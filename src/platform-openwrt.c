@@ -1,13 +1,16 @@
-#include <libubus.h>
 #include <syslog.h>
 #include <errno.h>
 
-#include <libubox/blobmsg.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <stdint.h>
+#include <stdlib.h>
 
 #include <sys/un.h>
 #include <sys/socket.h>
+
+#include "libubox/blobmsg.h"
+#include <libubus.h>
 
 #include "platform.h"
 #include "iface.h"
@@ -34,27 +37,6 @@ int platform_init(void)
 }
 
 
-
-enum ipc_option {
-	OPT_COMMAND,
-	OPT_INTERFACE,
-	OPT_DEVICE,
-	OPT_MAX
-};
-
-struct blobmsg_policy ipc_policy[] = {
-	[OPT_COMMAND] = {"command", BLOBMSG_TYPE_INT32},
-	[OPT_INTERFACE] = {"interface", BLOBMSG_TYPE_STRING},
-	[OPT_DEVICE] = {"device", BLOBMSG_TYPE_STRING},
-};
-
-enum ipc_command {
-	CMD_IFUP,
-	CMD_IFDOWN,
-	CMD_MAX
-};
-
-
 void platform_apply_domain(__unused struct iface *iface)
 {
 	// Dummy, see platform_commit
@@ -68,36 +50,6 @@ void platform_apply_zone(__unused struct iface *iface)
 void platform_apply_address(__unused struct iface_addr *addr, __unused bool enable)
 {
 	// Dummy, see platform_commit
-}
-
-
-// Handle internal IPC message
-void platform_handle(struct uloop_fd *fd, __unused unsigned int events)
-{
-	uint8_t buf[4096];
-	ssize_t len;
-	struct sockaddr_un sender;
-	socklen_t sender_len = sizeof(sender);
-	struct blob_attr *tb[OPT_MAX];
-
-	while ((len = recvfrom(fd->fd, buf, sizeof(buf), MSG_DONTWAIT,
-			(struct sockaddr*)&sender, &sender_len)) >= 0) {
-		blobmsg_parse(ipc_policy, OPT_MAX, tb, buf, len);
-		if (!tb[OPT_COMMAND] || !tb[OPT_INTERFACE])
-			continue;
-
-		const char *name = blobmsg_get_string(tb[OPT_INTERFACE]);
-
-		enum ipc_command cmd = blobmsg_get_u32(tb[OPT_COMMAND]);
-		if (cmd == CMD_IFUP && tb[OPT_DEVICE]) {
-			iface_create(name, blobmsg_get_string(tb[OPT_DEVICE]));
-			// TODO: Create nested interfaces for DHCP/v6 client
-		} else if (cmd == CMD_IFDOWN) {
-			struct iface *iface = iface_get(name);
-			if (iface)
-				iface_delete(iface);
-		}
-	}
 }
 
 // Commit platform changes
