@@ -65,11 +65,6 @@ void platform_apply_zone(__unused struct iface *iface)
 	// Dummy, see platform_commit
 }
 
-void platform_apply_route(__unused struct iface_route *route, __unused bool enable)
-{
-	// Dummy, see platform_commit
-}
-
 void platform_apply_address(__unused struct iface_addr *addr, __unused bool enable)
 {
 	// Dummy, see platform_commit
@@ -115,7 +110,6 @@ void platform_commit(struct iface *iface)
 
 	void *k, *l;
 	struct iface_addr *a;
-	struct iface_route *r;
 
 	k = blobmsg_open_array(&b, "ipaddr");
 	vlist_for_each_element(&iface->addrs, a, node) {
@@ -129,7 +123,7 @@ void platform_commit(struct iface *iface)
 		blobmsg_add_string_buffer(&b);
 
 		buf = blobmsg_alloc_string_buffer(&b, "mask", 4);
-		snprintf(buf, 4, "%u", a->addr.prefix);
+		snprintf(buf, 4, "%u", a->prefix);
 		blobmsg_add_string_buffer(&b);
 
 		blobmsg_close_table(&b, l);
@@ -148,85 +142,13 @@ void platform_commit(struct iface *iface)
 		blobmsg_add_string_buffer(&b);
 
 		buf = blobmsg_alloc_string_buffer(&b, "mask", 4);
-		snprintf(buf, 4, "%u", a->addr.prefix);
+		snprintf(buf, 4, "%u", a->prefix);
 		blobmsg_add_string_buffer(&b);
 
 		if (a->valid_until) {
 			blobmsg_add_u32(&b, "preferred", a->preferred_until);
 			blobmsg_add_u32(&b, "valid", a->valid_until);
 		}
-
-		blobmsg_close_table(&b, l);
-	}
-	blobmsg_close_array(&b, k);
-
-	k = blobmsg_open_array(&b, "routes");
-	vlist_for_each_element(&iface->routes, r, node) {
-		if (r->v6)
-			continue;
-
-		l = blobmsg_open_table(&b, NULL);
-
-		char *buf = blobmsg_alloc_string_buffer(&b, "target", INET_ADDRSTRLEN);
-		inet_ntop(AF_INET, &r->target, buf, INET_ADDRSTRLEN);
-		blobmsg_add_string_buffer(&b);
-
-		buf = blobmsg_alloc_string_buffer(&b, "netmask", 4);
-		snprintf(buf, 4, "%u", r->target.prefix);
-		blobmsg_add_string_buffer(&b);
-
-		buf = blobmsg_alloc_string_buffer(&b, "gw", INET_ADDRSTRLEN);
-		inet_ntop(AF_INET, &r->nexthop, buf, INET_ADDRSTRLEN);
-		blobmsg_add_string_buffer(&b);
-
-		if (r->source.prefix) {
-			buf = blobmsg_alloc_string_buffer(&b, "source", INET_ADDRSTRLEN + 4);
-			inet_ntop(AF_INET, &r->target, buf, INET_ADDRSTRLEN);
-			snprintf(buf + strlen(buf), 4, "/%u", r->target.prefix);
-			blobmsg_add_string_buffer(&b);
-		}
-
-		if (r->metric)
-			blobmsg_add_u32(&b, "metric", r->metric);
-
-		if (r->valid_until)
-			blobmsg_add_u32(&b, "valid", r->valid_until);
-
-		blobmsg_close_table(&b, l);
-	}
-	blobmsg_close_array(&b, k);
-
-	k = blobmsg_open_array(&b, "routes6");
-	vlist_for_each_element(&iface->routes, r, node) {
-		if (!r->v6)
-			continue;
-
-		l = blobmsg_open_table(&b, NULL);
-
-		char *buf = blobmsg_alloc_string_buffer(&b, "target", INET6_ADDRSTRLEN);
-		inet_ntop(AF_INET6, &r->target, buf, INET6_ADDRSTRLEN);
-		blobmsg_add_string_buffer(&b);
-
-		buf = blobmsg_alloc_string_buffer(&b, "netmask", 4);
-		snprintf(buf, 4, "%u", r->target.prefix);
-		blobmsg_add_string_buffer(&b);
-
-		buf = blobmsg_alloc_string_buffer(&b, "gw", INET6_ADDRSTRLEN);
-		inet_ntop(AF_INET6, &r->nexthop, buf, INET6_ADDRSTRLEN);
-		blobmsg_add_string_buffer(&b);
-
-		if (r->source.prefix) {
-			buf = blobmsg_alloc_string_buffer(&b, "source", INET6_ADDRSTRLEN + 4);
-			inet_ntop(AF_INET6, &r->target, buf, INET6_ADDRSTRLEN);
-			snprintf(buf + strlen(buf), 4, "/%u", r->target.prefix);
-			blobmsg_add_string_buffer(&b);
-		}
-
-		if (r->metric)
-			blobmsg_add_u32(&b, "metric", r->metric);
-
-		if (r->valid_until)
-			blobmsg_add_u32(&b, "valid", r->valid_until);
 
 		blobmsg_close_table(&b, l);
 	}

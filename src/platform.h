@@ -16,9 +16,6 @@ void platform_apply_domain(struct iface *iface);
 // Handle internal change
 void platform_apply_zone(struct iface *iface);
 
-// Set / unset a route
-void platform_apply_route(struct iface_route *route, bool enable);
-
 // Set / unset an address
 void platform_apply_address(struct iface_addr *addr, bool enable);
 
