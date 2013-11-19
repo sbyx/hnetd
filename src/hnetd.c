@@ -24,7 +24,6 @@
 #include <libubox/uloop.h>
 
 #include "ipc.h"
-#include "prefix.h"
 #include "platform.h"
 
 
@@ -44,11 +43,6 @@ int main(__unused int argc, char* const argv[])
 	if (platform_init()) {
 		syslog(LOG_ERR, "Failed to init platform: %s", strerror(errno));
 		return 3;
-	}
-
-	if (prefix_init()) {
-		syslog(LOG_ERR, "Failed to init prefix: %s", strerror(errno));
-		return 4;
 	}
 
 	if (ipc_init()) {

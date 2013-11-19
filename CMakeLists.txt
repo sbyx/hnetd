@@ -7,7 +7,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -std=c99")
 add_definitions(-D_GNU_SOURCE -Wall -Wextra)
 
 # TODO: split platform logic
-add_executable(hnetd src/hnetd.c src/prefix.c src/iface.c src/ipc.c src/platform-openwrt.c)
+add_executable(hnetd src/hnetd.c src/iface.c src/ipc.c src/platform-openwrt.c)
 target_link_libraries(hnetd ubox ubus blobmsg_json)
 
 # Installation rules

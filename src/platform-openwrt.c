@@ -9,13 +9,14 @@
 #include <sys/un.h>
 #include <sys/socket.h>
 
-#include "libubox/blobmsg.h"
+#include <libubox/blobmsg.h>
 #include <libubus.h>
 
 #include "platform.h"
 #include "iface.h"
 
 static struct ubus_context *ubus = NULL;
+//static struct ubus_subscriber netifd;
 static uint32_t ubus_network_interface = 0;
 static struct blob_buf b;
 
@@ -27,8 +28,12 @@ int platform_init(void)
 		return -1;
 	}
 
-	// TODO: register network event handlers for interface events to scoop PDs + watch nested interfaces
-	// TODO: do dump call to get initial PDs from interfaces that are already online
+/*
+	netifd.cb = handle_update;
+	ubus_register_subscriber(ubus, &netifd);
+*/
+
+	// TODO: dump iface data
 
 	ubus_lookup_id(ubus, "network.interface", &ubus_network_interface);
 	ubus_add_uloop(ubus);
@@ -127,3 +132,41 @@ void platform_commit(struct iface *iface)
 	// TODO: test return code
 	ubus_invoke(ubus, ubus_network_interface, "proto_update", b.head, NULL, NULL, 1000);
 }
+
+
+enum {
+	IFACE_ATTR_INTERFACE,
+	IFACE_ATTR_PREFIX,
+	IFACE_ATTR_MAX,
+};
+
+static const struct blobmsg_policy iface_attrs[IFACE_ATTR_MAX] = {
+	[IFACE_ATTR_INTERFACE] = { .name = "interface", .type = BLOBMSG_TYPE_STRING },
+	[IFACE_ATTR_PREFIX] = { .name = "ipv6-prefix", .type = BLOBMSG_TYPE_ARRAY },
+};
+
+/*
+static int handle_update(__unused struct ubus_context *ctx, __unused struct ubus_object *obj,
+		__unused struct ubus_request_data *req, __unused const char *method,
+		struct blob_attr *msg)
+{
+	struct blob_attr *tb[IFACE_ATTR_MAX];
+	blobmsg_parse(iface_attrs, IFACE_ATTR_MAX, tb, blob_data(msg), blob_len(msg));
+
+	const char *interface = (tb[IFACE_ATTR_INTERFACE]) ?
+			blobmsg_get_string(tb[IFACE_ATTR_INTERFACE]) : "";
+	const char *ifname = (tb[IFACE_ATTR_IFNAME]) ?
+			blobmsg_get_string(tb[IFACE_ATTR_IFNAME]) : "";
+
+	struct interface *c, *iface = NULL;
+	list_for_each_entry(c, &interfaces, head)
+		if (!strcmp(interface, c->name) || !strcmp(ifname, c->ifname))
+			iface = c;
+
+	if (iface && iface->ignore)
+		return 0;
+
+	ubus_invoke(ubus, objid, "dump", NULL, handle_dump, NULL, 0);
+	return 0;
+}
+*/

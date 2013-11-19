@@ -91,11 +91,9 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 
 		enum ipc_command cmd = blobmsg_get_u32(tb[OPT_COMMAND]);
 		if (cmd == CMD_IFUP && tb[OPT_DEVICE]) {
-			iface_create(name, blobmsg_get_string(tb[OPT_DEVICE]));
+			iface_create(name, blobmsg_get_string(tb[OPT_DEVICE]), true);
 		} else if (cmd == CMD_IFDOWN) {
-			struct iface *iface = iface_get(name);
-			if (iface)
-				iface_delete(iface);
+			iface_delete(name);
 		}
 	}
 }
