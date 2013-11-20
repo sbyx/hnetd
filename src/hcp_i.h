@@ -6,13 +6,16 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Nov 20 15:43:30 2013 mstenber
- * Edit time:     13 min
+ * Last modified: Wed Nov 20 16:08:44 2013 mstenber
+ * Edit time:     15 min
  *
  */
 
 #ifndef HCP_I_H
 #define HCP_I_H
+
+#include <libubox/avl.h>
+#include <libubox/vlist.h>
 
 /* Let's assume we use MD5 for the time being.. */
 #define HCP_HASH_LEN 16
@@ -41,7 +44,7 @@ struct hcp_struct {
 
 struct hcp_node_struct {
   /* hcp->nodes entry */
-  struct vlist_node avl;
+  struct vlist_node in_nodes;
 
   /* These map 1:1 to node data TLV's start */
   unsigned char node_identifier_hash[HCP_HASH_LEN];
@@ -59,7 +62,7 @@ struct hcp_node_struct {
 
 struct hcp_tlv_struct {
   /* hcp->tlvs entry */
-  struct avl_node avl;
+  struct avl_node in_tlvs;
 
   /* Actual TLV attribute itself. */
   struct tlv_attr *tlv;
