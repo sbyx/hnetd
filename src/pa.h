@@ -17,8 +17,6 @@
 #include <stdint.h>
 #include <time.h>
 
-typedef void * pa_t;
-
 /* A prefix for IPv4 and IPv6 addresses.
  * IPv4 addresses are of the form ffff::AABB:CCDD. */
 struct pa_prefix {
@@ -60,8 +58,8 @@ struct pa_ldp {
 /* Callbacks for flooding callbacks. */
 struct pa_flood_callbacks {
 	void *priv;
-	void (*updated_laps)(pa_t pa, void *priv); /* When laps are updated */
-	void (*updated_ldps)(pa_t pa, void *priv); /* When ldps are udated */
+	void (*updated_laps)(void *priv); /* When laps are updated */
+	void (*updated_ldps)(void *priv); /* When ldps are udated */
 };
 
 /* Callbacks for interface and routing configuration. */
@@ -70,13 +68,13 @@ struct pa_net_callbacks {
 
 	/* Must configure network interfaces with some prefix.
 	 * Address can then be chosen and RAs sent. */
-	void (*assign_prefix)(pa_t pa, char *ifname, struct pa_prefix *prefix);
-	void (*remove_prefix)(pa_t pa, char *ifname, struct pa_prefix *prefix);
+	void (*assign_prefix)(char *ifname, struct pa_prefix *prefix);
+	void (*remove_prefix)(char *ifname, struct pa_prefix *prefix);
 
 	/* Must configure routing protocol to advertise the prefix route.
 	 * Must configure routing table for next hop. */
-	void (*add_ldp)(pa_t pa, struct pa_ldp *ldp);
-	void (*remove_ldp)(pa_t pa, struct pa_ldp *ldp);
+	void (*add_ldp)(struct pa_ldp *ldp);
+	void (*remove_ldp)(struct pa_ldp *ldp);
 };
 
 struct pa_conf {
@@ -128,15 +126,15 @@ void pa_conf_term(struct pa_conf *);
  * Owner's interface.
  */
 
-/* Creates a prefix assignment structure. */
-pa_t pa_create(const struct pa_conf *);
+/* Initializes the prefix assignment algorithm. */
+int pa_init(const struct pa_conf *);
 
 
 /* Modifies the conf. */
-void pa_update_conf(pa_t pa, const struct pa_conf *);
+void pa_update_conf(const struct pa_conf *);
 
-/* Stops the prefix assignement and free memory. */
-void pa_destroy(pa_t pa);
+/* Stops the prefix assignement. */
+void pa_term();
 
 
 
@@ -145,13 +143,11 @@ void pa_destroy(pa_t pa);
  */
 
 /* Updates or add a locally delegated prefix.
- * pa          - The pa structure
  * prefix      - The delegated prefix.
  * valid_until - When the delegated prefix will timeout.
  * deprecated  - Zero if not deprecated. The time it became
  *               deprecated otherwise. */
-int pa_update_ldp(pa_t pa,
-			const struct pa_prefix *prefix,
+int pa_update_ldp(const struct pa_prefix *prefix,
 			time_t valid_until,
 			time_t deprecated);
 
@@ -168,45 +164,41 @@ int pa_update_ldp(pa_t pa,
  */
 
 /* Before starting update, the flooder has to call this function. */
-void pa_update_init(pa_t pa);
+void pa_update_init();
 
 /* For each prefix assigned by *other* node, call that function.
- * @pa     - The pa structure.
  * @prefix - The assigned prefix
  * @takes_precedence - Whether we have higher priority on prefix
  *                     assignment.
  * @ifname - Interface name, if assigned on a connected link.
  *           Zero-length string otherwise.
  */
-int pa_update_eap(pa_t pa,
-				const struct pa_prefix *prefix,
+int pa_update_eap(const struct pa_prefix *prefix,
 				bool takes_precedence,
 				const char ifname);
 
 /* For each delegated prefix announced by *other* node,
  * call this function. This can only be called during db update.
- * @pa     - The pa structure
  * @prefix - The delegated prefix
  * @valid_until - Time when the prefix becomes invalid
  */
-int pa_update_edp(pa_t pa,
-				const struct pa_prefix *prefix,
+int pa_update_edp(const struct pa_prefix *prefix,
 				time_t valid_until);
 
 /* At the end of an update, the flooder must call this function. */
-void pa_update_commit(pa_t pa);
+void pa_update_commit();
 
 /* For some things (like deciding whether to choose ula prefix),
  * the router needs to be home network leader.
  * This can be called anytime. */
-void pa_set_global_leadership(pa_t pa, bool leadership);
+void pa_set_global_leadership(bool leadership);
 
 /* This will return a list of locally assigned prefixes (struct pa_lap) */
-struct list_head *pa_get_laps(pa_t pa);
+struct list_head *pa_get_laps();
 
 /* This will return a list of all locally delegated prefixes
  * (struct pa_ldp) */
-struct list_head *pa_get_ldps(pa_t pa);
+struct list_head *pa_get_ldps();
 
 #endif
 
