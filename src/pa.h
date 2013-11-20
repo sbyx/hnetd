@@ -78,9 +78,6 @@ struct pa_net_callbacks {
 };
 
 struct pa_conf {
-	/* Iface list */
-	struct list_head ifaces;
-
 	/* When a global/ula delegated prefix is deleted, we wait
 	 * some time before removing it from our list. */
 	uint32_t remove_glb_delegated_prefix_delay;
@@ -112,9 +109,6 @@ struct pa_conf {
 /* Initializes a conf structure.
  * Values are set to default. */
 void pa_conf_init(struct pa_conf *);
-
-/* Add an interface to configuration. */
-int pa_conf_add_iface(struct pa_conf *, const char *ifname);
 
 /* Uninitializes a conf structure.
  * Values are undefined, and init can be used again. */
