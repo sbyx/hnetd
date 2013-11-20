@@ -2,6 +2,23 @@
 
 #include <string.h>
 
+struct prefix ipv4_in_ipv6_prefix = {
+		.prefix = { .s6_addr = {
+				0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00,
+				0x00,0x00, 0xff,0xff }},
+		.plen = 96 };
+
+struct prefix ipv6_ula_prefix = {
+		.prefix = { .s6_addr = { 0xfc }},
+		.plen = 7 };
+
+struct prefix ipv6_ll_prefix = {
+		.prefix = { .s6_addr = { 0xfe,0x80 }},
+		.plen = 10 };
+
+struct prefix ipv6_global_prefix = {
+		.prefix = { .s6_addr = { 0x20 }},
+		.plen = 3 };
 
 static int bmemcmp(const void *m1, const void *m2, size_t bitlen)
 {

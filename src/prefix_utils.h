@@ -11,23 +11,10 @@ struct prefix {
 	uint8_t plen;
 };
 
-struct prefix ipv4_in_ipv6_prefix = {
-		.prefix = { .s6_addr = {
-				0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00,
-				0x00,0x00, 0xff,0xff }},
-		.plen = 96 };
-
-struct prefix ipv6_ula_prefix = {
-		.prefix = { .s6_addr = { 0xfc }},
-		.plen = 7 };
-
-struct prefix ipv6_ll_prefix = {
-		.prefix = { .s6_addr = { 0xfe,0x80 }},
-		.plen = 10 };
-
-struct prefix ipv6_global_prefix = {
-		.prefix = { .s6_addr = { 0x20 }},
-		.plen = 3 };
+extern struct prefix ipv4_in_ipv6_prefix;
+extern struct prefix ipv6_ula_prefix;
+extern struct prefix ipv6_ll_prefix;
+extern struct prefix ipv6_global_prefix;
 
 /* Tests whether p1 contains p2 */
 bool prefix_contains(const struct prefix *p1,
