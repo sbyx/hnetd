@@ -62,21 +62,6 @@ struct pa_flood_callbacks {
 	void (*updated_ldps)(void *priv); /* When ldps are udated */
 };
 
-/* Callbacks for interface and routing configuration. */
-struct pa_net_callbacks {
-	void *priv;
-
-	/* Must configure network interfaces with some prefix.
-	 * Address can then be chosen and RAs sent. */
-	void (*assign_prefix)(char *ifname, struct pa_prefix *prefix);
-	void (*remove_prefix)(char *ifname, struct pa_prefix *prefix);
-
-	/* Must configure routing protocol to advertise the prefix route.
-	 * Must configure routing table for next hop. */
-	void (*add_ldp)(struct pa_ldp *ldp);
-	void (*remove_ldp)(struct pa_ldp *ldp);
-};
-
 struct pa_conf {
 	/* When a global/ula delegated prefix is deleted, we wait
 	 * some time before removing it from our list. */
@@ -95,9 +80,6 @@ struct pa_conf {
 
 	/* Callbacks for flooding protocol */
 	struct pa_flood_callbacks flood_cb;
-
-	/* Callbacks for configuration */
-	struct pa_net_callbacks conf_cb;
 };
 
 
