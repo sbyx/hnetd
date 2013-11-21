@@ -11,33 +11,28 @@
 #ifndef PA_H
 #define PA_H
 
-#include <libubox/list.h>
-#include <netinet/in.h>
+#include <libubox/avl.h>
+#include <libubox/uloop.h>
 #include <net/if.h>
 #include <stdint.h>
 #include <time.h>
 
-/* A prefix for IPv4 and IPv6 addresses.
- * IPv4 addresses are of the form ffff::AABB:CCDD. */
-struct pa_prefix {
-	struct in6_addr prefix;		/* Address itself */
-	uint8_t plen;				/* Prefix length */
-};
+#include "prefix_utils.h"
 
 /* Locally assigned prefix */
 struct pa_lap {
-	struct list_head le;		/* laps are stored in a list */
-	struct pa_prefix prefix;	/* The assigned prefix */
+	struct avl_node avl_node;  /* laps are stored in a tree */
+	struct prefix prefix;	    /* The assigned prefix */
 	char ifname[IFNAMSIZ];		/* lap's interface name */
 };
 
 /* Locally delegated prefix.
  * i.e. a delegated prefix that we own. */
 struct pa_ldp {
-	struct list_head le;
+	struct avl_node avl_node;
 
 	/* The delegated prefix. */
-	struct pa_prefix prefix;
+	struct prefix prefix;
 
 	/* Interface toward gateway for that prefix or
 	 * zero-length string if no gateway (like ulas) */
@@ -49,10 +44,8 @@ struct pa_ldp {
 	/* The prefix is valid until that time.
 	 * Afterward, it will be discarded (no delay for graceful timeout). */
 	time_t valid_until;
-
-	/* Time when the prefix becomes deprecated.
-	 * It should not be announced anymore. But will remain some time. */
-	time_t deprecated;
+	/* The prefix also as a prefered lifetime */
+	time_t prefered_until;
 };
 
 /* Callbacks for flooding callbacks. */
@@ -63,23 +56,39 @@ struct pa_flood_callbacks {
 };
 
 struct pa_conf {
-	/* When a global/ula delegated prefix is deleted, we wait
-	 * some time before removing it from our list. */
-	uint32_t remove_glb_delegated_prefix_delay;
-	uint32_t remove_ula_delegated_prefix_delay;
-
 	/* Delay between flooding announce and interface level
 	 * address assignment. */
-	uint32_t commit_glb_prefix_delay;
-	uint32_t commit_ula_prefix_delay;
+	uint32_t commit_lap_delay;
+	uint32_t delete_lap_delay;
 
-	char use_ula; /* Enables ULA use */
-	char no_ula_if_glb_ipv6; /* Disable ULA when there is a global IPv6 */
-	char use_ipv4; /* Enables IPv4 10/8 use */
-	char no_ipv4_if_glb_ipv6; /* Disable IPv4 when we have IPv6 global address */
+	/* Enables ULA use
+	 * default = 1 */
+	char use_ula;
 
-	/* Callbacks for flooding protocol */
-	struct pa_flood_callbacks flood_cb;
+	/* Disable ULA when an ipv6 prefix is available
+	 * default = 1 */
+	char no_ula_if_glb_ipv6;
+
+	/* Selects a ula randomly according to rfc4193
+	 * default = 1 */
+	char use_random_ula;
+
+	/* If not random, use that ULA prefix (must be ULA)
+	 * default = undef */
+	struct prefix ula_prefix;
+
+	/* Enable IPv4 use
+	 * default = 1 */
+	char use_ipv4;
+
+	/* Disable IPv4 when there is global ipv6 available
+	 * default = 0 */
+	char no_ipv4_if_glb_ipv6;
+
+	/* When needed, use that v4 prefix
+	 * default = ::ffff:10.0.0.0/104 */
+	struct prefix v4_prefix;
+
 };
 
 
@@ -102,30 +111,22 @@ void pa_conf_term(struct pa_conf *);
  * Owner's interface.
  */
 
-/* Initializes the prefix assignment algorithm. */
+/* Initializes the prefix assignment algorithm with a default
+ * configuration.
+ * returns 0 on success, a negative value on error. */
 int pa_init(const struct pa_conf *);
 
+/* Starts the pa algorithm
+ * All registrations with other modules (uloop, iface, ...) are
+ * done here. */
+int pa_start(const struct pa_conf *);
 
 /* Modifies the conf. */
-void pa_update_conf(const struct pa_conf *);
+int pa_set_conf(const struct pa_conf *);
 
-/* Stops the prefix assignement. */
+/* Stops and uninit the prefix assignement.
+ * Init must be called to use it again. */
 void pa_term();
-
-
-
-/*
- * Upper layer interface (dhcp & co)
- */
-
-/* Updates or add a locally delegated prefix.
- * prefix      - The delegated prefix.
- * valid_until - When the delegated prefix will timeout.
- * deprecated  - Zero if not deprecated. The time it became
- *               deprecated otherwise. */
-int pa_update_ldp(const struct pa_prefix *prefix,
-			time_t valid_until,
-			time_t deprecated);
 
 
 
@@ -139,6 +140,10 @@ int pa_update_ldp(const struct pa_prefix *prefix,
  * be pushed and everything must be done in a single uloop event.
  */
 
+/* Sets flooder algorithm callbacks.
+ * A new subscription will override the previous one. */
+void pa_flood_subscribe(const struct pa_flood_callbacks *);
+
 /* Before starting update, the flooder has to call this function. */
 void pa_update_init();
 
@@ -149,17 +154,17 @@ void pa_update_init();
  * @ifname - Interface name, if assigned on a connected link.
  *           Zero-length string otherwise.
  */
-int pa_update_eap(const struct pa_prefix *prefix,
+int pa_update_eap(const struct prefix *prefix,
 				bool takes_precedence,
-				const char ifname);
+				const char *ifname);
 
 /* For each delegated prefix announced by *other* node,
  * call this function. This can only be called during db update.
  * @prefix - The delegated prefix
  * @valid_until - Time when the prefix becomes invalid
  */
-int pa_update_edp(const struct pa_prefix *prefix,
-				time_t valid_until);
+int pa_update_edp(const struct prefix *prefix,
+				time_t valid_until, time_t prefered_until);
 
 /* At the end of an update, the flooder must call this function. */
 void pa_update_commit();
@@ -169,12 +174,13 @@ void pa_update_commit();
  * This can be called anytime. */
 void pa_set_global_leadership(bool leadership);
 
-/* This will return a list of locally assigned prefixes (struct pa_lap) */
-struct list_head *pa_get_laps();
+/* This will return a the tree containing assigned prefixes
+ * (struct pa_lap) */
+struct avl_tree *pa_get_laps();
 
-/* This will return a list of all locally delegated prefixes
+/* This will return a the tree containing delegated prefixes
  * (struct pa_ldp) */
-struct list_head *pa_get_ldps();
+struct avl_tree *pa_get_ldps();
 
 #endif
 
