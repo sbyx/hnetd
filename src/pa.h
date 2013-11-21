@@ -21,31 +21,31 @@
 
 /* Locally assigned prefix */
 struct pa_lap {
-	struct avl_node avl_node;  /* laps are stored in a tree */
+	struct avl_node avl_node;   /* Must be first */
 	struct prefix prefix;	    /* The assigned prefix */
 	char ifname[IFNAMSIZ];		/* lap's interface name */
+
+	/** PRIVATE **/
+	time_t assigned; // When assigned for the first time
+	bool configured; // Whether that lap is pushed to iface */
 };
 
 /* Locally delegated prefix.
  * i.e. a delegated prefix that we own. */
 struct pa_ldp {
-	struct avl_node avl_node;
+	struct avl_node avl_node; /* Must be first */
 
 	/* The delegated prefix. */
 	struct prefix prefix;
-
-	/* Interface toward gateway for that prefix or
-	 * zero-length string if no gateway (like ulas) */
-	char ifname[IFNAMSIZ];
-
-	/* Gateway address (can be link local) */
-	struct in6_addr next_hop;
 
 	/* The prefix is valid until that time.
 	 * Afterward, it will be discarded (no delay for graceful timeout). */
 	time_t valid_until;
 	/* The prefix also as a prefered lifetime */
 	time_t prefered_until;
+
+	/** PRIVATE **/
+	// Nothing for now
 };
 
 /* Callbacks for flooding callbacks. */
@@ -53,6 +53,12 @@ struct pa_flood_callbacks {
 	void *priv;
 	void (*updated_laps)(void *priv); /* When laps are updated */
 	void (*updated_ldps)(void *priv); /* When ldps are udated */
+};
+
+struct pa_iface_callbacks {
+	void *priv;
+	void (*assign_prefix)(const char *ifname, struct prefix *, void *priv);
+	void (*remove_prefix)(const char *ifname, struct prefix *, void *priv);
 };
 
 struct pa_conf {
@@ -106,6 +112,14 @@ void pa_conf_init(struct pa_conf *);
 void pa_conf_term(struct pa_conf *);
 
 
+/*
+ * Callbacks for iface
+ */
+
+/* Subscribes to lap change events.
+ * Will be used by iface.c to obtain new laps information. */
+void pa_laps_subscribe(struct pa_iface_callbacks *);
+
 
 /*
  * Owner's interface.
@@ -119,7 +133,7 @@ int pa_init(const struct pa_conf *);
 /* Starts the pa algorithm
  * All registrations with other modules (uloop, iface, ...) are
  * done here. */
-int pa_start(const struct pa_conf *);
+int pa_start();
 
 /* Modifies the conf. */
 int pa_set_conf(const struct pa_conf *);
@@ -174,11 +188,11 @@ void pa_update_commit();
  * This can be called anytime. */
 void pa_set_global_leadership(bool leadership);
 
-/* This will return a the tree containing assigned prefixes
+/* This will return the tree containing assigned prefixes
  * (struct pa_lap) */
 struct avl_tree *pa_get_laps();
 
-/* This will return a the tree containing delegated prefixes
+/* This will return the tree containing delegated prefixes
  * (struct pa_ldp) */
 struct avl_tree *pa_get_ldps();
 
