@@ -16,3 +16,4 @@ install_manifest.txt
 *.orig
 hnetd
 test_dummy
+test_hcp
