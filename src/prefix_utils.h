@@ -21,16 +21,16 @@ bool prefix_contains(const struct prefix *p1,
 					const struct prefix *p2);
 
 #define prefix_is_ipv4(prefix) \
-	prefix_contains(&ipv4_in_ipv6_prefix, prefix);
+	prefix_contains(&ipv4_in_ipv6_prefix, prefix)
 
 #define prefix_is_ipv6_ula(prefix) \
-	prefix_contains(&ipv6_ula_prefix, prefix);
+	prefix_contains(&ipv6_ula_prefix, prefix)
 
 #define prefix_is_ll(prefix) \
-	prefix_contains(&ipv6_ll_prefix, prefix);
+	prefix_contains(&ipv6_ll_prefix, prefix)
 
 #define prefix_is_global(prefix) \
-	prefix_contains(&ipv6_global_prefix, prefix);
+	prefix_contains(&ipv6_global_prefix, prefix)
 
 /* Compare two prefixes according to a complete order definition.
  * Will be used in trees.
