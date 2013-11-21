@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Nov 21 14:20:24 2013 mstenber
- * Edit time:     34 min
+ * Last modified: Thu Nov 21 15:21:28 2013 mstenber
+ * Edit time:     35 min
  *
  */
 
@@ -42,6 +42,7 @@ struct hcp_struct {
 
   /* Whole network hash we consider current (based on content of 'nodes'). */
   unsigned char network_hash[HCP_HASH_LEN];
+  bool network_hash_is_valid;
 };
 
 struct hcp_link_struct {

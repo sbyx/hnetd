@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Nov 21 15:06:00 2013 mstenber
- * Edit time:     72 min
+ * Last modified: Thu Nov 21 15:36:26 2013 mstenber
+ * Edit time:     76 min
  *
  */
 
@@ -217,10 +217,21 @@ static void _flush(hcp_node n)
     if (!tlv_put_raw(&tb, &t->tlv, tlv_pad_len(&t->tlv)))
       return;
   /* Ok, all puts _did_ succeed. */
+  o->should_publish = false;
+
+  /* Should we check if this caused a real change or not? If we
+   * should, and there wasn't any, we should just free tb's contents
+   * and bail out.*/
+  /* Omitted for the time being.. */
+
+  /* Replace old state with new. */
   if (n->tlv_container)
     free(n->tlv_container);
   n->tlv_container = tb.head;
-  o->should_publish = false;
+  n->update_number++;
+  /* XXX - wait for refactoring of hnetd_time out of hnetd.c
+     n->origination_time = hnetd_time(); */
+  o->network_hash_is_valid = false;
 }
 
 void hcp_node_get_tlvs(hcp_node n, struct tlv_attr **r)
