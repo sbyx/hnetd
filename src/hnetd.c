@@ -14,6 +14,7 @@
 #include <time.h>
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,12 +24,9 @@
 #include <fcntl.h>
 
 #include <libubox/uloop.h>
-#include <libubox/utils.h>
 
 #include "ipc.h"
 #include "platform.h"
-
-static int urandom_fd = -1;
 
 int main(__unused int argc, char* const argv[])
 {
@@ -53,25 +51,14 @@ int main(__unused int argc, char* const argv[])
 		return 5;
 	}
 
-	if ((urandom_fd = open("/dev/urandom", O_CLOEXEC | O_RDONLY)) < 0) {
-		syslog(LOG_ERR, "Failed to open urandom: %s", strerror(errno));
-		return 6;
+	int urandom_fd;
+	if ((urandom_fd = open("/dev/urandom", O_CLOEXEC | O_RDONLY)) >= 0) {
+		unsigned int seed;
+		read(urandom_fd, &seed, sizeof(seed));
+		close(urandom_fd);
+		srandom(seed);
 	}
 
 	uloop_run();
 	return 0;
-}
-
-
-time_t hnetd_time(void)
-{
-	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return ts.tv_sec;
-}
-
-
-ssize_t hnetd_random(void *buf, size_t len)
-{
-	return read(urandom_fd, buf, len);
 }

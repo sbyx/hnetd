@@ -139,7 +139,7 @@ tlv_put_raw(struct tlv_buf *buf, const void *ptr, int len)
 {
 	struct tlv_attr *attr;
 
-	if (len < sizeof(struct tlv_attr) || !ptr)
+	if (len < (int)sizeof(struct tlv_attr) || !ptr)
 		return NULL;
 
 	attr = tlv_add(buf, tlv_next(buf->head), 0, len - sizeof(struct tlv_attr));
@@ -213,12 +213,12 @@ tlv_parse(struct tlv_attr *attr, struct tlv_attr **data, const struct tlv_attr_i
 {
 	struct tlv_attr *pos;
 	int found = 0;
-	int rem;
+	unsigned int rem;
 
 	memset(data, 0, sizeof(struct tlv_attr *) * max);
 	tlv_for_each_attr(pos, attr, rem) {
 		int id = tlv_id(pos);
-		int len = tlv_len(pos);
+		unsigned int len = tlv_len(pos);
 
 		if (id >= max)
 			continue;
