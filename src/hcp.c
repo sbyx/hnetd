@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Nov 21 12:32:33 2013 mstenber
- * Edit time:     48 min
+ * Last modified: Thu Nov 21 14:30:15 2013 mstenber
+ * Edit time:     69 min
  *
  */
 
@@ -63,7 +63,8 @@ static void update_node(__unused struct vlist_tree *t,
   __unused hcp_node n_new = container_of(node_new, hcp_node_s, in_nodes);
   if (n_old)
     {
-      free(n_old->first_tlv);
+      if (n_old->tlv_container)
+        free(n_old->tlv_container);
       free(n_old);
     }
 }
@@ -106,13 +107,20 @@ void hcp_hash(const void *buf, int len, unsigned char *dest)
 }
 
 
-void hcp_init(hcp o, unsigned char *node_identifier, int len)
+bool hcp_init(hcp o, unsigned char *node_identifier, int len)
 {
-  unsigned char node_identifier_hash[HCP_HASH_LEN];
+  hcp_node n;
 
   vlist_init(&o->nodes, compare_nodes, update_node);
   vlist_init(&o->tlvs, compare_tlvs, update_tlv);
-  hcp_hash(node_identifier, len, node_identifier_hash);
+  n = calloc(1, sizeof(*n));
+  if (!n)
+    return false;
+  hcp_hash(node_identifier, len, n->node_identifier_hash);
+  n->hcp = o;
+  vlist_add(&o->nodes, &n->in_nodes, n);
+  o->own_node = n;
+  return true;
 }
 
 hcp hcp_create(void)
@@ -133,7 +141,11 @@ hcp hcp_create(void)
       free(o);
       return NULL;
     }
-  hcp_init(o, buf, c-buf);
+  if (!hcp_init(o, buf, c-buf))
+    {
+      free(o);
+      return NULL;
+    }
   return o;
 }
 
@@ -149,7 +161,8 @@ hcp_node hcp_get_first_node(hcp o)
 {
   hcp_node n;
 
-  return avl_first_element(&o->nodes.avl, n, in_nodes.avl);
+  return avl_is_empty(&o->nodes.avl) ? NULL :
+    avl_first_element(&o->nodes.avl, n, in_nodes.avl);
 }
 
 bool hcp_add_tlv(hcp o, struct tlv_attr *tlv)
@@ -176,4 +189,47 @@ bool hcp_remove_tlv(hcp o, struct tlv_attr *tlv)
     return false;
   vlist_delete(&o->tlvs, &old->in_tlvs);
   return true;
+}
+
+bool hcp_node_is_self(hcp_node n)
+{
+  return n->hcp->own_node == n;
+}
+
+hcp_node hcp_node_get_next(hcp_node n)
+{
+  hcp o = n->hcp;
+  hcp_node last = avl_last_element(&o->nodes.avl, n, in_nodes.avl);
+  if (!n || n == last)
+    return NULL;
+  return avl_next_element(n, in_nodes.avl);
+}
+
+static void _flush(hcp_node n)
+{
+  hcp o = n->hcp;
+  hcp_tlv t;
+  struct tlv_buf tb;
+
+  if (!o->should_publish)
+    return;
+  /* Dump the contents of hcp->tlvs to single tlv_buf. */
+  /* Based on whether or not that would cause change in things, 'do stuff'. */
+  memset(&tb, 0, sizeof(tb));
+  tlv_buf_init(&tb, 0); /* not passed anywhere */
+  vlist_for_each_element(&o->tlvs, t, in_tlvs)
+    if (!tlv_put_raw(&tb, &t->tlv, tlv_pad_len(&t->tlv)))
+      return;
+  /* Ok, all puts _did_ succeed. */
+  if (n->tlv_container)
+    free(n->tlv_container);
+  n->tlv_container = tb.head;
+  o->should_publish = false;
+}
+
+void hcp_node_get_tlvs(hcp_node n, struct tlv_attr **r)
+{
+  if (hcp_node_is_self(n))
+    _flush(n);
+  *r = n->tlv_container;
 }

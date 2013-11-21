@@ -7,7 +7,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g")
 add_definitions(-D_GNU_SOURCE -Wall -Wextra)
 
 # TODO: split platform logic
-add_executable(hnetd src/hcp.c src/hnetd.c src/iface.c src/ipc.c src/platform-openwrt.c)
+add_executable(hnetd src/hcp.c src/hnetd.c src/iface.c src/ipc.c src/platform-openwrt.c src/tlv.c)
 target_link_libraries(hnetd ubox ubus blobmsg_json)
 
 # Unit test stuff
@@ -17,7 +17,7 @@ include_directories(src)
 add_executable(test_dummy test/test_dummy.c)
 add_test(dummy test_dummy)
 
-add_executable(test_hcp src/hcp.c test/test_hcp.c)
+add_executable(test_hcp src/hcp.c src/tlv.c test/test_hcp.c)
 target_link_libraries(test_hcp ubox ubus blobmsg_json)
 add_test(hcp test_hcp)
 

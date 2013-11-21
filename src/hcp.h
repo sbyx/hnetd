@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Thu Nov 21 11:16:28 2013 mstenber
- * Edit time:     25 min
+ * Last modified: Thu Nov 21 14:19:38 2013 mstenber
+ * Edit time:     29 min
  *
  */
 
@@ -70,7 +70,7 @@ bool hcp_node_is_self(hcp_node n);
 /**
  * Get the TLVs for particular HCP node.
  */
-void hcp_node_get_tlvs(hcp_node n, struct tlv_attr **first, int *len);
+void hcp_node_get_tlvs(hcp_node n, struct tlv_attr **container_tlv);
 
 
 #endif /* HCP_H */

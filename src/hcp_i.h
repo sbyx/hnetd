@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Nov 21 12:36:24 2013 mstenber
- * Edit time:     29 min
+ * Last modified: Thu Nov 21 14:20:24 2013 mstenber
+ * Edit time:     34 min
  *
  */
 
@@ -52,6 +52,9 @@ struct hcp_node_struct {
   /* hcp->nodes entry */
   struct vlist_node in_nodes;
 
+  /* backpointer to hcp */
+  hcp hcp;
+
   /* These map 1:1 to node data TLV's start */
   unsigned char node_identifier_hash[HCP_HASH_LEN];
   uint32_t update_number;
@@ -64,8 +67,11 @@ struct hcp_node_struct {
    * received/created. We could probably also maintain this at end of
    * the structure, but that'd mandate re-inserts whenever content
    * changes, so probably just faster to keep a pointer to it. */
-  int tlv_len;
-  struct tlv_attr *first_tlv;
+
+  /* (We actually _do_ parse incoming TLV and create a new TLV, just
+   * to make sure there's no 'bad actors' somewhere with invalid sizes
+   * or whatever). */
+  struct tlv_attr *tlv_container;
 };
 
 typedef struct hcp_tlv_struct hcp_tlv_s, *hcp_tlv;
@@ -80,7 +86,7 @@ struct hcp_tlv_struct {
 
 /* Internal or testing-only way to initialize hp struct _without_
  * dynamic allocations (and some of the steps omitted too). */
-void hcp_init(hcp o, unsigned char *node_identifier, int len);
+bool hcp_init(hcp o, unsigned char *node_identifier, int len);
 
 void hcp_hash(const void *buf, int len, unsigned char *dest);
 
