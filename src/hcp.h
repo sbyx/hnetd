@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Wed Nov 20 16:00:50 2013 mstenber
- * Edit time:     23 min
+ * Last modified: Thu Nov 21 11:16:28 2013 mstenber
+ * Edit time:     25 min
  *
  */
 
@@ -17,11 +17,11 @@
 #include "tlv.h"
 
 /* Opaque pointer that represents hcp instance. */
-typedef struct hcp_struct *hcp;
+typedef struct hcp_struct hcp_s, *hcp;
 
 /* Opaque pointer that represents single node (own or another) in
    hcp. It is effectlively TLV list. */
-typedef struct hcp_node_struct *hcp_node;
+typedef struct hcp_node_struct hcp_node_s, *hcp_node;
 
 /************************************************ API for whole hcp instance */
 
@@ -48,12 +48,12 @@ hcp_node hcp_get_first_node(hcp o);
 /**
  * Publish a single TLV.
  */
-void hcp_add_tlv(hcp o, struct tlv_attr *tlv);
+bool hcp_add_tlv(hcp o, struct tlv_attr *tlv);
 
 /**
  * Remove a single TLV.
  */
-void hcp_remove_tlv(hcp o, struct tlv_attr *tlv);
+bool hcp_remove_tlv(hcp o, struct tlv_attr *tlv);
 
 /************************************************************** Per-node API */
 
