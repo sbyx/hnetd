@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8)
 project(hnetd C)
 
 set(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -std=c99")
 
 add_definitions(-D_GNU_SOURCE -Wall -Wextra)
 

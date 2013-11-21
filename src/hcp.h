@@ -6,14 +6,15 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Thu Nov 21 14:19:38 2013 mstenber
- * Edit time:     29 min
+ * Last modified: Thu Nov 21 15:07:09 2013 mstenber
+ * Edit time:     32 min
  *
  */
 
 #ifndef HCP_H
 #define HCP_H
 
+#include "hnetd.h"
 #include "tlv.h"
 
 /* Opaque pointer that represents hcp instance. */

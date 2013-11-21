@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Nov 21 14:30:15 2013 mstenber
- * Edit time:     69 min
+ * Last modified: Thu Nov 21 15:06:00 2013 mstenber
+ * Edit time:     72 min
  *
  */
 
@@ -20,10 +20,6 @@
 #include <net/if.h>
 #include <net/ethernet.h>
 #include <unistd.h>
-
-#ifndef __unused
-#define __unused __attribute__((unused))
-#endif /* !__unused */
 
 /* 'found' from odhcp6c */
 static int

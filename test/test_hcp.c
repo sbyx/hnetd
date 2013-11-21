@@ -6,16 +6,13 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Thu Nov 21 14:34:43 2013 mstenber
- * Edit time:     14 min
+ * Last modified: Thu Nov 21 15:07:40 2013 mstenber
+ * Edit time:     15 min
  *
  */
 
 #include "hcp.h"
 #include "sput.h"
-#ifndef __unused
-#define __unused __attribute__((unused))
-#endif /* !__unused */
 
 void hcp_ext(void)
 {

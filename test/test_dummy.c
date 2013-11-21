@@ -6,16 +6,13 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 12:51:48 2013 mstenber
- * Last modified: Thu Nov 21 13:21:44 2013 mstenber
+ * Last modified: Thu Nov 21 15:07:31 2013 mstenber
  * Edit time:     6 min
  *
  */
 
+#include "hnetd.h"
 #include "sput.h"
-#ifndef __unused
-#define __unused __attribute__((unused))
-#endif /* !__unused */
-
 
 void sample(void)
 {
