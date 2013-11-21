@@ -1,6 +1,14 @@
 #pragma once
 #include <stddef.h>
 
+// Get current monotonic clock with second granularity
+time_t hnetd_time(void);
+
+// Get a number of random bytes from /dev/urandom
+ssize_t hnetd_random(void *buf, size_t len);
+
+
+
 // Some C99 compatibility
 
 #ifndef typeof
