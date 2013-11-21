@@ -10,6 +10,10 @@ add_definitions(-D_GNU_SOURCE -Wall -Wextra)
 add_executable(hnetd src/hnetd.c src/iface.c src/ipc.c src/platform-openwrt.c)
 target_link_libraries(hnetd ubox ubus blobmsg_json)
 
+enable_testing()
+add_executable(test_dummy test/test_dummy.c)
+add_test(dummy test_dummy)
+
 # Installation rules
 install(TARGETS hnetd DESTINATION sbin/)
 
