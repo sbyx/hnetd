@@ -19,6 +19,8 @@
 
 #include "prefix_utils.h"
 
+typedef void *pa_t;
+
 /* Callbacks for flooding protocol. */
 struct pa_flood_callbacks {
 	void *priv;
@@ -94,13 +96,8 @@ struct pa_conf {
  * Configuration manipulation
  */
 
-/* Initializes a conf structure.
- * Values are set to default. */
-void pa_conf_init(struct pa_conf *);
-
-/* Uninitializes a conf structure.
- * Values are undefined, and init can be used again. */
-void pa_conf_term(struct pa_conf *);
+/* Sets conf values to defaults. */
+void pa_conf_default(struct pa_conf *);
 
 
 /*
@@ -109,20 +106,20 @@ void pa_conf_term(struct pa_conf *);
 
 /* Initializes the prefix assignment algorithm with a default
  * configuration.
- * returns 0 on success, a negative value on error. */
-int pa_init(const struct pa_conf *);
+ * Returns a pa struct on success and NULL on error. */
+pa_t pa_create(const struct pa_conf *);
 
 /* Starts the pa algorithm
  * All registrations with other modules (uloop, iface, ...) are
  * done here. */
-int pa_start();
+int pa_start(pa_t);
 
 /* Modifies the conf. */
-int pa_set_conf(const struct pa_conf *);
+int pa_set_conf(pa_t, const struct pa_conf *);
 
-/* Stops and uninit the prefix assignement.
+/* Stops and destroys the prefix assignment.
  * Init must be called to use it again. */
-void pa_term();
+void pa_destroy(pa_t);
 
 
 
@@ -133,7 +130,7 @@ void pa_term();
 /* Subscribes to lap change events.
  * Will be used by iface.c to obtain new laps information.
  * Subscribing will override previous subscription (if any). */
-void pa_iface_subscribe(const struct pa_iface_callbacks *);
+void pa_iface_subscribe(pa_t, const struct pa_iface_callbacks *);
 
 
 
@@ -144,7 +141,7 @@ void pa_iface_subscribe(const struct pa_iface_callbacks *);
 
 /* Sets flooder algorithm callbacks.
  * Subscribing will override previous subscription (if any). */
-void pa_flood_subscribe(const struct pa_flood_callbacks *);
+void pa_flood_subscribe(pa_t, const struct pa_flood_callbacks *);
 
 
 /* For each prefix assigned by *other* node, call that function.
@@ -154,7 +151,7 @@ void pa_flood_subscribe(const struct pa_flood_callbacks *);
  * @ifname - Interface name, if assigned on a connected link.
  *           Zero-length string otherwise.
  */
-int pa_update_eap(const struct prefix *prefix, const char *ifname,
+int pa_update_eap(pa_t, const struct prefix *prefix, const char *ifname,
 				bool takes_precedence, int do_delete);
 
 /* For each delegated prefix announced by *other* node,
@@ -163,13 +160,13 @@ int pa_update_eap(const struct prefix *prefix, const char *ifname,
  * @valid_until - Time when the prefix becomes invalid (0 for deletion)
  * @prefered_until - Time when the prefix is not prefered.
  */
-int pa_update_edp(const struct prefix *prefix,
+int pa_update_edp(pa_t, const struct prefix *prefix,
 				time_t valid_until, time_t prefered_until);
 
 /* For some things (like deciding whether to choose ula prefix),
  * the router needs to be home network leader.
  * This can be called anytime. */
-void pa_set_global_leadership(bool leadership);
+void pa_set_global_leadership(pa_t, bool leadership);
 
 #endif
 
