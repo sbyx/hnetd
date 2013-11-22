@@ -19,6 +19,8 @@
 
 #include "prefix_utils.h"
 
+#define PA_NO_IFACE ""
+
 typedef void *pa_t;
 
 /* Callbacks for flooding protocol. */
@@ -121,9 +123,6 @@ pa_t pa_create(const struct pa_conf *);
  * done here. */
 int pa_start(pa_t);
 
-/* Modifies the conf. */
-int pa_set_conf(pa_t, const struct pa_conf *);
-
 /* Stops and destroys the prefix assignment.
  * Init must be called to use it again. */
 void pa_destroy(pa_t);
@@ -154,17 +153,12 @@ void pa_flood_subscribe(pa_t, const struct pa_flood_callbacks *);
 /* For each prefix assigned by *other* node, call that function.
  * @prefix - The assigned prefix
  * @ifname - Interface name, if assigned on a connected link.
- *           Zero-length string otherwise.
+ *           NULL or PA_NO_IFACE otherwise.
  * @do_delete - Whether this eap must be deleted
+ * @higher_priority - Whether the sender has higher priority than us
  */
 int pa_update_eap(pa_t, const struct prefix *prefix, const char *ifname,
-					int do_delete);
-
-/* When link ownership changes (or doesn't change, it is checked)
- * @ifname - The interface name
- * @owner - Whether we are owner
- */
-int pa_update_link_owner(pa_t, const char *ifname, bool owner);
+					bool to_delete, bool higher_priority);
 
 /* For each delegated prefix announced by *other* node,
  * call this function. This can only be called during db update.
