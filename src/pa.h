@@ -46,12 +46,19 @@ struct pa_iface_callbacks {
 	 * modified.
 	 * @p - the assigned prefix
 	 * @ifname - the interface on which that prefix is or should be
+	 * @owner - whether the iface should do dhcp+ras on the link
 	 * @valid_until - validity date
 	 * @prefered_until - prefered date
 	 * @priv - The private pointer
 	 */
 	void (*update_prefix)(const struct prefix *p, const char *ifname,
 						time_t valid_until,	time_t prefered_until, void *priv);
+
+	/* When interface ownership changes.
+	 * @ifname - The interface name
+	 * @owner - Whether we are link owner
+	 * @priv - The private pointer */
+	void (*update_link_owner)(const char *ifname, bool owner, void *priv);
 };
 
 struct pa_conf {
@@ -146,13 +153,18 @@ void pa_flood_subscribe(pa_t, const struct pa_flood_callbacks *);
 
 /* For each prefix assigned by *other* node, call that function.
  * @prefix - The assigned prefix
- * @takes_precedence - Whether we have higher priority on prefix
- *                     assignment.
  * @ifname - Interface name, if assigned on a connected link.
  *           Zero-length string otherwise.
+ * @do_delete - Whether this eap must be deleted
  */
 int pa_update_eap(pa_t, const struct prefix *prefix, const char *ifname,
-				bool takes_precedence, int do_delete);
+					int do_delete);
+
+/* When link ownership changes (or doesn't change, it is checked)
+ * @ifname - The interface name
+ * @owner - Whether we are owner
+ */
+int pa_update_link_owner(pa_t, const char *ifname, bool owner);
 
 /* For each delegated prefix announced by *other* node,
  * call this function. This can only be called during db update.
