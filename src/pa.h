@@ -19,46 +19,37 @@
 
 #include "prefix_utils.h"
 
-/* Locally assigned prefix */
-struct pa_lap {
-	struct avl_node avl_node;   /* Must be first */
-	struct prefix prefix;	    /* The assigned prefix */
-	char ifname[IFNAMSIZ];		/* lap's interface name */
-
-	/** PRIVATE **/
-	time_t assigned; // When assigned for the first time
-	bool configured; // Whether that lap is pushed to iface */
-};
-
-/* Locally delegated prefix.
- * i.e. a delegated prefix that we own. */
-struct pa_ldp {
-	struct avl_node avl_node; /* Must be first */
-
-	/* The delegated prefix. */
-	struct prefix prefix;
-
-	/* The prefix is valid until that time.
-	 * Afterward, it will be discarded (no delay for graceful timeout). */
-	time_t valid_until;
-	/* The prefix also as a prefered lifetime */
-	time_t prefered_until;
-
-	/** PRIVATE **/
-	// Nothing for now
-};
-
-/* Callbacks for flooding callbacks. */
+/* Callbacks for flooding protocol. */
 struct pa_flood_callbacks {
 	void *priv;
-	void (*updated_laps)(void *priv); /* When laps are updated */
-	void (*updated_ldps)(void *priv); /* When ldps are udated */
+	/* Called whenever a locally assigned prefix is modified
+	 * @p - the assigned prefix
+	 * @ifname - interface on which assignment is made
+	 * @to_delete - non-zero when the lap must not be advertised anymore
+	 * @priv - The private pointer */
+	void (*updated_lap)(const struct prefix *p, const char *ifname,
+							int to_delete, void *priv);
+	/* Called whenever a locally delegated prefix is modified
+	 * @p - the delegated prefix
+	 * @valid_until - End of validity date and 0 to ask for deletion
+	 * @prefered_until - Preferred date
+	 * @priv - The private pointer */
+	void (*updated_ldp)(const struct prefix *p, time_t valid_until,
+							time_t prefered_until, void *priv);
 };
 
 struct pa_iface_callbacks {
 	void *priv;
-	void (*assign_prefix)(const char *ifname, struct prefix *, void *priv);
-	void (*remove_prefix)(const char *ifname, struct prefix *, void *priv);
+	/* Called whenever an prefix assigned to some interface should be
+	 * modified.
+	 * @p - the assigned prefix
+	 * @ifname - the interface on which that prefix is or should be
+	 * @valid_until - validity date
+	 * @prefered_until - prefered date
+	 * @priv - The private pointer
+	 */
+	void (*update_prefix)(const struct prefix *p, const char *ifname,
+						time_t valid_until,	time_t prefered_until, void *priv);
 };
 
 struct pa_conf {
@@ -113,16 +104,7 @@ void pa_conf_term(struct pa_conf *);
 
 
 /*
- * Callbacks for iface
- */
-
-/* Subscribes to lap change events.
- * Will be used by iface.c to obtain new laps information. */
-void pa_laps_subscribe(struct pa_iface_callbacks *);
-
-
-/*
- * Owner's interface.
+ * pa control functions
  */
 
 /* Initializes the prefix assignment algorithm with a default
@@ -145,21 +127,25 @@ void pa_term();
 
 
 /*
+ * For iface interface
+ */
+
+/* Subscribes to lap change events.
+ * Will be used by iface.c to obtain new laps information.
+ * Subscribing will override previous subscription (if any). */
+void pa_iface_subscribe(const struct pa_iface_callbacks *);
+
+
+
+/*
  * Flooding algorithm interface
  */
 
-/*
- * Each time it changes, the flooding algorithm must
- * update the eap and edp database. All the entries must
- * be pushed and everything must be done in a single uloop event.
- */
 
 /* Sets flooder algorithm callbacks.
- * A new subscription will override the previous one. */
+ * Subscribing will override previous subscription (if any). */
 void pa_flood_subscribe(const struct pa_flood_callbacks *);
 
-/* Before starting update, the flooder has to call this function. */
-void pa_update_init();
 
 /* For each prefix assigned by *other* node, call that function.
  * @prefix - The assigned prefix
@@ -168,33 +154,22 @@ void pa_update_init();
  * @ifname - Interface name, if assigned on a connected link.
  *           Zero-length string otherwise.
  */
-int pa_update_eap(const struct prefix *prefix,
-				bool takes_precedence,
-				const char *ifname);
+int pa_update_eap(const struct prefix *prefix, const char *ifname,
+				bool takes_precedence, int do_delete);
 
 /* For each delegated prefix announced by *other* node,
  * call this function. This can only be called during db update.
  * @prefix - The delegated prefix
- * @valid_until - Time when the prefix becomes invalid
+ * @valid_until - Time when the prefix becomes invalid (0 for deletion)
+ * @prefered_until - Time when the prefix is not prefered.
  */
 int pa_update_edp(const struct prefix *prefix,
 				time_t valid_until, time_t prefered_until);
-
-/* At the end of an update, the flooder must call this function. */
-void pa_update_commit();
 
 /* For some things (like deciding whether to choose ula prefix),
  * the router needs to be home network leader.
  * This can be called anytime. */
 void pa_set_global_leadership(bool leadership);
-
-/* This will return the tree containing assigned prefixes
- * (struct pa_lap) */
-struct avl_tree *pa_get_laps();
-
-/* This will return the tree containing delegated prefixes
- * (struct pa_ldp) */
-struct avl_tree *pa_get_ldps();
 
 #endif
 
