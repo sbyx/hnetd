@@ -1,5 +1,6 @@
 #include <syslog.h>
 #include <errno.h>
+#include <assert.h>
 
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -19,6 +20,13 @@ static struct ubus_context *ubus = NULL;
 //static struct ubus_subscriber netifd;
 static uint32_t ubus_network_interface = 0;
 static struct blob_buf b;
+
+static void platform_commit(struct uloop_timeout *t);
+struct platform_iface {
+	struct iface *iface;
+	struct uloop_timeout update;
+	char handle[];
+};
 
 
 int platform_init(void)
@@ -41,46 +49,77 @@ int platform_init(void)
 	return 0;
 }
 
-
-void platform_apply_domain(__unused struct iface *iface)
+void platform_iface_new(struct iface *c, const char *handle)
 {
-	// Dummy, see platform_commit
+	assert(c->platform == NULL);
+
+	size_t handlenamelen = strlen(handle) + 1;
+	struct platform_iface *iface = calloc(1, sizeof(*iface) + handlenamelen);
+	iface->iface = c;
+	iface->update.cb = platform_commit;
+
+	c->platform = iface;
 }
 
-void platform_apply_zone(__unused struct iface *iface)
+void platform_iface_free(struct iface *c)
 {
-	// Dummy, see platform_commit
+	struct platform_iface *iface = c->platform;
+	if (iface) {
+		uloop_timeout_cancel(&iface->update);
+		free(iface);
+		c->platform = NULL;
+	}
 }
 
-void platform_apply_address(__unused struct iface_addr *addr, __unused bool enable)
+void platform_set_internal(struct iface *c,
+		__unused bool internal)
 {
-	// Dummy, see platform_commit
+	struct platform_iface *iface = c->platform;
+	assert(iface);
+	uloop_timeout_set(&iface->update, 100);
 }
+
+void platform_set_address(struct iface *c,
+		__unused struct iface_addr *addr, __unused bool enable)
+{
+	platform_set_internal(c, false);
+}
+
+
+void platform_set_owner(struct iface *c,
+		__unused bool enable)
+{
+	platform_set_internal(c, false);
+}
+
 
 // Commit platform changes
-void platform_commit(struct iface *iface)
+static void platform_commit(struct uloop_timeout *t)
 {
+	struct platform_iface *iface = container_of(t, struct platform_iface, update);
+	struct iface *c = iface->iface;
+
 	blob_buf_init(&b, 0);
 	blobmsg_add_u32(&b, "action", 0);
 	blobmsg_add_u8(&b, "link-up", 1);
-	blobmsg_add_string(&b, "interface", iface->name);
+	blobmsg_add_string(&b, "interface", iface->handle);
 
 	void *k, *l;
 	struct iface_addr *a;
 
 	k = blobmsg_open_array(&b, "ipaddr");
-	vlist_for_each_element(&iface->addrs, a, node) {
-		if (a->v6)
+	vlist_for_each_element(&c->assigned, a, node) {
+		if (!IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix))
 			continue;
 
 		l = blobmsg_open_table(&b, NULL);
 
 		char *buf = blobmsg_alloc_string_buffer(&b, "ipaddr", INET_ADDRSTRLEN);
-		inet_ntop(AF_INET, &a->addr, buf, INET_ADDRSTRLEN);
+		inet_ntop(AF_INET, &a->prefix.prefix.s6_addr32[3], buf, INET_ADDRSTRLEN);
 		blobmsg_add_string_buffer(&b);
 
 		buf = blobmsg_alloc_string_buffer(&b, "mask", 4);
-		snprintf(buf, 4, "%u", a->prefix);
+		snprintf(buf, 4, "%u", a->prefix.plen);
 		blobmsg_add_string_buffer(&b);
 
 		blobmsg_close_table(&b, l);
@@ -88,18 +127,18 @@ void platform_commit(struct iface *iface)
 	blobmsg_close_array(&b, k);
 
 	k = blobmsg_open_array(&b, "ip6addr");
-	vlist_for_each_element(&iface->addrs, a, node) {
-		if (!a->v6)
+	vlist_for_each_element(&c->assigned, a, node) {
+		if (IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix))
 			continue;
 
 		l = blobmsg_open_table(&b, NULL);
 
 		char *buf = blobmsg_alloc_string_buffer(&b, "ipaddr", INET6_ADDRSTRLEN);
-		inet_ntop(AF_INET6, &a->addr, buf, INET6_ADDRSTRLEN);
+		inet_ntop(AF_INET6, &a->prefix.prefix, buf, INET6_ADDRSTRLEN);
 		blobmsg_add_string_buffer(&b);
 
 		buf = blobmsg_alloc_string_buffer(&b, "mask", 4);
-		snprintf(buf, 4, "%u", a->prefix);
+		snprintf(buf, 4, "%u", a->prefix.plen);
 		blobmsg_add_string_buffer(&b);
 
 		if (a->valid_until) {
@@ -113,18 +152,18 @@ void platform_commit(struct iface *iface)
 
 	k = blobmsg_open_table(&b, "data");
 
-	if (iface->domain) {
+	if (c->domain) {
 		l = blobmsg_open_array(&b, "domain");
-		blobmsg_add_string(&b, NULL, iface->domain);
+		blobmsg_add_string(&b, NULL, c->domain);
 		blobmsg_close_array(&b, l);
 	}
 
-	const char *service = (iface->internal) ? "server" : "disabled";
+	const char *service = (c->linkowner) ? "server" : "disabled";
 	blobmsg_add_string(&b, "ra", service);
 	blobmsg_add_string(&b, "dhcpv4", service);
 	blobmsg_add_string(&b, "dhcpv6", service);
 
-	const char *zone = (iface->internal) ? "lan" : "wan";
+	const char *zone = (c->internal) ? "lan" : "wan";
 	blobmsg_add_string(&b, "zone", zone);
 
 	blobmsg_close_table(&b, k);

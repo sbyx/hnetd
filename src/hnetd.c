@@ -41,7 +41,7 @@ int main(__unused int argc, char* const argv[])
 		return 2;
 	}
 
-	if (platform_init()) {
+	if (iface_init()) {
 		syslog(LOG_ERR, "Failed to init platform: %s", strerror(errno));
 		return 3;
 	}

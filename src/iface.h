@@ -1,64 +1,72 @@
-#pragma once
+#ifndef _IFACE_H
+#define _IFACE_H
+
 #include "hnetd.h"
+#include "prefix_utils.h"
 
-#include <stdbool.h>
-#include <netinet/in.h>
-
-#include <libubox/vlist.h>
 #include <libubox/list.h>
+#include <libubox/vlist.h>
+#include <netinet/in.h>
+#include <time.h>
+
+
+// API for PA / HCP & friends
+
+struct iface_user {
+	// We will just add this struct to our linked-list so please keep it around by yourself ;)
+	struct list_head head;
+
+	/* Callback for internal interfaces */
+	void (*cb_intiface)(struct iface_user *u, const char *ifname, bool internal);
+
+	/* Callback for delegated prefixes (a negative validity time indicates removal) */
+	void (*cb_prefix)(struct iface_user *u, const struct prefix *prefix,
+			time_t valid_until, time_t preferred_until);
+};
+
+// Register user for interface events (callbacks with NULL-values are ignored)
+void iface_register_user(struct iface_user *user);
+
+// Unregister user for interface events, do NOT call this from the callback itself!
+void iface_unregister_user(struct iface_user *user);
+
+
+
+// Internal API to platform
 
 struct iface_addr {
 	struct vlist_node node;
-	struct iface *iface;
-
 	time_t valid_until;
 	time_t preferred_until;
-
-	bool v6;
-	uint8_t prefix;
-	union iface_ia {
-		struct in_addr inet;
-		struct in6_addr inet6;
-	} addr;
+	struct prefix prefix;
 };
 
 struct iface {
 	struct list_head head;
 
-	char *name;
-	int ifindex;
-	char *ifname;
+	// Platform specific handle
+	void *platform;
+
+	// Interface status
+	bool linkowner;
+	bool unmanaged;
+	bool internal;
+	bool v4leased;
+
+	// Prefix storage
+	struct vlist_tree assigned;
+	struct vlist_tree delegated;
+
+	// Other data
 	char *domain;
 
-	bool internal;
-	bool managed;
-
-	struct vlist_tree addrs;
-	struct vlist_tree prefixes;
+	// Interface name
+	char ifname[];
 };
 
-struct list_head interfaces;
 
-// API to be called from ELSA logic to manipulate interface config
+int iface_init(void);
+struct iface* iface_get(const char *ifname, const char *handle);
+void iface_remove(const char *ifname);
 
-// Get / set / delete managed interface
-struct iface* iface_get(const char *name);
-struct iface* iface_create(const char *name, const char *ifname, bool managed);
-void iface_delete(const char *name);
-
-// Add address to interface
-void iface_set_addr(struct iface *iface, bool v6, const union iface_ia *addr,
-		uint8_t prefix, time_t valid_until, time_t preferred_until);
-
-// Add prefix to interface
-void iface_set_prefix(struct iface *iface, bool v6, const union iface_ia *addr,
-		uint8_t prefix, time_t valid_until, time_t preferred_until);
-
-// Change domain of interface
-void iface_set_domain(struct iface *iface, const char *domain);
-
-// Change internal state of interface
-void iface_set_internal(struct iface *iface, bool external);
-
-// Commit all changes to this interface to apply it on platform
-void iface_commit(struct iface *iface);
+#endif

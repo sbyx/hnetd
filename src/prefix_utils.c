@@ -1,6 +1,7 @@
 #include "prefix_utils.h"
 
 #include <string.h>
+#include <stdlib.h>
 
 struct prefix ipv4_in_ipv6_prefix = {
 		.prefix = { .s6_addr = {
@@ -124,8 +125,8 @@ int prefix_random(const struct prefix *p, struct prefix *dst,
 	if(plen > 128 || plen < p->plen)
 		return -1;
 
-	/* TODO: TO BE DEFINED */
-	random_read(&rand, sizeof(rand));
+	for (size_t i = 0; i < sizeof(rand); ++i)
+		rand.s6_addr[i] = random();
 
 	dst->plen = plen;
 	memcpy(&dst->prefix, &p->prefix, sizeof(rand));
