@@ -1,5 +1,7 @@
 #include "pa.h"
 
+#include "iface.h"
+
 #include <stdlib.h>
 #include <string.h>
 #include <libubox/list.h>
@@ -7,6 +9,8 @@
 
 /* #of ms waiting when we want immediate pa run */
 #define PA_SCHEDULE_RUNNEXT_MS  10
+
+#define PA_RIDCMP(r1, r2) memcmp(r1, r2, PA_RIDLEN)
 
 #define PA_CONF_DFLT_COMMIT_LAP_DELAY  20
 #define PA_CONF_DFLT_DELETE_LAP_DELAY  240
@@ -23,91 +27,88 @@ static struct prefix PA_CONF_DFLT_V4 = {
 			0x00,0x00, 0xff,0xff,  0x0a }},
 	.plen = 104 };
 
-
-/* Externally assigned prefix */
-struct pa_eap {
-	struct avl_node avl_node;
-	struct prefix prefix;
+/* Represents an interface for pa.
+ * If an iface is not internal, has no laps and no eaps,
+ * it must be deleted. */
+struct pa_iface {
+	struct list_head le; /* Linked in ifaces list */
 	char ifname[IFNAMSIZ];
 
-	bool higher_priority; /* If we have higher priority */
-	int to_delete; /* This eap is to be deleted */
+	bool internal;  /* Whether the iface is internal */
 
-	/* Must be checked against pa */
-	bool updated;
-};
-
-/* A delegated prefix */
-struct pa_dp {
-	struct avl_node avl_node;
-	struct prefix prefix;
-	time_t valid_until;
-	time_t prefered_until;
-	bool local;
-
-	/* That means the dp was modified and should be checked against
-	 * pa algo during next schedule. */
-	bool updated;
+	struct list_head laps; /* laps on that iface */
+	struct list_head eaps; /* eaps on that iface */
 };
 
 /* Locally assigned prefix */
 struct pa_lap {
 	struct avl_node avl_node;   /* Must be first */
 	struct prefix prefix;	    /* The assigned prefix */
-	char ifname[IFNAMSIZ];		/* lap's interface name */
 
-	struct pa_dp *dp;
-	bool owner;
-	time_t flooded;  //When flooding started
-	time_t assigned; //When assigned to iface
+	struct pa_iface *iface; /* Iface for that lap */
+	struct list_head if_le; /* Linked in iface struct */
+
+	struct pa_dp *dp;		/*The used delegated prefix*/
+	struct list_head dp_le; /*List element in dp */
+
+	bool flooded;  /* flooding started */
+	bool assigned; /* assigned to iface */
 };
 
-/* Represents an interface for pa */
-struct pa_iface {
+/* Externally assigned prefix */
+struct pa_eap {
+	struct avl_node avl_node;
+	struct prefix prefix;
+	struct pa_rid rid;    /* Sender's router id */
+
+	struct pa_iface *iface; /* Iface for that eap (or NULL) */
+	struct list_head if_le;/* Linked in iface */
+};
+
+/* A delegated prefix */
+struct pa_dp {
 	struct list_head le;
-	char ifname[IFNAMSIZ];
+	struct prefix prefix;
+	hnetd_time_t valid_until; /* Zero if must be deleted */
+	hnetd_time_t preferred_until;
 
-	/* run_pa can be set by iface.
-	 * owner can be set by hcp.
-	 * If both of them are null, we really don't care
-	 * about that interface and it should be deleted.
-	 */
-	bool run_pa;
-
-	/* Means that interface has been modified
-	 * and must be checked against pa algorithm during
-	 * next schedule. */
-	bool updated;
+	struct list_head laps; /* All laps attached to that prefix */
+	bool local;            /* If we own that assignment */
+	struct pa_rid rid;     /* If not local, source rid */
 };
-
 
 struct pa {
 	struct pa_conf conf;
 
 	struct avl_tree laps; /* Locally assigned prefixes */
 	struct avl_tree eaps; /* Externaly assigned prefixes */
-	struct avl_tree dps;  /* Delegated prefixes db */
+
+	struct list_head dps; /* Delegated prefixes list */
 
 	struct list_head ifaces; /* List of interfaces known by pa */
 
-	bool global_leadership; /* Whether we are global leader */
+	struct pa_rid rid; /* Our router id */
 
 	struct pa_flood_callbacks fcb; /* flooder interface */
 	struct pa_iface_callbacks ifcb; /* iface callbacks */
 
-	/* Whether the pa is started */
-	bool started;
+	struct iface_user ifu; /* To receive ifaces callbacks */
 
-#define PA_TODO_ULA    0x0001
-#define PA_TODO_LAPS   0x0002
-#define PA_TODO_IFACE  0x0004
-#define PA_TODO_DP     0x0008
-#define PA_TODO_LEADER 0x0010
-#define PA_TODO_EAPS   0x0020
+	bool started;   /* Whether the pa is started */
+	bool scheduled; /* Wether a pa run is scheduled */
+	struct uloop_timeout pa_timeout; /* The timeout */
+
+
+/* Ways of optimizing the pa algorithm */
+#define PA_TODO_ALL    0xffff
 	uint32_t todo_flags;
-
-	struct uloop_timeout pa_timeout;
 };
+
+
+/*** HEADERS *****/
+static void pa_eap_iface_assign(struct pa_eap *eap, struct pa_iface *iface);
+static void pa_lap_destroy(struct pa *pa, struct pa_lap *lap);
+
 
 static int pa_avl_prefix_cmp (const void *k1, const void *k2, void *ptr)
 {
@@ -117,20 +118,13 @@ static int pa_avl_prefix_cmp (const void *k1, const void *k2, void *ptr)
 	return (i>0)?1:-1;
 }
 
-#define pa_schedule_raw(pa) \
-		uloop_timeout_set(&pa->pa_timeout, PA_SCHEDULE_RUNNEXT_MS)
-
 static void pa_schedule(struct pa *pa, uint32_t todo_flags)
 {
-	if(!(todo_flags & ~pa->todo_flags))
-		return;
-
-	bool running = pa->todo_flags;
-
 	pa->todo_flags |= todo_flags;
-
-	if(pa->started && !running)
-		pa_schedule_raw(pa);
+	if(pa->started && pa->todo_flags && !pa->scheduled) {
+		uloop_timeout_set(&pa->pa_timeout, PA_SCHEDULE_RUNNEXT_MS);
+		pa->scheduled = true;
+	}
 }
 
 void pa_conf_default(struct pa_conf *conf)
@@ -155,27 +149,15 @@ void pa_flood_subscribe(pa_t pat, const struct pa_flood_callbacks *cb)
 	memcpy(&pa->fcb, cb, sizeof(*cb));
 }
 
+void pa_iface_subscribe(pa_t pat, const struct pa_iface_callbacks *cb)
+{
+	struct pa *pa = (struct pa *)pat;
+	memcpy(&pa->ifcb, cb, sizeof(*cb));
+}
+
 /**************************************************************/
 /******************* Lookup functions *************************/
 /**************************************************************/
-
-struct pa_dp *pa_dp_getbyprefix(struct pa *pa, const struct prefix *p,
-		bool local)
-{
-	struct pa_dp *iter;
-	struct pa_dp *first;
-	struct pa_dp *last;
-
-	first = avl_find_ge_element(&pa->dps, p, first, avl_node);
-	last = avl_find_le_element(&pa->dps, p, first, avl_node);
-
-	avl_for_element_range(first, last, iter, avl_node) {
-		if(iter->local == local)
-			return iter;
-	}
-
-	return NULL;
-}
 
 #define pa_lap_getbyprefix(pa, prefix) \
 		(struct pa_lap *)avl_find(&pa->laps, prefix)
@@ -184,46 +166,202 @@ struct pa_dp *pa_dp_getbyprefix(struct pa *pa, const struct prefix *p,
 		(struct pa_eap *)avl_find(&pa->eaps, prefix)
 
 
+
+/**************************************************************/
+/******************* iface managment **************************/
+/**************************************************************/
+
+static struct pa_iface *pa_iface_goc(struct pa *pa, const char *ifname)
+{
+	struct pa_iface *iface;
+
+	list_for_each_entry(iface, &pa->ifaces, le) {
+		if(!strcmp(ifname, iface->ifname))
+			return iface;
+	}
+
+	if(strlen(ifname) > IFNAMSIZ - 1)
+			return NULL; //Name too long
+
+	if(!(iface = malloc(sizeof(struct pa_iface))))
+			return NULL;
+
+	strcpy(iface->ifname, ifname);
+	list_init_head(&iface->eaps);
+	list_init_head(&iface->laps);
+	iface->internal = 0;
+
+	return iface;
+}
+
+static void pa_iface_rmlaps(struct pa *pa, struct pa_iface *iface)
+{
+	struct pa_lap *lap;
+	struct pa_lap *slap;
+	list_for_each_entry_safe(lap, slap, &iface->laps, if_le)
+		pa_lap_destroy(pa, lap);
+}
+
+/* Iface delete (called by pa) */
+static void pa_iface_destroy(struct pa *pa, struct pa_iface *iface)
+{
+	struct pa_eap *eap;
+
+
+	/* Destroys all laps */
+	pa_iface_rmlaps(pa, iface);
+
+	/* Remove iface from all eaps */
+	list_for_each_entry(eap, &iface->eaps, if_le)
+		pa_eap_iface_assign(eap, NULL);
+
+	list_del(&iface->le);
+	free(iface);
+}
+
+static void pa_iface_check(struct pa *pa,
+		struct pa_iface *iface)
+{
+	if(iface->internal)
+		return;
+
+	/* External ifaces can't have laps */
+	pa_iface_rmlaps(pa, iface);
+
+	/* We don't need an external iface with no eaps */
+	if(list_empty(&iface->eaps))
+		pa_iface_destroy(pa, iface);
+}
+
+static void pa_iface_set_internal(struct pa *pa,
+		struct pa_iface *iface, bool internal)
+{
+	if(iface->internal != internal)
+		pa_schedule(pa, PA_TODO_ALL);
+
+	iface->internal = internal;
+	pa_iface_check(pa, iface);
+}
+
 /**************************************************************/
 /********************* eap managment **************************/
 /**************************************************************/
 
+static void pa_eap_iface_assign(struct pa_eap *eap,
+		struct pa_iface *iface)
+{
+	if(eap->iface == iface)
+		return;
+
+	if(eap->iface) {
+		eap->iface = NULL;
+		list_remove(&eap->if_le);
+	}
+	eap->iface = iface;
+	if(iface)
+		list_add(&eap->if_le, &iface->eaps);
+
+	//TODO: Schedule pa
+}
+
+/* Find an eap with specified prefix and rid */
+static struct pa_eap *pa_eap_get(struct pa *pa,
+		const struct prefix *prefix, const struct pa_rid *rid)
+{
+	struct pa_eap *iter;
+	struct pa_eap *first;
+	struct pa_eap *last;
+
+	first = avl_find_ge_element(&pa->eaps, prefix, iter, avl_node);
+	last = avl_find_le_element(&pa->eaps, prefix, iter, avl_node);
+
+	if(!first)
+		return NULL;
+
+	avl_for_element_range(first, last, iter, avl_node) {
+		if(!PA_RIDCMP(rid, &iter->rid))
+			return iter;
+	}
+
+	return NULL;
+}
+
+static int pa_eap_iface_assignbyname(struct pa *pa,
+		struct pa_eap *eap, const char *ifname)
+{
+	struct pa_iface *iface = NULL;
+	if(ifname && strlen(ifname)) {
+		iface = pa_iface_goc(pa, ifname);
+
+		if(iface == NULL)
+			return -1;
+	}
+
+	pa_eap_iface_assign(eap, iface);
+	return 0;
+}
+
 static struct pa_eap *pa_eap_create(struct pa *pa, const struct prefix *prefix,
-		const char *ifname)
+		const struct pa_rid *rid)
 {
 	struct pa_eap *eap;
 
-	if(strlen(ifname) > IFNAMSIZ - 1)
-		return NULL;
-
 	if(!(eap = malloc(sizeof(struct pa_eap))))
-		return NULL;
+		goto malloc;
 
-	eap->to_delete = 1;
-	eap->higher_priority = 1;
-	eap->updated = 0;
-	strcpy(eap->ifname, ifname);
+	eap->iface = NULL; /* Important for assign */
+
+	memcpy(&eap->rid, rid, sizeof(struct pa_rid));
 	memcpy(&eap->prefix, prefix, sizeof(struct prefix));
 
-	if(avl_insert(&pa->eaps, &eap->avl_node)) {
-		free(eap);
+	if(avl_insert(&pa->eaps, &eap->avl_node))
+		goto insert;
+
+	return eap;
+
+insert:
+	free(eap);
+malloc:
+	return NULL;
+}
+
+static struct pa_eap *pa_eap_goc(struct pa *pa, const struct prefix *prefix,
+		const char *ifname, const struct pa_rid *rid)
+{
+	struct pa_eap *eap;
+
+	eap = pa_eap_get(pa, prefix, rid);
+
+	if(!eap)
+		eap = pa_eap_create(pa, prefix, rid);
+
+	if(!eap)
 		return NULL;
-	}
+
+	if(pa_eap_iface_assignbyname(pa, eap, ifname))
+		return NULL;
 
 	return eap;
 }
 
+/* Only hcp controls eaps.
+ * Destroying it is straightworward. */
 static void pa_eap_destroy(struct pa *pa, struct pa_eap *eap)
 {
+	if(eap->iface)
+		list_del(&eap->if_le);
+
 	avl_delete(&pa->eaps, &eap->avl_node);
 	free(eap);
 }
 
-/* Called when an eap is modified */
-static void pa_eap_modified(struct pa *pa, struct pa_eap *eap)
+static void pa_eap_update(struct pa *pa, struct pa_eap *eap,
+		bool to_delete)
 {
-	eap->updated = 1;
-	pa_schedule(pa, PA_TODO_EAPS);
+	if(to_delete) {
+		pa_eap_destroy(pa, eap);
+		pa_schedule(pa, PA_TODO_ALL);
+	}
 }
 
 /**************************************************************/
@@ -231,19 +369,15 @@ static void pa_eap_modified(struct pa *pa, struct pa_eap *eap)
 /**************************************************************/
 
 static struct pa_lap *pa_lap_create(struct pa *pa, const struct prefix *prefix,
-		const char *ifname)
+		struct pa_iface *iface, struct pa_dp* dp)
 {
 	struct pa_lap *lap;
-
-	if(strlen(ifname) > IFNAMSIZ - 1)
-		return NULL;
 
 	if(!(lap = malloc(sizeof(struct pa_lap))))
 		return NULL;
 
-	lap->assigned = 0;
-	lap->flooded = 0;
-	strcpy(lap->ifname, ifname);
+	lap->assigned = false;
+	lap->flooded = false;
 	memcpy(&lap->prefix, prefix, sizeof(struct prefix));
 
 	if(avl_insert(&pa->laps, &lap->avl_node)) {
@@ -251,68 +385,174 @@ static struct pa_lap *pa_lap_create(struct pa *pa, const struct prefix *prefix,
 		return NULL;
 	}
 
+	/* Attaching dp */
+	lap->dp = dp;
+	list_add(&lap->dp_le, &dp->laps);
+
+	/* Attaching iface */
+	lap->iface = iface;
+	list_add(&lap->if_le, &iface->laps);
+
 	return lap;
 }
 
-static void pa_lap_destory(struct pa *pa, struct pa_lap *lap)
+static void pa_lap_setflood(struct pa *pa, struct pa_lap *lap,
+		bool enable)
 {
+	if((!enable && !lap->flooded) || (enable && lap->flooded))
+		return; // No change
+
+	lap->flooded = enable;
+
+	// Tell hcp about that
+	if(pa->fcb.updated_lap)
+		pa->fcb.updated_lap(&lap->prefix, lap->iface->ifname,
+				!lap->flooded, pa->fcb.priv);
+}
+
+static void pa_lap_setassign(struct pa *pa, struct pa_lap *lap,
+		bool enable)
+{
+	if((!enable && !lap->assigned) || (enable && lap->assigned))
+		return; // No change
+
+	lap->assigned = enable;
+
+	// Tell ifaces about that
+	if(pa->ifcb.update_prefix)
+		pa->ifcb.update_prefix(&lap->prefix, lap->iface->ifname,
+				(lap->assigned)?lap->dp->valid_until:0,
+				(lap->assigned)?lap->dp->preferred_until:0,
+						pa->fcb.priv);
+}
+
+static void pa_lap_destroy(struct pa *pa, struct pa_lap *lap)
+{
+	/* Unassign if assigned */
+	pa_lap_setassign(pa, lap, false);
+
+	/* Unflood if flooded */
+	pa_lap_setflood(pa, lap, false);
+
+	list_remove(&lap->dp_le);
+	list_remove(&lap->if_le);
+
 	avl_delete(&pa->laps, &lap->avl_node);
 	free(lap);
 }
+
+
 
 
 /**************************************************************/
 /********************* dp managment **************************/
 /**************************************************************/
 
-/* Creates an empty dp with the given prefix */
-static struct pa_dp *pa_dp_create(struct pa *pa, const struct prefix *prefix,
-		bool local)
+struct pa_dp *pa_dp_get(struct pa *pa, const struct prefix *p,
+		const struct pa_rid *rid)
+{
+	struct pa_dp *dp;
+
+	list_for_each_entry(dp, &pa->dps, le) {
+		if(!prefix_cmp(p, &dp->prefix) &&
+				 ((rid)?(!PA_RIDCMP(&pa->rid, rid)):dp->local))
+			return dp;
+	}
+	return NULL;
+}
+
+/* Creates an empty unused dp with the given prefix */
+static struct pa_dp *pa_dp_create(struct pa *pa,
+		const struct prefix *prefix,
+		const struct pa_rid *rid)
 {
 	struct pa_dp *dp;
 	if(!(dp = malloc(sizeof(struct pa_dp))))
 		return NULL;
 
-	//Init
 	memcpy(&dp->prefix, prefix, sizeof(struct prefix));
+	list_init_head(&dp->laps);
 	dp->valid_until = 0;
-	dp->prefered_until = 0;
-	dp->updated = 0;
-	dp->local = local;
-
-	if(avl_insert(&pa->dps, &dp->avl_node)) {
-		free(dp);
-		return NULL;
+	dp->preferred_until = 0;
+	if(!rid) {
+		dp->local = 1;
+	} else {
+		dp->local = 0;
+		memcpy(&dp->rid, rid, sizeof(struct pa_rid));
 	}
 
+	list_add(&dp->le, &pa->dps); /* Adding dp */
+
 	return dp;
+}
+
+static struct pa_dp *pa_dp_goc(struct pa *pa, const struct prefix *prefix,
+		const struct pa_rid *rid)
+{
+	struct pa_dp *dp = pa_dp_get(pa, prefix, rid);
+
+	if(dp)
+		return dp;
+
+	return pa_dp_create(pa, prefix, rid);
 }
 
 /* Final and dummy destroy of a ldp */
 static void pa_dp_destroy(struct pa *pa, struct pa_dp *dp)
 {
-	//TODO: Remove all laps poiting to that dp.
+	struct pa_lap *lap;
+	struct pa_lap *slap;
 
-	avl_delete(&pa->dps, &dp->avl_node);
+	/* Destroy all lap rattached to that dp
+	 * because a lap needs a dp */
+	list_for_each_entry_safe(lap, slap, &dp->laps, dp_le) {
+		pa_lap_destroy(pa, lap);
+	}
+
+	//Notify hcp iff local
+	if(pa->fcb.updated_ldp && dp->local)
+			pa->fcb.updated_ldp(&dp->prefix, 0,
+					0, pa->fcb.priv);
+
+	//Remove that dp from database
+	list_remove(&dp->le);
 	free(dp);
 }
 
-/* A ldp has been modified */
-static void pa_dp_modified(struct pa *pa, struct pa_dp *dp)
+static void pa_dp_check(struct pa *pa, struct pa_dp *dp)
 {
-	dp->updated = 1;
-	pa_schedule(pa, PA_TODO_DP);
+	if(!dp->valid_until) {
+		pa_dp_destroy(pa, dp);
+		return;
+	}
 
-	/* Notify hcp */
-	if(pa->fcb.updated_ldp && dp->local)
+	pa_schedule(pa, PA_TODO_ALL);
+
+	/* Must tell hcp about changes */
+	if(dp->local && pa->fcb.updated_ldp) {
 		pa->fcb.updated_ldp(&dp->prefix, dp->valid_until,
-				dp->prefered_until, pa->fcb.priv);
+				dp->preferred_until, pa->fcb.priv);
+	}
 }
 
+
+static void pa_dp_update(struct pa *pa, struct pa_dp *dp,
+		hnetd_time_t valid_until,hnetd_time_t prefered_until)
+{
+	if(valid_until == dp->valid_until &&
+			prefered_until == dp->preferred_until)
+		return;
+
+	dp->valid_until = valid_until;
+	dp->preferred_until = prefered_until;
+
+	pa_dp_check(pa, dp);
+}
 
 /**************************************************************/
 /********************* PA algorithm ***************************/
 /**************************************************************/
+
 
 /* Executes pa algorithm */
 void pa_do(struct pa *pa)
@@ -322,188 +562,93 @@ void pa_do(struct pa *pa)
 
 static void pa_do_uloop(struct uloop_timeout *t)
 {
-
+	struct pa *pa = container_of(t, struct pa, pa_timeout);
+	pa_do(pa);
 }
 
-
-/**************************************************************/
-/******************* iface managment **************************/
-/**************************************************************/
-
-
-static struct pa_iface *pa_iface_create(const char *ifname)
-{
-	struct pa_iface *iface;
-
-	if(strlen(ifname) > IFNAMSIZ - 1)
-		return NULL; //Name too long
-
-	if(!(iface = malloc(sizeof(struct pa_iface))))
-		return NULL;
-
-	strcpy(iface->ifname, ifname);
-	iface->run_pa = 0;
-	iface->updated = 0;
-	return iface;
-}
-
-/* Last dummy iface delete */
-static void pa_iface_destroy(struct pa_iface *iface)
-{
-	list_del(&iface->le);
-	free(iface);
-}
-
-static struct pa_iface *pa_iface_getbyname(struct pa *pa, const char *ifname)
-{
-	struct pa_iface *iface;
-	list_for_each_entry(iface, &pa->ifaces, le) {
-		if(!strcmp(ifname, iface->ifname))
-				return iface;
-	}
-	return NULL;
-}
-
-static void pa_iface_modified(struct pa *pa, struct pa_iface *iface)
-{
-	/* Schedule new pa algo for iface change */
-	iface->updated = 1;
-
-	pa_schedule(pa, PA_TODO_IFACE);
-}
 
 /**************************************************************/
 /********************* hcp interface **************************/
 /**************************************************************/
 
-void pa_set_global_leadership(pa_t pat, bool leadership)
+void pa_set_rid(pa_t pat, const struct pa_rid *rid)
 {
 	struct pa *pa = (struct pa *)pat;
-	if(leadership == pa->global_leadership)
+	if(!PA_RIDCMP(&pa->rid, rid))
 		return;
 
-	pa->global_leadership = leadership;
+	memcpy(&pa->rid, rid, sizeof(struct pa_rid));
 
-	pa_schedule(pa, PA_TODO_LEADER);
+	pa_schedule(pa, PA_TODO_ALL);
 }
 
 /* Called by hcp when it wants to update an eap */
-int pa_update_eap(pa_t pat, const struct prefix *prefix, const char *ifname,
-					bool to_delete, bool higher_priority)
+int pa_update_eap(pa_t pat, const struct prefix *prefix,
+		const struct pa_rid *rid,
+		const char *ifname, bool to_delete)
 {
 	struct pa *pa = (struct pa *)pat;
-	struct pa_eap *eap = pa_eap_getbyprefix(pa, prefix);
+	struct pa_eap *eap;
 
-	if(!eap) {
-		if(to_delete)
-			return 0;
-
-		eap = pa_eap_create(pa, prefix, (ifname)?ifname:PA_NO_IFACE);
-	}
-
-	if(!eap)
+	if(!(eap = pa_eap_goc(pa, prefix, ifname, rid)))
 		return -1;
 
-	if(to_delete == eap->to_delete &&
-			eap->higher_priority == higher_priority)
-		return 0;
-
-	eap->to_delete = to_delete;
-
-	pa_eap_modified(pa, eap);
-
+	pa_eap_update(pa, eap, to_delete);
 	return 0;
 }
 
 int pa_update_edp(pa_t pat, const struct prefix *prefix,
-				time_t valid_until, time_t prefered_until)
+		const struct pa_rid *rid,
+		hnetd_time_t valid_until, hnetd_time_t prefered_until)
 {
 	struct pa *pa = (struct pa *)pat;
-	struct pa_dp *edp = pa_dp_getbyprefix(pa, prefix, false);
+	struct pa_dp *dp;
 
-	if(!edp) {
-		if(!valid_until)
-			return 0;
-		edp = pa_dp_create(pa, prefix, false);
-	}
-
-	if(!edp)
+	if(!rid)
 		return -1;
 
-	if(edp->valid_until == valid_until && edp->prefered_until)
-		return 0;
+	if(!(dp = pa_dp_goc(pa, prefix, rid)))
+		return -1;
 
-	edp->valid_until = valid_until;
-	edp->prefered_until = prefered_until;
-
-	pa_dp_modified(pa, edp);
-
+	pa_dp_update(pa, dp, valid_until, prefered_until);
 	return 0;
 }
 
 
 /**************************************************************/
-/********************* iface interface ************************/
+/********************* iface callbacks ************************/
 /**************************************************************/
 
-/* Called when iface.c wants us to run pa on an iface */
-static void pa_iface_set_runpa(struct pa *pa, const char *ifname,
-		bool run_pa)
+static void pa_ifu_intiface(struct iface_user *u,
+		const char *ifname, bool enabled)
 {
-	struct pa_iface *iface = pa_iface_getbyname(pa, ifname);
+	struct pa *pa = container_of(u, struct pa, ifu);
+	struct pa_iface *iface;
 
-	if(!iface) {
-		if(!run_pa)
-			return;
+	iface = pa_iface_goc(pa, ifname);
 
-		iface = pa_iface_create(ifname);
-	}
-
-	if(run_pa == iface->run_pa)
+	if(!iface)
 		return;
 
-	iface->run_pa = run_pa;
-
-	pa_iface_modified(pa, iface);
+	pa_iface_set_internal(pa, iface, enabled);
 }
 
-
-/* When a locally dedicated prefix needs to be updated */
-static int pa_ldp_update(struct pa *pa, const struct prefix *prefix,
-			time_t valid_until, time_t prefered_until)
+static void pa_ifu_pd(struct iface_user *u,
+			const struct prefix *prefix,
+			hnetd_time_t valid_until, hnetd_time_t preferred_until)
 {
-	struct pa_dp *ldp;
+	struct pa *pa = container_of(u, struct pa, ifu);
+	struct pa_dp *dp = pa_dp_goc(pa, prefix, NULL);
 
-	ldp = pa_dp_getbyprefix(pa, prefix, true);
+	if(!dp)
+		return;
 
-	if(!ldp) {
-		if(!valid_until) //Unknown ldp needs to be destroyed... That was easy.
-			return 0;
-
-		ldp = pa_dp_create(pa, prefix, 1);
-	}
-
-	if(!ldp)
-		return -1;
-
-	if(ldp->valid_until == valid_until &&
-			ldp->prefered_until == prefered_until)
-		return 0;
-
-	ldp->valid_until = valid_until;
-	ldp->prefered_until = prefered_until;
-
-	pa_dp_modified(pa, ldp);
-
-	return 0;
+	pa_dp_update(pa, dp, valid_until, preferred_until);
 }
-
-
 
 /**************************************************************/
 /********************* main management ************************/
 /**************************************************************/
-
 
 int pa_set_conf(pa_t pat, const struct pa_conf *conf)
 {
@@ -526,23 +671,26 @@ pa_t pa_create(const struct pa_conf *conf)
 
 	memset(&pa, 0, sizeof(pa));
 
-	avl_init(&pa->eaps, pa_avl_prefix_cmp, false, NULL);
+	avl_init(&pa->eaps, pa_avl_prefix_cmp, true, NULL);
 	avl_init(&pa->laps, pa_avl_prefix_cmp, false, NULL);
-	avl_init(&pa->dps, pa_avl_prefix_cmp, true, NULL);
-	INIT_LIST_HEAD(&pa->ifaces);
+	list_init_head(&pa->dps);
+	list_init_head(&pa->ifaces);
 
-	pa->started = 0;
+	pa->started = false;
 	pa->todo_flags = 0;
+	pa->scheduled = false;
 
-	memset(&pa->pa_timeout, 0, sizeof(pa->pa_timeout));
-	pa->pa_timeout.cb = pa_do_uloop;
+	pa->ifu.cb_intiface = pa_ifu_intiface;
+	pa->ifu.cb_prefix = pa_ifu_pd;
+
+	pa->pa_timeout = (struct uloop_timeout) { .cb = pa_do_uloop };
 
 	if(pa_set_conf(pa, conf)) {
 		free(pa);
 		return NULL;
 	}
 
-	pa_schedule(pa, PA_TODO_ULA);
+	pa_schedule(pa, PA_TODO_ALL);
 
 	return pa;
 }
@@ -550,14 +698,16 @@ pa_t pa_create(const struct pa_conf *conf)
 int pa_start(pa_t pat)
 {
 	struct pa *pa = (struct pa *)pat;
-	//TODO: register to iface.c for iface updates
-	//TODO: register to iface.c for PDs updates
 
-	if(!pa->started) {
-		pa->started = 1;
-		/* Starts the pa for real */
-		pa_schedule_raw(pa);
-	}
+	if(pa->started)
+		return -1;
+
+	pa->started = 1;
+	/* Starts the pa if there is things to do */
+	pa_schedule(pa, 0);
+
+	/* Register to iface */
+	iface_register_user(&pa->ifu);
 
 	return 0;
 }
@@ -565,7 +715,30 @@ int pa_start(pa_t pat)
 void pa_destroy(pa_t pat)
 {
 	struct pa *pa = (struct pa *)pat;
-	//TODO: Destroy everything
+	struct pa_iface *iface;
+	struct pa_dp *dp;
+	struct pa_eap *eap;
+	struct pa_eap *seap;
+
+	/* Unregister everywhere */
+	iface_unregister_user(&pa->ifu);
+
+	/* Destroy all interfaces
+	 * This will also delete all laps */
+	while((iface = list_first_entry(&pa->ifaces, struct pa_iface, le))) {
+		pa_iface_destroy(pa, iface);
+	}
+
+	/* Destroy all dps */
+	while((dp = list_first_entry(&pa->dps, struct pa_dp, le))) {
+		pa_dp_destroy(pa, dp);
+	}
+
+	/* Destroy all eaps */
+	avl_for_each_element_safe(&pa->eaps, eap, avl_node, seap) {
+		pa_eap_destroy(pa, eap);
+	}
+
 	free(pa);
 }
 

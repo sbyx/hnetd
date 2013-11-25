@@ -17,9 +17,15 @@
 #include <stdint.h>
 #include <time.h>
 
+#include "hnetd.h"
 #include "prefix_utils.h"
 
-#define PA_NO_IFACE ""
+/* Length of router ids */
+#define PA_RIDLEN 16
+
+struct pa_rid {
+	uint8_t id[PA_RIDLEN];
+};
 
 typedef void *pa_t;
 
@@ -38,8 +44,8 @@ struct pa_flood_callbacks {
 	 * @valid_until - End of validity date and 0 to ask for deletion
 	 * @prefered_until - Preferred date
 	 * @priv - The private pointer */
-	void (*updated_ldp)(const struct prefix *p, time_t valid_until,
-							time_t prefered_until, void *priv);
+	void (*updated_ldp)(const struct prefix *p, hnetd_time_t valid_until,
+							hnetd_time_t prefered_until, void *priv);
 };
 
 struct pa_iface_callbacks {
@@ -54,7 +60,7 @@ struct pa_iface_callbacks {
 	 * @priv - The private pointer
 	 */
 	void (*update_prefix)(const struct prefix *p, const char *ifname,
-						time_t valid_until,	time_t prefered_until, void *priv);
+						hnetd_time_t valid_until,	hnetd_time_t prefered_until, void *priv);
 
 	/* When interface ownership changes.
 	 * @ifname - The interface name
@@ -153,12 +159,13 @@ void pa_flood_subscribe(pa_t, const struct pa_flood_callbacks *);
 /* For each prefix assigned by *other* node, call that function.
  * @prefix - The assigned prefix
  * @ifname - Interface name, if assigned on a connected link.
- *           NULL or PA_NO_IFACE otherwise.
+ *           NULL otherwise.
  * @do_delete - Whether this eap must be deleted
- * @higher_priority - Whether the sender has higher priority than us
+ * @rid - The source router id
  */
-int pa_update_eap(pa_t, const struct prefix *prefix, const char *ifname,
-					bool to_delete, bool higher_priority);
+int pa_update_eap(pa_t, const struct prefix *prefix,
+				const struct pa_rid *rid,
+				const char *ifname, bool to_delete);
 
 /* For each delegated prefix announced by *other* node,
  * call this function. This can only be called during db update.
@@ -167,12 +174,11 @@ int pa_update_eap(pa_t, const struct prefix *prefix, const char *ifname,
  * @prefered_until - Time when the prefix is not prefered.
  */
 int pa_update_edp(pa_t, const struct prefix *prefix,
-				time_t valid_until, time_t prefered_until);
+				const struct pa_rid *rid,
+				hnetd_time_t valid_until, hnetd_time_t prefered_until);
 
-/* For some things (like deciding whether to choose ula prefix),
- * the router needs to be home network leader.
- * This can be called anytime. */
-void pa_set_global_leadership(pa_t, bool leadership);
+/* Sets the router id. */
+void pa_set_rid(pa_t, const struct pa_rid *);
 
 #endif
 
