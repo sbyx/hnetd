@@ -9,7 +9,7 @@
 
 static struct iface* iface_find(const char *ifname);
 static void iface_update_prefix(const struct prefix *p, const char *ifname,
-		time_t valid_until, time_t preferred_until, void *priv);
+		hnetd_time_t valid_until, hnetd_time_t preferred_until, void *priv);
 static void iface_update_link_owner(const char *ifname, bool owner, void *priv);
 
 static struct list_head interfaces = LIST_HEAD_INIT(interfaces);
@@ -21,12 +21,12 @@ static struct pa_iface_callbacks pa_cb = {
 
 
 static void iface_update_prefix(const struct prefix *p, const char *ifname,
-		time_t valid_until, time_t preferred_until, __unused void *priv)
+		hnetd_time_t valid_until, hnetd_time_t preferred_until, __unused void *priv)
 {
 	struct iface *c = iface_find(ifname);
 	assert(c != NULL && c->platform != NULL);
 
-	if (valid_until && valid_until < hnetd_time()) { // Delete action
+	if (valid_until < hnetd_time()) { // Delete action
 		struct iface_addr *a = vlist_find(&c->assigned, p, a, node);
 		if (a)
 			vlist_delete(&c->assigned, &a->node);
@@ -49,6 +49,15 @@ static void iface_update_link_owner(const char *ifname, bool owner, __unused voi
 		c->linkowner = owner;
 		platform_set_owner(c, owner);
 	}
+}
+
+
+static void iface_notify_internal_state(struct iface *c, bool enabled)
+{
+	struct iface_user *u;
+	list_for_each_entry(u, &users, head)
+		if (u->cb_intiface)
+			u->cb_intiface(u, c->ifname, enabled);
 }
 
 
@@ -133,8 +142,11 @@ struct iface* iface_get(const char *ifname, const char *handle)
 		vlist_init(&c->assigned, compare_addrs, update_addr);
 		vlist_init(&c->delegated, compare_addrs, update_prefix);
 
-		if (handle)
+		if (handle) {
 			platform_iface_new(c, handle);
+			c->internal = true;
+			iface_notify_internal_state(c, true);
+		}
 
 		list_add(&c->head, &interfaces);
 	}
@@ -147,18 +159,17 @@ void iface_remove(const char *ifname)
 {
 	struct iface *c = iface_get(ifname, NULL);
 	if (c) {
-		if (c->internal) {
-			struct iface_user *u;
-			list_for_each_entry(u, &users, head)
-				if (u->cb_intiface)
-					u->cb_intiface(u, c->ifname, false);
-		}
+		// If interface was internal, let subscribers know of removal
+		if (c->internal)
+			iface_notify_internal_state(c, false);
 
 		list_del(&c->head);
 		vlist_flush_all(&c->assigned);
 		vlist_flush_all(&c->delegated);
+
 		if (c->platform)
 			platform_iface_free(c);
+
 		free(c->domain);
 		free(c);
 	}
@@ -181,12 +192,7 @@ static void iface_discover_border(struct iface *c)
 	bool internal = !c->v4leased && avl_is_empty(&c->delegated.avl);
 	if (c->internal != internal) {
 		c->internal = internal;
-
-		struct iface_user *u;
-		list_for_each_entry(u, &users, head)
-			if (u->cb_intiface)
-				u->cb_intiface(u, c->ifname, internal);
-
+		iface_notify_internal_state(c, internal);
 		platform_set_internal(c, internal);
 	}
 }
@@ -207,7 +213,8 @@ void iface_update_delegated(struct iface *c)
 }
 
 
-void iface_add_delegated(struct iface *c, const struct prefix *p, time_t valid_until, time_t preferred_until)
+void iface_add_delegated(struct iface *c, const struct prefix *p,
+		hnetd_time_t valid_until, hnetd_time_t preferred_until)
 {
 	struct iface_addr *a = calloc(1, sizeof(*a));
 	a->prefix = *p;
