@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Nov 25 14:24:00 2013 mstenber
- * Edit time:     56 min
+ * Last modified: Mon Nov 25 14:30:22 2013 mstenber
+ * Edit time:     57 min
  *
  */
 
@@ -109,10 +109,10 @@ struct hcp_neighbor_struct {
   struct in6_addr last_address;
 
   /* When did we last hear from this one? */
-  time_t last_heard;
+  hnetd_time_t last_heard;
 
   /* When did they last respond to our message? */
-  time_t last_response;
+  hnetd_time_t last_response;
 };
 
 struct hcp_node_struct {
@@ -128,7 +128,7 @@ struct hcp_node_struct {
 
   /* Node state stuff */
   unsigned char node_state_hash[HCP_HASH_LEN];
-  time_t origination_time; /* in monotonic time */
+  hnetd_time_t origination_time; /* in monotonic time */
 
   /* TLV data for the node. All TLV data in one binary blob, as
    * received/created. We could probably also maintain this at end of
