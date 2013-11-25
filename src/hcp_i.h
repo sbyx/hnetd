@@ -6,13 +6,15 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Nov 25 17:35:18 2013 mstenber
- * Edit time:     60 min
+ * Last modified: Mon Nov 25 18:34:44 2013 mstenber
+ * Edit time:     69 min
  *
  */
 
 #ifndef HCP_I_H
 #define HCP_I_H
+
+#include <libubox/uloop.h>
 
 /* Rough approximation - should think of real figure (-UDP size - HCP
    header size). */
@@ -75,6 +77,10 @@ struct hcp_struct {
 
   /* UDP socket. */
   int udp_socket;
+
+  /* Timeout for doing 'something' in hcp_io. */
+  struct uloop_timeout timeout;
+  hnetd_time_t join_failed_time;
 };
 
 typedef struct hcp_link_struct hcp_link_s, *hcp_link;
@@ -98,7 +104,11 @@ struct hcp_link_struct {
   /* Join failed -> probably tried during DAD. Should try later again. */
   bool join_pending;
 
-  /* XXX Trickle state */
+  /* Trickle state */
+  int i; /* trickle interval size */
+  hnetd_time_t send_time; /* when do we send if c < k*/
+  hnetd_time_t interval_end_time; /* when does current interval end */
+  int c; /* counter */
 };
 
 typedef struct hcp_neighbor_struct hcp_neighbor_s, *hcp_neighbor;
@@ -132,7 +142,7 @@ struct hcp_node_struct {
   uint32_t update_number;
 
   /* Node state stuff */
-  unsigned char node_state_hash[HCP_HASH_LEN];
+  unsigned char node_data_hash[HCP_HASH_LEN];
   hnetd_time_t origination_time; /* in monotonic time */
 
   /* TLV data for the node. All TLV data in one binary blob, as
@@ -162,6 +172,9 @@ bool hcp_init(hcp o, unsigned char *node_identifier, int len);
 
 void hcp_hash(const void *buf, int len, unsigned char *dest);
 
+/* Calculate hash of the network state based on current nodes. */
+void hcp_calculate_network_hash(hcp o, unsigned char *dest);
+void hcp_calculate_node_data_hash(hcp_node n, unsigned char *dest);
 
 /* Low-level interface module stuff. */
 
@@ -169,5 +182,6 @@ bool hcp_io_init(hcp o);
 void hcp_io_uninit(hcp o);
 bool hcp_io_set_ifname_enabled(hcp o, const char *ifname, bool enabled);
 int hcp_io_get_hwaddr(const char *ifname, unsigned char *buf, int buf_left);
+void hcp_io_maybe_reset_trickle(hcp o);
 
 #endif /* HCP_I_H */

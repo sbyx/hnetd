@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Nov 25 17:39:31 2013 mstenber
- * Edit time:     163 min
+ * Last modified: Mon Nov 25 18:41:55 2013 mstenber
+ * Edit time:     176 min
  *
  */
 
@@ -39,6 +39,7 @@ static void update_node(__unused struct vlist_tree *t,
       free(n_old);
     }
   o->network_hash_dirty = true;
+  hcp_io_maybe_reset_trickle(o);
 }
 
 
@@ -365,6 +366,8 @@ static void _flush(hcp_node n)
   n->update_number++;
   n->origination_time = hnetd_time();
   o->network_hash_dirty = true;
+  hcp_calculate_node_data_hash(n, n->node_data_hash);
+  hcp_io_maybe_reset_trickle(o);
 }
 
 void hcp_node_get_tlvs(hcp_node n, struct tlv_attr **r)
@@ -372,4 +375,31 @@ void hcp_node_get_tlvs(hcp_node n, struct tlv_attr **r)
   if (hcp_node_is_self(n))
     _flush(n);
   *r = n->tlv_container;
+}
+
+void hcp_calculate_network_hash(hcp o, unsigned char *dest)
+{
+  hcp_node n;
+  md5_ctx_t ctx;
+
+  md5_begin(&ctx);
+  vlist_for_each_element(&o->nodes, n, in_nodes)
+    md5_hash(n->node_data_hash, HCP_HASH_LEN, &ctx);
+  md5_end(dest, &ctx);
+}
+
+void hcp_calculate_node_data_hash(hcp_node n, unsigned char *dest)
+{
+  md5_ctx_t ctx;
+  struct tlv_attr h;
+  int l = tlv_len(n->tlv_container);
+
+  tlv_init(&h, HCP_T_NODE_DATA, HCP_HASH_LEN + 4 + l);
+  md5_begin(&ctx);
+  md5_hash(&h, sizeof(h), &ctx);
+  md5_hash(n->node_identifier_hash, HCP_HASH_LEN, &ctx);
+  md5_hash(&n->update_number, 4, &ctx);
+  if (n->tlv_container)
+    md5_hash(tlv_data(n->tlv_container), l, &ctx);
+  md5_end(dest, &ctx);
 }
