@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Nov 25 13:58:37 2013 mstenber
- * Edit time:     147 min
+ * Last modified: Mon Nov 25 14:28:46 2013 mstenber
+ * Edit time:     152 min
  *
  */
 
@@ -182,29 +182,28 @@ hcp hcp_create(void)
   unsigned char buf[ETHER_ADDR_LEN * 2], *c = buf;
 
   o = calloc(1, sizeof(*o));
-  if (!o) return NULL;
-
+  if (!o)
+    goto err;
   /* XXX - this is very arbitrary and Linux-only. However, hopefully
    * it is enough (should probably have ifname(s) as argument). */
   c += get_hwaddr("eth0", c, sizeof(buf) + buf - c);
   c += get_hwaddr("eth1", c, sizeof(buf) + buf - c);
   if (c == buf)
-    {
-      /* No hwaddr = no go. */
-      free(o);
-      return NULL;
-    }
+    goto err;
   if (!hcp_init(o, buf, c-buf))
-    {
-      free(o);
-      return NULL;
-    }
+    goto err;
+  if (!hcp_io_init(o))
+    goto err;
   return o;
+ err:
+  if (o) free(o);
+  return NULL;
 }
 
 void hcp_destroy(hcp o)
 {
   if (!o) return;
+  hcp_io_uninit(o);
   vlist_flush_all(&o->nodes);
   vlist_flush_all(&o->tlvs);
   vlist_flush_all(&o->links);

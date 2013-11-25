@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Nov 25 13:33:44 2013 mstenber
- * Edit time:     55 min
+ * Last modified: Mon Nov 25 14:24:00 2013 mstenber
+ * Edit time:     56 min
  *
  */
 
@@ -156,5 +156,8 @@ struct hcp_tlv_struct {
 bool hcp_init(hcp o, unsigned char *node_identifier, int len);
 
 void hcp_hash(const void *buf, int len, unsigned char *dest);
+
+bool hcp_io_init(hcp o);
+void hcp_io_uninit(hcp o);
 
 #endif /* HCP_I_H */
