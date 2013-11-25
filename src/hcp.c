@@ -6,41 +6,14 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Nov 25 14:40:23 2013 mstenber
- * Edit time:     159 min
+ * Last modified: Mon Nov 25 17:39:31 2013 mstenber
+ * Edit time:     163 min
  *
  */
 
 #include "hcp_i.h"
 #include <libubox/md5.h>
-#include <stdbool.h>
-#include <sys/ioctl.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <net/if.h>
 #include <net/ethernet.h>
-#include <unistd.h>
-
-/* 'found' from odhcp6c */
-static int
-get_hwaddr(const char *ifname, unsigned char *buf, int buf_left)
-{
-  struct ifreq ifr;
-  int sock;
-  int tocopy = buf_left < ETHER_ADDR_LEN ? buf_left : ETHER_ADDR_LEN;
-
-  sock = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-  if (sock<0)
-    return 0;
-  strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-  if (ioctl(sock, SIOCGIFINDEX, &ifr))
-    return 0;
-  if (ioctl(sock, SIOCGIFHWADDR, &ifr))
-    return 0;
-  memcpy(buf, ifr.ifr_hwaddr.sa_data, tocopy);
-  close(sock);
-  return tocopy;
-}
 
 static int
 compare_nodes(const void *a, const void *b, void *ptr __unused)
@@ -118,9 +91,16 @@ static void update_link(struct vlist_tree *t,
       free(t_old);
     }
   if (!t_new)
-    hcp_io_set_ifname_enabled(o, t_old->ifname, false);
+    {
+      hcp_io_set_ifname_enabled(o, t_old->ifname, false);
+    }
   else if (!t_old)
-    hcp_io_set_ifname_enabled(o, t_old->ifname, true);
+    {
+      if (!hcp_io_set_ifname_enabled(o, t_new->ifname, true))
+        {
+          t_new->join_pending = true;
+        }
+    }
   o->links_dirty = true;
 }
 
@@ -190,8 +170,8 @@ hcp hcp_create(void)
     goto err;
   /* XXX - this is very arbitrary and Linux-only. However, hopefully
    * it is enough (should probably have ifname(s) as argument). */
-  c += get_hwaddr("eth0", c, sizeof(buf) + buf - c);
-  c += get_hwaddr("eth1", c, sizeof(buf) + buf - c);
+  c += hcp_io_get_hwaddr("eth0", c, sizeof(buf) + buf - c);
+  c += hcp_io_get_hwaddr("eth1", c, sizeof(buf) + buf - c);
   if (c == buf)
     goto err;
   if (!hcp_init(o, buf, c-buf))

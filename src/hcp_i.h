@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Nov 25 14:39:52 2013 mstenber
- * Edit time:     58 min
+ * Last modified: Mon Nov 25 17:35:18 2013 mstenber
+ * Edit time:     60 min
  *
  */
 
@@ -95,6 +95,9 @@ struct hcp_link_struct {
    * hcp process. */
   iid_t iid;
 
+  /* Join failed -> probably tried during DAD. Should try later again. */
+  bool join_pending;
+
   /* XXX Trickle state */
 };
 
@@ -159,9 +162,12 @@ bool hcp_init(hcp o, unsigned char *node_identifier, int len);
 
 void hcp_hash(const void *buf, int len, unsigned char *dest);
 
+
+/* Low-level interface module stuff. */
+
 bool hcp_io_init(hcp o);
 void hcp_io_uninit(hcp o);
-
-void hcp_io_set_ifname_enabled(hcp o, const char *ifname, bool enabled);
+bool hcp_io_set_ifname_enabled(hcp o, const char *ifname, bool enabled);
+int hcp_io_get_hwaddr(const char *ifname, unsigned char *buf, int buf_left);
 
 #endif /* HCP_I_H */
