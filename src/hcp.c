@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Nov 25 18:41:55 2013 mstenber
- * Edit time:     176 min
+ * Last modified: Mon Nov 25 19:04:51 2013 mstenber
+ * Edit time:     177 min
  *
  */
 
@@ -39,7 +39,7 @@ static void update_node(__unused struct vlist_tree *t,
       free(n_old);
     }
   o->network_hash_dirty = true;
-  hcp_io_maybe_reset_trickle(o);
+  hcp_io_schedule(o, 0);
 }
 
 
@@ -88,14 +88,14 @@ static void update_link(struct vlist_tree *t,
 
   if (t_old)
     {
+      if (!t_new)
+        {
+          hcp_io_set_ifname_enabled(o, t_old->ifname, false);
+        }
       vlist_flush_all(&t_old->neighbors);
       free(t_old);
     }
-  if (!t_new)
-    {
-      hcp_io_set_ifname_enabled(o, t_old->ifname, false);
-    }
-  else if (!t_old)
+  else
     {
       if (!hcp_io_set_ifname_enabled(o, t_new->ifname, true))
         {
@@ -367,7 +367,7 @@ static void _flush(hcp_node n)
   n->origination_time = hnetd_time();
   o->network_hash_dirty = true;
   hcp_calculate_node_data_hash(n, n->node_data_hash);
-  hcp_io_maybe_reset_trickle(o);
+  hcp_io_schedule(o, 0);
 }
 
 void hcp_node_get_tlvs(hcp_node n, struct tlv_attr **r)
@@ -402,4 +402,88 @@ void hcp_calculate_node_data_hash(hcp_node n, unsigned char *dest)
   if (n->tlv_container)
     md5_hash(tlv_data(n->tlv_container), l, &ctx);
   md5_end(dest, &ctx);
+}
+
+#define TRICKLE_IMIN 250
+
+/* Note: This is concrete value, NOT exponent # as noted in RFC. I
+ * don't know why RFC does that.. We don't want to ever need do
+ * exponentiation in any case in code. 64 seconds for the time being.. */
+#define TRICKLE_IMAX ((TRICKLE_IMIN*4)*64)
+
+/* Redundancy constant. */
+#define TRICKLE_K 1
+
+static void trickle_set_i(hcp_link l, hnetd_time_t now, int i)
+{
+  l->i = i;
+  l->send_time = now + l->i * (1000 + random() % 1000) / 2000;
+  l->interval_end_time = now + l->i;
+}
+
+static void trickle_upgrade(hcp_link l, hnetd_time_t now)
+{
+  int i = l->i * 2;
+  i = i < TRICKLE_IMIN ? TRICKLE_IMIN : i > TRICKLE_IMAX ? TRICKLE_IMAX : i;
+  trickle_set_i(l, now, i);
+}
+
+static void trickle_send(hcp_link l)
+{
+  if (l->c < TRICKLE_K)
+    {
+      /* XXX */
+    }
+  l->send_time = 0;
+}
+
+#define TMIN(x,y) ((x) == 0 ? (y) : (y) == 0 ? (x) : (x) < (y) ? (x) : (y))
+
+void hcp_run(hcp o)
+{
+  hnetd_time_t next = 0;
+  hnetd_time_t now = hnetd_time();
+  hcp_link l;
+
+  /* First off: If the network hash is dirty, recalculate it (and hope
+   * the outcome ISN'T). */
+  if (o->network_hash_dirty)
+    {
+      unsigned char buf[HCP_HASH_LEN];
+
+      memcpy(buf, o->network_hash, HCP_HASH_LEN);
+      hcp_calculate_network_hash(o, o->network_hash);
+      if (memcmp(buf, o->network_hash, HCP_HASH_LEN))
+        {
+          /* Shocker. The network hash changed -> reset _every_
+           * trickle. */
+          vlist_for_each_element(&o->links, l, in_links)
+            trickle_set_i(l, now, TRICKLE_IMIN);
+        }
+      o->network_hash_dirty = false;
+    }
+
+  vlist_for_each_element(&o->links, l, in_links)
+    {
+      if (l->interval_end_time <= now)
+        {
+          trickle_upgrade(l, now);
+          next = TMIN(next, l->send_time);
+          continue;
+        }
+
+      if (l->send_time)
+        {
+          if (l->send_time > now)
+            {
+              next = TMIN(next, l->send_time);
+              continue;
+            }
+
+          trickle_send(l);
+        }
+      next = TMIN(next, l->interval_end_time);
+    }
+  if (next)
+    hcp_io_schedule(o, next-now);
 }

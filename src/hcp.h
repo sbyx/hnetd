@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Mon Nov 25 17:29:33 2013 mstenber
- * Edit time:     38 min
+ * Last modified: Mon Nov 25 19:01:43 2013 mstenber
+ * Edit time:     39 min
  *
  */
 
@@ -82,6 +82,13 @@ bool hcp_remove_tlv(hcp o, struct tlv_attr *tlv);
  * Enable/disable on an interface.
  */
 bool hcp_set_link_enabled(hcp o, const char *ifname, bool enabled);
+
+/**
+ * Run HCP state machine once. It should re-queue itself when needed.
+ * (This should be mainly called from timeout callback, or from unit
+ * tests).
+ */
+void hcp_run(hcp o);
 
 /************************************************************** Per-node API */
 

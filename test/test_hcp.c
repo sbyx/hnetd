@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Mon Nov 25 13:48:38 2013 mstenber
+ * Last modified: Mon Nov 25 19:03:12 2013 mstenber
  * Edit time:     20 min
  *
  */
@@ -60,6 +60,9 @@ void hcp_ext(void)
 
   hcp_node_get_tlvs(n, &t);
   sput_fail_unless(!tlv_attr_equal(t, tb.head), "tlvs should be different");
+
+  /* Make sure run doesn't blow things up */
+  hcp_run(o);
 
   r = hcp_remove_tlv(o, t_data);
   sput_fail_unless(r, "hcp_remove_tlv should work");

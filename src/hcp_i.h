@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Nov 25 18:34:44 2013 mstenber
- * Edit time:     69 min
+ * Last modified: Mon Nov 25 19:00:14 2013 mstenber
+ * Edit time:     71 min
  *
  */
 
@@ -182,6 +182,6 @@ bool hcp_io_init(hcp o);
 void hcp_io_uninit(hcp o);
 bool hcp_io_set_ifname_enabled(hcp o, const char *ifname, bool enabled);
 int hcp_io_get_hwaddr(const char *ifname, unsigned char *buf, int buf_left);
-void hcp_io_maybe_reset_trickle(hcp o);
+void hcp_io_schedule(hcp o, int msecs);
 
 #endif /* HCP_I_H */
