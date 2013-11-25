@@ -26,7 +26,7 @@ static void iface_update_prefix(const struct prefix *p, const char *ifname,
 	struct iface *c = iface_find(ifname);
 	assert(c != NULL && c->platform != NULL);
 
-	if (valid_until && valid_until < hnetd_time()) { // Delete action
+	if (valid_until < hnetd_time()) { // Delete action
 		struct iface_addr *a = vlist_find(&c->assigned, p, a, node);
 		if (a)
 			vlist_delete(&c->assigned, &a->node);
