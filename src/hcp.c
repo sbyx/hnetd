@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Nov 25 13:37:48 2013 mstenber
- * Edit time:     136 min
+ * Last modified: Mon Nov 25 13:58:37 2013 mstenber
+ * Edit time:     147 min
  *
  */
 
@@ -318,9 +318,10 @@ static void _flush(hcp_node n)
           /* Due to how node link TLV is specified, we can't use
            * tlv.[ch]'s convenience stuff directly. Oh well. */
           struct tlv_attr *a = (struct tlv_attr *)buf;
-          unsigned char *c = buf + 8; /* 4 = tlv header. 4 = link iid. */
-          int32_t *iid = (int32_t *)buf + 4;
+          unsigned char *c = buf + 4; /* 4 = tlv header. */
+          int32_t *iid = (int32_t *)c;
           *iid = cpu_to_be32(l->iid);
+          c += 4;
           vlist_for_each_element(&l->neighbors, ne, in_neighbors)
             {
               struct tlv_attr *nt = (struct tlv_attr *)c;
@@ -356,6 +357,8 @@ static void _flush(hcp_node n)
         tlv_buf_free(&tb);
         return;
       }
+  tlv_fill_pad(tb.head);
+
   /* Ok, all puts _did_ succeed. */
   o->tlvs_dirty = false;
 

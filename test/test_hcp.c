@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Mon Nov 25 12:32:34 2013 mstenber
- * Edit time:     17 min
+ * Last modified: Mon Nov 25 13:48:38 2013 mstenber
+ * Edit time:     20 min
  *
  */
 
@@ -49,11 +49,17 @@ void hcp_ext(void)
   r = hcp_set_link_enabled(o, "eth1", true);
   sput_fail_unless(!r, "hcp_set_link_enabled eth1 (2nd true)");
 
+  hcp_node_get_tlvs(n, &t);
+  sput_fail_unless(!tlv_attr_equal(t, tb.head), "tlvs should be different");
+
   r = hcp_set_link_enabled(o, "eth1", false);
   sput_fail_unless(r, "hcp_set_link_enabled eth1 (false)");
 
   r = hcp_set_link_enabled(o, "eth1", false);
   sput_fail_unless(!r, "hcp_set_link_enabled eth1 (2nd false)");
+
+  hcp_node_get_tlvs(n, &t);
+  sput_fail_unless(!tlv_attr_equal(t, tb.head), "tlvs should be different");
 
   r = hcp_remove_tlv(o, t_data);
   sput_fail_unless(r, "hcp_remove_tlv should work");
@@ -65,6 +71,8 @@ void hcp_ext(void)
   sput_fail_unless(!n, "second node should not exist");
 
   hcp_destroy(o);
+
+  tlv_buf_free(&tb);
 }
 
 #include "hcp_i.h"
