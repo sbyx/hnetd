@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Thu Nov 21 15:07:09 2013 mstenber
- * Edit time:     32 min
+ * Last modified: Mon Nov 25 13:04:28 2013 mstenber
+ * Edit time:     37 min
  *
  */
 
@@ -16,6 +16,25 @@
 
 #include "hnetd.h"
 #include "tlv.h"
+
+enum {
+  /* Request TLVs (not to be really stored anywhere) */
+  HCP_T_REQ_NET_HASH = 1,
+  HCP_T_REQ_NODE_DATA = 5,
+
+  HCP_T_NET_HASH = 2,
+  HCP_T_NODE_ID = 3,
+  HCP_T_NODE_STATE = 4,
+
+  HCP_T_NODE_DATA = 6,
+  HCP_T_NODE_DATA_KEY = 7,
+  HCP_T_NODE_DATA_LINK = 8,
+  HCP_T_NODE_DATA_LINK_NEIGHBOR = 9,
+
+  HCP_T_CUSTOM = 10,
+
+  HCP_T_SIGNATURE = 0xFFFF
+};
 
 /* Opaque pointer that represents hcp instance. */
 typedef struct hcp_struct hcp_s, *hcp;
@@ -55,6 +74,11 @@ bool hcp_add_tlv(hcp o, struct tlv_attr *tlv);
  * Remove a single TLV.
  */
 bool hcp_remove_tlv(hcp o, struct tlv_attr *tlv);
+
+/**
+ * Enable/disable on an interface.
+ */
+bool hcp_set_link_enabled(hcp o, const char *ifname, bool enabled);
 
 /************************************************************** Per-node API */
 

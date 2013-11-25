@@ -6,15 +6,29 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Nov 21 15:21:28 2013 mstenber
- * Edit time:     35 min
+ * Last modified: Mon Nov 25 13:33:44 2013 mstenber
+ * Edit time:     55 min
  *
  */
 
 #ifndef HCP_I_H
 #define HCP_I_H
 
+/* Rough approximation - should think of real figure (-UDP size - HCP
+   header size). */
+#define HCP_MAXIMUM_TLV_SIZE 65536
+#define HCP_MAXIMUM_LINK_TLV_SIZE 1024
+
+/* How big is one neighbor TLV? (incl. TLV header). */
+#define HCP_NEIGHBOR_TLV_SIZE (4 + 4 + HCP_HASH_LEN)
+
 #include <libubox/vlist.h>
+
+/* in6_addr */
+#include <netinet/in.h>
+
+/* IFNAMSIZ */
+#include <net/if.h>
 
 /* Let's assume we use MD5 for the time being.. */
 #define HCP_HASH_LEN 16
@@ -27,26 +41,78 @@
 
 #include "hcp.h"
 
+typedef uint32_t iid_t;
+
 struct hcp_struct {
-  /* vlist tree of nodes. */
+  /* nodes (as contained within the protocol, that is, raw TLV data blobs). */
   struct vlist_tree nodes;
 
-  /* vlist tree of local data. */
+  /* local data (TLVs API's clients want published). */
   struct vlist_tree tlvs;
 
+  /* local links (those API's clients want active). */
+  struct vlist_tree links;
+
+  /* flag which indicates that we should re-publish links. */
+  bool links_dirty;
+
   /* flag which indicates that we should re-publish our node in nodes. */
-  bool should_publish;
+  bool tlvs_dirty;
+
+  /* flag which indicates that we should re-calculate network hash
+   * based on nodes' state. */
+  bool network_hash_dirty;
 
   /* Our own node (it should be constant, never purged) */
   hcp_node own_node;
 
   /* Whole network hash we consider current (based on content of 'nodes'). */
   unsigned char network_hash[HCP_HASH_LEN];
-  bool network_hash_is_valid;
+
+
+  /* First free local interface identifier (we allocate them in
+   * monotonically increasing fashion just to keep things simple). */
+  int first_free_iid;
 };
+
+typedef struct hcp_link_struct hcp_link_s, *hcp_link;
 
 struct hcp_link_struct {
   struct vlist_node in_links;
+
+  /* Backpointer to hcp */
+  hcp hcp;
+
+  /* Who are the neighbors on the link. */
+  struct vlist_tree neighbors;
+
+  /* Name of the (local) link. */
+  char ifname[IFNAMSIZ];
+
+  /* Interface identifier - these should be unique over lifetime of
+   * hcp process. */
+  iid_t iid;
+
+  /* XXX Trickle state */
+};
+
+typedef struct hcp_neighbor_struct hcp_neighbor_s, *hcp_neighbor;
+
+
+struct hcp_neighbor_struct {
+  struct vlist_node in_neighbors;
+
+  unsigned char node_identifier_hash[HCP_HASH_LEN];
+  iid_t iid;
+
+  /* Link-level address */
+  struct in6_addr last_address;
+
+  /* When did we last hear from this one? */
+  time_t last_heard;
+
+  /* When did they last respond to our message? */
+  time_t last_response;
 };
 
 struct hcp_node_struct {

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Thu Nov 21 15:07:40 2013 mstenber
- * Edit time:     15 min
+ * Last modified: Mon Nov 25 12:32:34 2013 mstenber
+ * Edit time:     17 min
  *
  */
 
@@ -38,6 +38,22 @@ void hcp_ext(void)
 
   hcp_node_get_tlvs(n, &t);
   sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs consistent");
+
+  /* Should be able to enable it on a link. */
+  r = hcp_set_link_enabled(o, "eth0", true);
+  sput_fail_unless(r, "hcp_set_link_enabled eth0");
+
+  r = hcp_set_link_enabled(o, "eth1", true);
+  sput_fail_unless(r, "hcp_set_link_enabled eth1");
+
+  r = hcp_set_link_enabled(o, "eth1", true);
+  sput_fail_unless(!r, "hcp_set_link_enabled eth1 (2nd true)");
+
+  r = hcp_set_link_enabled(o, "eth1", false);
+  sput_fail_unless(r, "hcp_set_link_enabled eth1 (false)");
+
+  r = hcp_set_link_enabled(o, "eth1", false);
+  sput_fail_unless(!r, "hcp_set_link_enabled eth1 (2nd false)");
 
   r = hcp_remove_tlv(o, t_data);
   sput_fail_unless(r, "hcp_remove_tlv should work");

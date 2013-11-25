@@ -29,7 +29,7 @@ tlv_buffer_grow(struct tlv_buf *buf, int minlen)
 	return !!buf->buf;
 }
 
-static void
+void
 tlv_init(struct tlv_attr *attr, int id, unsigned int len)
 {
 	len &= TLV_ATTR_LEN_MASK;
