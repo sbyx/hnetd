@@ -147,6 +147,13 @@ void iface_remove(const char *ifname)
 {
 	struct iface *c = iface_get(ifname, NULL);
 	if (c) {
+		if (c->internal) {
+			struct iface_user *u;
+			list_for_each_entry(u, &users, head)
+				if (u->cb_intiface)
+					u->cb_intiface(u, c->ifname, false);
+		}
+
 		list_del(&c->head);
 		vlist_flush_all(&c->assigned);
 		vlist_flush_all(&c->delegated);

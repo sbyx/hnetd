@@ -17,7 +17,7 @@ struct iface_user {
 	struct list_head head;
 
 	/* Callback for internal interfaces */
-	void (*cb_intiface)(struct iface_user *u, const char *ifname, bool internal);
+	void (*cb_intiface)(struct iface_user *u, const char *ifname, bool enabled);
 
 	/* Callback for delegated prefixes (a negative validity time indicates removal) */
 	void (*cb_prefix)(struct iface_user *u, const struct prefix *prefix,
