@@ -9,7 +9,7 @@
 
 static struct iface* iface_find(const char *ifname);
 static void iface_update_prefix(const struct prefix *p, const char *ifname,
-		time_t valid_until, time_t preferred_until, void *priv);
+		hnetd_time_t valid_until, hnetd_time_t preferred_until, void *priv);
 static void iface_update_link_owner(const char *ifname, bool owner, void *priv);
 
 static struct list_head interfaces = LIST_HEAD_INIT(interfaces);
@@ -21,7 +21,7 @@ static struct pa_iface_callbacks pa_cb = {
 
 
 static void iface_update_prefix(const struct prefix *p, const char *ifname,
-		time_t valid_until, time_t preferred_until, __unused void *priv)
+		hnetd_time_t valid_until, hnetd_time_t preferred_until, __unused void *priv)
 {
 	struct iface *c = iface_find(ifname);
 	assert(c != NULL && c->platform != NULL);
@@ -213,7 +213,8 @@ void iface_update_delegated(struct iface *c)
 }
 
 
-void iface_add_delegated(struct iface *c, const struct prefix *p, time_t valid_until, time_t preferred_until)
+void iface_add_delegated(struct iface *c, const struct prefix *p,
+		hnetd_time_t valid_until, hnetd_time_t preferred_until)
 {
 	struct iface_addr *a = calloc(1, sizeof(*a));
 	a->prefix = *p;

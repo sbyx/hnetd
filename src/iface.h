@@ -21,7 +21,7 @@ struct iface_user {
 
 	/* Callback for delegated prefixes (a negative validity time indicates removal) */
 	void (*cb_prefix)(struct iface_user *u, const struct prefix *prefix,
-			time_t valid_until, time_t preferred_until);
+			hnetd_time_t valid_until, hnetd_time_t preferred_until);
 };
 
 // Register user for interface events (callbacks with NULL-values are ignored)
@@ -36,8 +36,8 @@ void iface_unregister_user(struct iface_user *user);
 
 struct iface_addr {
 	struct vlist_node node;
-	time_t valid_until;
-	time_t preferred_until;
+	hnetd_time_t valid_until;
+	hnetd_time_t preferred_until;
 	struct prefix prefix;
 };
 
@@ -79,7 +79,8 @@ void iface_remove(const char *ifname);
 void iface_update_delegated(struct iface *c);
 
 // Add currently available prefixes from PD
-void iface_add_delegated(struct iface *c, const struct prefix *p, time_t valid_until, time_t preferred_until);
+void iface_add_delegated(struct iface *c, const struct prefix *p,
+		hnetd_time_t valid_until, hnetd_time_t preferred_until);
 
 // Flush and commit PD to synthesize events to users and rerun border discovery
 void iface_commit_delegated(struct iface *c);
