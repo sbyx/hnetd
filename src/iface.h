@@ -1,64 +1,92 @@
-#pragma once
+#ifndef _IFACE_H
+#define _IFACE_H
+
 #include "hnetd.h"
+#include "prefix_utils.h"
 
-#include <stdbool.h>
-#include <netinet/in.h>
-
-#include <libubox/vlist.h>
 #include <libubox/list.h>
+#include <libubox/vlist.h>
+#include <netinet/in.h>
+#include <time.h>
+
+
+// API for PA / HCP & friends
+
+struct iface_user {
+	// We will just add this struct to our linked-list so please keep it around by yourself ;)
+	struct list_head head;
+
+	/* Callback for internal interfaces */
+	void (*cb_intiface)(struct iface_user *u, const char *ifname, bool internal);
+
+	/* Callback for delegated prefixes (a negative validity time indicates removal) */
+	void (*cb_prefix)(struct iface_user *u, const struct prefix *prefix,
+			time_t valid_until, time_t preferred_until);
+};
+
+// Register user for interface events (callbacks with NULL-values are ignored)
+void iface_register_user(struct iface_user *user);
+
+// Unregister user for interface events, do NOT call this from the callback itself!
+void iface_unregister_user(struct iface_user *user);
+
+
+
+// Internal API to platform
 
 struct iface_addr {
 	struct vlist_node node;
-	struct iface *iface;
-
 	time_t valid_until;
 	time_t preferred_until;
-
-	bool v6;
-	uint8_t prefix;
-	union iface_ia {
-		struct in_addr inet;
-		struct in6_addr inet6;
-	} addr;
+	struct prefix prefix;
 };
 
 struct iface {
 	struct list_head head;
 
-	char *name;
-	int ifindex;
-	char *ifname;
+	// Platform specific handle
+	void *platform;
+
+	// Interface status
+	bool linkowner;
+	bool internal;
+	bool v4leased;
+
+	// Prefix storage
+	struct vlist_tree assigned;
+	struct vlist_tree delegated;
+
+	// Other data
 	char *domain;
 
-	bool internal;
-	bool managed;
-
-	struct vlist_tree addrs;
-	struct vlist_tree prefixes;
+	// Interface name
+	char ifname[];
 };
 
-struct list_head interfaces;
 
-// API to be called from ELSA logic to manipulate interface config
+// Generic initializer to be called by main()
+int iface_init(void);
 
-// Get / set / delete managed interface
-struct iface* iface_get(const char *name);
-struct iface* iface_create(const char *name, const char *ifname, bool managed);
-void iface_delete(const char *name);
 
-// Add address to interface
-void iface_set_addr(struct iface *iface, bool v6, const union iface_ia *addr,
-		uint8_t prefix, time_t valid_until, time_t preferred_until);
+// Create / get an interface (external or internal), handle set = managed
+struct iface* iface_get(const char *ifname, const char *handle);
 
-// Add prefix to interface
-void iface_set_prefix(struct iface *iface, bool v6, const union iface_ia *addr,
-		uint8_t prefix, time_t valid_until, time_t preferred_until);
+// Remove a known interface
+void iface_remove(const char *ifname);
 
-// Change domain of interface
-void iface_set_domain(struct iface *iface, const char *domain);
 
-// Change internal state of interface
-void iface_set_internal(struct iface *iface, bool external);
+// Begin PD update cycle
+void iface_update_delegated(struct iface *c);
 
-// Commit all changes to this interface to apply it on platform
-void iface_commit(struct iface *iface);
+// Add currently available prefixes from PD
+void iface_add_delegated(struct iface *c, const struct prefix *p, time_t valid_until, time_t preferred_until);
+
+// Flush and commit PD to synthesize events to users and rerun border discovery
+void iface_commit_delegated(struct iface *c);
+
+
+// Set DHCPv4 leased flag and rerun border discovery
+void iface_set_v4leased(struct iface *c, bool v4leased);
+
+
+#endif

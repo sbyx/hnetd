@@ -19,15 +19,15 @@ static const char *ipcpath = "/var/run/hnetd.sock";
 
 enum ipc_option {
 	OPT_COMMAND,
-	OPT_INTERFACE,
-	OPT_DEVICE,
+	OPT_IFNAME,
+	OPT_HANDLE,
 	OPT_MAX
 };
 
 struct blobmsg_policy ipc_policy[] = {
 	[OPT_COMMAND] = {"command", BLOBMSG_TYPE_INT32},
-	[OPT_INTERFACE] = {"interface", BLOBMSG_TYPE_STRING},
-	[OPT_DEVICE] = {"device", BLOBMSG_TYPE_STRING},
+	[OPT_IFNAME] = {"ifname", BLOBMSG_TYPE_STRING},
+	[OPT_HANDLE] = {"handle", BLOBMSG_TYPE_STRING},
 };
 
 enum ipc_command {
@@ -84,16 +84,16 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 	while ((len = recvfrom(fd->fd, buf, sizeof(buf), MSG_DONTWAIT,
 			(struct sockaddr*)&sender, &sender_len)) >= 0) {
 		blobmsg_parse(ipc_policy, OPT_MAX, tb, buf, len);
-		if (!tb[OPT_COMMAND] || !tb[OPT_INTERFACE])
+		if (!tb[OPT_COMMAND] || !tb[OPT_IFNAME])
 			continue;
 
-		const char *name = blobmsg_get_string(tb[OPT_INTERFACE]);
+		const char *ifname = blobmsg_get_string(tb[OPT_IFNAME]);
 
 		enum ipc_command cmd = blobmsg_get_u32(tb[OPT_COMMAND]);
-		if (cmd == CMD_IFUP && tb[OPT_DEVICE]) {
-			iface_create(name, blobmsg_get_string(tb[OPT_DEVICE]), true);
+		if (cmd == CMD_IFUP && tb[OPT_HANDLE]) {
+			iface_get(ifname, blobmsg_get_string(tb[OPT_HANDLE]));
 		} else if (cmd == CMD_IFDOWN) {
-			iface_delete(name);
+			iface_remove(ifname);
 		}
 	}
 }

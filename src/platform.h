@@ -4,20 +4,23 @@
 
 #include "iface.h"
 
+
 // Platform specific initialization
 int platform_init(void);
 
-// Handle IPC message
-void platform_handle(struct uloop_fd *fd, unsigned int events);
 
-// Handle domain change
-void platform_apply_domain(struct iface *iface);
 
 // Handle internal change
-void platform_apply_zone(struct iface *iface);
+void platform_set_internal(struct iface *c, bool internal);
 
 // Set / unset an address
-void platform_apply_address(struct iface_addr *addr, bool enable);
+void platform_set_address(struct iface *c, struct iface_addr *addr, bool enable);
 
-// Apply changes all changes (if necessary)
-void platform_commit(struct iface *iface);
+// Set owner status
+void platform_set_owner(struct iface *c, bool enable);
+
+// Create local interface
+void platform_iface_new(struct iface *c, const char *handle);
+
+// Delete local interface
+void platform_iface_free(struct iface *c);
