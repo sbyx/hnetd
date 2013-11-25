@@ -49,7 +49,6 @@ struct iface {
 
 	// Interface status
 	bool linkowner;
-	bool unmanaged;
 	bool internal;
 	bool v4leased;
 
@@ -65,8 +64,29 @@ struct iface {
 };
 
 
+// Generic initializer to be called by main()
 int iface_init(void);
+
+
+// Create / get an interface (external or internal), handle set = managed
 struct iface* iface_get(const char *ifname, const char *handle);
+
+// Remove a known interface
 void iface_remove(const char *ifname);
+
+
+// Begin PD update cycle
+void iface_update_delegated(struct iface *c);
+
+// Add currently available prefixes from PD
+void iface_add_delegated(struct iface *c, const struct prefix *p, time_t valid_until, time_t preferred_until);
+
+// Flush and commit PD to synthesize events to users and rerun border discovery
+void iface_commit_delegated(struct iface *c);
+
+
+// Set DHCPv4 leased flag and rerun border discovery
+void iface_set_v4leased(struct iface *c, bool v4leased);
+
 
 #endif

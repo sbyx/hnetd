@@ -1,16 +1,60 @@
 #include <string.h>
 #include <stdlib.h>
 #include <net/if.h>
+#include <assert.h>
 
 #include "iface.h"
 #include "platform.h"
+#include "pa.h"
+
+static struct iface* iface_find(const char *ifname);
+static void iface_update_prefix(const struct prefix *p, const char *ifname,
+		time_t valid_until, time_t preferred_until, void *priv);
+static void iface_update_link_owner(const char *ifname, bool owner, void *priv);
 
 static struct list_head interfaces = LIST_HEAD_INIT(interfaces);
 static struct list_head users = LIST_HEAD_INIT(users);
+static struct pa_iface_callbacks pa_cb = {
+	.update_prefix = iface_update_prefix,
+	.update_link_owner = iface_update_link_owner
+};
+
+
+static void iface_update_prefix(const struct prefix *p, const char *ifname,
+		time_t valid_until, time_t preferred_until, __unused void *priv)
+{
+	struct iface *c = iface_find(ifname);
+	assert(c != NULL && c->platform != NULL);
+
+	if (valid_until && valid_until < hnetd_time()) { // Delete action
+		struct iface_addr *a = vlist_find(&c->assigned, p, a, node);
+		if (a)
+			vlist_delete(&c->assigned, &a->node);
+	} else { // Create / update action
+		struct iface_addr *a = calloc(1, sizeof(*a));
+		a->prefix = *p;
+		a->valid_until = valid_until;
+		a->preferred_until = preferred_until;
+		vlist_add(&c->assigned, &a->node, &a->prefix);
+	}
+}
+
+
+static void iface_update_link_owner(const char *ifname, bool owner, __unused void *priv)
+{
+	struct iface *c = iface_find(ifname);
+	assert(c != NULL && c->platform != NULL);
+
+	if (owner != c->linkowner) {
+		c->linkowner = owner;
+		platform_set_owner(c, owner);
+	}
+}
 
 
 int iface_init(void)
 {
+	// TODO: pa_iface_subscribe(NULL, &pa_cb);
 	return platform_init();
 }
 
@@ -67,16 +111,20 @@ static void update_prefix(__unused struct vlist_tree *t, struct vlist_node *node
 }
 
 
+static struct iface* iface_find(const char *ifname)
+{
+	struct iface *c;
+	list_for_each_entry(c, &interfaces, head)
+		if (!strcmp(c->ifname, ifname))
+			return c;
+
+	return NULL;
+}
+
+
 struct iface* iface_get(const char *ifname, const char *handle)
 {
-	struct iface *c = NULL, *k;
-	list_for_each_entry(k, &interfaces, head) {
-		if (!strcmp(k->ifname, ifname)) {
-			c = k;
-			break;
-		}
-	}
-
+	struct iface *c = iface_find(ifname);
 	if (!c) {
 		size_t namelen = strlen(ifname) + 1;
 		c = calloc(1, sizeof(*c) + namelen);
@@ -102,7 +150,8 @@ void iface_remove(const char *ifname)
 		list_del(&c->head);
 		vlist_flush_all(&c->assigned);
 		vlist_flush_all(&c->delegated);
-		platform_iface_free(c);
+		if (c->platform)
+			platform_iface_free(c);
 		free(c->domain);
 		free(c);
 	}
@@ -116,10 +165,10 @@ void iface_update_init(struct iface *c)
 }
 
 
-void iface_update_commit(struct iface *c)
+static void iface_discover_border(struct iface *c)
 {
-	vlist_flush(&c->assigned);
-	vlist_flush(&c->delegated);
+	if (!c->platform) // No border discovery on unmanaged interfaces
+		return;
 
 	// Perform border-discovery (border on DHCPv4 assignment or DHCPv6-PD)
 	bool internal = !c->v4leased && avl_is_empty(&c->delegated.avl);
@@ -133,4 +182,36 @@ void iface_update_commit(struct iface *c)
 
 		platform_set_internal(c, internal);
 	}
+}
+
+
+void iface_set_v4leased(struct iface *c, bool v4leased)
+{
+	if (c->v4leased != v4leased) {
+		c->v4leased = v4leased;
+		iface_discover_border(c);
+	}
+}
+
+
+void iface_update_delegated(struct iface *c)
+{
+	vlist_update(&c->delegated);
+}
+
+
+void iface_add_delegated(struct iface *c, const struct prefix *p, time_t valid_until, time_t preferred_until)
+{
+	struct iface_addr *a = calloc(1, sizeof(*a));
+	a->prefix = *p;
+	a->valid_until = valid_until;
+	a->preferred_until = preferred_until;
+	vlist_add(&c->delegated, &a->node, &a->prefix);
+}
+
+
+void iface_commit_delegated(struct iface *c)
+{
+	vlist_flush(&c->delegated);
+	iface_discover_border(c);
 }
