@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Nov 25 14:28:46 2013 mstenber
- * Edit time:     152 min
+ * Last modified: Mon Nov 25 14:40:23 2013 mstenber
+ * Edit time:     159 min
  *
  */
 
@@ -117,6 +117,10 @@ static void update_link(struct vlist_tree *t,
       vlist_flush_all(&t_old->neighbors);
       free(t_old);
     }
+  if (!t_new)
+    hcp_io_set_ifname_enabled(o, t_old->ifname, false);
+  else if (!t_old)
+    hcp_io_set_ifname_enabled(o, t_old->ifname, true);
   o->links_dirty = true;
 }
 
@@ -272,6 +276,7 @@ bool hcp_set_link_enabled(hcp o, const char *ifname, bool enabled)
   l = (hcp_link) calloc(1, sizeof(*l));
   if (!l)
     return false;
+  l->iid = o->first_free_iid++;
   vlist_init(&l->neighbors, compare_neighbors, update_neighbor);
   strcpy(l->ifname, ifname);
   vlist_add(&o->links, &l->in_links, l);

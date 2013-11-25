@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Mon Nov 25 14:28:37 2013 mstenber
- * Edit time:     7 min
+ * Last modified: Mon Nov 25 14:41:57 2013 mstenber
+ * Edit time:     9 min
  *
  */
 
@@ -24,5 +24,11 @@ bool hcp_io_init(hcp o __unused)
 }
 
 void hcp_io_uninit(hcp o __unused)
+{
+}
+
+void hcp_io_set_ifname_enabled(hcp o __unused,
+                               const char *ifname __unused,
+                               bool enabled __unused)
 {
 }

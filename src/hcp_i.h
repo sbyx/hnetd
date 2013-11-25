@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Nov 25 14:30:22 2013 mstenber
- * Edit time:     57 min
+ * Last modified: Mon Nov 25 14:39:52 2013 mstenber
+ * Edit time:     58 min
  *
  */
 
@@ -69,10 +69,12 @@ struct hcp_struct {
   /* Whole network hash we consider current (based on content of 'nodes'). */
   unsigned char network_hash[HCP_HASH_LEN];
 
-
   /* First free local interface identifier (we allocate them in
    * monotonically increasing fashion just to keep things simple). */
   int first_free_iid;
+
+  /* UDP socket. */
+  int udp_socket;
 };
 
 typedef struct hcp_link_struct hcp_link_s, *hcp_link;
@@ -159,5 +161,7 @@ void hcp_hash(const void *buf, int len, unsigned char *dest);
 
 bool hcp_io_init(hcp o);
 void hcp_io_uninit(hcp o);
+
+void hcp_io_set_ifname_enabled(hcp o, const char *ifname, bool enabled);
 
 #endif /* HCP_I_H */
