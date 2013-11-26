@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Mon Nov 25 19:01:43 2013 mstenber
- * Edit time:     39 min
+ * Last modified: Tue Nov 26 08:21:33 2013 mstenber
+ * Edit time:     40 min
  *
  */
 
@@ -22,7 +22,7 @@ enum {
   HCP_T_REQ_NET_HASH = 1,
   HCP_T_REQ_NODE_DATA = 5,
 
-  HCP_T_NET_HASH = 2,
+  HCP_T_NETWORK_HASH = 2,
   HCP_T_NODE_ID = 3,
   HCP_T_NODE_STATE = 4,
 
@@ -89,6 +89,11 @@ bool hcp_set_link_enabled(hcp o, const char *ifname, bool enabled);
  * tests).
  */
 void hcp_run(hcp o);
+
+/**
+ * Poll the i/o system once.
+ */
+void hcp_poll(hcp o);
 
 /************************************************************** Per-node API */
 

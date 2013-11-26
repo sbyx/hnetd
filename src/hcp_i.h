@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Nov 25 19:00:14 2013 mstenber
- * Edit time:     71 min
+ * Last modified: Tue Nov 26 08:19:20 2013 mstenber
+ * Edit time:     74 min
  *
  */
 
@@ -16,10 +16,12 @@
 
 #include <libubox/uloop.h>
 
-/* Rough approximation - should think of real figure (-UDP size - HCP
-   header size). */
-#define HCP_MAXIMUM_TLV_SIZE 65536
-#define HCP_MAXIMUM_LINK_TLV_SIZE 1024
+/* Rough approximation - should think of real figure. */
+#define HCP_MAXIMUM_PAYLOAD_SIZE 65536
+
+/* Pretty arbitrary. I wonder if all links can really guarantee MTU size
+ * packets going through.. */
+#define HCP_MAXIMUM_MULTICAST_SIZE 1280
 
 /* How big is one neighbor TLV? (incl. TLV header). */
 #define HCP_NEIGHBOR_TLV_SIZE (4 + 4 + HCP_HASH_LEN)
@@ -80,6 +82,10 @@ struct hcp_struct {
 
   /* Timeout for doing 'something' in hcp_io. */
   struct uloop_timeout timeout;
+
+  /* Multicast address */
+  struct in6_addr multicast_address;
+
   hnetd_time_t join_failed_time;
 };
 
@@ -183,5 +189,13 @@ void hcp_io_uninit(hcp o);
 bool hcp_io_set_ifname_enabled(hcp o, const char *ifname, bool enabled);
 int hcp_io_get_hwaddr(const char *ifname, unsigned char *buf, int buf_left);
 void hcp_io_schedule(hcp o, int msecs);
+
+ssize_t hcp_io_recvfrom(hcp o, void *buf, size_t len,
+                        char *ifname,
+                        struct in6_addr *address);
+ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
+                      const char *ifname,
+                      const struct in6_addr *dst);
+
 
 #endif /* HCP_I_H */

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Nov 26 07:34:13 2013 mstenber
- * Edit time:     179 min
+ * Last modified: Tue Nov 26 08:22:10 2013 mstenber
+ * Edit time:     199 min
  *
  */
 
@@ -302,8 +302,8 @@ static void _flush(hcp_node n)
 
   if (o->links_dirty)
     {
-      unsigned char buf[HCP_MAXIMUM_TLV_SIZE];;
-      unsigned char *e = buf + HCP_MAXIMUM_TLV_SIZE;
+      unsigned char buf[HCP_MAXIMUM_PAYLOAD_SIZE];;
+      unsigned char *e = buf + sizeof(buf);;
       /* Rather crude: We simply get rid of existing link TLVs, and
        * publish new ones. Assumption: Whatever is added using
        * hcp_add_tlv will have version=-1, and dynamically generated
@@ -441,11 +441,70 @@ static void trickle_upgrade(hcp_link l, hnetd_time_t now)
   trickle_set_i(l, now, i);
 }
 
+#define HCP_T_NODE_STATE_V_SIZE (2 * HCP_HASH_LEN + 2 * 4)
+
 static void trickle_send(hcp_link l)
 {
+  hcp_node n;
+  hcp o = l->hcp;
+  struct tlv_buf tb;
+  struct tlv_attr *a;
+  unsigned char *c;
+
   if (l->c < TRICKLE_K)
     {
-      /* XXX */
+      hnetd_time_t now = hnetd_time();
+
+      tlv_buf_init(&tb, 0); /* not passed anywhere */
+      vlist_for_each_element(&o->nodes, n, in_nodes)
+        {
+          a = tlv_new(&tb, HCP_T_NODE_STATE, HCP_T_NODE_STATE_V_SIZE);
+          if (!a)
+            {
+              tlv_buf_free(&tb);
+              return;
+            }
+          c = tlv_data(a);
+
+          memcpy(c, n->node_identifier_hash, HCP_HASH_LEN);
+          c += HCP_HASH_LEN;
+
+          *((uint32_t *)c) = cpu_to_be32(n->update_number);
+          c += 4;
+
+          *((uint32_t *)c) = cpu_to_be32(now - n->origination_time);
+          c += 4;
+
+          memcpy(c, n->node_data_hash, HCP_HASH_LEN);
+        }
+      tlv_fill_pad(tb.head);
+      /* -4 = not including the dummy TLV header */
+      /* rest = network state TLV size */
+      if ((tlv_pad_len(tb.head) - 4 + 4 + HCP_HASH_LEN)
+          > HCP_MAXIMUM_MULTICAST_SIZE)
+        {
+          /* Clear the buffer - just send the network state hash. */
+          tlv_buf_free(&tb);
+          tlv_buf_init(&tb, 0); /* not passed anywhere */
+        }
+      a = tlv_new(&tb, HCP_T_NETWORK_HASH, HCP_HASH_LEN);
+      if (!a)
+        {
+          tlv_buf_free(&tb);
+          return;
+        }
+      c = tlv_data(a);
+      memcpy(c, o->network_hash, HCP_HASH_LEN);
+      if (hcp_io_sendto(o,
+                        tlv_data(tb.head),
+                        tlv_len(tb.head),
+                        l->ifname,
+                        &o->multicast_address) < 0)
+        {
+          tlv_buf_free(&tb);
+          return;
+        }
+      tlv_buf_free(&tb);
     }
   l->send_time = 0;
 }
@@ -509,4 +568,17 @@ void hcp_run(hcp o)
     }
   if (next)
     hcp_io_schedule(o, next-now);
+}
+
+void hcp_poll(hcp o)
+{
+  unsigned char buf[HCP_MAXIMUM_PAYLOAD_SIZE];
+  ssize_t read;
+  char srcif[IFNAMSIZ];
+  struct in6_addr src;
+
+  while ((read = hcp_io_recvfrom(o, buf, sizeof(buf), srcif, &src)) > 0)
+    {
+      
+    }
 }

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Nov 26 07:25:13 2013 mstenber
- * Edit time:     56 min
+ * Last modified: Tue Nov 26 08:23:11 2013 mstenber
+ * Edit time:     70 min
  *
  */
 
@@ -56,6 +56,8 @@ bool hcp_io_init(hcp o)
 {
   int s;
 
+  if (!inet_pton(AF_INET6, HCP_MCAST_GROUP, &o->multicast_address))
+    return false;
   s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
   if (s<0)
     return false;
@@ -76,8 +78,7 @@ bool hcp_io_set_ifname_enabled(hcp o,
 {
   struct ipv6_mreq val;
 
-  if (!inet_pton(AF_INET6, HCP_MCAST_GROUP, &val.ipv6mr_multiaddr))
-    goto fail;
+  val.ipv6mr_multiaddr = o->multicast_address;
   if (!(val.ipv6mr_interface = if_nametoindex(ifname)))
     goto fail;
   if (setsockopt(o->udp_socket,
@@ -95,4 +96,41 @@ bool hcp_io_set_ifname_enabled(hcp o,
 void hcp_io_schedule(hcp o, int msecs)
 {
   uloop_timeout_set(&o->timeout, msecs);
+}
+
+ssize_t hcp_io_recvfrom(hcp o, void *buf, size_t len,
+                        char *ifname,
+                        struct in6_addr *address)
+{
+  int flags = 0;
+  struct sockaddr_in6 src;
+  socklen_t src_len = sizeof(src);
+  ssize_t l;
+
+  l = recvfrom(o->udp_socket, buf, len, flags, &src, &src_len);
+  if (l > 0)
+    {
+      if (!if_indextoname(src.sin6_scope_id, ifname))
+        *ifname = 0;
+      *address = src.sin6_addr;
+    }
+  else
+    {
+      *ifname = 0;
+    }
+  return l;
+}
+
+ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
+                      const char *ifname,
+                      const struct in6_addr *to)
+{
+  int flags = 0;
+  struct sockaddr_in6 dst;
+
+  memset(&dst, 0, sizeof(dst));
+  if (!(dst.sin6_scope_id = if_nametoindex(ifname)))
+    return -1;
+  dst.sin6_addr = *to;
+  return sendto(o->udp_socket, buf, len, flags, &dst, sizeof(dst));
 }
