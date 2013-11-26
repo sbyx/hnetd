@@ -18,6 +18,7 @@
 #include <time.h>
 
 #include "hnetd.h"
+#include "iface.h"
 #include "prefix_utils.h"
 
 /* Length of router ids */
@@ -31,41 +32,44 @@ typedef void *pa_t;
 
 /* Callbacks for flooding protocol. */
 struct pa_flood_callbacks {
+	/* Private pointer provided by the subscriber */
 	void *priv;
-	/* Called whenever a locally assigned prefix is modified
-	 * @p - the assigned prefix
-	 * @ifname - interface on which assignment is made
-	 * @to_delete - non-zero when the lap must not be advertised anymore
-	 * @priv - The private pointer */
-	void (*updated_lap)(const struct prefix *p, const char *ifname,
+	/* Called whenever a locally assigned prefix is modified.
+	 * @param prefix The assigned prefix
+	 * @param ifname Interface on which assignment is made
+	 * @param to_delete Whether that lap needs to be deleted
+	 * @param priv Private pointer as provided by subscriber */
+	void (*updated_lap)(const struct prefix *prefix, const char *ifname,
 							int to_delete, void *priv);
-	/* Called whenever a locally delegated prefix is modified
-	 * @p - the delegated prefix
-	 * @valid_until - End of validity date and 0 to ask for deletion
-	 * @prefered_until - Preferred date
-	 * @priv - The private pointer */
-	void (*updated_ldp)(const struct prefix *p, hnetd_time_t valid_until,
-							hnetd_time_t prefered_until, void *priv);
+	/* Called whenever a locally delegated prefix is modified.
+	 * @param prefix The assigned prefix
+	 * @param valid_until End of validity date or zero when the ldp should
+	 *        be deleted
+	 * @param preferred_until When the prefix will not be preferred anymore
+	 * @param priv Private pointer as provided by subscriber */
+	void (*updated_ldp)(const struct prefix *prefix, hnetd_time_t valid_until,
+							hnetd_time_t preferred_until, void *priv);
 };
 
 struct pa_iface_callbacks {
+	/* Private pointer provided by the subscriber */
 	void *priv;
-	/* Called whenever an prefix assigned to some interface should be
+	/* Called whenever a prefix assigned to some interface should be
 	 * modified.
-	 * @p - the assigned prefix
-	 * @ifname - the interface on which that prefix is or should be
-	 * @owner - whether the iface should do dhcp+ras on the link
-	 * @valid_until - validity date
-	 * @prefered_until - prefered date
-	 * @priv - The private pointer
-	 */
+	 * @param prefix The assigned prefix
+	 * @param ifname The interface on which that prefix must be assigned
+	 * @param valid_until End of validity date or zero when the prefix should
+	 *        be deleted
+	 * @param preferred_until When the prefix will not be preferred anymore
+	 * @param priv Private pointer as provided by subscriber */
 	void (*update_prefix)(const struct prefix *p, const char *ifname,
-						hnetd_time_t valid_until,	hnetd_time_t prefered_until, void *priv);
+						hnetd_time_t valid_until,
+						hnetd_time_t preferred_until, void *priv);
 
 	/* When interface ownership changes.
-	 * @ifname - The interface name
-	 * @owner - Whether we are link owner
-	 * @priv - The private pointer */
+	 * @param ifname The interface name
+	 * @param owner Whether we should do dhcp+ra
+	 * @param priv Private pointer as provided by subscriber */
 	void (*update_link_owner)(const char *ifname, bool owner, void *priv);
 };
 
@@ -103,21 +107,15 @@ struct pa_conf {
 	 * default = ::ffff:10.0.0.0/104 */
 	struct prefix v4_prefix;
 
+	/* The iface registration function.
+	 * Default is iface_register_user (from iface.h).
+	 * This must not be modified unless for unit-testing. */
+	void (*iface_registration)(struct iface_user *user);
 };
 
 
-
-/*
- * Configuration manipulation
- */
-
 /* Sets conf values to defaults. */
 void pa_conf_default(struct pa_conf *);
-
-
-/*
- * pa control functions
- */
 
 /* Initializes the prefix assignment algorithm with a default
  * configuration.
@@ -133,52 +131,43 @@ int pa_start(pa_t);
  * Init must be called to use it again. */
 void pa_destroy(pa_t);
 
-
-
-/*
- * For iface interface
- */
-
 /* Subscribes to lap change events.
  * Will be used by iface.c to obtain new laps information.
  * Subscribing will override previous subscription (if any). */
 void pa_iface_subscribe(pa_t, const struct pa_iface_callbacks *);
 
-
-
-/*
- * Flooding algorithm interface
- */
-
-
 /* Sets flooder algorithm callbacks.
- * Subscribing will override previous subscription (if any). */
+ * Subscribing will override previous subscription (if any).
+ * The provided structure can be destroyed after function returns. */
 void pa_flood_subscribe(pa_t, const struct pa_flood_callbacks *);
 
 
-/* For each prefix assigned by *other* node, call that function.
- * @prefix - The assigned prefix
- * @ifname - Interface name, if assigned on a connected link.
+/* Sets the router id.
+ * This must be called after creation. Otherwise,
+ * an rid of zero will be used (lowest priority). */
+void pa_set_rid(pa_t, const struct pa_rid *rid);
+
+/* Flooding protocol must call that function whenever an assigned
+ * prefix advertised by some *other* node is modified or deleted.
+ * @param prefix The assigned prefix
+ * @param ifname Interface name when assigned on a connected link.
  *           NULL otherwise.
- * @do_delete - Whether this eap must be deleted
- * @rid - The source router id
- */
+ * @param do_delete Whether this eap must be deleted
+ * @param rid The source router id
+ * @return 0 on success. A different value on error. */
 int pa_update_eap(pa_t, const struct prefix *prefix,
 				const struct pa_rid *rid,
 				const char *ifname, bool to_delete);
 
-/* For each delegated prefix announced by *other* node,
- * call this function. This can only be called during db update.
- * @prefix - The delegated prefix
- * @valid_until - Time when the prefix becomes invalid (0 for deletion)
- * @prefered_until - Time when the prefix is not prefered.
- */
+/* Flooding protocol must call that function whenever a delegated
+ * prefix advertised by some *other* node is modified or deleted.
+ * @param prefix The delegated prefix
+ * @param valid_until Time when the prefix becomes invalid (0 for deletion)
+ * @param preferred_until - Time when the prefix is not preferred anymore.
+ * @return 0 on success. A different value on error. */
 int pa_update_edp(pa_t, const struct prefix *prefix,
 				const struct pa_rid *rid,
-				hnetd_time_t valid_until, hnetd_time_t prefered_until);
-
-/* Sets the router id. */
-void pa_set_rid(pa_t, const struct pa_rid *);
+				hnetd_time_t valid_until, hnetd_time_t preferred_until);
 
 #endif
 
