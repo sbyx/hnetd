@@ -16,8 +16,8 @@ typedef int64_t hnetd_time_t;
 static inline hnetd_time_t hnetd_time(void) {
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return ((hnetd_time_t)ts.tv_sec * 1000) +
-			((hnetd_time_t)ts.tv_nsec / 1000000);
+	return ((hnetd_time_t)ts.tv_sec * HNETD_TIME_PER_SECOND) +
+			((hnetd_time_t)ts.tv_nsec / (1000000000 / HNETD_TIME_PER_SECOND));
 }
 
 
