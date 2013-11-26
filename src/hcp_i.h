@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Nov 26 11:43:41 2013 mstenber
+ * Last modified: Tue Nov 26 14:24:57 2013 mstenber
  * Edit time:     76 min
  *
  */
@@ -70,6 +70,7 @@ struct hcp_struct {
   /* before io-init is done, we keep just prod should_schedule. */
   bool io_init_done;
   bool should_schedule;
+  bool immediate_scheduled;
 
   /* Our own node (it should be constant, never purged) */
   hcp_node own_node;
@@ -182,9 +183,14 @@ bool hcp_init(hcp o, unsigned char *node_identifier, int len);
 
 void hcp_hash(const void *buf, int len, unsigned char *dest);
 
+/* Flush own TLV changes to own node. */
+void hcp_self_flush(hcp_node n, hnetd_time_t now);
+
 /* Calculate hash of the network state based on current nodes. */
 void hcp_calculate_network_hash(hcp o, unsigned char *dest);
 void hcp_calculate_node_data_hash(hcp_node n, unsigned char *dest);
+
+
 
 /* Low-level interface module stuff. */
 

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:14:59 2013 mstenber
- * Last modified: Tue Nov 26 11:27:27 2013 mstenber
- * Edit time:     45 min
+ * Last modified: Tue Nov 26 15:39:09 2013 mstenber
+ * Edit time:     63 min
  *
  */
 
@@ -111,10 +111,9 @@ static inline void *smock_pull(const char *name)
     {
       return NULL;
     }
-
-  sput_fail_unless(!list_empty(&q->eh), name);
   if (list_empty(&q->eh))
     {
+      sput_fail_unless(!list_empty(&q->eh), "queue not empty ");
       return NULL;
     }
   h = q->eh.next;
@@ -136,20 +135,40 @@ static inline void *smock_pull(const char *name)
   return r;
 }
 
-static inline bool smock_empty()
+#define smock_empty() (_smock_head == NULL)
+
+static inline void smock_is_empty()
 {
-  return _smock_head == NULL;
+  struct list_head *h;
+  smock_queue q;
+  if (!smock_empty()) {
+    list_for_each(h, _smock_head)
+      {
+        q = container_of(h, smock_queue_s, lh);
+        sput_fail_unless(!q, q->name);
+      }
+  }
 }
 
 #define smock_push_int(q,v) smock_push(q, (void *)((intptr_t) (v)))
-#define smock_pull_int(q) (intptr_t)smock_pull(q)
-#define smock_pull_int_is(q,v) \
-  sput_fail_unless(smock_pull_int(q) == (v), "int match")
+#define smock_pull_int(q) ((intptr_t)smock_pull(q))
 
 #define smock_push_bool(q,v) smock_push(q, (void *)((intptr_t) (v) ? 1 : 0))
 #define smock_pull_bool(q) ((intptr_t)smock_pull(q) == 1 ? true : false)
-#define smock_pull_bool_is(q,v) \
-  sput_fail_unless(smock_pull_bool(q) == (v), "bool match")
+
+/* Assertion-like utilities. */
+#define smock_pull_int_is(q,v)                          \
+do {                                                    \
+  intptr_t _v = smock_pull_int(q);                      \
+  sput_fail_unless(_v == (v), "int match " # q);        \
+} while(0)
+
+
+#define smock_pull_bool_is(q,v)                         \
+do {                                                    \
+  bool _v = smock_pull_bool(q);                         \
+  sput_fail_unless(_v == (v), "bool match " # q);       \
+} while(0)
 
 #define smock_pull_string_is(q, v)                      \
 do {                                                    \

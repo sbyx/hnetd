@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Nov 26 11:44:44 2013 mstenber
- * Edit time:     204 min
+ * Last modified: Tue Nov 26 15:47:52 2013 mstenber
+ * Edit time:     226 min
  *
  */
 
@@ -22,6 +22,19 @@ compare_nodes(const void *a, const void *b, void *ptr __unused)
 
   return memcmp(n1->node_identifier_hash, n2->node_identifier_hash,
                 HCP_HASH_LEN);
+}
+
+static void _schedule(hcp o)
+{
+  if (o->io_init_done)
+    {
+      if (o->immediate_scheduled)
+        return;
+      hcp_io_schedule(o, 0);
+      o->immediate_scheduled = true;
+    }
+  else
+    o->should_schedule = true;
 }
 
 static void update_node(__unused struct vlist_tree *t,
@@ -39,10 +52,7 @@ static void update_node(__unused struct vlist_tree *t,
       free(n_old);
     }
   o->network_hash_dirty = true;
-  if (o->io_init_done)
-    hcp_io_schedule(o, 0);
-  else
-    o->should_schedule = true;
+  _schedule(o);
 }
 
 
@@ -50,14 +60,18 @@ static int
 compare_tlvs(const void *a, const void *b, void *ptr __unused)
 {
   hcp_tlv t1 = (hcp_tlv) a, t2 = (hcp_tlv) b;
-  int s1 = tlv_pad_len(&t1->tlv);
-  int s2 = tlv_pad_len(&t2->tlv);
-  int s = s1 < s2 ? s1 : s2;
-  int r = memcmp(&t1->tlv, &t2->tlv, s);
 
-  if (r == 0 && s1 != s2)
-    return s1 < s2 ? -1 : 1;
-  return r;
+  if (tlv_attr_equal(&t1->tlv, &t2->tlv))
+    return 0;
+
+  {
+    int s1 = tlv_pad_len(&t1->tlv);
+    int s2 = tlv_pad_len(&t2->tlv);
+    int s = s1 < s2 ? s1 : s2;
+    int r = memcmp(&t1->tlv, &t2->tlv, s);
+
+    return r;
+  }
 }
 
 static void update_tlv(struct vlist_tree *t,
@@ -71,6 +85,7 @@ static void update_tlv(struct vlist_tree *t,
   if (t_old)
     free(t_old);
   o->tlvs_dirty = true;
+  _schedule(o);
 }
 
 static int
@@ -105,19 +120,17 @@ static void update_link(struct vlist_tree *t,
 
   if (t_old)
     {
-      if (!t_new)
-        {
-          hcp_io_set_ifname_enabled(o, t_old->ifname, false);
-        }
+      if (!t_new && o->io_init_done)
+        hcp_io_set_ifname_enabled(o, t_old->ifname, false);
       vlist_flush_all(&t_old->neighbors);
       free(t_old);
     }
   else
     {
-      if (!hcp_link_join(t_new, 0))
-        hcp_io_schedule(o, 0);
+      hcp_link_join(t_new, 0);
     }
   o->links_dirty = true;
+  _schedule(o);
 }
 
 static int
@@ -145,9 +158,8 @@ static void update_neighbor(struct vlist_tree *t,
   if (t_old)
     free(t_old);
   o->links_dirty = true;
+  _schedule(o);
 }
-
-
 
 void hcp_hash(const void *buf, int len, unsigned char *dest)
 {
@@ -183,7 +195,7 @@ hcp hcp_create(void)
 
   o = calloc(1, sizeof(*o));
   if (!o)
-    goto err;
+    return NULL;
   /* XXX - this is very arbitrary and Linux-only. However, hopefully
    * it is enough (should probably have ifname(s) as argument). */
   c += hcp_io_get_hwaddr("eth0", c, sizeof(buf) + buf - c);
@@ -193,13 +205,15 @@ hcp hcp_create(void)
   if (!hcp_init(o, buf, c-buf))
     goto err;
   if (!hcp_io_init(o))
-    goto err;
+    goto err2;
   o->io_init_done = true;
   if (o->should_schedule)
-    hcp_io_schedule(o, 0);
+    _schedule(o);
   return o;
+ err2:
+  vlist_flush_all(&o->nodes);
  err:
-  if (o) free(o);
+  free(o);
   return NULL;
 }
 
@@ -207,6 +221,7 @@ void hcp_destroy(hcp o)
 {
   if (!o) return;
   hcp_io_uninit(o);
+  o->io_init_done = false; /* cannot schedule anything anymore after this. */
   vlist_flush_all(&o->nodes);
   vlist_flush_all(&o->tlvs);
   vlist_flush_all(&o->links);
@@ -298,7 +313,7 @@ hcp_node hcp_node_get_next(hcp_node n)
   return avl_next_element(n, in_nodes.avl);
 }
 
-static void _flush(hcp_node n)
+void hcp_self_flush(hcp_node n, hnetd_time_t now)
 {
   hcp o = n->hcp;
   hcp_tlv t;
@@ -331,7 +346,8 @@ static void _flush(hcp_node n)
               struct tlv_attr *nt = (struct tlv_attr *)c;
               if ((c + HCP_NEIGHBOR_TLV_SIZE) >= e)
                 return;
-              tlv_init(nt, HCP_T_NODE_DATA_LINK_NEIGHBOR, HCP_NEIGHBOR_TLV_SIZE);
+              tlv_init(nt, HCP_T_NODE_DATA_LINK_NEIGHBOR,
+                       HCP_NEIGHBOR_TLV_SIZE);
               c += 4; /* skip header */
 
               memcpy(c, ne->node_identifier_hash, HCP_HASH_LEN);
@@ -383,16 +399,16 @@ static void _flush(hcp_node n)
     }
   n->tlv_container = tb.head;
   n->update_number++;
-  n->origination_time = hnetd_time();
+  n->origination_time = now ? now : hnetd_time();
   o->network_hash_dirty = true;
   hcp_calculate_node_data_hash(n, n->node_data_hash);
-  hcp_io_schedule(o, 0);
+  _schedule(o);
 }
 
 void hcp_node_get_tlvs(hcp_node n, struct tlv_attr **r)
 {
   if (hcp_node_is_self(n))
-    _flush(n);
+    hcp_self_flush(n, 0);
   *r = n->tlv_container;
 }
 
@@ -413,7 +429,7 @@ void hcp_calculate_node_data_hash(hcp_node n, unsigned char *dest)
   struct tlv_attr h;
   int l = tlv_len(n->tlv_container);
 
-  tlv_init(&h, HCP_T_NODE_DATA, HCP_HASH_LEN + 4 + l);
+  tlv_init(&h, HCP_T_NODE_DATA, 4 + HCP_HASH_LEN + l);
   md5_begin(&ctx);
   md5_hash(&h, sizeof(h), &ctx);
   md5_hash(n->node_identifier_hash, HCP_HASH_LEN, &ctx);
@@ -422,4 +438,3 @@ void hcp_calculate_node_data_hash(hcp_node n, unsigned char *dest)
     md5_hash(tlv_data(n->tlv_container), l, &ctx);
   md5_end(dest, &ctx);
 }
-
