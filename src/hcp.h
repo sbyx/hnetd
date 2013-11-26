@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Tue Nov 26 08:21:33 2013 mstenber
+ * Last modified: Tue Nov 26 09:24:30 2013 mstenber
  * Edit time:     40 min
  *
  */
@@ -36,8 +36,8 @@ enum {
   HCP_T_SIGNATURE = 0xFFFF
 };
 
-#define HCP_PORT 880
-#define HCP_MCAST_GROUP "ff02::880"
+#define HCP_PORT 8808
+#define HCP_MCAST_GROUP "ff02::8808"
 
 /* Opaque pointer that represents hcp instance. */
 typedef struct hcp_struct hcp_s, *hcp;

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Nov 26 08:58:42 2013 mstenber
- * Edit time:     82 min
+ * Last modified: Tue Nov 26 09:33:02 2013 mstenber
+ * Edit time:     90 min
  *
  */
 
@@ -26,6 +26,7 @@
 #include <net/ethernet.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <libubox/usock.h>
 
 /* 'found' from odhcp6c */
 int
@@ -57,19 +58,33 @@ static void _timeout(struct uloop_timeout *t)
 bool hcp_io_init(hcp o)
 {
   int s;
+#if 0
   /* Could also use usock here; however, it uses getaddrinfo, which
    * doesn't seem to work when e.g. default routes aren't currently
    * set up. Too bad. */
+  char buf[6];
 
-  if (!inet_pton(AF_INET6, HCP_MCAST_GROUP, &o->multicast_address))
+  sprintf(buf, "%d", HCP_PORT);
+  s = usock(USOCK_IPV6ONLY|USOCK_UDP|USOCK_SERVER|USOCK_NONBLOCK, NULL, buf);
+  if (s < 0)
     return false;
+#else
+  struct sockaddr_in6 addr;
+
   s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
   if (s<0)
     return false;
   fcntl(s, F_SETFL, O_NONBLOCK);
-  /* XXX - bind port */
+  memset(&addr, 0, sizeof(addr));
+  addr.sin6_family = AF_INET6;
+  addr.sin6_port = HCP_PORT;
+  if (bind(s, &addr, sizeof(addr))<0)
+    return false;
+#endif
   o->udp_socket = s;
   o->timeout.cb = _timeout;
+  if (!inet_pton(AF_INET6, HCP_MCAST_GROUP, &o->multicast_address))
+    return false;
   return true;
 }
 
