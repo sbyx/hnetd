@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Nov 26 09:54:23 2013 mstenber
- * Edit time:     105 min
+ * Last modified: Tue Nov 26 12:07:56 2013 mstenber
+ * Edit time:     106 min
  *
  */
 
@@ -94,6 +94,8 @@ bool hcp_io_init(hcp o)
 void hcp_io_uninit(hcp o)
 {
   close(o->udp_socket);
+  /* clear the timer from uloop. */
+  uloop_timeout_cancel(&o->timeout);
 }
 
 bool hcp_io_set_ifname_enabled(hcp o,

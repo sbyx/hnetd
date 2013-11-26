@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Nov 26 11:44:44 2013 mstenber
- * Edit time:     204 min
+ * Last modified: Tue Nov 26 12:10:45 2013 mstenber
+ * Edit time:     209 min
  *
  */
 
@@ -22,6 +22,14 @@ compare_nodes(const void *a, const void *b, void *ptr __unused)
 
   return memcmp(n1->node_identifier_hash, n2->node_identifier_hash,
                 HCP_HASH_LEN);
+}
+
+static void _schedule(hcp o)
+{
+  if (o->io_init_done)
+    hcp_io_schedule(o, 0);
+  else
+    o->should_schedule = true;
 }
 
 static void update_node(__unused struct vlist_tree *t,
@@ -39,10 +47,7 @@ static void update_node(__unused struct vlist_tree *t,
       free(n_old);
     }
   o->network_hash_dirty = true;
-  if (o->io_init_done)
-    hcp_io_schedule(o, 0);
-  else
-    o->should_schedule = true;
+  _schedule(o);
 }
 
 
@@ -115,7 +120,7 @@ static void update_link(struct vlist_tree *t,
   else
     {
       if (!hcp_link_join(t_new, 0))
-        hcp_io_schedule(o, 0);
+        _schedule(o);
     }
   o->links_dirty = true;
 }
@@ -183,7 +188,7 @@ hcp hcp_create(void)
 
   o = calloc(1, sizeof(*o));
   if (!o)
-    goto err;
+    return NULL;
   /* XXX - this is very arbitrary and Linux-only. However, hopefully
    * it is enough (should probably have ifname(s) as argument). */
   c += hcp_io_get_hwaddr("eth0", c, sizeof(buf) + buf - c);
@@ -193,13 +198,15 @@ hcp hcp_create(void)
   if (!hcp_init(o, buf, c-buf))
     goto err;
   if (!hcp_io_init(o))
-    goto err;
+    goto err2;
   o->io_init_done = true;
   if (o->should_schedule)
     hcp_io_schedule(o, 0);
   return o;
+ err2:
+  vlist_flush_all(&o->nodes);
  err:
-  if (o) free(o);
+  free(o);
   return NULL;
 }
 
@@ -207,6 +214,7 @@ void hcp_destroy(hcp o)
 {
   if (!o) return;
   hcp_io_uninit(o);
+  o->io_init_done = false; /* cannot schedule anything anymore after this. */
   vlist_flush_all(&o->nodes);
   vlist_flush_all(&o->tlvs);
   vlist_flush_all(&o->links);

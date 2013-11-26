@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Tue Nov 26 11:48:21 2013 mstenber
- * Edit time:     41 min
+ * Last modified: Tue Nov 26 12:04:34 2013 mstenber
+ * Edit time:     47 min
  *
  */
 
@@ -64,7 +64,7 @@ int hcp_io_get_hwaddr(const char *ifname, unsigned char *buf, int buf_left)
 void hcp_io_schedule(hcp o, int msecs)
 {
   sput_fail_unless(o, "hcp");
-  sput_fail_unless(o && o->udp_socket == 1, "hcp_io_init called");
+  sput_fail_unless(o && o->udp_socket == 1, "hcp_io_schedule valid");
   smock_pull_int_is("schedule", msecs);
 }
 
@@ -175,6 +175,10 @@ static void hcp_init1(void)
 
   hcp o = hcp_create();
   sput_fail_unless(o, "hcp_create -> hcp");
+  sput_fail_unless(smock_empty(), "smock_empty");
+
+  smock_push("uninit", NULL);
+  hcp_destroy(o);
   sput_fail_unless(smock_empty(), "smock_empty");
 }
 
