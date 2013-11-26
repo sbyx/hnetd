@@ -7,8 +7,12 @@
 #include <sys/types.h>
 #include <libubox/utils.h>
 
-// Get current monotonic clock with millisecond granularity
+
 typedef int64_t hnetd_time_t;
+#define HNETD_TIME_MAX INT64_MAX
+#define HNETD_TIME_PER_SECOND 1000
+
+// Get current monotonic clock with millisecond granularity
 static inline hnetd_time_t hnetd_time(void) {
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
