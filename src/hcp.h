@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Tue Nov 26 09:24:30 2013 mstenber
- * Edit time:     40 min
+ * Last modified: Tue Nov 26 12:55:00 2013 mstenber
+ * Edit time:     42 min
  *
  */
 
@@ -38,6 +38,23 @@ enum {
 
 #define HCP_PORT 8808
 #define HCP_MCAST_GROUP "ff02::8808"
+
+/* How often we retry multicast joins? Once per second seems sane
+ * enough. */
+#define HCP_REJOIN_INTERVAL 1000
+
+/* Minimum interval trickle starts at. The first potential time it may
+ * send something is actually this divided by two. */
+#define HCP_TRICKLE_IMIN 250
+
+/* Note: This is concrete value, NOT exponent # as noted in RFC. I
+ * don't know why RFC does that.. We don't want to ever need do
+ * exponentiation in any case in code. 64 seconds for the time being.. */
+#define HCP_TRICKLE_IMAX ((HCP_TRICKLE_IMIN*4)*64)
+
+/* Redundancy constant. */
+#define HCP_TRICKLE_K 1
+
 
 /* Opaque pointer that represents hcp instance. */
 typedef struct hcp_struct hcp_s, *hcp;
@@ -91,7 +108,8 @@ bool hcp_set_link_enabled(hcp o, const char *ifname, bool enabled);
 void hcp_run(hcp o);
 
 /**
- * Poll the i/o system once.
+ * Poll the i/o system once. This should be called from event loop
+ * whenever the udp socket has inputs.
  */
 void hcp_poll(hcp o);
 

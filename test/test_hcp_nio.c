@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Tue Nov 26 12:22:44 2013 mstenber
- * Edit time:     56 min
+ * Last modified: Tue Nov 26 12:55:23 2013 mstenber
+ * Edit time:     83 min
  *
  */
 
@@ -19,7 +19,10 @@
 
 #include "hnetd.h"
 #define hnetd_time hnetd_time_mock
+#include <stdlib.h>
+#define random random_mock
 static hnetd_time_t hnetd_time_mock(void);
+static int random_mock(void);
 #include "hcp.c"
 #include "hcp_recv.c"
 #include "hcp_timeout.c"
@@ -117,12 +120,19 @@ static hnetd_time_t hnetd_time_mock(void)
   return smock_pull_int("time");
 }
 
+static int random_mock(void)
+{
+  return smock_pull_int("random");
+}
+
 /******************************************************* Start of test cases */
+
+static char *dummy_ifname = "eth0";
 
 static void hcp_init_no_hwaddr(void)
 {
   /* Feed in fake hwaddr for eth0+eth1 (hardcoded, ugh) */
-  smock_push("get_hwaddr_ifname", "eth0");
+  smock_push("get_hwaddr_ifname", dummy_ifname);
   smock_push("get_hwaddr_buf", NULL);
   smock_push_int("get_hwaddr_len", 0);
 
@@ -140,7 +150,7 @@ static void hcp_init_iofail(void)
   char buf[4] = "foo";
 
   /* Feed in fake hwaddr for eth0+eth1 (hardcoded, ugh) */
-  smock_push("get_hwaddr_ifname", "eth0");
+  smock_push("get_hwaddr_ifname", dummy_ifname);
   smock_push("get_hwaddr_buf", buf);
   smock_push_int("get_hwaddr_len", sizeof(buf));
 
@@ -161,7 +171,7 @@ static hcp create_hcp(void)
   char buf[4] = "foo";
 
   /* Feed in fake hwaddr for eth0+eth1 (hardcoded, ugh) */
-  smock_push("get_hwaddr_ifname", "eth0");
+  smock_push("get_hwaddr_ifname", dummy_ifname);
   smock_push("get_hwaddr_buf", buf);
   smock_push_int("get_hwaddr_len", sizeof(buf));
 
@@ -196,15 +206,66 @@ static void hcp_ok_minimal(void)
   destroy_hcp(o);
 }
 
+static void one_join(bool ok)
+{
+  smock_push("set_enable_ifname", dummy_ifname);
+  smock_push_bool("set_enable_enabled", true);
+  smock_push_bool("set_enable_result", ok);
+}
+
 static void hcp_ok(void)
 {
   hcp o = create_hcp();
 
   sput_fail_unless(smock_empty(), "smock_empty");
-  smock_push("set_enable_ifname", "eth0");
-  smock_push_bool("set_enable_enabled", true);
-  smock_push_bool("set_enable_result", true);
-  hcp_set_link_enabled(o, "eth0", true);
+  one_join(true);
+  hcp_set_link_enabled(o, dummy_ifname, true);
+  sput_fail_unless(smock_empty(), "smock_empty");
+
+  /* Ok. We're cooking with gas. */
+
+  /* no unregisters at end, as we first kill io, and then flush
+   * structures (socket kill should take care of it in any case). */
+  destroy_hcp(o);
+}
+
+static void hcp_rejoin_works(void)
+{
+  hcp o = create_hcp();
+  int t = 123000;
+
+
+  /* we'll try to join dummy_ifname; however, it fails. */
+  sput_fail_unless(smock_empty(), "smock_empty");
+  one_join(false);
+  smock_push_int("schedule", 0);
+  smock_push_int("time", t);
+  hcp_set_link_enabled(o, dummy_ifname, true);
+  sput_fail_unless(smock_empty(), "smock_empty");
+
+  /* make sure next timeout before HCP_REJOIN_INTERVAL just re-schedules. */
+  t += HCP_REJOIN_INTERVAL / 2;
+  smock_push_int("time", t);
+  smock_push_int("schedule", HCP_REJOIN_INTERVAL / 2);
+  hcp_run(o);
+  sput_fail_unless(smock_empty(), "smock_empty");
+
+  /* now that the time _has_ expired, we should try joining.. fail again. */
+  t += HCP_REJOIN_INTERVAL / 2;
+  smock_push_int("time", t);
+  smock_push_int("schedule", HCP_REJOIN_INTERVAL);
+  one_join(false);
+  hcp_run(o);
+  sput_fail_unless(smock_empty(), "smock_empty");
+
+  /* again try after HCP_REJOIN_INTERVAL, it should work. trickle
+   * scheduling should require exactly one random call. */
+  t += HCP_REJOIN_INTERVAL;
+  smock_push_int("time", t);
+  smock_push_int("random", 0);
+  smock_push_int("schedule", HCP_TRICKLE_IMIN / 2);
+  one_join(true);
+  hcp_run(o);
   sput_fail_unless(smock_empty(), "smock_empty");
 
   /* no unregisters at end, as we first kill io, and then flush
@@ -220,6 +281,7 @@ int main(__unused int argc, __unused char **argv)
   sput_run_test(hcp_init_iofail);
   sput_run_test(hcp_ok_minimal);
   sput_run_test(hcp_ok);
+  sput_run_test(hcp_rejoin_works);
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();

@@ -6,25 +6,12 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Tue Nov 26 08:33:04 2013 mstenber
- * Edit time:     1 min
+ * Last modified: Tue Nov 26 12:58:19 2013 mstenber
+ * Edit time:     4 min
  *
  */
 
 #include "hcp_i.h"
-
-/* Once per second */
-#define HCP_REJOIN_INTERVAL 1000
-
-#define TRICKLE_IMIN 250
-
-/* Note: This is concrete value, NOT exponent # as noted in RFC. I
- * don't know why RFC does that.. We don't want to ever need do
- * exponentiation in any case in code. 64 seconds for the time being.. */
-#define TRICKLE_IMAX ((TRICKLE_IMIN*4)*64)
-
-/* Redundancy constant. */
-#define TRICKLE_K 1
 
 static void trickle_set_i(hcp_link l, hnetd_time_t now, int i)
 {
@@ -36,7 +23,8 @@ static void trickle_set_i(hcp_link l, hnetd_time_t now, int i)
 static void trickle_upgrade(hcp_link l, hnetd_time_t now)
 {
   int i = l->i * 2;
-  i = i < TRICKLE_IMIN ? TRICKLE_IMIN : i > TRICKLE_IMAX ? TRICKLE_IMAX : i;
+  i = i < HCP_TRICKLE_IMIN ? HCP_TRICKLE_IMIN
+    : i > HCP_TRICKLE_IMAX ? HCP_TRICKLE_IMAX : i;
   trickle_set_i(l, now, i);
 }
 
@@ -50,7 +38,7 @@ static void trickle_send(hcp_link l)
   struct tlv_attr *a;
   unsigned char *c;
 
-  if (l->c < TRICKLE_K)
+  if (l->c < HCP_TRICKLE_K)
     {
       hnetd_time_t now = hnetd_time();
 
@@ -130,7 +118,8 @@ void hcp_run(hcp o)
           /* Shocker. The network hash changed -> reset _every_
            * trickle. */
           vlist_for_each_element(&o->links, l, in_links)
-            trickle_set_i(l, now, TRICKLE_IMIN);
+            if (!l->join_pending)
+              trickle_set_i(l, now, HCP_TRICKLE_IMIN);
         }
       o->network_hash_dirty = false;
     }
@@ -143,7 +132,7 @@ void hcp_run(hcp o)
           && (time_since_failed_join < HCP_REJOIN_INTERVAL
               || !hcp_link_join(l, now)))
         {
-          next = TMIN(next, HCP_REJOIN_INTERVAL - (now - o->join_failed_time));
+          next = TMIN(next, now + HCP_REJOIN_INTERVAL - (now - o->join_failed_time));
           continue;
         }
       if (l->interval_end_time <= now)
