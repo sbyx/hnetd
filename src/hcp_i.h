@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Nov 26 08:19:20 2013 mstenber
+ * Last modified: Tue Nov 26 08:33:13 2013 mstenber
  * Edit time:     74 min
  *
  */
@@ -197,5 +197,7 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
                       const char *ifname,
                       const struct in6_addr *dst);
 
+/* Multicast rejoin utility. (in hcp.c) */
+bool hcp_link_join(hcp_link l, hnetd_time_t now);
 
 #endif /* HCP_I_H */
