@@ -130,24 +130,24 @@ struct iface* iface_get(const char *ifname)
 }
 
 
-void iface_remove(const char *ifname)
+void iface_remove(struct iface *c)
 {
-	struct iface *c = iface_create(ifname, NULL);
-	if (c) {
-		// If interface was internal, let subscribers know of removal
-		if (c->internal)
-			iface_notify_internal_state(c, false);
+	if (!c)
+		return;
 
-		list_del(&c->head);
-		vlist_flush_all(&c->assigned);
-		vlist_flush_all(&c->delegated);
+	// If interface was internal, let subscribers know of removal
+	if (c->internal)
+		iface_notify_internal_state(c, false);
 
-		if (c->platform)
-			platform_iface_free(c);
+	list_del(&c->head);
+	vlist_flush_all(&c->assigned);
+	vlist_flush_all(&c->delegated);
 
-		free(c->domain);
-		free(c);
-	}
+	if (c->platform)
+		platform_iface_free(c);
+
+	free(c->domain);
+	free(c);
 }
 
 

@@ -74,7 +74,7 @@ struct iface* iface_get(const char *ifname);
 struct iface* iface_create(const char *ifname, const char *handle);
 
 // Remove a known interface
-void iface_remove(const char *ifname);
+void iface_remove(struct iface *iface);
 
 
 // Begin PD update cycle
