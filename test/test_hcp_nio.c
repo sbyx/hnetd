@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Tue Nov 26 12:55:23 2013 mstenber
- * Edit time:     83 min
+ * Last modified: Tue Nov 26 15:45:40 2013 mstenber
+ * Edit time:     135 min
  *
  */
 
@@ -30,6 +30,14 @@ static int random_mock(void);
 #include "smock.h"
 
 /********************************************************* Mocked interfaces */
+
+bool check_timing = true;
+bool check_send = true;
+bool check_random = true;
+
+int want_schedule;
+int want_send;
+int current_hnetd_time;
 
 /* Fake version of the I/O interface. */
 bool hcp_io_init(hcp o)
@@ -67,9 +75,16 @@ int hcp_io_get_hwaddr(const char *ifname, unsigned char *buf, int buf_left)
 
 void hcp_io_schedule(hcp o, int msecs)
 {
-  sput_fail_unless(o, "hcp");
-  sput_fail_unless(o && o->udp_socket == 1, "hcp_io ready");
-  smock_pull_int_is("schedule", msecs);
+  if (check_timing)
+    {
+      sput_fail_unless(o, "hcp");
+      sput_fail_unless(o && o->udp_socket == 1, "hcp_io ready");
+      smock_pull_int_is("schedule", msecs);
+    }
+  else
+    {
+      want_schedule = msecs;
+    }
 }
 
 ssize_t hcp_io_recvfrom(hcp o, void *buf, size_t len,
@@ -96,33 +111,46 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
                       const char *ifname,
                       const struct in6_addr *dst)
 {
-  sput_fail_unless(o, "hcp");
-  sput_fail_unless(o && o->udp_socket == 1, "hcp_io ready");
-  smock_pull_string_is("sendto_ifname", ifname);
-  struct in6_addr *e_dst = smock_pull("sendto_dst");
-  sput_fail_unless(e_dst && memcmp(e_dst, dst, sizeof(*dst)) == 0, "dst match");
-  /* Two optional verification steps.. */
-  if (_smock_get_queue("sendto_len", false))
+  if (check_send)
     {
-      int r_len = smock_pull_int("sendto_len");
-      sput_fail_unless(r_len == (int) len, "len");
+      sput_fail_unless(o, "hcp");
+      sput_fail_unless(o && o->udp_socket == 1, "hcp_io ready");
+      smock_pull_string_is("sendto_ifname", ifname);
+      struct in6_addr *e_dst = smock_pull("sendto_dst");
+      sput_fail_unless(e_dst && memcmp(e_dst, dst, sizeof(*dst)) == 0, "dst match");
+      /* Two optional verification steps.. */
+      if (_smock_get_queue("sendto_len", false))
+        {
+          int r_len = smock_pull_int("sendto_len");
+          sput_fail_unless(r_len == (int) len, "len");
+        }
+      if (_smock_get_queue("sendto_buf", false))
+        {
+          unsigned char *r = smock_pull("sendto_buf");
+          sput_fail_unless(memcmp(r, buf, len), "buf");
+        }
+      return smock_pull_int("sendto_return");
     }
-  if (_smock_get_queue("sendto_buf", false))
+  else
     {
-      unsigned char *r = smock_pull("sendto_buf");
-      sput_fail_unless(memcmp(r, buf, len), "buf");
+      want_send++;
+      return 1;
     }
-  return smock_pull_int("sendto_return");
 }
 
 static hnetd_time_t hnetd_time_mock(void)
 {
-  return smock_pull_int("time");
+  if (check_timing)
+    return smock_pull_int("time");
+  return current_hnetd_time;
 }
 
 static int random_mock(void)
 {
-  return smock_pull_int("random");
+  if (check_random)
+    return smock_pull_int("random");
+#undef random
+  return random();
 }
 
 /******************************************************* Start of test cases */
@@ -142,7 +170,7 @@ static void hcp_init_no_hwaddr(void)
 
   hcp o = hcp_create();
   sput_fail_unless(!o, "hcp_create -> !hcp");
-  sput_fail_unless(smock_empty(), "smock_empty");
+  smock_is_empty();
 }
 
 static void hcp_init_iofail(void)
@@ -163,7 +191,7 @@ static void hcp_init_iofail(void)
 
   hcp o = hcp_create();
   sput_fail_unless(!o, "hcp_create -> !hcp");
-  sput_fail_unless(smock_empty(), "smock_empty");
+  smock_is_empty();
 }
 
 static hcp create_hcp(void)
@@ -187,7 +215,12 @@ static hcp create_hcp(void)
 
   hcp o = hcp_create();
   sput_fail_unless(o, "hcp_create -> hcp");
-  sput_fail_unless(smock_empty(), "smock_empty");
+  smock_is_empty();
+
+  /* clear the scheduled timeout - for now, we're empty slate anyway*/
+  smock_push_int("time", 0);
+  hcp_run(o);
+  smock_is_empty();
 
   return o;
 }
@@ -196,7 +229,7 @@ static void destroy_hcp(hcp o)
 {
   smock_push("uninit", NULL);
   hcp_destroy(o);
-  sput_fail_unless(smock_empty(), "smock_empty");
+  smock_is_empty();
 }
 
 
@@ -213,22 +246,6 @@ static void one_join(bool ok)
   smock_push_bool("set_enable_result", ok);
 }
 
-static void hcp_ok(void)
-{
-  hcp o = create_hcp();
-
-  sput_fail_unless(smock_empty(), "smock_empty");
-  one_join(true);
-  hcp_set_link_enabled(o, dummy_ifname, true);
-  sput_fail_unless(smock_empty(), "smock_empty");
-
-  /* Ok. We're cooking with gas. */
-
-  /* no unregisters at end, as we first kill io, and then flush
-   * structures (socket kill should take care of it in any case). */
-  destroy_hcp(o);
-}
-
 static void hcp_rejoin_works(void)
 {
   hcp o = create_hcp();
@@ -236,19 +253,19 @@ static void hcp_rejoin_works(void)
 
 
   /* we'll try to join dummy_ifname; however, it fails. */
-  sput_fail_unless(smock_empty(), "smock_empty");
+  smock_is_empty();
   one_join(false);
   smock_push_int("schedule", 0);
   smock_push_int("time", t);
   hcp_set_link_enabled(o, dummy_ifname, true);
-  sput_fail_unless(smock_empty(), "smock_empty");
+  smock_is_empty();
 
   /* make sure next timeout before HCP_REJOIN_INTERVAL just re-schedules. */
   t += HCP_REJOIN_INTERVAL / 2;
   smock_push_int("time", t);
   smock_push_int("schedule", HCP_REJOIN_INTERVAL / 2);
   hcp_run(o);
-  sput_fail_unless(smock_empty(), "smock_empty");
+  smock_is_empty();
 
   /* now that the time _has_ expired, we should try joining.. fail again. */
   t += HCP_REJOIN_INTERVAL / 2;
@@ -256,7 +273,7 @@ static void hcp_rejoin_works(void)
   smock_push_int("schedule", HCP_REJOIN_INTERVAL);
   one_join(false);
   hcp_run(o);
-  sput_fail_unless(smock_empty(), "smock_empty");
+  smock_is_empty();
 
   /* again try after HCP_REJOIN_INTERVAL, it should work. trickle
    * scheduling should require exactly one random call. */
@@ -266,13 +283,126 @@ static void hcp_rejoin_works(void)
   smock_push_int("schedule", HCP_TRICKLE_IMIN / 2);
   one_join(true);
   hcp_run(o);
-  sput_fail_unless(smock_empty(), "smock_empty");
+  smock_is_empty();
 
   /* no unregisters at end, as we first kill io, and then flush
    * structures (socket kill should take care of it in any case). */
   destroy_hcp(o);
 }
 
+
+static void hcp_ok(void)
+{
+  hcp o = create_hcp();
+  int t = 123000;
+  int i;
+
+  smock_is_empty();
+  one_join(true);
+  smock_push_int("schedule", 0);
+  hcp_set_link_enabled(o, dummy_ifname, true);
+  smock_is_empty();
+
+  /* Ok. We're cooking with gas. */
+  smock_push_int("time", t);
+  smock_push_int("random", 0);
+  smock_push_int("schedule", HCP_TRICKLE_IMIN / 2);
+  hcp_run(o);
+  smock_is_empty();
+
+  t += HCP_TRICKLE_IMIN / 2 - 1;
+  smock_push_int("time", t);
+  smock_push_int("schedule", 1);
+  hcp_run(o);
+  smock_is_empty();
+
+  t += 1;
+  /* Ok. we get timestamp -> woah, need to do something. */
+  smock_push_int("time", t);
+
+  /* Should send stuff on an interface. */
+  smock_push("sendto_ifname", dummy_ifname);
+  smock_push("sendto_dst", &o->multicast_address);
+  smock_push_int("sendto_return", 1);
+
+  /* And schedule next one (=end of interval). */
+  smock_push_int("schedule", HCP_TRICKLE_IMIN / 2);
+  hcp_run(o);
+  smock_is_empty();
+
+  /* overshoot what we were asked for.. shouldn't be a problem. */
+  t += HCP_TRICKLE_IMIN;
+  smock_push_int("time", t);
+  /* should be queueing next send, and now we go for 'max' value. */
+  smock_push_int("random", 999);
+  smock_push_int("schedule", 2 * HCP_TRICKLE_IMIN * (1000 + 999) / 2000);
+  hcp_run(o);
+  smock_is_empty();
+
+  /* run the clock until we hit HCP_TRICKLE_IMAX/2 delay; or we run
+   * out of iterations. */
+  check_timing = false;
+  check_send = false;
+  check_random = false;
+  want_send = 0;
+  for (i = 0 ; i < 100 ; i++)
+    {
+      current_hnetd_time = t;
+      want_schedule = 0;
+      hcp_run(o);
+      if (want_schedule >= (HCP_TRICKLE_IMAX / 2))
+        {
+          sput_fail_unless(want_schedule <= HCP_TRICKLE_IMAX, "reasonable timeout");
+          break;
+        }
+      t += want_schedule;
+      current_hnetd_time += want_schedule;
+    }
+  sput_fail_unless(want_send <= i / 2, "few sends");
+  sput_fail_unless(i < 100, "did not encounter big enough delta");
+  /* then, run for few more iterations, making sure we don't hit too long ones. */
+  want_send = 0;
+  for (i = 0 ; i < 10 ; i++)
+    {
+      current_hnetd_time = t;
+      want_schedule = 0;
+      hcp_run(o);
+      sput_fail_unless(want_schedule <= HCP_TRICKLE_IMAX, "reasonable timeout");
+      t += want_schedule;
+      current_hnetd_time += want_schedule;
+    }
+  sput_fail_unless(want_send > 0 && want_send <= i / 2, "few sends");
+  check_timing = true;
+  check_send = true;
+  check_random = true;
+
+  /* Ok, Trickle was in a stable state 'long' time. Make sure the
+   * state resets once we push something new in. */
+  struct tlv_attr ta;
+  printf("add tlv a\n");
+  tlv_init(&ta, 123, 4);
+  smock_push_int("schedule", 0);
+  hcp_add_tlv(o, &ta);
+  smock_is_empty();
+
+  printf("add tlv b\n");
+  tlv_init(&ta, 124, 4);
+  /* should NOT cause extra schedule! */
+  hcp_add_tlv(o, &ta);
+  smock_is_empty();
+
+  printf("last run starting\n");
+  smock_push_int("time", t);
+  smock_push_int("random", 0);
+  smock_push_int("schedule", HCP_TRICKLE_IMIN / 2);
+  hcp_run(o);
+  smock_is_empty();
+
+
+  /* no unregisters at end, as we first kill io, and then flush
+   * structures (socket kill should take care of it in any case). */
+  destroy_hcp(o);
+}
 int main(__unused int argc, __unused char **argv)
 {
   sput_start_testing();
@@ -280,8 +410,8 @@ int main(__unused int argc, __unused char **argv)
   sput_run_test(hcp_init_no_hwaddr);
   sput_run_test(hcp_init_iofail);
   sput_run_test(hcp_ok_minimal);
-  sput_run_test(hcp_ok);
   sput_run_test(hcp_rejoin_works);
+  sput_run_test(hcp_ok);
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();
