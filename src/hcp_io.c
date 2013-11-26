@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Nov 26 08:23:11 2013 mstenber
- * Edit time:     70 min
+ * Last modified: Tue Nov 26 08:58:42 2013 mstenber
+ * Edit time:     82 min
  *
  */
 
@@ -16,9 +16,11 @@
  * that just deal with buffers for input and output (thereby
  * facilitating unit testing without using real sockets). */
 
+#include <fcntl.h>
 #include "hcp_i.h"
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <netinet/in.h>
 #include <net/if.h>
 #include <net/ethernet.h>
@@ -55,12 +57,16 @@ static void _timeout(struct uloop_timeout *t)
 bool hcp_io_init(hcp o)
 {
   int s;
+  /* Could also use usock here; however, it uses getaddrinfo, which
+   * doesn't seem to work when e.g. default routes aren't currently
+   * set up. Too bad. */
 
   if (!inet_pton(AF_INET6, HCP_MCAST_GROUP, &o->multicast_address))
     return false;
   s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
   if (s<0)
     return false;
+  fcntl(s, F_SETFL, O_NONBLOCK);
   /* XXX - bind port */
   o->udp_socket = s;
   o->timeout.cb = _timeout;

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Mon Nov 25 19:03:12 2013 mstenber
- * Edit time:     20 min
+ * Last modified: Tue Nov 26 08:36:41 2013 mstenber
+ * Edit time:     21 min
  *
  */
 
@@ -63,6 +63,9 @@ void hcp_ext(void)
 
   /* Make sure run doesn't blow things up */
   hcp_run(o);
+
+  /* Similarly, poll should also be nop (socket should be non-blocking). */
+  hcp_poll(o);
 
   r = hcp_remove_tlv(o, t_data);
   sput_fail_unless(r, "hcp_remove_tlv should work");

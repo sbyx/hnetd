@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Nov 26 08:33:51 2013 mstenber
- * Edit time:     201 min
+ * Last modified: Tue Nov 26 08:36:09 2013 mstenber
+ * Edit time:     202 min
  *
  */
 
@@ -417,16 +417,3 @@ void hcp_calculate_node_data_hash(hcp_node n, unsigned char *dest)
   md5_end(dest, &ctx);
 }
 
-
-void hcp_poll(hcp o)
-{
-  unsigned char buf[HCP_MAXIMUM_PAYLOAD_SIZE];
-  ssize_t read;
-  char srcif[IFNAMSIZ];
-  struct in6_addr src;
-
-  while ((read = hcp_io_recvfrom(o, buf, sizeof(buf), srcif, &src)) > 0)
-    {
-      
-    }
-}
