@@ -6,14 +6,17 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Nov 25 19:04:51 2013 mstenber
- * Edit time:     177 min
+ * Last modified: Tue Nov 26 07:34:13 2013 mstenber
+ * Edit time:     179 min
  *
  */
 
 #include "hcp_i.h"
 #include <libubox/md5.h>
 #include <net/ethernet.h>
+
+/* Once per second */
+#define HCP_REJOIN_INTERVAL 1000
 
 static int
 compare_nodes(const void *a, const void *b, void *ptr __unused)
@@ -78,6 +81,18 @@ compare_links(const void *a, const void *b, void *ptr __unused)
   return strcmp(t1->ifname, t2->ifname);
 }
 
+static bool _join(hcp o, hcp_link l, hnetd_time_t now)
+{
+  if (!hcp_io_set_ifname_enabled(o, l->ifname, true))
+    {
+      l->join_pending = true;
+      o->join_failed_time = now ? now : hnetd_time();
+      return false;
+    }
+  l->join_pending = false;
+  return true;
+}
+
 static void update_link(struct vlist_tree *t,
                         struct vlist_node *node_new,
                         struct vlist_node *node_old)
@@ -97,10 +112,8 @@ static void update_link(struct vlist_tree *t,
     }
   else
     {
-      if (!hcp_io_set_ifname_enabled(o, t_new->ifname, true))
-        {
-          t_new->join_pending = true;
-        }
+      if (!_join(o, t_new, 0))
+        hcp_io_schedule(o, 0);
     }
   o->links_dirty = true;
 }
@@ -444,6 +457,7 @@ void hcp_run(hcp o)
   hnetd_time_t next = 0;
   hnetd_time_t now = hnetd_time();
   hcp_link l;
+  int time_since_failed_join = (now - o->join_failed_time);
 
   /* First off: If the network hash is dirty, recalculate it (and hope
    * the outcome ISN'T). */
@@ -465,6 +479,15 @@ void hcp_run(hcp o)
 
   vlist_for_each_element(&o->links, l, in_links)
     {
+      /* If we're in join pending state, we retry every
+       * HCP_REJOIN_INTERVAL if necessary. */
+      if (l->join_pending
+          && (time_since_failed_join < HCP_REJOIN_INTERVAL
+              || !_join(o, l, now)))
+        {
+          next = TMIN(next, HCP_REJOIN_INTERVAL - (now - o->join_failed_time));
+          continue;
+        }
       if (l->interval_end_time <= now)
         {
           trickle_upgrade(l, now);

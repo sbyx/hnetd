@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Mon Nov 25 19:02:28 2013 mstenber
+ * Last modified: Tue Nov 26 07:25:13 2013 mstenber
  * Edit time:     56 min
  *
  */
@@ -89,8 +89,6 @@ bool hcp_io_set_ifname_enabled(hcp o,
   return true;
 
  fail:
-  o->join_failed_time = hnetd_time();
-  uloop_timeout_set(&o->timeout, 0);
   return false;
 }
 
