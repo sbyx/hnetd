@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Tue Nov 26 12:04:34 2013 mstenber
- * Edit time:     47 min
+ * Last modified: Tue Nov 26 12:22:44 2013 mstenber
+ * Edit time:     56 min
  *
  */
 
@@ -45,6 +45,7 @@ void hcp_io_uninit(hcp o)
 bool hcp_io_set_ifname_enabled(hcp o, const char *ifname, bool enabled)
 {
   sput_fail_unless(o, "hcp");
+  sput_fail_unless(o && o->udp_socket == 1, "hcp_io ready");
   smock_pull_string_is("set_enable_ifname", ifname);
   smock_pull_bool_is("set_enable_enabled", enabled);
   return smock_pull_bool("set_enable_result");
@@ -64,7 +65,7 @@ int hcp_io_get_hwaddr(const char *ifname, unsigned char *buf, int buf_left)
 void hcp_io_schedule(hcp o, int msecs)
 {
   sput_fail_unless(o, "hcp");
-  sput_fail_unless(o && o->udp_socket == 1, "hcp_io_schedule valid");
+  sput_fail_unless(o && o->udp_socket == 1, "hcp_io ready");
   smock_pull_int_is("schedule", msecs);
 }
 
@@ -80,6 +81,7 @@ ssize_t hcp_io_recvfrom(hcp o, void *buf, size_t len,
   smock_pull_string_is("recvfrom_ifname", ifname);
 
   sput_fail_unless(o, "hcp");
+  sput_fail_unless(o && o->udp_socket == 1, "hcp_io_schedule valid");
   sput_fail_unless(r_len <= ((int) len), "result length reasonable");
   *src = *r_src;
   *dst = *r_dst;
@@ -92,6 +94,7 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
                       const struct in6_addr *dst)
 {
   sput_fail_unless(o, "hcp");
+  sput_fail_unless(o && o->udp_socket == 1, "hcp_io ready");
   smock_pull_string_is("sendto_ifname", ifname);
   struct in6_addr *e_dst = smock_pull("sendto_dst");
   sput_fail_unless(e_dst && memcmp(e_dst, dst, sizeof(*dst)) == 0, "dst match");
@@ -153,8 +156,7 @@ static void hcp_init_iofail(void)
   sput_fail_unless(smock_empty(), "smock_empty");
 }
 
-
-static void hcp_init1(void)
+static hcp create_hcp(void)
 {
   char buf[4] = "foo";
 
@@ -177,9 +179,37 @@ static void hcp_init1(void)
   sput_fail_unless(o, "hcp_create -> hcp");
   sput_fail_unless(smock_empty(), "smock_empty");
 
+  return o;
+}
+
+static void destroy_hcp(hcp o)
+{
   smock_push("uninit", NULL);
   hcp_destroy(o);
   sput_fail_unless(smock_empty(), "smock_empty");
+}
+
+
+static void hcp_ok_minimal(void)
+{
+  hcp o = create_hcp();
+  destroy_hcp(o);
+}
+
+static void hcp_ok(void)
+{
+  hcp o = create_hcp();
+
+  sput_fail_unless(smock_empty(), "smock_empty");
+  smock_push("set_enable_ifname", "eth0");
+  smock_push_bool("set_enable_enabled", true);
+  smock_push_bool("set_enable_result", true);
+  hcp_set_link_enabled(o, "eth0", true);
+  sput_fail_unless(smock_empty(), "smock_empty");
+
+  /* no unregisters at end, as we first kill io, and then flush
+   * structures (socket kill should take care of it in any case). */
+  destroy_hcp(o);
 }
 
 int main(__unused int argc, __unused char **argv)
@@ -188,7 +218,8 @@ int main(__unused int argc, __unused char **argv)
   sput_enter_suite("hcp_nio"); /* optional */
   sput_run_test(hcp_init_no_hwaddr);
   sput_run_test(hcp_init_iofail);
-  sput_run_test(hcp_init1);
+  sput_run_test(hcp_ok_minimal);
+  sput_run_test(hcp_ok);
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Nov 26 12:10:45 2013 mstenber
- * Edit time:     209 min
+ * Last modified: Tue Nov 26 12:22:07 2013 mstenber
+ * Edit time:     210 min
  *
  */
 
@@ -110,10 +110,8 @@ static void update_link(struct vlist_tree *t,
 
   if (t_old)
     {
-      if (!t_new)
-        {
-          hcp_io_set_ifname_enabled(o, t_old->ifname, false);
-        }
+      if (!t_new && o->io_init_done)
+        hcp_io_set_ifname_enabled(o, t_old->ifname, false);
       vlist_flush_all(&t_old->neighbors);
       free(t_old);
     }
