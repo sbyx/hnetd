@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Nov 26 09:33:02 2013 mstenber
- * Edit time:     90 min
+ * Last modified: Tue Nov 26 09:54:23 2013 mstenber
+ * Edit time:     105 min
  *
  */
 
@@ -58,6 +58,7 @@ static void _timeout(struct uloop_timeout *t)
 bool hcp_io_init(hcp o)
 {
   int s;
+  int on = 1;
 #if 0
   /* Could also use usock here; however, it uses getaddrinfo, which
    * doesn't seem to work when e.g. default routes aren't currently
@@ -81,6 +82,8 @@ bool hcp_io_init(hcp o)
   if (bind(s, &addr, sizeof(addr))<0)
     return false;
 #endif
+  if (setsockopt(s, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) < 0)
+    return false;
   o->udp_socket = s;
   o->timeout.cb = _timeout;
   if (!inet_pton(AF_INET6, HCP_MCAST_GROUP, &o->multicast_address))
@@ -121,24 +124,40 @@ void hcp_io_schedule(hcp o, int msecs)
 
 ssize_t hcp_io_recvfrom(hcp o, void *buf, size_t len,
                         char *ifname,
-                        struct in6_addr *address)
+                        struct in6_addr *src,
+                        struct in6_addr *dst)
 {
-  int flags = 0;
-  struct sockaddr_in6 src;
-  socklen_t src_len = sizeof(src);
+  struct sockaddr_in6 srcsa;
+  struct iovec iov = {buf, len};
+  unsigned char cmsg_buf[256];
+  struct msghdr msg = {&srcsa, sizeof(srcsa), &iov, 1,
+                       cmsg_buf, sizeof(cmsg_buf), 0};
   ssize_t l;
+  struct cmsghdr *h;
+  struct in6_pktinfo *ipi6;
 
-  l = recvfrom(o->udp_socket, buf, len, flags, &src, &src_len);
+  l = recvmsg(o->udp_socket, &msg, MSG_DONTWAIT);
   if (l > 0)
     {
-      if (!if_indextoname(src.sin6_scope_id, ifname))
-        *ifname = 0;
-      *address = src.sin6_addr;
+      *ifname = 0;
+      *src = srcsa.sin6_addr;
+      for (h = CMSG_FIRSTHDR(&msg); h ;
+           h = CMSG_NXTHDR(&msg, h))
+        if (h->cmsg_level == IPPROTO_IPV6
+            && h->cmsg_type == IPV6_PKTINFO)
+          {
+            ipi6 = (struct in6_pktinfo *)CMSG_DATA(h);
+            if (!if_indextoname(ipi6->ipi6_ifindex, ifname))
+              *ifname = 0;
+            *dst = ipi6->ipi6_addr;
+          }
     }
   else
     {
       *ifname = 0;
     }
+  if (!*ifname)
+    return -1;
   return l;
 }
 

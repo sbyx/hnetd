@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Nov 26 08:33:13 2013 mstenber
- * Edit time:     74 min
+ * Last modified: Tue Nov 26 09:49:27 2013 mstenber
+ * Edit time:     76 min
  *
  */
 
@@ -192,7 +192,8 @@ void hcp_io_schedule(hcp o, int msecs);
 
 ssize_t hcp_io_recvfrom(hcp o, void *buf, size_t len,
                         char *ifname,
-                        struct in6_addr *address);
+                        struct in6_addr *src,
+                        struct in6_addr *dst);
 ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
                       const char *ifname,
                       const struct in6_addr *dst);

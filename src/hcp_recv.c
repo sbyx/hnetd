@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue Nov 26 08:36:18 2013 mstenber
- * Edit time:     2 min
+ * Last modified: Tue Nov 26 09:51:29 2013 mstenber
+ * Edit time:     3 min
  *
  */
 
@@ -26,9 +26,9 @@ void hcp_poll(hcp o)
   ssize_t read;
   char srcif[IFNAMSIZ];
   struct in6_addr src;
+  struct in6_addr dst;
 
-  while ((read = hcp_io_recvfrom(o, buf, sizeof(buf), srcif, &src)) > 0)
+  while ((read = hcp_io_recvfrom(o, buf, sizeof(buf), srcif, &src, &dst)) > 0)
     {
-
     }
 }
