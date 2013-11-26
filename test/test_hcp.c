@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Tue Nov 26 08:36:41 2013 mstenber
- * Edit time:     21 min
+ * Last modified: Tue Nov 26 10:01:14 2013 mstenber
+ * Edit time:     22 min
  *
  */
 
@@ -85,6 +85,8 @@ void hcp_ext(void)
 
 void hcp_int(void)
 {
+  /* If we want to do bit more whitebox unit testing of the whole hcp,
+   * do it here. */
 }
 
 int main(__unused int argc, __unused char **argv)

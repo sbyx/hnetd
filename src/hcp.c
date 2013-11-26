@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Nov 26 08:36:09 2013 mstenber
- * Edit time:     202 min
+ * Last modified: Tue Nov 26 11:44:44 2013 mstenber
+ * Edit time:     204 min
  *
  */
 
@@ -39,7 +39,10 @@ static void update_node(__unused struct vlist_tree *t,
       free(n_old);
     }
   o->network_hash_dirty = true;
-  hcp_io_schedule(o, 0);
+  if (o->io_init_done)
+    hcp_io_schedule(o, 0);
+  else
+    o->should_schedule = true;
 }
 
 
@@ -191,6 +194,9 @@ hcp hcp_create(void)
     goto err;
   if (!hcp_io_init(o))
     goto err;
+  o->io_init_done = true;
+  if (o->should_schedule)
+    hcp_io_schedule(o, 0);
   return o;
  err:
   if (o) free(o);

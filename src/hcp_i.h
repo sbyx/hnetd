@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Nov 26 09:49:27 2013 mstenber
+ * Last modified: Tue Nov 26 11:43:41 2013 mstenber
  * Edit time:     76 min
  *
  */
@@ -66,6 +66,10 @@ struct hcp_struct {
   /* flag which indicates that we should re-calculate network hash
    * based on nodes' state. */
   bool network_hash_dirty;
+
+  /* before io-init is done, we keep just prod should_schedule. */
+  bool io_init_done;
+  bool should_schedule;
 
   /* Our own node (it should be constant, never purged) */
   hcp_node own_node;
