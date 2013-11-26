@@ -67,9 +67,11 @@ struct iface {
 // Generic initializer to be called by main()
 int iface_init(void);
 
+// Get an interface by name
+struct iface* iface_get(const char *ifname);
 
 // Create / get an interface (external or internal), handle set = managed
-struct iface* iface_get(const char *ifname, const char *handle);
+struct iface* iface_create(const char *ifname, const char *handle);
 
 // Remove a known interface
 void iface_remove(const char *ifname);

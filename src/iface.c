@@ -7,7 +7,6 @@
 #include "platform.h"
 #include "pa.h"
 
-static struct iface* iface_find(const char *ifname);
 static void iface_update_prefix(const struct prefix *p, const char *ifname,
 		hnetd_time_t valid_until, hnetd_time_t preferred_until, void *priv);
 static void iface_update_link_owner(const char *ifname, bool owner, void *priv);
@@ -23,7 +22,7 @@ static struct pa_iface_callbacks pa_cb = {
 static void iface_update_prefix(const struct prefix *p, const char *ifname,
 		hnetd_time_t valid_until, hnetd_time_t preferred_until, __unused void *priv)
 {
-	struct iface *c = iface_find(ifname);
+	struct iface *c = iface_get(ifname);
 	assert(c != NULL && c->platform != NULL);
 
 	if (valid_until < hnetd_time()) { // Delete action
@@ -42,7 +41,7 @@ static void iface_update_prefix(const struct prefix *p, const char *ifname,
 
 static void iface_update_link_owner(const char *ifname, bool owner, __unused void *priv)
 {
-	struct iface *c = iface_find(ifname);
+	struct iface *c = iface_get(ifname);
 	assert(c != NULL && c->platform != NULL);
 
 	if (owner != c->linkowner) {
@@ -120,7 +119,7 @@ static void update_prefix(__unused struct vlist_tree *t, struct vlist_node *node
 }
 
 
-static struct iface* iface_find(const char *ifname)
+struct iface* iface_get(const char *ifname)
 {
 	struct iface *c;
 	list_for_each_entry(c, &interfaces, head)
@@ -131,33 +130,9 @@ static struct iface* iface_find(const char *ifname)
 }
 
 
-struct iface* iface_get(const char *ifname, const char *handle)
-{
-	struct iface *c = iface_find(ifname);
-	if (!c) {
-		size_t namelen = strlen(ifname) + 1;
-		c = calloc(1, sizeof(*c) + namelen);
-		memcpy(c->ifname, ifname, namelen);
-
-		vlist_init(&c->assigned, compare_addrs, update_addr);
-		vlist_init(&c->delegated, compare_addrs, update_prefix);
-
-		if (handle) {
-			platform_iface_new(c, handle);
-			c->internal = true;
-			iface_notify_internal_state(c, true);
-		}
-
-		list_add(&c->head, &interfaces);
-	}
-
-	return c;
-}
-
-
 void iface_remove(const char *ifname)
 {
-	struct iface *c = iface_get(ifname, NULL);
+	struct iface *c = iface_create(ifname, NULL);
 	if (c) {
 		// If interface was internal, let subscribers know of removal
 		if (c->internal)
@@ -195,6 +170,29 @@ static void iface_discover_border(struct iface *c)
 		iface_notify_internal_state(c, internal);
 		platform_set_internal(c, internal);
 	}
+}
+
+
+struct iface* iface_create(const char *ifname, const char *handle)
+{
+	struct iface *c = iface_get(ifname);
+	if (!c) {
+		size_t namelen = strlen(ifname) + 1;
+		c = calloc(1, sizeof(*c) + namelen);
+		memcpy(c->ifname, ifname, namelen);
+
+		vlist_init(&c->assigned, compare_addrs, update_addr);
+		vlist_init(&c->delegated, compare_addrs, update_prefix);
+
+		list_add(&c->head, &interfaces);
+	}
+
+	if (!c->platform && handle) {
+		platform_iface_new(c, handle);
+		iface_discover_border(c);
+	}
+
+	return c;
 }
 
 
