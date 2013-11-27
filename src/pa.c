@@ -8,6 +8,8 @@
 /* #of ms waiting when we want immediate pa run */
 #define PA_SCHEDULE_RUNNEXT_MS  10
 
+#define PA_MAX_RANDOM_ROUNDS	20
+
 #define PA_RIDCMP(r1, r2) memcmp(r1, r2, PA_RIDLEN)
 
 #define PA_CONF_DFLT_COMMIT_LAP_DELAY  20
@@ -36,6 +38,8 @@ struct pa_iface {
 	char ifname[IFNAMSIZ]; /* Interface name */
 
 	bool internal;         /* Whether the iface is internal */
+	bool do_dhcp;          /* Whether we should do dhcp on that
+	                          iface. */
 
 	struct list_head laps; /* laps on that iface */
 	struct list_head eaps; /* eaps on that iface */
@@ -54,6 +58,14 @@ struct pa_lap {
 
 	bool flooded;             /* Whether it was given to hcp */
 	bool assigned;            /* Whether it was assigned */
+
+	/* Used by pa algo. marked true before running.
+	 * Checked against at the end of pa algo. */
+	bool invalid;
+
+	/* Whether we are the one that is currently owner
+	 * of that assignment (only one per link) */
+	bool own;
 };
 
 /* Externally assigned prefix */
@@ -253,6 +265,20 @@ static void pa_iface_set_internal(struct pa *pa,
 	pa_iface_cleanmaybe(pa, iface);
 }
 
+static void pa_iface_set_dodhcp(struct pa *pa,
+		struct pa_iface *iface, bool do_dhcp)
+{
+	if(iface->do_dhcp == do_dhcp)
+		return;
+
+	iface->do_dhcp = do_dhcp;
+
+	/* Tell iface about link ownership */
+	if(pa->ifcb.update_link_owner)
+		pa->ifcb.update_link_owner(iface->ifname, do_dhcp,
+				pa->ifcb.priv);
+}
+
 /**************************************************************/
 /********************* eap managment **************************/
 /**************************************************************/
@@ -394,6 +420,8 @@ static struct pa_lap *pa_lap_create(struct pa *pa, const struct prefix *prefix,
 
 	lap->assigned = false;
 	lap->flooded = false;
+	lap->invalid = false; /* For pa algo */
+	lap->own = false;
 	memcpy(&lap->prefix, prefix, sizeof(struct prefix));
 
 	if(avl_insert(&pa->laps, &lap->avl_node)) {
@@ -426,6 +454,16 @@ static void pa_lap_setflood(struct pa *pa, struct pa_lap *lap,
 				!lap->flooded, pa->fcb.priv);
 }
 
+static void pa_lap_telliface(struct pa *pa, struct pa_lap *lap)
+{
+	// Tell ifaces about that
+	if(pa->ifcb.update_prefix)
+		pa->ifcb.update_prefix(&lap->prefix, lap->iface->ifname,
+				(lap->assigned)?lap->dp->valid_until:0,
+						(lap->assigned)?lap->dp->preferred_until:0,
+								pa->fcb.priv);
+}
+
 static void pa_lap_setassign(struct pa *pa, struct pa_lap *lap,
 		bool enable)
 {
@@ -434,12 +472,21 @@ static void pa_lap_setassign(struct pa *pa, struct pa_lap *lap,
 
 	lap->assigned = enable;
 
-	// Tell ifaces about that
-	if(pa->ifcb.update_prefix)
-		pa->ifcb.update_prefix(&lap->prefix, lap->iface->ifname,
-				(lap->assigned)?lap->dp->valid_until:0,
-				(lap->assigned)?lap->dp->preferred_until:0,
-						pa->fcb.priv);
+	pa_lap_telliface(pa, lap);
+}
+
+static void pa_lap_setdp(struct pa *pa, struct pa_lap *lap,
+		struct pa_dp *dp)
+{
+	if(lap->dp == dp)
+		return;
+
+	list_remove(&lap->dp_le);
+	lap->dp = dp;
+	list_add(&lap->dp_le, &dp->laps);
+
+	if(lap->assigned)
+		pa_lap_telliface(pa, lap);
 }
 
 static void pa_lap_destroy(struct pa *pa, struct pa_lap *lap)
@@ -516,12 +563,25 @@ static void pa_dp_destroy(struct pa *pa, struct pa_dp *dp)
 {
 	struct pa_lap *lap;
 	struct pa_lap *slap;
+	struct pa_dp *s_dp;
+	bool found;
 
-	/* Destroy all lap rattached to that dp
-	 * because a lap needs a dp
-	 * TODO: Manage orphan laps (i.e. find another compatible dp) */
+	/* Destoy all laps attached to that dp.
+	 * If we can't reattach the lap to another dp (temporarly) */
 	list_for_each_entry_safe(lap, slap, &dp->laps, dp_le) {
-		pa_lap_destroy(pa, lap);
+		/* Find another dp that could temporarily accept that lap */
+		found = false;
+		list_for_each_entry(s_dp, &pa->dps, le) {
+			if(s_dp != dp && prefix_contains(&s_dp->prefix, &lap->prefix)){
+				found = true;
+				break;
+			}
+		}
+		if(found) {
+			pa_lap_setdp(pa, lap, s_dp);
+		} else {
+			pa_lap_destroy(pa, lap);
+		}
 	}
 
 	//Notify hcp iff local
@@ -566,15 +626,283 @@ static void pa_dp_update(struct pa *pa, struct pa_dp *dp,
 	}
 }
 
+static void pa_dp_cleanmaybe(struct pa *pa, struct pa_dp *dp,
+		hnetd_time_t now)
+{
+	if(now > dp->valid_until)
+		pa_dp_destroy(pa, dp);
+}
+
 /**************************************************************/
 /********************* PA algorithm ***************************/
 /**************************************************************/
 
+/* Check whether a foreign assignment exists on a link different than iface
+ * with a higher or equal router id. */
+static bool pa_prefix_checkcollision(struct pa *pa, struct prefix *prefix,
+		struct pa_iface *exclude_iface, struct pa_rid *rid,
+		bool check_foreign, bool check_local)
+{
+	struct pa_eap *eap;
+	struct pa_eap *lap;
+
+	if(check_foreign) {
+		avl_for_each_element(&pa->eaps, eap, avl_node) {
+			if((!exclude_iface || eap->iface != exclude_iface) &&
+					prefix_contains(&eap->prefix, prefix) &&
+					(!rid ||  PA_RIDCMP(&eap->rid, rid) > 0)) {
+				return true;
+			}
+		}
+	}
+
+	if(check_local) {
+		avl_for_each_element(&pa->laps, lap, avl_node) {
+			if((!exclude_iface || lap->iface != exclude_iface) &&
+					prefix_contains(&lap->prefix, prefix) &&
+					(!rid || PA_RIDCMP(&pa->rid, rid) > 0)) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+static int pa_get_newprefix_storage(struct pa *pa, struct pa_iface *iface,
+		struct pa_dp *dp, struct prefix *new_prefix) {
+	//TODO
+	return -1;
+}
+
+static int pa_get_newprefix_random(struct pa *pa, struct pa_iface *iface,
+		struct pa_dp *dp, struct prefix *new_prefix) {
+
+	int i;
+	uint8_t plen;
+
+	if(dp->prefix.plen < 64) {
+		plen = 64;
+	} else if (dp->prefix.plen == 104) { //IPv4
+		plen = 120;
+	} else {
+		// TODO: raise warning
+		return -1;
+	}
+
+	for(i=0; i<PA_MAX_RANDOM_ROUNDS; i++) {
+		prefix_random(&dp->prefix, new_prefix, plen);
+		if(!pa_prefix_checkcollision(pa, &new_prefix, NULL, NULL, true, true))
+			return 0;
+	}
+
+	return -1;
+}
 
 /* Executes pa algorithm */
 void pa_do(struct pa *pa)
 {
+	hnetd_time_t now;
+	struct pa_iface *iface, *s_iface;
+	struct pa_dp *dp, *s_dp;
+	struct pa_lap *lap, *s_lap;
+	struct pa_eap *eap, *s_eap;
+	struct prefix *prefix;
+	struct prefix new_prefix;
+	bool found, own, link_highest_rid;
 
+	now = hnetd_time();
+
+	/* This is at the beginning because any modification
+	 * to laps should make the algorithm run again */
+	if(!pa->todo_flags)
+		return;
+	pa->scheduled = false;
+	pa->todo_flags = 0;
+
+	/* Clean interfaces that should be destroyed
+	 * (external with no eaps)*/
+	list_for_each_entry_safe(iface, s_iface, &pa->ifaces, le) {
+		pa_iface_cleanmaybe(pa, iface);
+	}
+
+	/* Clean dps that are outdated */
+	list_for_each_entry_safe(dp, s_dp, &pa->dps, le) {
+		pa_dp_cleanmaybe(pa, dp, now);
+	}
+
+	/* Mark all laps as invalid */
+	avl_for_each_element(&pa->laps, lap, avl_node) {
+		lap->invalid = true;
+	}
+
+	/* Go through all internal ifaces */
+	list_for_each_entry(iface, &pa->ifaces, le) {
+		/* SHOULD NOT DELETE IFACE HERE */
+
+		if(!iface->internal)
+			continue;
+
+		/* Go through all dps */
+		list_for_each_entry(dp, &pa->dps, le) {
+			/* Check if the dp doesn't contain another smaller dp */
+			found = false;
+			list_for_each_entry(s_dp, &pa->dps, le) {
+				if(s_dp != dp &&
+						prefix_contains(&dp->prefix, &s_dp->prefix)) {
+					found = true;
+					break;
+				}
+			}
+
+			/* Only use smaller dps
+			 * Laps that are not in smaller dps will
+			 * be removed due to invalid-labelling */
+			if(found)
+				continue;
+
+			/* See whether we have a lap for this
+			 * iface/dp pair */
+			lap = NULL;
+			list_for_each_entry(s_lap, &iface->laps, if_le) {
+				/* Prefix ownership is not important here. */
+				if(prefix_contains(&dp->prefix, &s_lap->prefix)) {
+					lap = s_lap;
+					/* lap is attached to a dp.
+					 * This dp will be updated when
+					 * lap->invalid is set to false (if it does) */
+					break;
+				}
+			}
+
+			/* See whether someone else made an assignment
+			 * on that same link. Keep the highest rid. */
+			eap = NULL;
+			list_for_each_entry(s_eap, &iface->eaps, if_le) {
+				if(prefix_contains(&dp->prefix, &s_eap->prefix) &&
+						(!eap || PA_RIDCMP(&s_eap->rid, &eap->rid) > 0 )) {
+					eap = s_eap;
+				}
+			}
+
+			/* See whether we have highest router id on that link */
+			link_highest_rid = true;
+			list_for_each_entry(s_eap, &iface->eaps, if_le) {
+				if(PA_RIDCMP(&s_eap->rid, &pa->rid) > 0) {
+					link_highest_rid = false;
+					break;
+				}
+			}
+
+
+			/* See if someone overrides our assignment */
+			if(lap && eap && PA_RIDCMP(&eap->rid, &pa->rid) &&
+					prefix_cmp(&lap->prefix, &eap->prefix)) {
+				/* We have a lap but a guy with higher priority
+				 * disagrees with us. We need to override ours. */
+				pa_lap_destroy(pa, lap);
+				lap = NULL;
+			}
+
+			if(lap && lap->own &&
+					pa_prefix_checkcollision(pa, &lap->prefix, iface, &pa->rid, true, false)) {
+				/* This is case i. of algorithm
+				 * We have an assignment but we need to check for collisions
+				 * on other links. */
+				pa_lap_destroy(pa, lap);
+				lap = NULL;
+			}
+
+			if(!lap) {
+				/* This is step 6 of the algorithm
+				 * Assignment generation. */
+
+				prefix = NULL;
+
+				if(eap) {
+					/* Let's try to use that guy's eap.
+					 * But only if its valid against all other links
+					 * assignments. */
+					if(!pa_prefix_checkcollision(pa, &eap->prefix, iface, &eap->rid,
+							true, true)) {
+						prefix = &eap->prefix;
+						own = false; /* The other guy owns it */
+					}
+				}
+
+				if(!prefix && link_highest_rid) {
+					/* Let's choose a prefix for our own assignment */
+					if(!pa_get_newprefix_storage(pa, iface, dp, &new_prefix)) {
+						/* Got one from stable storage */
+						prefix = &new_prefix;
+						own = true;
+					} else if(!pa_get_newprefix_random(pa, iface, dp, &new_prefix)) {
+						/* Got one from random choice */
+						prefix = &new_prefix;
+						own = true;
+					}
+				}
+
+				if(prefix) {
+					/* We can make an assignment. */
+					lap = pa_lap_create(pa, prefix, iface, dp);
+					lap->own = own; /* Important to know whether we are owner. */
+				} else if (link_highest_rid) {
+					/* TODO: Raise warning */
+				}
+			}
+
+			/* Check iface assignment and flooding
+			 * TODO: Maybe do delayed flooding and assignment.
+			 * For simplicity. We do everything immediately. */
+			if(lap) {
+
+				/* If nobody else is advertising the prefix
+				 * anymore, we need to become owner of it. */
+				if(!lap->own) {
+					eap = NULL;
+					list_for_each_entry(s_eap, &iface->eaps, if_le) {
+						if(!prefix_cmp(&lap->prefix, &s_eap->prefix)) {
+							eap = s_eap;
+						}
+					}
+					if(!eap)
+						lap->own = true;
+				}
+
+				lap->invalid = false;
+				pa_lap_setdp(pa, lap, dp);
+
+				if(lap->own) /* TODO: Delayed flooding */
+					pa_lap_setflood(pa, lap, true);
+
+				pa_lap_setassign(pa, lap, true);
+			}
+
+		}
+
+	}
+
+	/* Clean invalid laps */
+	avl_for_each_element_safe(&pa->laps, lap, avl_node, s_lap) {
+		if(lap->invalid)
+			pa_lap_destroy(pa, lap);
+	}
+
+	/* Do interface ownership check */
+	list_for_each_entry(iface, &pa->ifaces, le) {
+		own = false;
+		/* By now (arkko's), we are owner as soon as we have a owned
+		 * prefix */
+		list_for_each_entry(lap, &iface->laps, if_le) {
+			if(lap->own) {
+				own = true;
+				break;
+			}
+		}
+
+		pa_iface_set_dodhcp(pa, iface, own);
+	}
 }
 
 static void pa_do_uloop(struct uloop_timeout *t)
