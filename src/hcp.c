@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Wed Nov 27 10:14:34 2013 mstenber
- * Edit time:     232 min
+ * Last modified: Wed Nov 27 10:49:23 2013 mstenber
+ * Edit time:     239 min
  *
  */
 
@@ -272,10 +272,28 @@ bool hcp_remove_tlv(hcp o, struct tlv_attr *tlv)
   return true;
 }
 
+hcp_link hcp_find_link(hcp o, const char *ifname, bool create)
+{
+  hcp_link cl = container_of(ifname, hcp_link_s, ifname);
+  hcp_link l = vlist_find(&o->links, cl, cl, in_links);
+
+  if (create && !l)
+    {
+      l = (hcp_link) calloc(1, sizeof(*l));
+      if (!l)
+        return NULL;
+      l->hcp = o;
+      l->iid = o->first_free_iid++;
+      vlist_init(&l->neighbors, compare_neighbors, update_neighbor);
+      strcpy(l->ifname, ifname);
+      vlist_add(&o->links, &l->in_links, l);
+    }
+  return l;
+}
+
 bool hcp_set_link_enabled(hcp o, const char *ifname, bool enabled)
 {
-  hcp_link l = container_of(ifname, hcp_link_s, ifname);
-  hcp_link old = vlist_find(&o->links, l, l, in_links);
+  hcp_link old = hcp_find_link(o, ifname, false);
 
   if (!enabled)
     {
@@ -286,16 +304,7 @@ bool hcp_set_link_enabled(hcp o, const char *ifname, bool enabled)
     }
   if (old)
     return false;
-
-  l = (hcp_link) calloc(1, sizeof(*l));
-  if (!l)
-    return false;
-  l->hcp = o;
-  l->iid = o->first_free_iid++;
-  vlist_init(&l->neighbors, compare_neighbors, update_neighbor);
-  strcpy(l->ifname, ifname);
-  vlist_add(&o->links, &l->in_links, l);
-  return true;
+  return hcp_find_link(o, ifname, true) != NULL;
 }
 
 
