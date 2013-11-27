@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Nov 27 12:52:49 2013 mstenber
- * Edit time:     28 min
+ * Last modified: Wed Nov 27 12:58:01 2013 mstenber
+ * Edit time:     29 min
  *
  */
 
@@ -100,8 +100,6 @@ static void trickle_send(hcp_link l)
     }
   l->send_time = 0;
 }
-
-#define TMIN(x,y) ((x) == 0 ? (y) : (y) == 0 ? (x) : (x) < (y) ? (x) : (y))
 
 void hcp_run(hcp o)
 {

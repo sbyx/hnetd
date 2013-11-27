@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Nov 27 12:51:53 2013 mstenber
- * Edit time:     63 min
+ * Last modified: Wed Nov 27 13:41:01 2013 mstenber
+ * Edit time:     100 min
  *
  */
 
@@ -57,6 +57,7 @@ typedef struct {
   struct net_sim_t *s;
   hcp_s n;
   hnetd_time_t want_timeout_at;
+  hnetd_time_t next_message_at;
 } net_node_s, *net_node;
 
 typedef struct net_sim_t {
@@ -65,7 +66,7 @@ typedef struct net_sim_t {
   struct list_head neighs;
   struct list_head messages;
 
-  hnetd_time_t now;
+  hnetd_time_t now, start;
 } net_sim_s, *net_sim;
 
 void net_sim_init(net_sim s)
@@ -73,6 +74,8 @@ void net_sim_init(net_sim s)
   INIT_LIST_HEAD(&s->nodes);
   INIT_LIST_HEAD(&s->neighs);
   INIT_LIST_HEAD(&s->messages);
+  /* 64 bits -> have to enjoy it.. */
+  s->start = s->now = 12345678901234;
 }
 
 hcp net_sim_add_hcp(net_sim s, const char *name)
@@ -83,6 +86,7 @@ hcp net_sim_add_hcp(net_sim s, const char *name)
   sput_fail_unless(n, "calloc net_node");
   n->s = s;
   r = hcp_init(&n->n, name, strlen(name));
+  n->n.io_init_done = true; /* our IO doesn't really need init.. */
   sput_fail_unless(r, "hcp_init");
   if (!r)
     return NULL;
@@ -94,6 +98,7 @@ hcp_link net_sim_hcp_find_link(hcp o, const char *name)
 {
   hcp_link l = hcp_find_link(o, name, true);
 
+  sput_fail_unless(l, "hcp_find_link");
   if (l)
     {
       /* Initialize the address - in rather ugly way. We just hash
@@ -113,6 +118,37 @@ hcp_link net_sim_hcp_find_link(hcp o, const char *name)
 
 void net_sim_set_connected(hcp_link l1, hcp_link l2, bool enabled)
 {
+  hcp o = l1->hcp;
+  net_node node = container_of(o, net_node_s, n);
+  net_sim s = node->s;
+
+  if (enabled)
+    {
+      /* Add node */
+      net_neigh n = calloc(1, sizeof(*n));
+
+      sput_fail_unless(n, "calloc net_neigh");
+      n->src = l1;
+      n->dst = l2;
+      list_add(&n->h, &s->neighs);
+    }
+  else
+    {
+      struct list_head *p;
+
+      /* Remove node */
+      list_for_each(p, &s->neighs)
+        {
+          net_neigh n = container_of(p, net_neigh_s, h);
+
+          if (n->src == l1 && n->dst == l2)
+            {
+              list_del(&n->h);
+              free(n);
+              return;
+            }
+        }
+    }
 }
 
 void net_sim_uninit(net_sim s)
@@ -137,6 +173,83 @@ void net_sim_uninit(net_sim s)
       free(m);
     }
 }
+
+hnetd_time_t net_sim_next(net_sim s)
+{
+  struct list_head *p;
+  hnetd_time_t v = 0;
+  net_node n;
+
+  list_for_each(p, &s->nodes)
+    {
+      n = container_of(p, net_node_s, h);
+      n->next_message_at = 0;
+      v = TMIN(v, n->want_timeout_at);
+    }
+  list_for_each(p, &s->messages)
+    {
+      net_msg m = container_of(p, net_msg_s, h);
+      hcp o = m->l->hcp;
+
+      n = container_of(o, net_node_s, n);
+      v = TMIN(v, m->readable_at);
+      n->next_message_at = TMIN(n->next_message_at, m->readable_at);
+    }
+  return v;
+}
+
+int net_sim_poll(net_sim s)
+{
+  struct list_head *p;
+  hnetd_time_t n = net_sim_next(s);
+  int i = 0;
+
+  if (n <= s->now)
+    {
+      list_for_each(p, &s->nodes)
+        {
+          net_node n = container_of(p, net_node_s, h);
+
+          if (n->want_timeout_at && n->want_timeout_at <= s->now)
+            {
+              n->want_timeout_at = 0;
+              hcp_run(&n->n);
+              i++;
+            }
+          if (n->next_message_at && n->next_message_at <= s->now)
+            {
+              hcp_poll(&n->n);
+              i++;
+            }
+        }
+    }
+  return i;
+}
+
+void net_sim_run(net_sim s)
+{
+  while (net_sim_poll(s));
+}
+
+void net_sim_advance(net_sim s, hnetd_time_t t)
+{
+  sput_fail_unless(s->now <= t, "time moving forwards");
+  s->now = t;
+  printf("time = %lld\n", (long long int) (t - s->start));
+}
+
+#define SIM_WHILE(s, maxiter, criteria)                         \
+do {                                                            \
+  int iter = 0;                                                 \
+                                                                \
+  while((criteria) && iter < maxiter)                           \
+    {                                                           \
+      net_sim_run(s);                                           \
+      net_sim_advance(s, net_sim_next(s));                      \
+      iter++;                                                   \
+    }                                                           \
+  sput_fail_unless(!(criteria), "criteria at maxiter too");     \
+ } while(0)
 
 /********************************************************* Mocked interfaces */
 
@@ -163,8 +276,9 @@ void hcp_io_schedule(hcp o, int msecs)
 {
   net_node node = container_of(o, net_node_s, n);
   net_sim s = node->s;
-  hnetd_time_t wt = msecs + s->now;
+  hnetd_time_t wt = s->now + msecs;
 
+  sput_fail_unless(wt >= s->now, "should be present or future");
   if (!node->want_timeout_at || node->want_timeout_at > wt)
     node->want_timeout_at = wt;
 }
@@ -251,11 +365,31 @@ void hcp_two(void)
   net_sim_s s;
   hcp n1;
   hcp n2;
+  hcp_link l1;
+  hcp_link l2;
 
   net_sim_init(&s);
   n1 = net_sim_add_hcp(&s, "n1");
   n2 = net_sim_add_hcp(&s, "n2");
-  
+  l1 = net_sim_hcp_find_link(n1, "eth0");
+  l2 = net_sim_hcp_find_link(n2, "eth1");
+  sput_fail_unless(avl_is_empty(&l1->neighbors.avl), "no l1 neighbors");
+  sput_fail_unless(avl_is_empty(&l2->neighbors.avl), "no l2 neighbors");
+
+  /* connect l1+l2 -> should see neighbors */
+  net_sim_set_connected(l1, l2, true);
+  net_sim_set_connected(l2, l1, true);
+  SIM_WHILE(&s, 100,
+            avl_is_empty(&l1->neighbors.avl)
+            || avl_is_empty(&l2->neighbors.avl));
+
+  /* disconnect on one side (=> unidirectional traffic) => should at
+   * some point disappear. */
+  net_sim_set_connected(l1, l2, false);
+  SIM_WHILE(&s, 100,
+            !avl_is_empty(&l1->neighbors.avl)
+            || !avl_is_empty(&l2->neighbors.avl));
+
   net_sim_uninit(&s);
 }
 

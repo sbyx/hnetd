@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Nov 27 12:48:44 2013 mstenber
+ * Last modified: Wed Nov 27 12:58:06 2013 mstenber
  * Edit time:     81 min
  *
  */
@@ -225,5 +225,7 @@ static inline hnetd_time_t hcp_time(hcp o)
     return hcp_io_time(o);
   return o->now;
 }
+
+#define TMIN(x,y) ((x) == 0 ? (y) : (y) == 0 ? (x) : (x) < (y) ? (x) : (y))
 
 #endif /* HCP_I_H */
