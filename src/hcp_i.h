@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Nov 27 14:43:14 2013 mstenber
- * Edit time:     82 min
+ * Last modified: Wed Nov 27 18:38:17 2013 mstenber
+ * Edit time:     85 min
  *
  */
 
@@ -30,12 +30,6 @@
 
 /* IFNAMSIZ */
 #include <net/if.h>
-
-/* Let's assume we use MD5 for the time being.. */
-#define HCP_HASH_LEN 16
-
-/* 64 bit version of the hash */
-#define HCP_HASH64_LEN 8
 
 /* Internal definitions for hcp.[ch] - do not touch or include! (This
  * is here mostly for test use.) */

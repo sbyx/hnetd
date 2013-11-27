@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Nov 27 14:43:08 2013 mstenber
+ * Last modified: Wed Nov 27 17:22:41 2013 mstenber
  * Edit time:     34 min
  *
  */
@@ -31,71 +31,6 @@ static void trickle_upgrade(hcp_link l)
     : i > HCP_TRICKLE_IMAX ? HCP_TRICKLE_IMAX : i;
   trickle_set_i(l, i);
 }
-
-#define HCP_T_NODE_STATE_V_SIZE (2 * HCP_HASH_LEN + 2 * 4)
-
-bool hcp_link_send_network_state(hcp_link l,
-                                 struct in6_addr *dst,
-                                 size_t maximum_size)
-{
-  hnetd_time_t now = hcp_time(l->hcp);
-  int rc;
-  struct tlv_buf tb;
-  struct tlv_attr *a;
-  unsigned char *c;
-  hcp_node n;
-  hcp o = l->hcp;
-
-  memset(&tb, 0, sizeof(tb));
-  tlv_buf_init(&tb, 0); /* not passed anywhere */
-  vlist_for_each_element(&o->nodes, n, in_nodes)
-    {
-      a = tlv_new(&tb, HCP_T_NODE_STATE, HCP_T_NODE_STATE_V_SIZE);
-      if (!a)
-        {
-          tlv_buf_free(&tb);
-          return false;
-        }
-      c = tlv_data(a);
-
-      memcpy(c, n->node_identifier_hash, HCP_HASH_LEN);
-      c += HCP_HASH_LEN;
-
-      *((uint32_t *)c) = cpu_to_be32(n->update_number);
-      c += 4;
-
-      *((uint32_t *)c) = cpu_to_be32(now - n->origination_time);
-      c += 4;
-
-      memcpy(c, n->node_data_hash, HCP_HASH_LEN);
-    }
-  tlv_fill_pad(tb.head);
-  /* -4 = not including the dummy TLV header */
-  /* rest = network state TLV size */
-  if (maximum_size
-      && (tlv_pad_len(tb.head) - 4 + 4 + HCP_HASH_LEN) > maximum_size)
-    {
-      /* Clear the buffer - just send the network state hash. */
-      tlv_buf_free(&tb);
-      tlv_buf_init(&tb, 0); /* not passed anywhere */
-    }
-  a = tlv_new(&tb, HCP_T_NETWORK_HASH, HCP_HASH_LEN);
-  if (!a)
-    {
-      tlv_buf_free(&tb);
-      return false;
-    }
-  c = tlv_data(a);
-  memcpy(c, o->network_hash, HCP_HASH_LEN);
-  rc = hcp_io_sendto(o,
-                     tlv_data(tb.head),
-                     tlv_len(tb.head),
-                     l->ifname,
-                     &o->multicast_address);
-  tlv_buf_free(&tb);
-  return rc > 0;
-}
-                            
 
 static void trickle_send(hcp_link l)
 {

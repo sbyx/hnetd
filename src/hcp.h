@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Wed Nov 27 14:23:25 2013 mstenber
- * Edit time:     44 min
+ * Last modified: Wed Nov 27 18:20:22 2013 mstenber
+ * Edit time:     61 min
  *
  */
 
@@ -16,47 +16,7 @@
 
 #include "hnetd.h"
 #include "tlv.h"
-
-enum {
-  /* Request TLVs (not to be really stored anywhere) */
-  HCP_T_REQ_NET_HASH = 1,
-  HCP_T_REQ_NODE_DATA = 5,
-
-  HCP_T_NETWORK_HASH = 2,
-  HCP_T_NODE_ID = 3,
-  HCP_T_NODE_STATE = 4,
-
-  HCP_T_NODE_DATA = 6,
-  HCP_T_NODE_DATA_KEY = 7,
-  HCP_T_NODE_DATA_NEIGHBOR = 8,
-
-  HCP_T_CUSTOM = 9,
-
-  HCP_T_SIGNATURE = 0xFFFF
-};
-
-/* How big is one neighbor TLV? (incl. TLV header). */
-#define HCP_T_NODE_DATA_NEIGHBOR_SIZE (4 + 4 + 4 + HCP_HASH_LEN)
-
-#define HCP_PORT 8808
-#define HCP_MCAST_GROUP "ff02::8808"
-
-/* How often we retry multicast joins? Once per second seems sane
- * enough. */
-#define HCP_REJOIN_INTERVAL (1 * HNETD_TIME_PER_SECOND)
-
-/* Minimum interval trickle starts at. The first potential time it may
- * send something is actually this divided by two. */
-#define HCP_TRICKLE_IMIN (HNETD_TIME_PER_SECOND / 4)
-
-/* Note: This is concrete value, NOT exponent # as noted in RFC. I
- * don't know why RFC does that.. We don't want to ever need do
- * exponentiation in any case in code. 64 seconds for the time being.. */
-#define HCP_TRICKLE_IMAX (64 * HNETD_TIME_PER_SECOND)
-
-/* Redundancy constant. */
-#define HCP_TRICKLE_K 1
-
+#include "hcp_proto.h"
 
 /* Opaque pointer that represents hcp instance. */
 typedef struct hcp_struct hcp_s, *hcp;

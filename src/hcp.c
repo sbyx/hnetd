@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Wed Nov 27 14:36:55 2013 mstenber
- * Edit time:     250 min
+ * Last modified: Wed Nov 27 18:12:11 2013 mstenber
+ * Edit time:     259 min
  *
  */
 
@@ -365,26 +365,18 @@ void hcp_self_flush(hcp_node n)
         {
           vlist_for_each_element(&l->neighbors, ne, in_neighbors)
             {
-              unsigned char buf[HCP_T_NODE_DATA_NEIGHBOR_SIZE];
-              unsigned char *c = buf;
-              struct tlv_attr *nt = (struct tlv_attr *)c;
-              int32_t *iid;
+              unsigned char buf[TLV_SIZE + sizeof(hcp_t_node_data_neighbor_s)];
+              struct tlv_attr *nt = (struct tlv_attr *)buf;
 
               tlv_init(nt,
                        HCP_T_NODE_DATA_NEIGHBOR,
-                       HCP_T_NODE_DATA_NEIGHBOR_SIZE);
-              c += 4; /* skip header */
+                       sizeof(hcp_t_node_data_neighbor_s));
+              hcp_t_node_data_neighbor d = tlv_data(nt);
 
-              memcpy(c, ne->node_identifier_hash, HCP_HASH_LEN);
-              c += HCP_HASH_LEN;
-
-              iid = (int32_t *)c;
-              *iid = cpu_to_be32(ne->iid);
-              c += 4;
-
-              iid = (int32_t *)c;
-              *iid = cpu_to_be32(l->iid);
-              c += 4;
+              memcpy(d->neighbor_node_identifier_hash,
+                     ne->node_identifier_hash, HCP_HASH_LEN);
+              d->neighbor_link_id = cpu_to_be32(ne->iid);
+              d->link_id = cpu_to_be32(l->iid);
 
               _add_tlv(o, nt);
             }
