@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:14:59 2013 mstenber
- * Last modified: Tue Nov 26 15:39:09 2013 mstenber
- * Edit time:     63 min
+ * Last modified: Wed Nov 27 09:50:39 2013 mstenber
+ * Edit time:     64 min
  *
  */
 
@@ -153,7 +153,7 @@ static inline void smock_is_empty()
 #define smock_push_int(q,v) smock_push(q, (void *)((intptr_t) (v)))
 #define smock_pull_int(q) ((intptr_t)smock_pull(q))
 
-#define smock_push_bool(q,v) smock_push(q, (void *)((intptr_t) (v) ? 1 : 0))
+#define smock_push_bool(q,v) smock_push(q, (void *)((intptr_t) ((v) ? 1 : 0)))
 #define smock_pull_bool(q) ((intptr_t)smock_pull(q) == 1 ? true : false)
 
 /* Assertion-like utilities. */
