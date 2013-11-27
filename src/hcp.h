@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Tue Nov 26 12:55:00 2013 mstenber
+ * Last modified: Wed Nov 27 09:49:54 2013 mstenber
  * Edit time:     42 min
  *
  */
@@ -41,16 +41,16 @@ enum {
 
 /* How often we retry multicast joins? Once per second seems sane
  * enough. */
-#define HCP_REJOIN_INTERVAL 1000
+#define HCP_REJOIN_INTERVAL (1 * HNETD_TIME_PER_SECOND)
 
 /* Minimum interval trickle starts at. The first potential time it may
  * send something is actually this divided by two. */
-#define HCP_TRICKLE_IMIN 250
+#define HCP_TRICKLE_IMIN (HNETD_TIME_PER_SECOND / 4)
 
 /* Note: This is concrete value, NOT exponent # as noted in RFC. I
  * don't know why RFC does that.. We don't want to ever need do
  * exponentiation in any case in code. 64 seconds for the time being.. */
-#define HCP_TRICKLE_IMAX ((HCP_TRICKLE_IMIN*4)*64)
+#define HCP_TRICKLE_IMAX (64 * HNETD_TIME_PER_SECOND)
 
 /* Redundancy constant. */
 #define HCP_TRICKLE_K 1
