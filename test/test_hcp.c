@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Tue Nov 26 10:01:14 2013 mstenber
- * Edit time:     22 min
+ * Last modified: Wed Nov 27 10:15:51 2013 mstenber
+ * Edit time:     23 min
  *
  */
 
@@ -50,7 +50,7 @@ void hcp_ext(void)
   sput_fail_unless(!r, "hcp_set_link_enabled eth1 (2nd true)");
 
   hcp_node_get_tlvs(n, &t);
-  sput_fail_unless(!tlv_attr_equal(t, tb.head), "tlvs should be different");
+  sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs should be same");
 
   r = hcp_set_link_enabled(o, "eth1", false);
   sput_fail_unless(r, "hcp_set_link_enabled eth1 (false)");
@@ -59,7 +59,7 @@ void hcp_ext(void)
   sput_fail_unless(!r, "hcp_set_link_enabled eth1 (2nd false)");
 
   hcp_node_get_tlvs(n, &t);
-  sput_fail_unless(!tlv_attr_equal(t, tb.head), "tlvs should be different");
+  sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs should be same");
 
   /* Make sure run doesn't blow things up */
   hcp_run(o);

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Nov 26 15:47:52 2013 mstenber
- * Edit time:     226 min
+ * Last modified: Wed Nov 27 10:14:34 2013 mstenber
+ * Edit time:     232 min
  *
  */
 
@@ -323,8 +323,6 @@ void hcp_self_flush(hcp_node n, hnetd_time_t now)
 
   if (o->links_dirty)
     {
-      unsigned char buf[HCP_MAXIMUM_PAYLOAD_SIZE];;
-      unsigned char *e = buf + sizeof(buf);;
       /* Rather crude: We simply get rid of existing link TLVs, and
        * publish new ones. Assumption: Whatever is added using
        * hcp_add_tlv will have version=-1, and dynamically generated
@@ -334,20 +332,16 @@ void hcp_self_flush(hcp_node n, hnetd_time_t now)
 
       vlist_for_each_element(&o->links, l, in_links)
         {
-          /* Due to how node link TLV is specified, we can't use
-           * tlv.[ch]'s convenience stuff directly. Oh well. */
-          struct tlv_attr *a = (struct tlv_attr *)buf;
-          unsigned char *c = buf + 4; /* 4 = tlv header. */
-          int32_t *iid = (int32_t *)c;
-          *iid = cpu_to_be32(l->iid);
-          c += 4;
           vlist_for_each_element(&l->neighbors, ne, in_neighbors)
             {
+              unsigned char buf[HCP_T_NODE_DATA_NEIGHBOR_SIZE];
+              unsigned char *c = buf;
               struct tlv_attr *nt = (struct tlv_attr *)c;
-              if ((c + HCP_NEIGHBOR_TLV_SIZE) >= e)
-                return;
-              tlv_init(nt, HCP_T_NODE_DATA_LINK_NEIGHBOR,
-                       HCP_NEIGHBOR_TLV_SIZE);
+              int32_t *iid;
+
+              tlv_init(nt,
+                       HCP_T_NODE_DATA_NEIGHBOR,
+                       HCP_T_NODE_DATA_NEIGHBOR_SIZE);
               c += 4; /* skip header */
 
               memcpy(c, ne->node_identifier_hash, HCP_HASH_LEN);
@@ -356,10 +350,13 @@ void hcp_self_flush(hcp_node n, hnetd_time_t now)
               iid = (int32_t *)c;
               *iid = cpu_to_be32(ne->iid);
               c += 4;
+
+              iid = (int32_t *)c;
+              *iid = cpu_to_be32(l->iid);
+              c += 4;
+
+              _add_tlv(o, nt);
             }
-          tlv_init(a, HCP_T_NODE_DATA_LINK, c-buf);
-          tlv_fill_pad(a);
-          _add_tlv(o, a);
         }
 
       vlist_flush(&o->tlvs);

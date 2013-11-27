@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Nov 26 14:24:57 2013 mstenber
+ * Last modified: Wed Nov 27 10:13:38 2013 mstenber
  * Edit time:     76 min
  *
  */
@@ -22,9 +22,6 @@
 /* Pretty arbitrary. I wonder if all links can really guarantee MTU size
  * packets going through.. */
 #define HCP_MAXIMUM_MULTICAST_SIZE 1280
-
-/* How big is one neighbor TLV? (incl. TLV header). */
-#define HCP_NEIGHBOR_TLV_SIZE (4 + 4 + HCP_HASH_LEN)
 
 #include <libubox/vlist.h>
 

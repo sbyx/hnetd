@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Wed Nov 27 09:49:54 2013 mstenber
+ * Last modified: Wed Nov 27 10:14:07 2013 mstenber
  * Edit time:     42 min
  *
  */
@@ -28,13 +28,15 @@ enum {
 
   HCP_T_NODE_DATA = 6,
   HCP_T_NODE_DATA_KEY = 7,
-  HCP_T_NODE_DATA_LINK = 8,
-  HCP_T_NODE_DATA_LINK_NEIGHBOR = 9,
+  HCP_T_NODE_DATA_NEIGHBOR = 8,
 
-  HCP_T_CUSTOM = 10,
+  HCP_T_CUSTOM = 9,
 
   HCP_T_SIGNATURE = 0xFFFF
 };
+
+/* How big is one neighbor TLV? (incl. TLV header). */
+#define HCP_T_NODE_DATA_NEIGHBOR_SIZE (4 + 4 + 4 + HCP_HASH_LEN)
 
 #define HCP_PORT 8808
 #define HCP_MCAST_GROUP "ff02::8808"
