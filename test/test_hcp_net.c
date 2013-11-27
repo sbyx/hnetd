@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Nov 27 13:41:01 2013 mstenber
- * Edit time:     100 min
+ * Last modified: Wed Nov 27 20:54:05 2013 mstenber
+ * Edit time:     113 min
  *
  */
 
@@ -21,7 +21,7 @@
 
 #include "hnetd.h"
 #include "hcp.c"
-#include "hcp_recv.c"
+#include "hcp_proto.c"
 #include "hcp_timeout.c"
 #include "sput.h"
 
@@ -111,7 +111,14 @@ hcp_link net_sim_hcp_find_link(hcp o, const char *name)
       hcp_hash(name, strlen(name), h1);
       for (i = 0 ; i < HCP_HASH_LEN ; i++)
         h[i] = h1[i] ^ o->own_node->node_identifier_hash[i];
+      h[0] = 0xFE;
+      h[1] = 0x80;
+      /* Let's pretend it's /64; clear out 2-7 */
+      for (i = 2 ; i < 8 ; i++)
+        h[i] = 0;
       memcpy(&l->address, h, sizeof(l->address));
+      sput_fail_unless(sizeof(l->address) == HCP_HASH_LEN,
+                       "weird address size");
     }
   return l;
 }
@@ -122,6 +129,7 @@ void net_sim_set_connected(hcp_link l1, hcp_link l2, bool enabled)
   net_node node = container_of(o, net_node_s, n);
   net_sim s = node->s;
 
+  printf("connection %x -> %x %s\n", l1, l2, enabled ? "on" : "off");
   if (enabled)
     {
       /* Add node */
@@ -342,6 +350,7 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
           sput_fail_unless(m->buf, "malloc buf");
           memcpy(m->buf, buf, len);
           m->len = len;
+          m->src = l->address;
           m->dst = *dst;
           m->readable_at = wt;
           list_add(&m->h, &s->messages);
@@ -383,12 +392,25 @@ void hcp_two(void)
             avl_is_empty(&l1->neighbors.avl)
             || avl_is_empty(&l2->neighbors.avl));
 
+  /* Network hashes should also become one at some point */
+  SIM_WHILE(&s, 100,
+            memcmp(&n1->network_hash, &n2->network_hash, HCP_HASH_LEN));
+
+  sput_fail_unless(n1->nodes.avl.count == 2, "n1 nodes == 2");
+  sput_fail_unless(n2->nodes.avl.count == 2, "n2 nodes == 2");
+
   /* disconnect on one side (=> unidirectional traffic) => should at
    * some point disappear. */
   net_sim_set_connected(l1, l2, false);
-  SIM_WHILE(&s, 100,
-            !avl_is_empty(&l1->neighbors.avl)
-            || !avl_is_empty(&l2->neighbors.avl));
+  SIM_WHILE(&s, 1000,
+            !avl_is_empty(&l2->neighbors.avl));
+
+  /* n1 will keep getting stuff from n2, so it's sometimes alive,
+   * sometimes not.. However, network hashes should be again
+   * different. */
+  sput_fail_unless(memcmp(&n1->network_hash, &n2->network_hash, HCP_HASH_LEN),
+                   "hashes different");
+
 
   net_sim_uninit(&s);
 }

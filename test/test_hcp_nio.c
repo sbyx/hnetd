@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Wed Nov 27 13:43:10 2013 mstenber
- * Edit time:     142 min
+ * Last modified: Wed Nov 27 19:37:35 2013 mstenber
+ * Edit time:     143 min
  *
  */
 
@@ -22,7 +22,7 @@
 #define random random_mock
 static int random_mock(void);
 #include "hcp.c"
-#include "hcp_recv.c"
+#include "hcp_proto.c"
 #include "hcp_timeout.c"
 #include "sput.h"
 #include "smock.h"

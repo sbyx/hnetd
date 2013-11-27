@@ -1,22 +1,22 @@
 /*
- * $Id: hcp_recv.c $
+ * $Id: hcp_proto.c $
  *
  * Author: Markus Stenberg <mstenber@cisco.com>
  *
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Nov 27 18:57:13 2013 mstenber
- * Edit time:     73 min
+ * Last modified: Wed Nov 27 21:32:33 2013 mstenber
+ * Edit time:     140 min
  *
  */
 
 #include "hcp_i.h"
 
 /*
- * This module contains the logic to handle reception of traffic from
- * single- or multicast sources. The actual low-level IO is performed
- * in hcp_io.
+ * This module contains the logic to handle receiving and sending of
+ * traffic from single- or multicast sources. The actual low-level IO
+ * is performed in hcp_io.
  */
 
 /* TLV attribute iteration for raw buffer. */
@@ -48,10 +48,9 @@ static bool _push_node_state_tlv(struct tlv_buf *tb, hcp_node n)
 
 static bool _push_node_data_tlv(struct tlv_buf *tb, hcp_node n)
 {
-  struct tlv_attr *a = tlv_new(tb, HCP_T_NETWORK_HASH,
-                               sizeof(hcp_t_node_data_header_s) +
-                               n->tlv_container ?
-                               tlv_len(n->tlv_container) : 0);
+  int s = n->tlv_container ? tlv_len(n->tlv_container) : 0;
+  struct tlv_attr *a = tlv_new(tb, HCP_T_NODE_DATA,
+                               sizeof(hcp_t_node_data_header_s) + s);
   hcp_t_node_data_header h;
 
   if (!a)
@@ -60,7 +59,7 @@ static bool _push_node_data_tlv(struct tlv_buf *tb, hcp_node n)
   memcpy(h->node_identifier_hash, n->node_identifier_hash, HCP_HASH_LEN);
   h->update_number = cpu_to_be32(n->update_number);
   memcpy((unsigned char *)h + sizeof(hcp_t_node_data_header_s),
-         n->tlv_container, tlv_len(n->tlv_container));
+         n->tlv_container, s);
   return true;
 }
 
@@ -84,7 +83,8 @@ static bool _push_link_id_tlv(struct tlv_buf *tb, hcp_link l)
   if (!a)
     return false;
   lid = tlv_data(a);
-  memcpy(lid->node_identifier_hash, l->hcp->own_node->node_identifier_hash, HCP_HASH_LEN);
+  memcpy(lid->node_identifier_hash, l->hcp->own_node->node_identifier_hash,
+         HCP_HASH_LEN);
   lid->link_id = cpu_to_be32(l->iid);
   return true;
 }
@@ -125,6 +125,7 @@ bool hcp_link_send_network_state(hcp_link l,
                              l->ifname,
                              dst);
       tlv_buf_free(&tb);
+      /* printf("hcp_link_send_network_state %p\n", l); */
       return rc > 0;
     }
  err:
@@ -132,9 +133,9 @@ bool hcp_link_send_network_state(hcp_link l,
   return false;
 }
 
-bool hcp_link_send_node_state(hcp_link l,
-                              struct in6_addr *dst,
-                              hcp_node n)
+bool hcp_link_send_node_data(hcp_link l,
+                             struct in6_addr *dst,
+                             hcp_node n)
 {
   /* Send two things:
      - node state tlv
@@ -155,6 +156,56 @@ bool hcp_link_send_node_state(hcp_link l,
                              l->ifname,
                              dst);
       r = rc > 0;
+      /* printf("hcp_link_send_node_data %p\n", l); */
+    }
+  tlv_buf_free(&tb);
+  return r;
+}
+
+bool hcp_link_send_req_network_state(hcp_link l,
+                                     struct in6_addr *dst)
+{
+  struct tlv_buf tb;
+  bool r = false;
+
+  memset(&tb, 0, sizeof(tb));
+  tlv_buf_init(&tb, 0); /* not passed anywhere */
+  if (_push_link_id_tlv(&tb, l)
+      && tlv_new(&tb, HCP_T_REQ_NET_HASH, 0))
+    {
+      int rc = hcp_io_sendto(l->hcp,
+                             tlv_data(tb.head),
+                             tlv_len(tb.head),
+                             l->ifname,
+                             dst);
+      r = rc > 0;
+      /* printf("hcp_link_send_req_network_state %p\n", l); */
+    }
+  tlv_buf_free(&tb);
+  return r;
+}
+
+bool hcp_link_send_req_node_data(hcp_link l,
+                                 struct in6_addr *dst,
+                                 hcp_t_node_state ns)
+{
+  struct tlv_buf tb;
+  bool r = false;
+  struct tlv_attr *a;
+
+  memset(&tb, 0, sizeof(tb));
+  tlv_buf_init(&tb, 0); /* not passed anywhere */
+  if (_push_link_id_tlv(&tb, l)
+      && (a = tlv_new(&tb, HCP_T_REQ_NODE_DATA, HCP_HASH_LEN)))
+    {
+      memcpy(tlv_data(a), ns->node_identifier_hash, HCP_HASH_LEN);
+      int rc = hcp_io_sendto(l->hcp,
+                             tlv_data(tb.head),
+                             tlv_len(tb.head),
+                             l->ifname,
+                             dst);
+      r = rc > 0;
+      /* printf("hcp_link_send_req_node_data %p\n", l); */
     }
   tlv_buf_free(&tb);
   return r;
@@ -162,10 +213,33 @@ bool hcp_link_send_node_state(hcp_link l,
 
 /************************************************************ Input handling */
 
-static void
-_heard(hcp_link l, hcp_t_link_id lid)
+static hcp_neighbor
+_heard(hcp_link l, hcp_t_link_id lid, struct in6_addr *src)
 {
-  /* XXX */
+  hcp_neighbor_s nc;
+  hcp_neighbor n;
+  hcp o = l->hcp;
+
+  memset(&nc, 0, sizeof(nc));
+  memcpy(nc.node_identifier_hash, lid->node_identifier_hash, HCP_HASH_LEN);
+  nc.iid = cpu_to_be32(lid->link_id);
+  n = vlist_find(&l->neighbors, &nc, &nc, in_neighbors);
+  if (!n)
+    {
+      /* new neighbor */
+      n = malloc(sizeof(nc));
+      if (!n)
+        return NULL;
+      memcpy(n, &nc, sizeof(nc));
+      vlist_add(&l->neighbors, &n->in_neighbors, n);
+      /* printf("_heard - added new neighbor %p\n", n); */
+    }
+
+  n->last_address = *src;
+  if (o->assume_bidirectional_reachability)
+    n->ping_count = 0;
+  n->last_heard = hcp_time(o);
+  return n;
 }
 
 /* Handle a single received message. */
@@ -180,8 +254,15 @@ handle_message(hcp_link l,
   struct tlv_attr *a;
   hcp_node n;
   hcp_t_link_id lid = NULL;
-  struct tlv_attr *nethash = NULL;
+  unsigned char *nethash = NULL;
   int nodestates = 0;
+  hcp_neighbor ne = NULL;
+  hcp_t_node_state ns;
+  hcp_t_node_data_header nd;
+  unsigned char *nd_data = NULL;
+  int nd_len = 0;
+  struct tlv_buf tb;
+  uint32_t new_update_number;
 
   /* Validate that link id exists. */
   tlv_for_each_attr_raw(data, len, a, pos)
@@ -191,10 +272,7 @@ handle_message(hcp_link l,
         if (lid)
           return;
         if (tlv_len(a) == sizeof(hcp_t_link_id_s))
-          {
-            lid = tlv_data(a);
-            _heard(l, lid);
-          }
+          lid = tlv_data(a);
         else
           return; /* weird link id */
       }
@@ -202,7 +280,10 @@ handle_message(hcp_link l,
   if (!lid)
     return;
 
-  _heard(l, lid);
+  ne = _heard(l, lid, src);
+
+  if (!ne)
+    return;
 
   /* Estimates what's in the payload + handles the few
    * request messages we support. */
@@ -210,11 +291,8 @@ handle_message(hcp_link l,
     {
       switch (tlv_id(a))
         {
-        case HCP_T_LINK_ID:
-          /* nop - already handled */
-          break;
         case HCP_T_NETWORK_HASH:
-          nethash = a;
+          nethash = tlv_data(a);
           break;
         case HCP_T_NODE_STATE:
           nodestates++;
@@ -233,18 +311,112 @@ handle_message(hcp_link l,
             {
               n = hcp_find_node_by_hash(o, tlv_data(a), false);
               if (n)
-                (void)hcp_link_send_node_state(l, src, n);
+                (void)hcp_link_send_node_data(l, src, n);
             }
           return;
         }
     }
-  /* XXX - handle normal state synchronization
-
-     Three different cases:
+  /* Three different cases:
      - raw network hash
      - network hash + node states
-     - node data(s)
+     - node state + node data
   */
+  if (!multicast)
+    {
+      ne->last_response = hcp_time(l->hcp);
+      ne->ping_count = 0;
+    }
+  /* We don't care, if network hash state IS same. */
+  if (nethash)
+    {
+      if (memcmp(nethash, o->network_hash, HCP_HASH_LEN) == 0)
+        return;
+      /* Short form (raw network hash) */
+      if (!nodestates)
+        {
+          if (multicast)
+            (void)hcp_link_send_req_network_state(l, src);
+          return;
+        }
+      /* Long form (has node states). */
+      /* The exercise becomes just to ask for any node state that
+       * differs from local and is more recent. */
+      tlv_for_each_attr_raw(data, len, a, pos)
+        if (tlv_id(a) == HCP_T_NODE_STATE)
+          {
+            if (tlv_len(a) != sizeof(hcp_t_node_state_s))
+              return;
+            ns = tlv_data(a);
+            n = hcp_find_node_by_hash(o, ns->node_identifier_hash, false);
+            if (!n || n->update_number < cpu_to_be32(ns->update_number))
+              hcp_link_send_req_node_data(l, src, ns);
+          }
+      return;
+    }
+  /* We don't accept node data via multicast. */
+  if (multicast)
+    return;
+  /* Look for node state + node data. */
+  ns = NULL;
+  nd = NULL;
+  tlv_for_each_attr_raw(data, len, a, pos)
+    switch(tlv_id(a))
+      {
+      case HCP_T_NODE_STATE:
+        if (ns)
+          return;
+        if (tlv_len(a) != sizeof(hcp_t_node_state_s))
+          return;
+        ns = tlv_data(a);
+        break;
+      case HCP_T_NODE_DATA:
+        if (nd)
+          return;
+        nd_len = tlv_len(a) - sizeof(hcp_t_node_data_header_s);
+        if (nd_len < 0)
+          return;
+        nd = tlv_data(a);
+        nd_data = (unsigned char *)nd + nd_len;
+        break;
+      }
+  if (!ns || !nd)
+    return;
+  /* If they're for different nodes, not interested. */
+  if (memcmp(ns->node_identifier_hash, nd->node_identifier_hash, HCP_HASH_LEN))
+    return;
+  /* Is it actually valid? Should be same update #. */
+  if (ns->update_number != nd->update_number)
+    return;
+  /* Let's see if it's more recent. */
+  n = hcp_find_node_by_hash(o, ns->node_identifier_hash, true);
+  if (!n)
+    return;
+  new_update_number = cpu_to_be32(ns->update_number);
+  if (n->update_number >= new_update_number)
+    return;
+  if (hcp_node_is_self(n))
+    {
+      /* Don't accept updates to 'self' from network. Instead,
+       * increment own update number. */
+      n->update_number = new_update_number + 1;
+      n->node_data_hash_dirty = true;
+      o->network_hash_dirty = true;
+      n->origination_time = hcp_time(o);
+      hcp_schedule(o);
+      return;
+    }
+  /* Ok. nd contains more recent TLV data than what we have
+   * already. Woot. */
+  memset(&tb, 0, sizeof(tb));
+  tlv_buf_init(&tb, 0); /* not passed anywhere */
+  if (tlv_put_raw(&tb, nd_data, nd_len))
+    {
+      n->update_number = new_update_number;
+      n->node_data_hash_dirty = true;
+      o->network_hash_dirty = true;
+      hcp_node_set_tlvs(n, tb.head);
+      hcp_schedule(o);
+    }
 }
 
 

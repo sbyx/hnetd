@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Nov 27 17:22:41 2013 mstenber
- * Edit time:     34 min
+ * Last modified: Wed Nov 27 21:33:02 2013 mstenber
+ * Edit time:     59 min
  *
  */
 
@@ -48,8 +48,9 @@ void hcp_run(hcp o)
   hnetd_time_t next = 0;
   hnetd_time_t now = hcp_io_time(o);
   hcp_link l;
+  hcp_neighbor n, n2;
   int time_since_failed_join = now - o->join_failed_time;
-
+  
   /* Assumption: We're within RTC step here -> can use same timestamp
    * all the way. */
   o->now = now;
@@ -73,7 +74,9 @@ void hcp_run(hcp o)
     {
       unsigned char buf[HCP_HASH_LEN];
 
+      /* Store original network hash for future study. */
       memcpy(buf, o->network_hash, HCP_HASH_LEN);
+
       hcp_calculate_network_hash(o, o->network_hash);
       if (memcmp(buf, o->network_hash, HCP_HASH_LEN))
         {
@@ -121,13 +124,47 @@ void hcp_run(hcp o)
           trickle_send(l);
         }
       next = TMIN(next, l->interval_end_time);
+
+      /* Look at neighbors we should be worried about.. */
+      /* vlist_for_each_element(&l->neighbors, n, in_neighbors) */
+      avl_for_each_element_safe(&l->neighbors.avl, n, in_neighbors.avl, n2)
+        {
+          hnetd_time_t next_time = HCP_INTERVAL_WORRIED
+            + o->assume_bidirectional_reachability ? n->last_heard
+            : n->last_response;
+
+          /* Maybe we're not worried yet.. */
+          if (next_time > now)
+            {
+              next = TMIN(next, next_time);
+              continue;
+            }
+
+          /* We _are_ worried. But should we ping right now? */
+          next_time = HCP_INTERVAL_WORRIED + n->last_ping;
+          if (next_time > now)
+            {
+              next = TMIN(next, next_time);
+              continue;
+            }
+
+          /* Yes, we should! */
+          if (n->ping_count++ == HCP_INTERVAL_RETRIES)
+            {
+              /* Zap the neighbor */
+              /* printf("neighbor gone\n"); */
+              vlist_delete(&l->neighbors, &n->in_neighbors);
+              continue;
+            }
+
+          /* Send a ping */
+          n->last_ping = now;
+          hcp_link_send_req_network_state(l, &n->last_address);
+          /* printf("pinging neighbor %d\n", n->ping_count); */
+        }
     }
 
-  /* Trickle algorithm should NOT cause any immediate scheduling. If
-   * it does, something is broken. */
-  assert(!o->immediate_scheduled);
-
-  if (next)
+  if (next && !o->immediate_scheduled)
     hcp_io_schedule(o, next-now);
 
   /* Clear the cached time, it's most likely no longer valid. */

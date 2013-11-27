@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Wed Nov 27 12:52:11 2013 mstenber
- * Edit time:     115 min
+ * Last modified: Wed Nov 27 19:15:11 2013 mstenber
+ * Edit time:     116 min
  *
  */
 
@@ -86,8 +86,6 @@ bool hcp_io_init(hcp o)
     return false;
   o->udp_socket = s;
   o->timeout.cb = _timeout;
-  if (!inet_pton(AF_INET6, HCP_MCAST_GROUP, &o->multicast_address))
-    return false;
   return true;
 }
 

@@ -6,14 +6,15 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Wed Nov 27 18:12:11 2013 mstenber
- * Edit time:     259 min
+ * Last modified: Wed Nov 27 21:32:11 2013 mstenber
+ * Edit time:     281 min
  *
  */
 
 #include "hcp_i.h"
 #include <libubox/md5.h>
 #include <net/ethernet.h>
+#include <arpa/inet.h>
 
 static int
 compare_nodes(const void *a, const void *b, void *ptr __unused)
@@ -24,7 +25,7 @@ compare_nodes(const void *a, const void *b, void *ptr __unused)
                 HCP_HASH_LEN);
 }
 
-static void _schedule(hcp o)
+void hcp_schedule(hcp o)
 {
   if (o->io_init_done)
     {
@@ -37,6 +38,24 @@ static void _schedule(hcp o)
     o->should_schedule = true;
 }
 
+bool hcp_node_set_tlvs(hcp_node n, struct tlv_attr *a)
+{
+  if (n->tlv_container)
+    {
+      if (a && tlv_attr_equal(n->tlv_container, a))
+        {
+          free(a);
+          return false;
+        }
+      free(n->tlv_container);
+    }
+  n->tlv_container = a;
+  n->hcp->network_hash_dirty = true;
+  n->node_data_hash_dirty = true;
+  return true;
+}
+
+
 static void update_node(__unused struct vlist_tree *t,
                         struct vlist_node *node_new,
                         struct vlist_node *node_old)
@@ -47,12 +66,11 @@ static void update_node(__unused struct vlist_tree *t,
 
   if (n_old)
     {
-      if (n_old->tlv_container)
-        free(n_old->tlv_container);
+      hcp_node_set_tlvs(n_old, NULL);
       free(n_old);
     }
   o->network_hash_dirty = true;
-  _schedule(o);
+  hcp_schedule(o);
 }
 
 
@@ -85,7 +103,7 @@ static void update_tlv(struct vlist_tree *t,
   if (t_old)
     free(t_old);
   o->tlvs_dirty = true;
-  _schedule(o);
+  hcp_schedule(o);
 }
 
 static int
@@ -130,7 +148,7 @@ static void update_link(struct vlist_tree *t,
       hcp_link_join(t_new);
     }
   o->links_dirty = true;
-  _schedule(o);
+  hcp_schedule(o);
 }
 
 static int
@@ -158,7 +176,7 @@ static void update_neighbor(struct vlist_tree *t,
   if (t_old)
     free(t_old);
   o->links_dirty = true;
-  _schedule(o);
+  hcp_schedule(o);
 }
 
 void hcp_hash(const void *buf, int len, unsigned char *dest)
@@ -198,6 +216,8 @@ bool hcp_init(hcp o, const void *node_identifier, int len)
   vlist_init(&o->tlvs, compare_tlvs, update_tlv);
   vlist_init(&o->links, compare_links, update_link);
   hcp_hash(node_identifier, len, buf);
+  if (!inet_pton(AF_INET6, HCP_MCAST_GROUP, &o->multicast_address))
+    return false;
   n = hcp_find_node_by_hash(o, buf, true);
   if (!n)
     return false;
@@ -225,7 +245,7 @@ hcp hcp_create(void)
     goto err2;
   o->io_init_done = true;
   if (o->should_schedule)
-    _schedule(o);
+    hcp_schedule(o);
   return o;
  err2:
   vlist_flush_all(&o->nodes);
@@ -407,22 +427,12 @@ void hcp_self_flush(hcp_node n)
    * and bail out.*/
 
   /* Replace old state with new _if_ it's really new. */
-  if (n->tlv_container)
-    {
-      /* Consider state being same.. */
-      if (tlv_attr_equal(n->tlv_container, tb.head))
-        {
-          tlv_buf_free(&tb);
-          return;
-        }
-      free(n->tlv_container);
-    }
-  n->tlv_container = tb.head;
+  if (!hcp_node_set_tlvs(n, tb.head))
+    return;
   n->update_number++;
   n->origination_time = hcp_time(o);
   o->network_hash_dirty = true;
-  hcp_calculate_node_data_hash(n, n->node_data_hash);
-  _schedule(o);
+  hcp_schedule(o);
 }
 
 void hcp_node_get_tlvs(hcp_node n, struct tlv_attr **r)
@@ -439,7 +449,14 @@ void hcp_calculate_network_hash(hcp o, unsigned char *dest)
 
   md5_begin(&ctx);
   vlist_for_each_element(&o->nodes, n, in_nodes)
-    md5_hash(n->node_data_hash, HCP_HASH_LEN, &ctx);
+    {
+      if (n->node_data_hash_dirty)
+        {
+          hcp_calculate_node_data_hash(n, n->node_data_hash);
+          n->node_data_hash_dirty = false;
+        }
+      md5_hash(n->node_data_hash, HCP_HASH_LEN, &ctx);
+    }
   md5_end(dest, &ctx);
 }
 
@@ -447,14 +464,14 @@ void hcp_calculate_node_data_hash(hcp_node n, unsigned char *dest)
 {
   md5_ctx_t ctx;
   struct tlv_attr h;
-  int l = tlv_len(n->tlv_container);
+  int l = n->tlv_container ? tlv_len(n->tlv_container) : 0;
 
   tlv_init(&h, HCP_T_NODE_DATA, 4 + HCP_HASH_LEN + l);
   md5_begin(&ctx);
   md5_hash(&h, sizeof(h), &ctx);
   md5_hash(n->node_identifier_hash, HCP_HASH_LEN, &ctx);
   md5_hash(&n->update_number, 4, &ctx);
-  if (n->tlv_container)
+  if (l)
     md5_hash(tlv_data(n->tlv_container), l, &ctx);
   md5_end(dest, &ctx);
 }

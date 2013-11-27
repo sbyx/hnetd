@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Wed Nov 27 18:38:29 2013 mstenber
- * Edit time:     2 min
+ * Last modified: Wed Nov 27 20:22:12 2013 mstenber
+ * Edit time:     4 min
  *
  */
 
@@ -22,12 +22,21 @@
 /* 64 bit version of the hash */
 #define HCP_HASH64_LEN 8
 
+/* When do we start to worry about the other side.. */
+#define HCP_INTERVAL_WORRIED (60 * HNETD_TIME_PER_SECOND)
+
+/* Exponentially backed off retries to 'ping' other side somehow
+ * ( either within protocol or without protocol ) to hear from them.
+ */
+#define HCP_INTERVAL_RETRIES 3
+
+
 /******************************************************************* TLV T's */
 
 enum {
   /* Request TLVs (not to be really stored anywhere) */
-  HCP_T_REQ_NET_HASH = 1,
-  HCP_T_REQ_NODE_DATA = 5,
+  HCP_T_REQ_NET_HASH = 1, /* empty */
+  HCP_T_REQ_NODE_DATA = 5, /* = just normal hash */
 
   /* This should be included in every message to facilitate neighbor
    * discovery of peers. */

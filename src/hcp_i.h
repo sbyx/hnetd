@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Nov 27 18:38:17 2013 mstenber
- * Edit time:     85 min
+ * Last modified: Wed Nov 27 21:23:49 2013 mstenber
+ * Edit time:     91 min
  *
  */
 
@@ -39,6 +39,9 @@
 typedef uint32_t iid_t;
 
 struct hcp_struct {
+  /* Can we assume bidirectional reachability? */
+  bool assume_bidirectional_reachability;
+
   /* cached current time; if zero, should ask hcp_io for it again */
   hnetd_time_t now;
 
@@ -85,6 +88,7 @@ struct hcp_struct {
   /* Multicast address */
   struct in6_addr multicast_address;
 
+  /* When did multicast join fail last time? */
   hnetd_time_t join_failed_time;
 };
 
@@ -136,6 +140,11 @@ struct hcp_neighbor_struct {
 
   /* When did they last respond to our message? */
   hnetd_time_t last_response;
+
+  /* If proactive mode is enabled, when did we last try to ping this
+   * one. */
+  hnetd_time_t last_ping;
+  int ping_count;
 };
 
 struct hcp_node_struct {
@@ -151,6 +160,7 @@ struct hcp_node_struct {
 
   /* Node state stuff */
   unsigned char node_data_hash[HCP_HASH_LEN];
+  bool node_data_hash_dirty; /* Something related to hash changed */
   hnetd_time_t origination_time; /* in monotonic time */
 
   /* TLV data for the node. All TLV data in one binary blob, as
@@ -182,8 +192,11 @@ void hcp_uninit(hcp o);
 hcp_link hcp_find_link(hcp o, const char *ifname, bool create);
 hcp_node hcp_find_node_by_hash(hcp o, unsigned char *h, bool create);
 
+/* Private utility - shouldn't be used by clients. */
+bool hcp_node_set_tlvs(hcp_node n, struct tlv_attr *a);
 
 void hcp_hash(const void *buf, int len, unsigned char *dest);
+void hcp_schedule(hcp o);
 
 /* Flush own TLV changes to own node. */
 void hcp_self_flush(hcp_node n);
@@ -192,9 +205,12 @@ void hcp_self_flush(hcp_node n);
 void hcp_calculate_network_hash(hcp o, unsigned char *dest);
 void hcp_calculate_node_data_hash(hcp_node n, unsigned char *dest);
 
+/* Utility functions to send frames. */
 bool hcp_link_send_network_state(hcp_link l,
                                  struct in6_addr *dst,
                                  size_t maximum_size);
+bool hcp_link_send_req_network_state(hcp_link l,
+                                     struct in6_addr *dst);
 
 
 /* Low-level interface module stuff. */
