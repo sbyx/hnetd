@@ -180,7 +180,7 @@ static void platform_commit(struct uloop_timeout *t)
 		blobmsg_close_array(&b, l);
 	}
 
-	const char *service = (c->linkowner) ? "server" : "disabled";
+	const char *service = (c->internal && c->linkowner) ? "server" : "disabled";
 	blobmsg_add_string(&b, "ra", service);
 	blobmsg_add_string(&b, "dhcpv4", service);
 	blobmsg_add_string(&b, "dhcpv6", service);
