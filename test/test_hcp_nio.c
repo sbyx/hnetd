@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Wed Nov 27 11:33:13 2013 mstenber
- * Edit time:     139 min
+ * Last modified: Wed Nov 27 12:50:06 2013 mstenber
+ * Edit time:     141 min
  *
  */
 
@@ -18,10 +18,8 @@
  * long periods of time.. */
 
 #include "hnetd.h"
-#define hnetd_time hnetd_time_mock
 #include <stdlib.h>
 #define random random_mock
-static hnetd_time_t hnetd_time_mock(void);
 static int random_mock(void);
 #include "hcp.c"
 #include "hcp_recv.c"
@@ -138,7 +136,7 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
     }
 }
 
-static hnetd_time_t hnetd_time_mock(void)
+hnetd_time_t hcp_io_time(hcp o)
 {
   if (check_timing)
     return smock_pull_int("time");

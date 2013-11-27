@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Nov 26 12:07:56 2013 mstenber
- * Edit time:     106 min
+ * Last modified: Wed Nov 27 12:52:11 2013 mstenber
+ * Edit time:     115 min
  *
  */
 
@@ -175,4 +175,9 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
     return -1;
   dst.sin6_addr = *to;
   return sendto(o->udp_socket, buf, len, flags, &dst, sizeof(dst));
+}
+
+hnetd_time_t hcp_io_time(hcp o __unused)
+{
+  return hnetd_time();
 }

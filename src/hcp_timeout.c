@@ -6,32 +6,35 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Tue Nov 26 15:48:16 2013 mstenber
- * Edit time:     24 min
+ * Last modified: Wed Nov 27 12:52:49 2013 mstenber
+ * Edit time:     28 min
  *
  */
 
 #include "hcp_i.h"
 #include <assert.h>
 
-static void trickle_set_i(hcp_link l, hnetd_time_t now, int i)
+static void trickle_set_i(hcp_link l, int i)
 {
+  hnetd_time_t now = hcp_time(l->hcp);
+
   l->i = i;
   l->send_time = now + l->i * (1000 + random() % 1000) / 2000;
   l->interval_end_time = now + l->i;
 }
 
-static void trickle_upgrade(hcp_link l, hnetd_time_t now)
+static void trickle_upgrade(hcp_link l)
 {
   int i = l->i * 2;
+
   i = i < HCP_TRICKLE_IMIN ? HCP_TRICKLE_IMIN
     : i > HCP_TRICKLE_IMAX ? HCP_TRICKLE_IMAX : i;
-  trickle_set_i(l, now, i);
+  trickle_set_i(l, i);
 }
 
 #define HCP_T_NODE_STATE_V_SIZE (2 * HCP_HASH_LEN + 2 * 4)
 
-static void trickle_send(hcp_link l, hnetd_time_t now)
+static void trickle_send(hcp_link l)
 {
   hcp_node n;
   hcp o = l->hcp;
@@ -41,6 +44,8 @@ static void trickle_send(hcp_link l, hnetd_time_t now)
 
   if (l->c < HCP_TRICKLE_K)
     {
+      hnetd_time_t now = hcp_time(l->hcp);
+
       memset(&tb, 0, sizeof(tb));
       tlv_buf_init(&tb, 0); /* not passed anywhere */
       vlist_for_each_element(&o->nodes, n, in_nodes)
@@ -101,9 +106,13 @@ static void trickle_send(hcp_link l, hnetd_time_t now)
 void hcp_run(hcp o)
 {
   hnetd_time_t next = 0;
-  hnetd_time_t now = hnetd_time();
+  hnetd_time_t now = hcp_io_time(o);
   hcp_link l;
-  int time_since_failed_join = (now - o->join_failed_time);
+  int time_since_failed_join = now - o->join_failed_time;
+
+  /* Assumption: We're within RTC step here -> can use same timestamp
+   * all the way. */
+  o->now = now;
 
   /* If we weren't before, we are now; processing within timeout (no
    * sense scheduling extra timeouts within hcp_self_flush). */
@@ -111,7 +120,7 @@ void hcp_run(hcp o)
 
   /* Refresh locally originated data; by doing this, we can avoid
    * replicating code. */
-  hcp_self_flush(o->own_node, now);
+  hcp_self_flush(o->own_node);
 
   /* Release the flag to allow more change-triggered zero timeouts to
    * be scheduled. (We don't want to do this before hcp_node_get_tlvs
@@ -133,7 +142,7 @@ void hcp_run(hcp o)
            * don't really count). */
           vlist_for_each_element(&o->links, l, in_links)
             if (!l->join_pending)
-              trickle_set_i(l, now, HCP_TRICKLE_IMIN);
+              trickle_set_i(l, HCP_TRICKLE_IMIN);
         }
       o->network_hash_dirty = false;
       /* printf("network_hash_dirty -> false\n"); */
@@ -146,8 +155,8 @@ void hcp_run(hcp o)
       if (l->join_pending)
         {
           if (time_since_failed_join >= HCP_REJOIN_INTERVAL
-              && hcp_link_join(l, now))
-            trickle_set_i(l, now, HCP_TRICKLE_IMIN);
+              && hcp_link_join(l))
+            trickle_set_i(l, HCP_TRICKLE_IMIN);
           else
             {
               next = TMIN(next, now + HCP_REJOIN_INTERVAL - (now - o->join_failed_time));
@@ -156,7 +165,7 @@ void hcp_run(hcp o)
         }
       if (l->interval_end_time <= now)
         {
-          trickle_upgrade(l, now);
+          trickle_upgrade(l);
           next = TMIN(next, l->send_time);
           continue;
         }
@@ -169,7 +178,7 @@ void hcp_run(hcp o)
               continue;
             }
 
-          trickle_send(l, now);
+          trickle_send(l);
         }
       next = TMIN(next, l->interval_end_time);
     }
@@ -180,4 +189,7 @@ void hcp_run(hcp o)
 
   if (next)
     hcp_io_schedule(o, next-now);
+
+  /* Clear the cached time, it's most likely no longer valid. */
+  o->now = 0;
 }

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Nov 27 12:02:40 2013 mstenber
- * Edit time:     31 min
+ * Last modified: Wed Nov 27 12:51:53 2013 mstenber
+ * Edit time:     63 min
  *
  */
 
@@ -20,8 +20,6 @@
  */
 
 #include "hnetd.h"
-#define hnetd_time hnetd_time_mock
-static hnetd_time_t hnetd_time_mock(void);
 #include "hcp.c"
 #include "hcp_recv.c"
 #include "hcp_timeout.c"
@@ -32,11 +30,17 @@ static hnetd_time_t hnetd_time_mock(void);
 
 /*********************************************** Fake network infrastructure */
 
+hnetd_time_t now_time;
+
+#define MESSAGE_PROPAGATION_DELAY (random() % 100 + 1)
+
 typedef struct {
   struct list_head h;
 
+  hnetd_time_t readable_at;
   hcp_link l;
-  struct in_addr dst;
+  struct in6_addr src;
+  struct in6_addr dst;
   void *buf;
   size_t len;
 } net_msg_s, *net_msg;
@@ -50,15 +54,18 @@ typedef struct {
 
 typedef struct {
   struct list_head h;
-
+  struct net_sim_t *s;
   hcp_s n;
+  hnetd_time_t want_timeout_at;
 } net_node_s, *net_node;
 
-typedef struct {
+typedef struct net_sim_t {
   /* Initialized set of nodes. */
   struct list_head nodes;
   struct list_head neighs;
   struct list_head messages;
+
+  hnetd_time_t now;
 } net_sim_s, *net_sim;
 
 void net_sim_init(net_sim s)
@@ -66,6 +73,46 @@ void net_sim_init(net_sim s)
   INIT_LIST_HEAD(&s->nodes);
   INIT_LIST_HEAD(&s->neighs);
   INIT_LIST_HEAD(&s->messages);
+}
+
+hcp net_sim_add_hcp(net_sim s, const char *name)
+{
+  net_node n = calloc(1, sizeof(*n));
+  bool r;
+
+  sput_fail_unless(n, "calloc net_node");
+  n->s = s;
+  r = hcp_init(&n->n, name, strlen(name));
+  sput_fail_unless(r, "hcp_init");
+  if (!r)
+    return NULL;
+  list_add(&n->h, &s->nodes);
+  return &n->n;
+}
+
+hcp_link net_sim_hcp_find_link(hcp o, const char *name)
+{
+  hcp_link l = hcp_find_link(o, name, true);
+
+  if (l)
+    {
+      /* Initialize the address - in rather ugly way. We just hash
+       * ifname + xor that with our own hash. The result should be
+       * highly unique still. */
+      unsigned char h1[HCP_HASH_LEN];
+      unsigned char h[HCP_HASH_LEN];
+      int i;
+
+      hcp_hash(name, strlen(name), h1);
+      for (i = 0 ; i < HCP_HASH_LEN ; i++)
+        h[i] = h1[i] ^ o->own_node->node_identifier_hash[i];
+      memcpy(&l->address, h, sizeof(l->address));
+    }
+  return l;
+}
+
+void net_sim_set_connected(hcp_link l1, hcp_link l2, bool enabled)
+{
 }
 
 void net_sim_uninit(net_sim s)
@@ -93,9 +140,6 @@ void net_sim_uninit(net_sim s)
 
 /********************************************************* Mocked interfaces */
 
-hnetd_time_t now_time;
-hnetd_time_t next_time;
-
 bool hcp_io_init(hcp o)
 {
   return true;
@@ -117,8 +161,12 @@ int hcp_io_get_hwaddr(const char *ifname, unsigned char *buf, int buf_left)
 
 void hcp_io_schedule(hcp o, int msecs)
 {
-  if (!next_time || msecs < (next_time - now_time))
-    next_time = now_time + msecs;
+  net_node node = container_of(o, net_node_s, n);
+  net_sim s = node->s;
+  hnetd_time_t wt = msecs + s->now;
+
+  if (!node->want_timeout_at || node->want_timeout_at > wt)
+    node->want_timeout_at = wt;
 }
 
 ssize_t hcp_io_recvfrom(hcp o, void *buf, size_t len,
@@ -126,6 +174,27 @@ ssize_t hcp_io_recvfrom(hcp o, void *buf, size_t len,
                         struct in6_addr *src,
                         struct in6_addr *dst)
 {
+  struct list_head *p;
+  net_node node = container_of(o, net_node_s, n);
+  net_sim s = node->s;
+
+  list_for_each(p, &s->messages)
+    {
+      net_msg m = container_of(p, net_msg_s, h);
+      if (m->l->hcp == o && m->readable_at <= s->now)
+        {
+          int s = m->len > len ? len : m->len;
+          /* Aimed at us. Yay. */
+          strcpy(ifname, m->l->ifname);
+          *src = m->src;
+          *dst = m->dst;
+          memcpy(buf, m->buf, s);
+          list_del(p);
+          free(m->buf);
+          free(m);
+          return s;
+        }
+    }
   return -1;
 }
 
@@ -133,19 +202,61 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
                       const char *ifname,
                       const struct in6_addr *dst)
 {
+  net_node node = container_of(o, net_node_s, n);
+  net_sim s = node->s;
+  hcp_link l = hcp_find_link(o, ifname, false);
+  bool is_multicast = memcmp(dst, &o->multicast_address, sizeof(*dst)) == 0;
+  struct list_head *p;
+
+  if (!l)
+    return -1;
+
+  list_for_each(p, &s->neighs)
+    {
+      net_neigh n = container_of(p, net_neigh_s, h);
+
+      if (n->src == l
+          && (is_multicast
+              || memcmp(&n->dst->address, dst, sizeof(*dst)) == 0))
+        {
+          net_msg m = calloc(1, sizeof(*m));
+          hnetd_time_t wt = s->now + MESSAGE_PROPAGATION_DELAY;
+
+          sput_fail_unless(m, "calloc neigh");
+          m->l = n->dst;
+          m->buf = malloc(len);
+          sput_fail_unless(m->buf, "malloc buf");
+          memcpy(m->buf, buf, len);
+          m->len = len;
+          m->dst = *dst;
+          m->readable_at = wt;
+          list_add(&m->h, &s->messages);
+        }
+    }
   return -1;
 }
 
-static hnetd_time_t hnetd_time_mock(void)
+hnetd_time_t hcp_io_time(hcp o)
 {
-  return now_time;
+  net_node node = container_of(o, net_node_s, n);
+  net_sim s = node->s;
+
+  return s->now;
 }
 
 /**************************************************************** Test cases */
 
 void hcp_two(void)
 {
-  /* XXX */
+  net_sim_s s;
+  hcp n1;
+  hcp n2;
+
+  net_sim_init(&s);
+  n1 = net_sim_add_hcp(&s, "n1");
+  n2 = net_sim_add_hcp(&s, "n2");
+  
+  net_sim_uninit(&s);
 }
 
 int main(__unused int argc, __unused char **argv)

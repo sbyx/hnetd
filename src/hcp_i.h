@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Nov 27 12:02:13 2013 mstenber
- * Edit time:     77 min
+ * Last modified: Wed Nov 27 12:48:44 2013 mstenber
+ * Edit time:     81 min
  *
  */
 
@@ -45,6 +45,9 @@
 typedef uint32_t iid_t;
 
 struct hcp_struct {
+  /* cached current time; if zero, should ask hcp_io for it again */
+  hnetd_time_t now;
+
   /* nodes (as contained within the protocol, that is, raw TLV data blobs). */
   struct vlist_tree nodes;
 
@@ -104,6 +107,9 @@ struct hcp_link_struct {
 
   /* Name of the (local) link. */
   char ifname[IFNAMSIZ];
+
+  /* Address of the interface (_only_ used in testing) */
+  struct in6_addr address;
 
   /* Interface identifier - these should be unique over lifetime of
    * hcp process. */
@@ -176,7 +182,7 @@ struct hcp_tlv_struct {
 
 /* Internal or testing-only way to initialize hp struct _without_
  * dynamic allocations (and some of the steps omitted too). */
-bool hcp_init(hcp o, unsigned char *node_identifier, int len);
+bool hcp_init(hcp o, const void *node_identifier, int len);
 void hcp_uninit(hcp o);
 
 hcp_link hcp_find_link(hcp o, const char *ifname, bool create);
@@ -184,7 +190,7 @@ hcp_link hcp_find_link(hcp o, const char *ifname, bool create);
 void hcp_hash(const void *buf, int len, unsigned char *dest);
 
 /* Flush own TLV changes to own node. */
-void hcp_self_flush(hcp_node n, hnetd_time_t now);
+void hcp_self_flush(hcp_node n);
 
 /* Calculate hash of the network state based on current nodes. */
 void hcp_calculate_network_hash(hcp o, unsigned char *dest);
@@ -199,6 +205,7 @@ void hcp_io_uninit(hcp o);
 bool hcp_io_set_ifname_enabled(hcp o, const char *ifname, bool enabled);
 int hcp_io_get_hwaddr(const char *ifname, unsigned char *buf, int buf_left);
 void hcp_io_schedule(hcp o, int msecs);
+hnetd_time_t hcp_io_time(hcp o);
 
 ssize_t hcp_io_recvfrom(hcp o, void *buf, size_t len,
                         char *ifname,
@@ -209,6 +216,14 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
                       const struct in6_addr *dst);
 
 /* Multicast rejoin utility. (in hcp.c) */
-bool hcp_link_join(hcp_link l, hnetd_time_t now);
+bool hcp_link_join(hcp_link l);
+
+/* Inlined utilities. */
+static inline hnetd_time_t hcp_time(hcp o)
+{
+  if (!o->now)
+    return hcp_io_time(o);
+  return o->now;
+}
 
 #endif /* HCP_I_H */

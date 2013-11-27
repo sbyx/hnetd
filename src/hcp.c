@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Wed Nov 27 11:55:18 2013 mstenber
- * Edit time:     242 min
+ * Last modified: Wed Nov 27 12:48:57 2013 mstenber
+ * Edit time:     245 min
  *
  */
 
@@ -96,14 +96,14 @@ compare_links(const void *a, const void *b, void *ptr __unused)
   return strcmp(t1->ifname, t2->ifname);
 }
 
-bool hcp_link_join(hcp_link l, hnetd_time_t now)
+bool hcp_link_join(hcp_link l)
 {
   hcp o = l->hcp;
 
   if (!hcp_io_set_ifname_enabled(o, l->ifname, true))
     {
       l->join_pending = true;
-      o->join_failed_time = now ? now : hnetd_time();
+      o->join_failed_time = hcp_time(l->hcp);
       return false;
     }
   l->join_pending = false;
@@ -127,7 +127,7 @@ static void update_link(struct vlist_tree *t,
     }
   else
     {
-      hcp_link_join(t_new, 0);
+      hcp_link_join(t_new);
     }
   o->links_dirty = true;
   _schedule(o);
@@ -171,7 +171,7 @@ void hcp_hash(const void *buf, int len, unsigned char *dest)
 }
 
 
-bool hcp_init(hcp o, unsigned char *node_identifier, int len)
+bool hcp_init(hcp o, const void *node_identifier, int len)
 {
   hcp_node n;
 
@@ -327,7 +327,7 @@ hcp_node hcp_node_get_next(hcp_node n)
   return avl_next_element(n, in_nodes.avl);
 }
 
-void hcp_self_flush(hcp_node n, hnetd_time_t now)
+void hcp_self_flush(hcp_node n)
 {
   hcp o = n->hcp;
   hcp_tlv t;
@@ -410,7 +410,7 @@ void hcp_self_flush(hcp_node n, hnetd_time_t now)
     }
   n->tlv_container = tb.head;
   n->update_number++;
-  n->origination_time = now ? now : hnetd_time();
+  n->origination_time = hcp_time(o);
   o->network_hash_dirty = true;
   hcp_calculate_node_data_hash(n, n->node_data_hash);
   _schedule(o);
@@ -419,7 +419,7 @@ void hcp_self_flush(hcp_node n, hnetd_time_t now)
 void hcp_node_get_tlvs(hcp_node n, struct tlv_attr **r)
 {
   if (hcp_node_is_self(n))
-    hcp_self_flush(n, 0);
+    hcp_self_flush(n);
   *r = n->tlv_container;
 }
 
