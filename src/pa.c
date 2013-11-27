@@ -12,8 +12,7 @@
 
 #define PA_RIDCMP(r1, r2) memcmp(r1, r2, PA_RIDLEN)
 
-#define PA_CONF_DFLT_COMMIT_LAP_DELAY  20
-#define PA_CONF_DFLT_DELETE_LAP_DELAY  240
+#define PA_CONF_DFLT_COMMIT_LAP_DELAY  10
 
 #define PA_CONF_DFLT_USE_ULA             1
 #define PA_CONF_DFLT_NO_ULA_IF_V6        1
@@ -166,8 +165,6 @@ void pa_conf_default(struct pa_conf *conf)
 {
 	conf->commit_lap_delay =
 			PA_CONF_DFLT_COMMIT_LAP_DELAY;
-	conf->delete_lap_delay =
-			PA_CONF_DFLT_DELETE_LAP_DELAY;
 
 	conf->use_ula = PA_CONF_DFLT_USE_ULA;
 	conf->no_ula_if_glb_ipv6 = PA_CONF_DFLT_NO_ULA_IF_V6;
