@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Wed Nov 27 12:48:57 2013 mstenber
- * Edit time:     245 min
+ * Last modified: Wed Nov 27 14:36:55 2013 mstenber
+ * Edit time:     250 min
  *
  */
 
@@ -171,19 +171,36 @@ void hcp_hash(const void *buf, int len, unsigned char *dest)
 }
 
 
+hcp_node hcp_find_node_by_hash(hcp o, unsigned char *h, bool create)
+{
+  hcp_node ch = container_of(h, hcp_node_s, node_identifier_hash);
+  hcp_node n = vlist_find(&o->nodes, ch, ch, in_nodes);
+
+  if (n)
+    return n;
+  if (!create)
+    return NULL;
+  n = calloc(1, sizeof(*n));
+  memcpy(n->node_identifier_hash, h, sizeof(n->node_identifier_hash));
+  if (!n)
+    return false;
+  n->hcp = o;
+  vlist_add(&o->nodes, &n->in_nodes, n);
+  return n;
+}
+
 bool hcp_init(hcp o, const void *node_identifier, int len)
 {
   hcp_node n;
+  unsigned char buf[HCP_HASH_LEN];
 
   vlist_init(&o->nodes, compare_nodes, update_node);
   vlist_init(&o->tlvs, compare_tlvs, update_tlv);
   vlist_init(&o->links, compare_links, update_link);
-  n = calloc(1, sizeof(*n));
+  hcp_hash(node_identifier, len, buf);
+  n = hcp_find_node_by_hash(o, buf, true);
   if (!n)
     return false;
-  hcp_hash(node_identifier, len, n->node_identifier_hash);
-  n->hcp = o;
-  vlist_add(&o->nodes, &n->in_nodes, n);
   o->own_node = n;
   return true;
 }

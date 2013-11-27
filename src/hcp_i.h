@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Nov 27 12:58:06 2013 mstenber
- * Edit time:     81 min
+ * Last modified: Wed Nov 27 14:43:14 2013 mstenber
+ * Edit time:     82 min
  *
  */
 
@@ -186,6 +186,8 @@ bool hcp_init(hcp o, const void *node_identifier, int len);
 void hcp_uninit(hcp o);
 
 hcp_link hcp_find_link(hcp o, const char *ifname, bool create);
+hcp_node hcp_find_node_by_hash(hcp o, unsigned char *h, bool create);
+
 
 void hcp_hash(const void *buf, int len, unsigned char *dest);
 
@@ -196,6 +198,9 @@ void hcp_self_flush(hcp_node n);
 void hcp_calculate_network_hash(hcp o, unsigned char *dest);
 void hcp_calculate_node_data_hash(hcp_node n, unsigned char *dest);
 
+bool hcp_link_send_network_state(hcp_link l,
+                                 struct in6_addr *dst,
+                                 size_t maximum_size);
 
 
 /* Low-level interface module stuff. */

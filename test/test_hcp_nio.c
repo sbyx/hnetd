@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Wed Nov 27 12:50:06 2013 mstenber
- * Edit time:     141 min
+ * Last modified: Wed Nov 27 13:43:10 2013 mstenber
+ * Edit time:     142 min
  *
  */
 
@@ -136,7 +136,7 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
     }
 }
 
-hnetd_time_t hcp_io_time(hcp o)
+hnetd_time_t hcp_io_time(hcp o __unused)
 {
   if (check_timing)
     return smock_pull_int("time");
