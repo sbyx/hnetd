@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Nov 27 10:47:17 2013 mstenber
+ * Last modified: Wed Nov 27 12:02:13 2013 mstenber
  * Edit time:     77 min
  *
  */
@@ -177,6 +177,7 @@ struct hcp_tlv_struct {
 /* Internal or testing-only way to initialize hp struct _without_
  * dynamic allocations (and some of the steps omitted too). */
 bool hcp_init(hcp o, unsigned char *node_identifier, int len);
+void hcp_uninit(hcp o);
 
 hcp_link hcp_find_link(hcp o, const char *ifname, bool create);
 

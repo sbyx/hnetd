@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Tue Nov 26 15:45:40 2013 mstenber
- * Edit time:     135 min
+ * Last modified: Wed Nov 27 11:33:13 2013 mstenber
+ * Edit time:     139 min
  *
  */
 
@@ -403,6 +403,7 @@ static void hcp_ok(void)
    * structures (socket kill should take care of it in any case). */
   destroy_hcp(o);
 }
+
 int main(__unused int argc, __unused char **argv)
 {
   sput_start_testing();

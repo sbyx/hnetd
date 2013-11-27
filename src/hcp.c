@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Wed Nov 27 10:49:23 2013 mstenber
- * Edit time:     239 min
+ * Last modified: Wed Nov 27 11:55:18 2013 mstenber
+ * Edit time:     242 min
  *
  */
 
@@ -217,14 +217,19 @@ hcp hcp_create(void)
   return NULL;
 }
 
-void hcp_destroy(hcp o)
+void hcp_uninit(hcp o)
 {
-  if (!o) return;
-  hcp_io_uninit(o);
   o->io_init_done = false; /* cannot schedule anything anymore after this. */
   vlist_flush_all(&o->nodes);
   vlist_flush_all(&o->tlvs);
   vlist_flush_all(&o->links);
+}
+
+void hcp_destroy(hcp o)
+{
+  if (!o) return;
+  hcp_io_uninit(o);
+  hcp_uninit(o);
   free(o);
 }
 
