@@ -12,8 +12,7 @@
 
 #define PA_RIDCMP(r1, r2) memcmp(r1, r2, PA_RIDLEN)
 
-#define PA_CONF_DFLT_COMMIT_LAP_DELAY  20
-#define PA_CONF_DFLT_DELETE_LAP_DELAY  240
+#define PA_CONF_DFLT_COMMIT_LAP_DELAY  10
 
 #define PA_CONF_DFLT_USE_ULA             1
 #define PA_CONF_DFLT_NO_ULA_IF_V6        1
@@ -56,6 +55,8 @@ struct pa_lap {
 	struct pa_dp *dp;		  /* The used delegated prefix*/
 	struct list_head dp_le;   /* Linked in dp list */
 
+	struct pa *pa;            /* Need that because of timeout callback */
+
 	bool flooded;             /* Whether it was given to hcp */
 	bool assigned;            /* Whether it was assigned */
 
@@ -66,6 +67,17 @@ struct pa_lap {
 	/* Whether we are the one that is currently owner
 	 * of that assignment (only one per link) */
 	bool own;
+
+	/* Delayed actions */
+	hnetd_time_t delayed_delete_time; /* When to delete or zero */
+
+	bool delayed_flooding; /* Value to set to flood */
+	hnetd_time_t delayed_flooding_time; /* When or zero */
+
+	bool delayed_assign; /* Value to set to assign*/
+	hnetd_time_t delayed_assign_time; /* When or zero */
+
+	struct uloop_timeout delayed_timeout;
 };
 
 /* Externally assigned prefix */
@@ -153,8 +165,6 @@ void pa_conf_default(struct pa_conf *conf)
 {
 	conf->commit_lap_delay =
 			PA_CONF_DFLT_COMMIT_LAP_DELAY;
-	conf->delete_lap_delay =
-			PA_CONF_DFLT_DELETE_LAP_DELAY;
 
 	conf->use_ula = PA_CONF_DFLT_USE_ULA;
 	conf->no_ula_if_glb_ipv6 = PA_CONF_DFLT_NO_ULA_IF_V6;
@@ -410,6 +420,8 @@ static void pa_eap_update(struct pa *pa, struct pa_eap *eap,
 /********************* lap management *************************/
 /**************************************************************/
 
+static void pa_lap_delayed_cb(struct uloop_timeout *t);
+
 static struct pa_lap *pa_lap_create(struct pa *pa, const struct prefix *prefix,
 		struct pa_iface *iface, struct pa_dp* dp)
 {
@@ -424,6 +436,7 @@ static struct pa_lap *pa_lap_create(struct pa *pa, const struct prefix *prefix,
 	lap->own = false;
 	memcpy(&lap->prefix, prefix, sizeof(struct prefix));
 
+	lap->pa = pa;
 	if(avl_insert(&pa->laps, &lap->avl_node)) {
 		free(lap);
 		return NULL;
@@ -437,7 +450,44 @@ static struct pa_lap *pa_lap_create(struct pa *pa, const struct prefix *prefix,
 	lap->iface = iface;
 	list_add(&lap->if_le, &iface->laps);
 
+	/* Setting delayed operations */
+	lap->delayed_timeout = (struct uloop_timeout) {.cb = pa_lap_delayed_cb};
+	lap->delayed_assign_time = 0;
+	lap->delayed_flooding_time = 0;
+	lap->delayed_delete_time = 0;
+
 	return lap;
+}
+
+static void pa_lap_delayed_update_timeout(struct pa *pa, struct pa_lap *lap,
+		hnetd_time_t now)
+{
+	hnetd_time_t timeout = 0;
+	if(lap->delayed_assign_time &&
+			(!timeout || lap->delayed_assign_time < timeout))
+		timeout = lap->delayed_assign_time;
+
+	if(lap->delayed_delete_time &&
+				(!timeout || lap->delayed_delete_time < timeout))
+			timeout = lap->delayed_delete_time;
+
+	if(lap->delayed_delete_time &&
+					(!timeout || lap->delayed_delete_time < timeout))
+				timeout = lap->delayed_delete_time;
+
+	if(!timeout) {
+		uloop_timeout_cancel(&lap->delayed_timeout);
+	} else {
+		if(timeout < now)
+			timeout = now;
+
+		timeout = timeout - now;
+
+		if(timeout > INTMAX_MAX)
+			timeout = INTMAX_MAX;
+
+		uloop_timeout_set(&lap->delayed_timeout, (int) timeout);
+	}
 }
 
 static void pa_lap_setflood(struct pa *pa, struct pa_lap *lap,
@@ -447,6 +497,12 @@ static void pa_lap_setflood(struct pa *pa, struct pa_lap *lap,
 		return;
 
 	lap->flooded = enable;
+
+	if(lap->delayed_flooding_time) {
+		/* Cancel the existing delayed set. */
+		lap->delayed_flooding_time = 0;
+		pa_lap_delayed_update_timeout(pa, lap, hnetd_time());
+	}
 
 	// Tell hcp about that
 	if(pa->fcb.updated_lap)
@@ -471,6 +527,12 @@ static void pa_lap_setassign(struct pa *pa, struct pa_lap *lap,
 		return;
 
 	lap->assigned = enable;
+
+	if(lap->delayed_assign_time) {
+		/* Cancel the existing delayed set. */
+		lap->delayed_assign_time = 0;
+		pa_lap_delayed_update_timeout(pa, lap, hnetd_time());
+	}
 
 	pa_lap_telliface(pa, lap);
 }
@@ -497,11 +559,78 @@ static void pa_lap_destroy(struct pa *pa, struct pa_lap *lap)
 	/* Unflood if flooded */
 	pa_lap_setflood(pa, lap, false);
 
+	/* Cancel timer if set */
+	uloop_timeout_cancel(&lap->delayed_timeout);
+
 	list_remove(&lap->dp_le);
 	list_remove(&lap->if_le);
 
 	avl_delete(&pa->laps, &lap->avl_node);
 	free(lap);
+}
+
+/* Default behaviour is *always override.
+ * When a direct call is made to set one of the
+ * values (flood or assign), the timer for that value
+ * is cancelled. */
+#define PA_DF_NOT_IF_LATER_AND_EQUAL 0x01 /* Do not update if same value and when is later */
+
+
+static void pa_lap_setdelete_delayed(struct pa *pa, struct pa_lap *lap,
+		hnetd_time_t when, hnetd_time_t now, int flags)
+{
+	if((flags & PA_DF_NOT_IF_LATER_AND_EQUAL) &&
+			lap->delayed_delete_time &&
+			when > lap->delayed_delete_time)
+		return;
+
+	lap->delayed_delete_time = when;
+	pa_lap_delayed_update_timeout(pa, lap, now);
+}
+
+static void pa_lap_setassign_delayed(struct pa *pa, struct pa_lap *lap,
+		hnetd_time_t when, hnetd_time_t now, bool assign, int flags)
+{
+	if((flags & PA_DF_NOT_IF_LATER_AND_EQUAL) &&
+			(assign == lap->delayed_assign) &&
+				when > lap->delayed_assign_time)
+			return;
+
+	lap->delayed_assign_time = when;
+	lap->delayed_assign = assign;
+	pa_lap_delayed_update_timeout(pa, lap, now);
+}
+
+static void pa_lap_setflooding_delayed(struct pa *pa, struct pa_lap *lap,
+		hnetd_time_t when, hnetd_time_t now, bool flood, int flags)
+{
+	if((flags & PA_DF_NOT_IF_LATER_AND_EQUAL) &&
+				(flood == lap->delayed_flooding) &&
+					when > lap->delayed_flooding_time)
+				return;
+
+	lap->delayed_flooding_time = when;
+	lap->delayed_flooding = flood;
+	pa_lap_delayed_update_timeout(pa, lap, now);
+}
+
+static void pa_lap_delayed_cb(struct uloop_timeout *t)
+{
+	struct pa_lap *lap = container_of(t, struct pa_lap, delayed_timeout);
+	struct pa *pa =  lap->pa;
+
+	hnetd_time_t now = hnetd_time();
+
+	if(lap->delayed_assign_time && lap->delayed_assign_time <= now)
+		pa_lap_setassign(pa, lap, lap->delayed_assign);
+
+	if(lap->delayed_flooding_time && lap->delayed_flooding_time <= now)
+			pa_lap_setflood(pa, lap, lap->delayed_flooding);
+
+	if(lap->delayed_delete_time && lap->delayed_delete_time <= now)
+			pa_lap_destroy(pa, lap);
+
+	pa_lap_delayed_update_timeout();
 }
 
 /**************************************************************/
@@ -702,7 +831,7 @@ static int pa_get_newprefix_random(struct pa *pa, struct pa_iface *iface,
 /* Executes pa algorithm */
 void pa_do(struct pa *pa)
 {
-	hnetd_time_t now;
+	hnetd_time_t now, timeout;
 	struct pa_iface *iface, *s_iface;
 	struct pa_dp *dp, *s_dp;
 	struct pa_lap *lap, *s_lap;
@@ -730,6 +859,8 @@ void pa_do(struct pa *pa)
 	list_for_each_entry_safe(dp, s_dp, &pa->dps, le) {
 		pa_dp_cleanmaybe(pa, dp, now);
 	}
+
+	/* TODO: Decide whether to generate ULAs or IPv4 */
 
 	/* Mark all laps as invalid */
 	avl_for_each_element(&pa->laps, lap, avl_node) {
@@ -873,10 +1004,16 @@ void pa_do(struct pa *pa)
 				lap->invalid = false;
 				pa_lap_setdp(pa, lap, dp);
 
-				if(lap->own) /* TODO: Delayed flooding */
+				if(lap->own) /*No delayed flooding */
 					pa_lap_setflood(pa, lap, true);
 
-				pa_lap_setassign(pa, lap, true);
+				if(pa->conf.commit_lap_delay) {
+					timeout = now + pa->conf.commit_lap_delay;
+					pa_lap_setassign_delayed(pa, lap, timeout, now, true,
+							PA_DF_NOT_IF_LATER_AND_EQUAL);
+				} else {
+					pa_lap_setassign(pa, lap, true);
+				}
 			}
 
 		}
