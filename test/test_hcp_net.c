@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Nov 27 20:54:05 2013 mstenber
- * Edit time:     113 min
+ * Last modified: Wed Nov 27 21:34:34 2013 mstenber
+ * Edit time:     116 min
  *
  */
 
@@ -411,6 +411,9 @@ void hcp_two(void)
   sput_fail_unless(memcmp(&n1->network_hash, &n2->network_hash, HCP_HASH_LEN),
                    "hashes different");
 
+  /* Should also have done the necessary purging of nodes due to lack
+   * of reachability.. */
+  sput_fail_unless(n2->nodes.avl.count == 1, "n2 nodes == 1");
 
   net_sim_uninit(&s);
 }
