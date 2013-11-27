@@ -136,6 +136,7 @@ static void platform_commit(struct uloop_timeout *t)
 	}
 	blobmsg_close_array(&b, k);
 
+	hnetd_time_t now = hnetd_time();
 	k = blobmsg_open_array(&b, "ip6addr");
 	vlist_for_each_element(&c->assigned, a, node) {
 		if (IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix))
@@ -151,10 +152,21 @@ static void platform_commit(struct uloop_timeout *t)
 		snprintf(buf, 4, "%u", a->prefix.plen);
 		blobmsg_add_string_buffer(&b);
 
-		if (a->valid_until) {
-			blobmsg_add_u32(&b, "preferred", a->preferred_until);
-			blobmsg_add_u32(&b, "valid", a->valid_until);
-		}
+		hnetd_time_t preferred = a->preferred_until - now;
+		hnetd_time_t valid = a->valid_until - now;
+
+		if (preferred < 0)
+			preferred = 0;
+		else if (preferred > UINT32_MAX)
+			preferred = UINT32_MAX;
+
+		if (valid < 0)
+			continue;
+		else if (valid > UINT32_MAX)
+			valid = UINT32_MAX;
+
+		blobmsg_add_u32(&b, "preferred", preferred);
+		blobmsg_add_u32(&b, "valid", valid);
 
 		blobmsg_close_table(&b, l);
 	}
@@ -168,7 +180,7 @@ static void platform_commit(struct uloop_timeout *t)
 		blobmsg_close_array(&b, l);
 	}
 
-	const char *service = (c->linkowner) ? "server" : "disabled";
+	const char *service = (c->internal && c->linkowner) ? "server" : "disabled";
 	blobmsg_add_string(&b, "ra", service);
 	blobmsg_add_string(&b, "dhcpv4", service);
 	blobmsg_add_string(&b, "dhcpv6", service);
