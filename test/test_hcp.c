@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Thu Nov 28 11:14:30 2013 mstenber
- * Edit time:     44 min
+ * Last modified: Thu Nov 28 11:58:02 2013 mstenber
+ * Edit time:     45 min
  *
  */
 
@@ -140,14 +140,14 @@ void hcp_int(void)
   hcp_init(o, hwbuf, strlen((char *)hwbuf));
 
   /* Make sure we can add nodes if we feel like it. */
-  unsigned char buf[HCP_HASH_LEN];
-  hcp_hash("bar", 3, buf);
-  n = hcp_find_node_by_hash(o, buf, false);
+  hcp_hash_s h;
+  hcp_calculate_hash("bar", 3, &h);
+  n = hcp_find_node_by_hash(o, &h, false);
   sput_fail_unless(!n, "hcp_find_node_by_hash w/ create=false => none");
-  n = hcp_find_node_by_hash(o, buf, true);
+  n = hcp_find_node_by_hash(o, &h, true);
   sput_fail_unless(n, "hcp_find_node_by_hash w/ create=false => !none");
-  sput_fail_unless(hcp_find_node_by_hash(o, buf, false), "should exist");
-  sput_fail_unless(hcp_find_node_by_hash(o, buf, false) == n, "still same");
+  sput_fail_unless(hcp_find_node_by_hash(o, &h, false), "should exist");
+  sput_fail_unless(hcp_find_node_by_hash(o, &h, false) == n, "still same");
 
   /* Similarly, links */
   const char *ifn = "foo";

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu Nov 28 11:19:24 2013 mstenber
- * Edit time:     141 min
+ * Last modified: Thu Nov 28 11:55:04 2013 mstenber
+ * Edit time:     143 min
  *
  */
 
@@ -31,7 +31,7 @@ static bool _push_node_state_tlv(struct tlv_buf *tb, hcp_node n)
   if (!a)
     return false;
   s = tlv_data(a);
-  memcpy(s->node_identifier_hash, n->node_identifier_hash, HCP_HASH_LEN);
+  s->node_identifier_hash = n->node_identifier_hash;
   s->update_number = cpu_to_be32(n->update_number);
   s->seconds_since_origination = cpu_to_be32(now - n->origination_time);
   return true;
@@ -47,7 +47,7 @@ static bool _push_node_data_tlv(struct tlv_buf *tb, hcp_node n)
   if (!a)
     return false;
   h = tlv_data(a);
-  memcpy(h->node_identifier_hash, n->node_identifier_hash, HCP_HASH_LEN);
+  h->node_identifier_hash = n->node_identifier_hash;
   h->update_number = cpu_to_be32(n->update_number);
   memcpy((unsigned char *)h + sizeof(hcp_t_node_data_header_s),
          n->tlv_container, s);
@@ -62,7 +62,7 @@ static bool _push_network_state_tlv(struct tlv_buf *tb, hcp o)
   if (!a)
     return false;
   c = tlv_data(a);
-  memcpy(c, o->network_hash, HCP_HASH_LEN);
+  memcpy(c, &o->network_hash, HCP_HASH_LEN);
   return true;
 }
 
@@ -74,8 +74,7 @@ static bool _push_link_id_tlv(struct tlv_buf *tb, hcp_link l)
   if (!a)
     return false;
   lid = tlv_data(a);
-  memcpy(lid->node_identifier_hash, l->hcp->own_node->node_identifier_hash,
-         HCP_HASH_LEN);
+  lid->node_identifier_hash = l->hcp->own_node->node_identifier_hash;
   lid->link_id = cpu_to_be32(l->iid);
   return true;
 }
@@ -189,7 +188,7 @@ bool hcp_link_send_req_node_data(hcp_link l,
   if (_push_link_id_tlv(&tb, l)
       && (a = tlv_new(&tb, HCP_T_REQ_NODE_DATA, HCP_HASH_LEN)))
     {
-      memcpy(tlv_data(a), ns->node_identifier_hash, HCP_HASH_LEN);
+      memcpy(tlv_data(a), &ns->node_identifier_hash, HCP_HASH_LEN);
       int rc = hcp_io_sendto(l->hcp,
                              tlv_data(tb.head),
                              tlv_len(tb.head),
@@ -212,7 +211,7 @@ _heard(hcp_link l, hcp_t_link_id lid, struct in6_addr *src)
   hcp o = l->hcp;
 
   memset(&nc, 0, sizeof(nc));
-  memcpy(nc.node_identifier_hash, lid->node_identifier_hash, HCP_HASH_LEN);
+  nc.node_identifier_hash = lid->node_identifier_hash;
   nc.iid = cpu_to_be32(lid->link_id);
   n = vlist_find(&l->neighbors, &nc, &nc, in_neighbors);
   if (!n)
@@ -319,7 +318,7 @@ handle_message(hcp_link l,
   /* We don't care, if network hash state IS same. */
   if (nethash)
     {
-      if (memcmp(nethash, o->network_hash, HCP_HASH_LEN) == 0)
+      if (memcmp(nethash, &o->network_hash, HCP_HASH_LEN) == 0)
         return;
       /* Short form (raw network hash) */
       if (!nodestates)
@@ -337,7 +336,7 @@ handle_message(hcp_link l,
             if (tlv_len(a) != sizeof(hcp_t_node_state_s))
               return;
             ns = tlv_data(a);
-            n = hcp_find_node_by_hash(o, ns->node_identifier_hash, false);
+            n = hcp_find_node_by_hash(o, &ns->node_identifier_hash, false);
             if (!n || n->update_number < cpu_to_be32(ns->update_number))
               hcp_link_send_req_node_data(l, src, ns);
           }
@@ -372,13 +371,13 @@ handle_message(hcp_link l,
   if (!ns || !nd)
     return;
   /* If they're for different nodes, not interested. */
-  if (memcmp(ns->node_identifier_hash, nd->node_identifier_hash, HCP_HASH_LEN))
+  if (memcmp(&ns->node_identifier_hash, &nd->node_identifier_hash, HCP_HASH_LEN))
     return;
   /* Is it actually valid? Should be same update #. */
   if (ns->update_number != nd->update_number)
     return;
   /* Let's see if it's more recent. */
-  n = hcp_find_node_by_hash(o, ns->node_identifier_hash, true);
+  n = hcp_find_node_by_hash(o, &ns->node_identifier_hash, true);
   if (!n)
     return;
   new_update_number = cpu_to_be32(ns->update_number);

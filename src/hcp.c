@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Wed Nov 27 21:32:11 2013 mstenber
- * Edit time:     281 min
+ * Last modified: Thu Nov 28 11:52:45 2013 mstenber
+ * Edit time:     289 min
  *
  */
 
@@ -21,7 +21,7 @@ compare_nodes(const void *a, const void *b, void *ptr __unused)
 {
   hcp_node n1 = (hcp_node) a, n2 = (hcp_node) b;
 
-  return memcmp(n1->node_identifier_hash, n2->node_identifier_hash,
+  return memcmp(&n1->node_identifier_hash, &n2->node_identifier_hash,
                 HCP_HASH_LEN);
 }
 
@@ -52,6 +52,7 @@ bool hcp_node_set_tlvs(hcp_node n, struct tlv_attr *a)
   n->tlv_container = a;
   n->hcp->network_hash_dirty = true;
   n->node_data_hash_dirty = true;
+  n->hcp->neighbors_dirty = true;
   return true;
 }
 
@@ -64,12 +65,15 @@ static void update_node(__unused struct vlist_tree *t,
   hcp_node n_old = container_of(node_old, hcp_node_s, in_nodes);
   __unused hcp_node n_new = container_of(node_new, hcp_node_s, in_nodes);
 
+  if (n_old == n_new)
+    return;
   if (n_old)
     {
       hcp_node_set_tlvs(n_old, NULL);
       free(n_old);
     }
   o->network_hash_dirty = true;
+  o->neighbors_dirty = true;
   hcp_schedule(o);
 }
 
@@ -157,7 +161,7 @@ compare_neighbors(const void *a, const void *b, void *ptr __unused)
   hcp_neighbor n1 = (hcp_neighbor) a, n2 = (hcp_neighbor) b;
   int r;
 
-  r = memcmp(n1->node_identifier_hash, n2->node_identifier_hash,
+  r = memcmp(&n1->node_identifier_hash, &n2->node_identifier_hash,
              HCP_HASH_LEN);
   if (r)
     return r;
@@ -179,7 +183,7 @@ static void update_neighbor(struct vlist_tree *t,
   hcp_schedule(o);
 }
 
-void hcp_hash(const void *buf, int len, unsigned char *dest)
+void hcp_calculate_hash(const void *buf, int len, hcp_hash dest)
 {
   md5_ctx_t ctx;
 
@@ -189,7 +193,7 @@ void hcp_hash(const void *buf, int len, unsigned char *dest)
 }
 
 
-hcp_node hcp_find_node_by_hash(hcp o, unsigned char *h, bool create)
+hcp_node hcp_find_node_by_hash(hcp o, hcp_hash h, bool create)
 {
   hcp_node ch = container_of(h, hcp_node_s, node_identifier_hash);
   hcp_node n = vlist_find(&o->nodes, ch, ch, in_nodes);
@@ -199,7 +203,7 @@ hcp_node hcp_find_node_by_hash(hcp o, unsigned char *h, bool create)
   if (!create)
     return NULL;
   n = calloc(1, sizeof(*n));
-  memcpy(n->node_identifier_hash, h, sizeof(n->node_identifier_hash));
+  n->node_identifier_hash = *h;
   if (!n)
     return false;
   n->hcp = o;
@@ -210,15 +214,17 @@ hcp_node hcp_find_node_by_hash(hcp o, unsigned char *h, bool create)
 bool hcp_init(hcp o, const void *node_identifier, int len)
 {
   hcp_node n;
-  unsigned char buf[HCP_HASH_LEN];
+  hcp_hash_s h;
 
+  memset(o, 0, sizeof(*o));
   vlist_init(&o->nodes, compare_nodes, update_node);
+  o->nodes.keep_old = true;
   vlist_init(&o->tlvs, compare_tlvs, update_tlv);
   vlist_init(&o->links, compare_links, update_link);
-  hcp_hash(node_identifier, len, buf);
+  hcp_calculate_hash(node_identifier, len, &h);
   if (!inet_pton(AF_INET6, HCP_MCAST_GROUP, &o->multicast_address))
     return false;
-  n = hcp_find_node_by_hash(o, buf, true);
+  n = hcp_find_node_by_hash(o, &h, true);
   if (!n)
     return false;
   o->own_node = n;
@@ -393,8 +399,7 @@ void hcp_self_flush(hcp_node n)
                        sizeof(hcp_t_node_data_neighbor_s));
               hcp_t_node_data_neighbor d = tlv_data(nt);
 
-              memcpy(d->neighbor_node_identifier_hash,
-                     ne->node_identifier_hash, HCP_HASH_LEN);
+              d->neighbor_node_identifier_hash = ne->node_identifier_hash;
               d->neighbor_link_id = cpu_to_be32(ne->iid);
               d->link_id = cpu_to_be32(l->iid);
 
@@ -442,7 +447,7 @@ void hcp_node_get_tlvs(hcp_node n, struct tlv_attr **r)
   *r = n->tlv_container;
 }
 
-void hcp_calculate_network_hash(hcp o, unsigned char *dest)
+void hcp_calculate_network_hash(hcp o, hcp_hash dest)
 {
   hcp_node n;
   md5_ctx_t ctx;
@@ -452,15 +457,15 @@ void hcp_calculate_network_hash(hcp o, unsigned char *dest)
     {
       if (n->node_data_hash_dirty)
         {
-          hcp_calculate_node_data_hash(n, n->node_data_hash);
+          hcp_calculate_node_data_hash(n, &n->node_data_hash);
           n->node_data_hash_dirty = false;
         }
-      md5_hash(n->node_data_hash, HCP_HASH_LEN, &ctx);
+      md5_hash(&n->node_data_hash, HCP_HASH_LEN, &ctx);
     }
   md5_end(dest, &ctx);
 }
 
-void hcp_calculate_node_data_hash(hcp_node n, unsigned char *dest)
+void hcp_calculate_node_data_hash(hcp_node n, hcp_hash dest)
 {
   md5_ctx_t ctx;
   struct tlv_attr h;
@@ -469,7 +474,7 @@ void hcp_calculate_node_data_hash(hcp_node n, unsigned char *dest)
   tlv_init(&h, HCP_T_NODE_DATA, 4 + HCP_HASH_LEN + l);
   md5_begin(&ctx);
   md5_hash(&h, sizeof(h), &ctx);
-  md5_hash(n->node_identifier_hash, HCP_HASH_LEN, &ctx);
+  md5_hash(&n->node_identifier_hash, HCP_HASH_LEN, &ctx);
   md5_hash(&n->update_number, 4, &ctx);
   if (l)
     md5_hash(tlv_data(n->tlv_container), l, &ctx);

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Thu Nov 28 10:12:14 2013 mstenber
- * Edit time:     119 min
+ * Last modified: Thu Nov 28 11:57:17 2013 mstenber
+ * Edit time:     121 min
  *
  */
 
@@ -104,19 +104,18 @@ hcp_link net_sim_hcp_find_link(hcp o, const char *name)
       /* Initialize the address - in rather ugly way. We just hash
        * ifname + xor that with our own hash. The result should be
        * highly unique still. */
-      unsigned char h1[HCP_HASH_LEN];
-      unsigned char h[HCP_HASH_LEN];
+      hcp_hash_s h1, h;
       int i;
 
-      hcp_hash(name, strlen(name), h1);
+      hcp_calculate_hash(name, strlen(name), &h1);
       for (i = 0 ; i < HCP_HASH_LEN ; i++)
-        h[i] = h1[i] ^ o->own_node->node_identifier_hash[i];
-      h[0] = 0xFE;
-      h[1] = 0x80;
+        h.buf[i] = h1.buf[i] ^ o->own_node->node_identifier_hash.buf[i];
+      h.buf[0] = 0xFE;
+      h.buf[1] = 0x80;
       /* Let's pretend it's /64; clear out 2-7 */
       for (i = 2 ; i < 8 ; i++)
-        h[i] = 0;
-      memcpy(&l->address, h, sizeof(l->address));
+        h.buf[i] = 0;
+      memcpy(&l->address, &h, sizeof(l->address));
       sput_fail_unless(sizeof(l->address) == HCP_HASH_LEN,
                        "weird address size");
     }

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Nov 28 11:18:45 2013 mstenber
- * Edit time:     98 min
+ * Last modified: Thu Nov 28 11:51:40 2013 mstenber
+ * Edit time:     102 min
  *
  */
 
@@ -78,7 +78,7 @@ struct hcp_struct {
   hcp_node own_node;
 
   /* Whole network hash we consider current (based on content of 'nodes'). */
-  unsigned char network_hash[HCP_HASH_LEN];
+  hcp_hash_s network_hash;
 
   /* First free local interface identifier (we allocate them in
    * monotonically increasing fashion just to keep things simple). */
@@ -134,7 +134,7 @@ typedef struct hcp_neighbor_struct hcp_neighbor_s, *hcp_neighbor;
 struct hcp_neighbor_struct {
   struct vlist_node in_neighbors;
 
-  unsigned char node_identifier_hash[HCP_HASH_LEN];
+  hcp_hash_s node_identifier_hash;
   iid_t iid;
 
   /* Link-level address */
@@ -160,11 +160,11 @@ struct hcp_node_struct {
   hcp hcp;
 
   /* These map 1:1 to node data TLV's start */
-  unsigned char node_identifier_hash[HCP_HASH_LEN];
+  hcp_hash_s node_identifier_hash;
   uint32_t update_number;
 
   /* Node state stuff */
-  unsigned char node_data_hash[HCP_HASH_LEN];
+  hcp_hash_s node_data_hash;
   bool node_data_hash_dirty; /* Something related to hash changed */
   hnetd_time_t origination_time; /* in monotonic time */
 
@@ -195,20 +195,20 @@ bool hcp_init(hcp o, const void *node_identifier, int len);
 void hcp_uninit(hcp o);
 
 hcp_link hcp_find_link(hcp o, const char *ifname, bool create);
-hcp_node hcp_find_node_by_hash(hcp o, unsigned char *h, bool create);
+hcp_node hcp_find_node_by_hash(hcp o, const hcp_hash h, bool create);
 
 /* Private utility - shouldn't be used by clients. */
 bool hcp_node_set_tlvs(hcp_node n, struct tlv_attr *a);
 
-void hcp_hash(const void *buf, int len, unsigned char *dest);
 void hcp_schedule(hcp o);
 
 /* Flush own TLV changes to own node. */
 void hcp_self_flush(hcp_node n);
 
-/* Calculate hash of the network state based on current nodes. */
-void hcp_calculate_network_hash(hcp o, unsigned char *dest);
-void hcp_calculate_node_data_hash(hcp_node n, unsigned char *dest);
+/* Various hash calculation utilities. */
+void hcp_calculate_hash(const void *buf, int len, hcp_hash dest);
+void hcp_calculate_network_hash(hcp o, hcp_hash dest);
+void hcp_calculate_node_data_hash(hcp_node n, hcp_hash dest);
 
 /* Utility functions to send frames. */
 bool hcp_link_send_network_state(hcp_link l,

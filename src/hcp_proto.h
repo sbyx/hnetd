@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Thu Nov 28 10:15:53 2013 mstenber
- * Edit time:     5 min
+ * Last modified: Thu Nov 28 11:50:56 2013 mstenber
+ * Edit time:     6 min
  *
  */
 
@@ -59,29 +59,33 @@ enum {
 
 #define TLV_SIZE sizeof(struct tlv_attr)
 
+typedef struct __packed {
+  unsigned char buf[HCP_HASH_LEN];
+} hcp_hash_s, *hcp_hash;
+
 /* HCP_T_LINK_ID */
 typedef struct __packed {
-  unsigned char node_identifier_hash[HCP_HASH_LEN];
+  hcp_hash_s node_identifier_hash;
   uint32_t link_id;
 } hcp_t_link_id_s, *hcp_t_link_id;
 
 /* HCP_T_NODE_STATE */
 typedef struct __packed {
-  unsigned char node_identifier_hash[HCP_HASH_LEN];
+  hcp_hash_s node_identifier_hash;
   uint32_t update_number;
   uint32_t seconds_since_origination;
-  unsigned char node_data_hash[HCP_HASH_LEN];
+  hcp_hash_s node_data_hash;
 } hcp_t_node_state_s, *hcp_t_node_state;
 
 /* HCP_T_NODE_DATA */
 typedef struct __packed {
-  unsigned char node_identifier_hash[HCP_HASH_LEN];
+  hcp_hash_s node_identifier_hash;
   uint32_t update_number;
 } hcp_t_node_data_header_s, *hcp_t_node_data_header;
 
 /* HCP_T_NODE_DATA_NEIGHBOR */
 typedef struct __packed {
-  unsigned char neighbor_node_identifier_hash[HCP_HASH_LEN];
+  hcp_hash_s neighbor_node_identifier_hash;
   uint32_t neighbor_link_id;
   uint32_t link_id;
 } hcp_t_node_data_neighbor_s, *hcp_t_node_data_neighbor;

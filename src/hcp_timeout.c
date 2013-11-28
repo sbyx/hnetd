@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu Nov 28 11:30:33 2013 mstenber
- * Edit time:     77 min
+ * Last modified: Thu Nov 28 11:56:02 2013 mstenber
+ * Edit time:     85 min
  *
  */
 
@@ -73,7 +73,8 @@ static void hcp_prune_rec(hcp_node n)
       if (tlv_len(a) == sizeof(hcp_t_node_data_neighbor_s))
         {
           ne = tlv_data(a);
-          n2 = hcp_find_node_by_hash(n->hcp, ne->neighbor_node_identifier_hash, false);
+          n2 = hcp_find_node_by_hash(n->hcp, &ne->neighbor_node_identifier_hash,
+                                     false);
           hcp_prune_rec(n2);
         }
 }
@@ -107,7 +108,7 @@ static void hcp_prune(hcp o)
               if (ne->last_response)
                 {
                   /* Ok, this is clearly reachable neighbor. */
-                  hcp_node n = hcp_find_node_by_hash(o, ne->node_identifier_hash, false);
+                  hcp_node n = hcp_find_node_by_hash(o, &ne->node_identifier_hash, false);
                   hcp_prune_rec(n);
                 }
             }
@@ -138,12 +139,11 @@ void hcp_run(hcp o)
 
   if (o->neighbors_dirty)
     {
-      hnetd_time_t delta =
-        HCP_MINIMUM_PRUNE_INTERVAL - (now - o->last_prune);
+      hnetd_time_t prune_at = HCP_MINIMUM_PRUNE_INTERVAL + o->last_prune;
 
-      if (delta > 0)
+      if (prune_at > now)
         {
-          next = TMIN(next, delta);
+          next = TMIN(next, prune_at);
         }
       else
         {
@@ -163,13 +163,11 @@ void hcp_run(hcp o)
    * the outcome ISN'T). */
   if (o->network_hash_dirty)
     {
-      unsigned char buf[HCP_HASH_LEN];
-
       /* Store original network hash for future study. */
-      memcpy(buf, o->network_hash, HCP_HASH_LEN);
+      hcp_hash_s old_hash = o->network_hash;
 
-      hcp_calculate_network_hash(o, o->network_hash);
-      if (memcmp(buf, o->network_hash, HCP_HASH_LEN))
+      hcp_calculate_network_hash(o, &o->network_hash);
+      if (memcmp(&old_hash, &o->network_hash, HCP_HASH_LEN))
         {
           /* Shocker. The network hash changed -> reset _every_
            * trickle (that is actually running; join_pending ones
