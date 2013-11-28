@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Thu Nov 28 11:58:02 2013 mstenber
- * Edit time:     45 min
+ * Last modified: Thu Nov 28 12:00:38 2013 mstenber
+ * Edit time:     46 min
  *
  */
 
@@ -136,7 +136,6 @@ void hcp_int(void)
   hcp_node n;
   hcp_link l;
 
-  memset(&s, 0, sizeof(s));
   hcp_init(o, hwbuf, strlen((char *)hwbuf));
 
   /* Make sure we can add nodes if we feel like it. */
