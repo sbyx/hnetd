@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <time.h>
+#include <syslog.h>
 #include <sys/types.h>
 #include <libubox/utils.h>
 
@@ -19,6 +20,39 @@ static inline hnetd_time_t hnetd_time(void) {
 	return ((hnetd_time_t)ts.tv_sec * HNETD_TIME_PER_SECOND) +
 			((hnetd_time_t)ts.tv_nsec / (1000000000 / HNETD_TIME_PER_SECOND));
 }
+
+
+// Logging macros
+#if L_LEVEL >= 3
+	#define L_ERR(format, ...)	syslog(LOG_ERR, format, __VA_ARGS__)
+#else
+	#define L_ERR
+#endif
+
+#if L_LEVEL >= 4
+	#define L_WARN(format, ...)	syslog(LOG_WARNING, format, __VA_ARGS__)
+#else
+	#define L_WARN
+#endif
+
+#if L_LEVEL >= 5
+	#define L_NOTICE(format, ...)	syslog(LOG_NOTICE, format, __VA_ARGS__)
+#else
+	#define L_NOTICE
+#endif
+
+#if L_LEVEL >= 6
+	#define L_INFO(format, ...)	syslog(LOG_INFO, format, __VA_ARGS__)
+#else
+	#define L_INFO
+#endif
+
+#if L_LEVEL >= 7
+	#define L_DEBUG(format, ...)	syslog(LOG_DEBUG, format, __VA_ARGS__)
+#else
+	#define L_DEBUG
+#endif
+
 
 
 // Some C99 compatibility
