@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu Nov 28 11:56:02 2013 mstenber
- * Edit time:     85 min
+ * Last modified: Thu Nov 28 12:09:40 2013 mstenber
+ * Edit time:     90 min
  *
  */
 
@@ -60,8 +60,9 @@ static void hcp_prune_rec(hcp_node n)
 
   hcp_node_get_tlvs(n, &tlvs);
 
-  /* No TLVs? No point recursing (and this node will disappear). */
-  if (!tlvs)
+  /* No TLVs? No point recursing, unless the node is us (we have to
+   * visit it always in any case). */
+  if (!tlvs && n != n->hcp->own_node)
     return;
 
   /* Refresh the entry - we clearly did reach it. */
@@ -94,9 +95,10 @@ static void hcp_prune(hcp o)
     {
       hcp_link l;
       hcp_neighbor ne;
+      hcp_node n = o->own_node;
 
       /* We're always reachable. */
-      vlist_add(&o->nodes, &o->own_node->in_nodes, o->own_node);
+      vlist_add(&o->nodes, &n->in_nodes, n);
 
       /* Only neighbors we believe to be reachable are the ones we can
        * find in our own link -> neighbor relations, with non-zero
@@ -108,7 +110,8 @@ static void hcp_prune(hcp o)
               if (ne->last_response)
                 {
                   /* Ok, this is clearly reachable neighbor. */
-                  hcp_node n = hcp_find_node_by_hash(o, &ne->node_identifier_hash, false);
+                  n = hcp_find_node_by_hash(o,
+                                            &ne->node_identifier_hash, false);
                   hcp_prune_rec(n);
                 }
             }
@@ -137,7 +140,7 @@ void hcp_run(hcp o)
    * replicating code. */
   hcp_self_flush(o->own_node);
 
-  if (o->neighbors_dirty)
+  if (o->neighbors_dirty && !o->disable_prune)
     {
       hnetd_time_t prune_at = HCP_MINIMUM_PRUNE_INTERVAL + o->last_prune;
 

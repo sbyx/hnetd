@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Nov 28 11:51:40 2013 mstenber
- * Edit time:     102 min
+ * Last modified: Thu Nov 28 12:10:45 2013 mstenber
+ * Edit time:     103 min
  *
  */
 
@@ -41,6 +41,9 @@ typedef uint32_t iid_t;
 struct hcp_struct {
   /* Can we assume bidirectional reachability? */
   bool assume_bidirectional_reachability;
+
+  /* Disable pruning (should be used probably only in unit tests) */
+  bool disable_prune;
 
   /* cached current time; if zero, should ask hcp_io for it again */
   hnetd_time_t now;

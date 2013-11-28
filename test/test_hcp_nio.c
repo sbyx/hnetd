@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Thu Nov 28 11:41:07 2013 mstenber
- * Edit time:     144 min
+ * Last modified: Thu Nov 28 12:10:53 2013 mstenber
+ * Edit time:     145 min
  *
  */
 
@@ -42,7 +42,7 @@ bool hcp_io_init(hcp o)
 {
   o->udp_socket = 1;
   sput_fail_unless(o, "hcp");
-  o->assume_bidirectional_reachability = true;
+  o->disable_prune = true;
   return smock_pull_bool("init_result");
 }
 void hcp_io_uninit(hcp o)
