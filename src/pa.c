@@ -5,6 +5,28 @@
 #include <libubox/list.h>
 #include <libubox/avl.h>
 
+/* Different algorithm flavours */
+#define PA_ALGO_ARKKO	0
+#define PA_ALGO_PFISTER	1
+
+#define PA_ALGO PA_ALGO_PFISTER
+
+#ifndef PA_ALGO
+#error "No prefix assignment algorithm defined"
+#elif (PA_ALGO > 1 && PA_ALGO < 0)
+#error "Invalid prefix assignment algorithm"
+#endif
+
+/* Logs */
+#define PA_L_LEVEL 7
+#define PA_L_PX "PA: "
+#ifdef PA_L_LEVEL
+#ifdef L_LEVEL
+	#undef L_LEVEL
+#endif
+	#define L_LEVEL PA_L_LEVEL
+#endif
+
 /* #of ms waiting when we want immediate pa run */
 #define PA_SCHEDULE_RUNNEXT_MS  10
 
@@ -12,7 +34,7 @@
 
 #define PA_RIDCMP(r1, r2) memcmp(r1, r2, PA_RIDLEN)
 
-#define PA_CONF_DFLT_COMMIT_LAP_DELAY  10
+#define PA_CONF_DFLT_COMMIT_LAP_DELAY  20
 
 #define PA_CONF_DFLT_USE_ULA             1
 #define PA_CONF_DFLT_NO_ULA_IF_V6        1
@@ -21,6 +43,7 @@
 #define PA_CONF_DFLT_USE_RDM_ULA         1
 
 #define PA_CONF_DFLT_IFACE_REGISTER      iface_register_user
+#define PA_CONF_DFLT_IFACE_UNREGISTER      iface_unregister_user
 
 /* 10/8 */
 static struct prefix PA_CONF_DFLT_V4 = {
@@ -38,7 +61,7 @@ struct pa_iface {
 
 	bool internal;         /* Whether the iface is internal */
 	bool do_dhcp;          /* Whether we should do dhcp on that
-	                          iface. */
+	                          iface. Which means we are owner of that link. */
 
 	struct list_head laps; /* laps on that iface */
 	struct list_head eaps; /* eaps on that iface */
@@ -120,9 +143,9 @@ struct pa {
 	struct iface_user ifu; /* Subscriber to ifaces callbacks */
 
 	bool started;   /* Whether the pa is started */
-	bool scheduled; /* Wether a pa run is scheduled */
-	struct uloop_timeout pa_timeout; /* PA algo scheduler */
-
+	bool scheduled; /* Schedule time */
+	struct uloop_timeout pa_short_timeout; /* PA short delay schedule */
+	struct uloop_timeout pa_dp_timeout; /* For dp events */
 /* Ways of optimizing the pa algorithm */
 #define PA_TODO_ALL    0xffff
 	uint32_t todo_flags;
@@ -156,7 +179,7 @@ static void pa_schedule(struct pa *pa, uint32_t todo_flags)
 {
 	pa->todo_flags |= todo_flags;
 	if(pa->started && pa->todo_flags && !pa->scheduled) {
-		uloop_timeout_set(&pa->pa_timeout, PA_SCHEDULE_RUNNEXT_MS);
+		uloop_timeout_set(&pa->pa_short_timeout, PA_SCHEDULE_RUNNEXT_MS);
 		pa->scheduled = true;
 	}
 }
@@ -175,6 +198,7 @@ void pa_conf_default(struct pa_conf *conf)
 	memcpy(&conf->v4_prefix, &PA_CONF_DFLT_V4, sizeof(conf->v4_prefix));
 
 	conf->iface_registration = PA_CONF_DFLT_IFACE_REGISTER;
+	conf->iface_unregistration = PA_CONF_DFLT_IFACE_UNREGISTER;
 }
 
 void pa_flood_subscribe(pa_t pat, const struct pa_flood_callbacks *cb)
@@ -190,10 +214,33 @@ void pa_iface_subscribe(pa_t pat, const struct pa_iface_callbacks *cb)
 }
 
 /**************************************************************/
-/******************* Lookup functions *************************/
+/********************** Utilities *****************************/
 /**************************************************************/
 
+/* Safe timeout set.
+ * Use when = 0 to cancel. */
+static void pa_uloop_set(struct uloop_timeout *timeout,
+		hnetd_time_t now, hnetd_time_t when)
+{
+	hnetd_time_t delay;
+	if(!when) {
+		uloop_timeout_cancel(timeout);
+		return;
+	}
 
+	if(when < now)
+		delay = 0;
+
+	delay = when - now;
+
+	if(delay)
+		++delay; /* To avoid free loops caused by imprecision */
+
+	if(delay > INTMAX_MAX)
+		delay = INTMAX_MAX;
+
+	uloop_timeout_set(timeout, (int) delay);
+}
 
 /**************************************************************/
 /******************* iface managment **************************/
@@ -282,6 +329,10 @@ static void pa_iface_set_dodhcp(struct pa *pa,
 		return;
 
 	iface->do_dhcp = do_dhcp;
+
+	/* When iface ownership changes,
+	 * it can be important to run PA again. */
+	pa_schedule(pa, PA_TODO_ALL);
 
 	/* Tell iface about link ownership */
 	if(pa->ifcb.update_link_owner)
@@ -456,6 +507,8 @@ static struct pa_lap *pa_lap_create(struct pa *pa, const struct prefix *prefix,
 	lap->delayed_flooding_time = 0;
 	lap->delayed_delete_time = 0;
 
+	pa_schedule(pa, PA_TODO_ALL);
+
 	return lap;
 }
 
@@ -471,43 +524,19 @@ static void pa_lap_delayed_update_timeout(struct pa *pa, struct pa_lap *lap,
 				(!timeout || lap->delayed_delete_time < timeout))
 			timeout = lap->delayed_delete_time;
 
-	if(lap->delayed_delete_time &&
-					(!timeout || lap->delayed_delete_time < timeout))
-				timeout = lap->delayed_delete_time;
+	if(lap->delayed_flooding_time &&
+					(!timeout || lap->delayed_flooding_time < timeout))
+				timeout = lap->delayed_flooding_time;
 
-	if(!timeout) {
-		uloop_timeout_cancel(&lap->delayed_timeout);
-	} else {
-		if(timeout < now)
-			timeout = now;
-
-		timeout = timeout - now;
-
-		if(timeout > INTMAX_MAX)
-			timeout = INTMAX_MAX;
-
-		uloop_timeout_set(&lap->delayed_timeout, (int) timeout);
-	}
+	pa_uloop_set(&lap->delayed_timeout, now, timeout);
 }
 
-static void pa_lap_setflood(struct pa *pa, struct pa_lap *lap,
-		bool enable)
+static void pa_lap_tellhcp(struct pa *pa, struct pa_lap *lap)
 {
-	if(enable == lap->flooded)
-		return;
-
-	lap->flooded = enable;
-
-	if(lap->delayed_flooding_time) {
-		/* Cancel the existing delayed set. */
-		lap->delayed_flooding_time = 0;
-		pa_lap_delayed_update_timeout(pa, lap, hnetd_time());
-	}
-
 	// Tell hcp about that
-	if(pa->fcb.updated_lap)
-		pa->fcb.updated_lap(&lap->prefix, lap->iface->ifname,
-				!lap->flooded, pa->fcb.priv);
+		if(pa->fcb.updated_lap)
+			pa->fcb.updated_lap(&lap->prefix, lap->iface->ifname,
+					!lap->flooded, pa->fcb.priv);
 }
 
 static void pa_lap_telliface(struct pa *pa, struct pa_lap *lap)
@@ -520,19 +549,35 @@ static void pa_lap_telliface(struct pa *pa, struct pa_lap *lap)
 								pa->fcb.priv);
 }
 
+static void pa_lap_setflood(struct pa *pa, struct pa_lap *lap,
+		bool enable)
+{
+	if(lap->delayed_flooding_time) {
+		lap->delayed_flooding_time = 0;
+		pa_lap_delayed_update_timeout(pa, lap, hnetd_time());
+	}
+
+	if(enable == lap->flooded)
+		return;
+
+	lap->flooded = enable;
+
+	pa_lap_tellhcp(pa, lap);
+}
+
 static void pa_lap_setassign(struct pa *pa, struct pa_lap *lap,
 		bool enable)
 {
-	if(enable == lap->assigned)
-		return;
-
-	lap->assigned = enable;
-
 	if(lap->delayed_assign_time) {
 		/* Cancel the existing delayed set. */
 		lap->delayed_assign_time = 0;
 		pa_lap_delayed_update_timeout(pa, lap, hnetd_time());
 	}
+
+	if(enable == lap->assigned)
+		return;
+
+	lap->assigned = enable;
 
 	pa_lap_telliface(pa, lap);
 }
@@ -567,12 +612,14 @@ static void pa_lap_destroy(struct pa *pa, struct pa_lap *lap)
 
 	avl_delete(&pa->laps, &lap->avl_node);
 	free(lap);
+
+	pa_schedule(pa, PA_TODO_ALL);
 }
 
-/* Default behaviour is *always override.
- * When a direct call is made to set one of the
- * values (flood or assign), the timer for that value
- * is cancelled. */
+/* This set of functions allows delayed actions.
+ * Without flags, previous delayed action are always overridden.
+ * It is also overriden when a direct assignment is made.
+ * Flags allow to not do something in some particular cases. */
 #define PA_DF_NOT_IF_LATER_AND_EQUAL 0x01 /* Do not update if same value and when is later */
 
 
@@ -591,8 +638,14 @@ static void pa_lap_setdelete_delayed(struct pa *pa, struct pa_lap *lap,
 static void pa_lap_setassign_delayed(struct pa *pa, struct pa_lap *lap,
 		hnetd_time_t when, hnetd_time_t now, bool assign, int flags)
 {
+	/* No change needed
+	 * delayed value is always different than current value */
+	if(assign == lap->assigned && !lap->delayed_assign_time)
+		return;
+
 	if((flags & PA_DF_NOT_IF_LATER_AND_EQUAL) &&
 			(assign == lap->delayed_assign) &&
+			lap->delayed_assign_time &&
 				when > lap->delayed_assign_time)
 			return;
 
@@ -604,8 +657,14 @@ static void pa_lap_setassign_delayed(struct pa *pa, struct pa_lap *lap,
 static void pa_lap_setflooding_delayed(struct pa *pa, struct pa_lap *lap,
 		hnetd_time_t when, hnetd_time_t now, bool flood, int flags)
 {
+	/* No change needed
+	 * delayed value is always different than current value */
+	if(flood == lap->flooded && !lap->delayed_flooding_time)
+		return;
+
 	if((flags & PA_DF_NOT_IF_LATER_AND_EQUAL) &&
 				(flood == lap->delayed_flooding) &&
+				lap->delayed_flooding_time &&
 					when > lap->delayed_flooding_time)
 				return;
 
@@ -758,7 +817,7 @@ static void pa_dp_update(struct pa *pa, struct pa_dp *dp,
 static void pa_dp_cleanmaybe(struct pa *pa, struct pa_dp *dp,
 		hnetd_time_t now)
 {
-	if(now > dp->valid_until)
+	if(now >= dp->valid_until)
 		pa_dp_destroy(pa, dp);
 }
 
@@ -815,7 +874,7 @@ static int pa_get_newprefix_random(struct pa *pa, struct pa_iface *iface,
 	} else if (dp->prefix.plen == 104) { //IPv4
 		plen = 120;
 	} else {
-		// TODO: raise warning
+		L_WARN(PA_L_PX"Delegated prefix length (%d) not supported", dp->prefix.plen);
 		return -1;
 	}
 
@@ -838,7 +897,7 @@ void pa_do(struct pa *pa)
 	struct pa_eap *eap, *s_eap;
 	struct prefix *prefix;
 	struct prefix new_prefix;
-	bool found, own, link_highest_rid;
+	bool found, own, link_highest_rid, wait_for_neigh;
 
 	now = hnetd_time();
 
@@ -859,6 +918,16 @@ void pa_do(struct pa *pa)
 	list_for_each_entry_safe(dp, s_dp, &pa->dps, le) {
 		pa_dp_cleanmaybe(pa, dp, now);
 	}
+
+	/* Get next dp timeout */
+	timeout = 0;
+	list_for_each_entry(dp, &pa->dps, le) {
+		if(!timeout || timeout < dp->valid_until) {
+			timeout = dp->valid_until;
+		}
+	}
+	pa_uloop_set(&pa->pa_dp_timeout, now, timeout);
+
 
 	/* TODO: Decide whether to generate ULAs or IPv4 */
 
@@ -950,6 +1019,7 @@ void pa_do(struct pa *pa)
 
 				prefix = NULL;
 
+				wait_for_neigh = false;
 				if(eap) {
 					/* Let's try to use that guy's eap.
 					 * But only if its valid against all other links
@@ -957,11 +1027,25 @@ void pa_do(struct pa *pa)
 					if(!pa_prefix_checkcollision(pa, &eap->prefix, iface, &eap->rid,
 							true, true)) {
 						prefix = &eap->prefix;
+#if PA_ALGO == PA_ALGO_ARKKO
 						own = false; /* The other guy owns it */
+#elif PA_ALGO == PA_ALGO_PFISTER
+						/* If we do dhcp and we have highest link id
+						 * we claim ownership of all prefixes so that
+						 * it converges to a single owner per link. */
+						own = (link_highest_rid && iface->do_dhcp);
+#endif
+					} else {
+						/* We detected a collision, but just silently ignore it */
+#if PA_ALGO == PA_ALGO_ARKKO
+						wait_for_neigh = true;
+#elif PA_ALGO == PA_ALGO_PFISTER
+						wait_for_neigh = !iface->do_dhcp;
+#endif
 					}
 				}
 
-				if(!prefix && link_highest_rid) {
+				if(!prefix && link_highest_rid && !wait_for_neigh) {
 					/* Let's choose a prefix for our own assignment */
 					if(!pa_get_newprefix_storage(pa, iface, dp, &new_prefix)) {
 						/* Got one from stable storage */
@@ -978,14 +1062,12 @@ void pa_do(struct pa *pa)
 					/* We can make an assignment. */
 					lap = pa_lap_create(pa, prefix, iface, dp);
 					lap->own = own; /* Important to know whether we are owner. */
-				} else if (link_highest_rid) {
-					/* TODO: Raise warning */
+				} else if (link_highest_rid && !wait_for_neigh) {
+					L_WARN(PA_L_PX"Could not generate a prefix for interface %s", iface->ifname);
 				}
 			}
 
-			/* Check iface assignment and flooding
-			 * TODO: Maybe do delayed flooding and assignment.
-			 * For simplicity. We do everything immediately. */
+			/* Check iface assignment and flooding */
 			if(lap) {
 
 				/* If nobody else is advertising the prefix
@@ -1014,6 +1096,7 @@ void pa_do(struct pa *pa)
 				} else {
 					pa_lap_setassign(pa, lap, true);
 				}
+
 			}
 
 		}
@@ -1044,7 +1127,7 @@ void pa_do(struct pa *pa)
 
 static void pa_do_uloop(struct uloop_timeout *t)
 {
-	struct pa *pa = container_of(t, struct pa, pa_timeout);
+	struct pa *pa = container_of(t, struct pa, pa_short_timeout);
 	pa_do(pa);
 }
 
@@ -1163,7 +1246,8 @@ pa_t pa_create(const struct pa_conf *conf)
 	pa->ifu.cb_intiface = pa_ifu_intiface;
 	pa->ifu.cb_prefix = pa_ifu_pd;
 
-	pa->pa_timeout = (struct uloop_timeout) { .cb = pa_do_uloop };
+	pa->pa_short_timeout = (struct uloop_timeout) { .cb = pa_do_uloop };
+	pa->pa_dp_timeout = (struct uloop_timeout) { .cb = pa_do_uloop };
 	pa->rid = (struct pa_rid) {};
 
 	if(pa_set_conf(pa, conf)) {
@@ -1188,7 +1272,8 @@ int pa_start(pa_t pat)
 	pa_schedule(pa, 0);
 
 	/* Register to iface */
-	iface_register_user(&pa->ifu);
+	if(pa->conf.iface_registration)
+		pa->conf.iface_registration(&pa->ifu);
 
 	return 0;
 }
@@ -1202,7 +1287,8 @@ void pa_destroy(pa_t pat)
 	struct pa_eap *seap;
 
 	/* Unregister everywhere */
-	iface_unregister_user(&pa->ifu);
+	if(pa->conf.iface_unregistration)
+			pa->conf.iface_unregistration(&pa->ifu);
 
 	/* Destroy all interfaces
 	 * This will also delete all laps */
