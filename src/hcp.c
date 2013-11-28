@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Nov 28 11:52:45 2013 mstenber
- * Edit time:     289 min
+ * Last modified: Thu Nov 28 12:03:24 2013 mstenber
+ * Edit time:     292 min
  *
  */
 
@@ -236,7 +236,8 @@ hcp hcp_create(void)
   hcp o;
   unsigned char buf[ETHER_ADDR_LEN * 2], *c = buf;
 
-  o = calloc(1, sizeof(*o));
+  /* hcp_init does memset 0 -> we can just malloc here. */
+  o = malloc(sizeof(*o));
   if (!o)
     return NULL;
   /* XXX - this is very arbitrary and Linux-only. However, hopefully
@@ -322,7 +323,7 @@ bool hcp_remove_tlv(hcp o, struct tlv_attr *tlv)
 
 hcp_link hcp_find_link(hcp o, const char *ifname, bool create)
 {
-  hcp_link cl = container_of(ifname, hcp_link_s, ifname);
+  hcp_link cl = container_of(ifname, hcp_link_s, ifname[0]);
   hcp_link l = vlist_find(&o->links, cl, cl, in_links);
 
   if (create && !l)
