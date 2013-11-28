@@ -233,18 +233,18 @@ tlv_put_u64(struct tlv_buf *buf, int id, uint64_t val)
 #define tlv_put_int32	tlv_put_u32
 #define tlv_put_int64	tlv_put_u64
 
-#define __tlv_for_each_attr(pos, attr, rem) \
-	for (pos = (void *) attr; \
-	     rem > 0 && (tlv_pad_len(pos) <= rem) && \
-	     (tlv_pad_len(pos) >= sizeof(struct tlv_attr)); \
-	     rem -= tlv_pad_len(pos), pos = tlv_next(pos))
+/* Paranoid version: Have faith only in the caller providing correct
+ * buf + len; pos is used to maintain the current position within buf. */
+#define tlv_for_each_in_buf(pos, buf, len)                              \
+  for (pos = (void *)buf;                                               \
+       ((void *)pos + sizeof(struct tlv_attr)) <= ((void *)buf + len)   \
+         && tlv_pad_len(pos) >= sizeof(struct tlv_attr)                 \
+         && (void *)tlv_next(pos) <= ((void *)buf + len);               \
+       pos = tlv_next(pos))
 
-
-#define tlv_for_each_attr(pos, attr, rem) \
-	for (rem = attr ? tlv_len(attr) : 0, \
-	     pos = attr ? tlv_data(attr) : 0; \
-	     rem > 0 && (tlv_pad_len(pos) <= rem) && \
-	     (tlv_pad_len(pos) >= sizeof(struct tlv_attr)); \
-	     rem -= tlv_pad_len(pos), pos = tlv_next(pos))
+/* Assume the root 'attr' is trusted. The rest may contain garbage and
+ * we should still not blow up. */
+#define tlv_for_each_attr(pos, attr, x) \
+  x = attr ? tlv_len(attr) : 0; tlv_for_each_in_buf(pos, tlv_data(attr), x)
 
 #endif
