@@ -50,8 +50,9 @@ int prefix_random(const struct prefix *p, struct prefix *dst,
 
 
 /* Sets prefix's last bits to zero.
- * May be useful when printing the prefix. */
-void prefix_canonical(struct prefix *p);
+ * May be useful when printing the prefix.
+ * src and dst can be the same pointer. */
+void prefix_canonical(struct prefix *dst, const struct prefix *src);
 
 
 

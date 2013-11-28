@@ -110,11 +110,13 @@ int prefix_cmp(const struct prefix *p1,
 	return bmemcmp(&p1->prefix, &p2->prefix, p1->plen);
 }
 
-void prefix_canonical(struct prefix *p)
+void prefix_canonical(struct prefix *dst, const struct prefix *src)
 {
 	struct in6_addr zero;
 	memset(&zero, 0, sizeof(zero));
-	bmemcpy(&p->prefix, &zero, p->plen, 128 - p->plen);
+	if(src != dst)
+		memcpy(dst, src, sizeof(*src));
+	bmemcpy(&dst->prefix, &zero, dst->plen, 128 - dst->plen);
 }
 
 int prefix_random(const struct prefix *p, struct prefix *dst,
