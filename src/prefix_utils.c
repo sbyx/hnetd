@@ -1,7 +1,10 @@
 #include "prefix_utils.h"
 
+#include <arpa/inet.h>
 #include <string.h>
 #include <stdlib.h>
+
+static __prefix_tostring_buffers[PREFIX_PRINT_BUFF_N][PREFIX_MAXBUFFLEN];
 
 struct prefix ipv4_in_ipv6_prefix = {
 		.prefix = { .s6_addr = {
@@ -42,7 +45,6 @@ static int bmemcmp(const void *m1, const void *m2, size_t bitlen)
 /* Copy nbits from *one* byte to another.
  * @frombit First bit to be copied (0 <= x < 8)
  * @nbits Number of bits to be copied (0 < x <= 8 - frombit)
- * TODO: Test that function
  */
 static void bbytecpy (uint8_t *dst, const uint8_t *src,
 		uint8_t frombit, uint8_t nbits) {
@@ -58,7 +60,6 @@ static void bbytecpy (uint8_t *dst, const uint8_t *src,
 
 /* Copy bits of memory from src to dst.
  * Starts from bit #frombit and copies nbits.
- * TODO: Test that function
  */
 static void bmemcpy(void *dst, const void *src,
 		size_t frombit, size_t nbits)
@@ -136,4 +137,49 @@ int prefix_random(const struct prefix *p, struct prefix *dst,
 	return 0;
 }
 
+char *prefix_ntop(char *dst, size_t dst_len,
+		const struct prefix *prefix,
+		bool canonical)
+{
+	struct prefix can;
+	struct prefix *to_use;
+
+	if(canonical) {
+		prefix_canonical(&can, prefix);
+		to_use = &can;
+	} else {
+		to_use = prefix;
+	}
+
+	char *res = inet_ntop(AF_INET6, &to_use->prefix, dst, dst_len);
+
+	if(!res)
+		return NULL;
+
+	size_t written = strlen(dst);
+	size_t remaining = dst_len - written;
+	char *end = dst + written;
+
+	if(snprintf(end, remaining, "/%u", to_use->plen) >= remaining)
+		return NULL;
+
+	return dst;
+}
+
+const char *prefix_ntop_s(char *dst, size_t dst_len,
+		const struct prefix *prefix,
+		bool canonical)
+{
+	return prefix_ntop(dst, dst_len, prefix, canonical)?dst:PREFIX_STRERR;
+}
+
+const char *prefix_ntop_n(const struct prefix *prefix, size_t n,
+		bool canonical)
+{
+	if(n >= PREFIX_PRINT_BUFF_N)
+		return PREFIX_STRERR;
+
+	return prefix_ntop(&__prefix_tostring_buffers[n],
+			PREFIX_MAXBUFFLEN, prefix, canonical);
+}
 

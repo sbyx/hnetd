@@ -55,6 +55,37 @@ int prefix_random(const struct prefix *p, struct prefix *dst,
 void prefix_canonical(struct prefix *dst, const struct prefix *src);
 
 
+/* String returned in some cases */
+#define PREFIX_STRERR "*prefix_print_error*"
+/* Maximum needed space to print a prefix */
+#define PREFIX_MAXBUFFLEN 44
+/* Number of available string buffer */
+#define PREFIX_PRINT_BUFF_N 4
 
+extern char **__prefix_tostring_buffers;
+
+/* Writes the prefix into the specified buffer of length dst_len.
+ * Returns dst upon success and NULL if buffer size is too small.
+ * Canonical means the last bits of the prefix are considered as
+ * zeros. */
+char *prefix_ntop(char *dst, size_t dst_len,
+		const struct prefix *prefix,
+		bool canonical);
+
+/* This function behaves like prefix_ntop but the string
+ * PREFIX_STRERR is returned if the buffer size it too small. */
+const char *prefix_ntop_s(char *dst, size_t dst_len,
+		const struct prefix *prefix,
+		bool canonical);
+
+/* This function behaves like prefix_ntop but uses one of the
+ * pre-allocated buffers. Returns PREFIX_STRERR if and only if
+ * n is >= PREFIX_PRINT_BUFF_N */
+const char *prefix_ntop_n(const struct prefix *prefix,
+		size_t buff_id,
+		bool canonical);
+
+#define PREFIX_TOSTRING(prefix, buff_number) \
+	prefix_ntop_n(prefix, buff_number, true);
 
 #endif
