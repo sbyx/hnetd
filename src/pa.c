@@ -1,4 +1,16 @@
+/* Loglevel redefinition */
+#define PA_L_LEVEL 7
+#define PA_L_PX "PA: "
+#ifdef PA_L_LEVEL
+#ifdef L_LEVEL
+	#undef L_LEVEL
+#endif
+	#define L_LEVEL PA_L_LEVEL
+#endif
+
 #include "pa.h"
+
+#include "hnetd.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -17,15 +29,7 @@
 #error "Invalid prefix assignment algorithm"
 #endif
 
-/* Logs */
-#define PA_L_LEVEL 7
-#define PA_L_PX "PA: "
-#ifdef PA_L_LEVEL
-#ifdef L_LEVEL
-	#undef L_LEVEL
-#endif
-	#define L_LEVEL PA_L_LEVEL
-#endif
+
 
 /* #of ms waiting when we want immediate pa run */
 #define PA_SCHEDULE_RUNNEXT_MS  10
@@ -689,7 +693,7 @@ static void pa_lap_delayed_cb(struct uloop_timeout *t)
 	if(lap->delayed_delete_time && lap->delayed_delete_time <= now)
 			pa_lap_destroy(pa, lap);
 
-	pa_lap_delayed_update_timeout();
+	pa_lap_delayed_update_timeout(pa, lap, now);
 }
 
 /**************************************************************/
@@ -880,7 +884,7 @@ static int pa_get_newprefix_random(struct pa *pa, struct pa_iface *iface,
 
 	for(i=0; i<PA_MAX_RANDOM_ROUNDS; i++) {
 		prefix_random(&dp->prefix, new_prefix, plen);
-		if(!pa_prefix_checkcollision(pa, &new_prefix, NULL, NULL, true, true))
+		if(!pa_prefix_checkcollision(pa, new_prefix, NULL, NULL, true, true))
 			return 0;
 	}
 

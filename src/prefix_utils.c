@@ -1,10 +1,11 @@
 #include "prefix_utils.h"
 
 #include <arpa/inet.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
-static __prefix_tostring_buffers[PREFIX_PRINT_BUFF_N][PREFIX_MAXBUFFLEN];
+char __prefix_tostring_buffers[PREFIX_PRINT_BUFF_N][PREFIX_MAXBUFFLEN];
 
 struct prefix ipv4_in_ipv6_prefix = {
 		.prefix = { .s6_addr = {
@@ -128,7 +129,8 @@ int prefix_random(const struct prefix *p, struct prefix *dst,
 	if(plen > 128 || plen < p->plen)
 		return -1;
 
-	for (size_t i = 0; i < sizeof(rand); ++i)
+	size_t i;
+	for (i = 0; i < sizeof(rand); ++i)
 		rand.s6_addr[i] = random();
 
 	dst->plen = plen;
@@ -142,7 +144,7 @@ char *prefix_ntop(char *dst, size_t dst_len,
 		bool canonical)
 {
 	struct prefix can;
-	struct prefix *to_use;
+	const struct prefix *to_use;
 
 	if(canonical) {
 		prefix_canonical(&can, prefix);
@@ -151,7 +153,7 @@ char *prefix_ntop(char *dst, size_t dst_len,
 		to_use = prefix;
 	}
 
-	char *res = inet_ntop(AF_INET6, &to_use->prefix, dst, dst_len);
+	const char *res = inet_ntop(AF_INET6, &to_use->prefix, dst, dst_len);
 
 	if(!res)
 		return NULL;
