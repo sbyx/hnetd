@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Nov 27 21:23:49 2013 mstenber
- * Edit time:     91 min
+ * Last modified: Thu Nov 28 11:18:45 2013 mstenber
+ * Edit time:     98 min
  *
  */
 
@@ -59,6 +59,11 @@ struct hcp_struct {
 
   /* flag which indicates that we should re-publish our node in nodes. */
   bool tlvs_dirty;
+
+  /* flag which indicates that we (or someone connected) may have
+   * changed connectivity. */
+  bool neighbors_dirty;
+  hnetd_time_t last_prune;
 
   /* flag which indicates that we should re-calculate network hash
    * based on nodes' state. */

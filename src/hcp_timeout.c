@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Nov 27 21:33:02 2013 mstenber
- * Edit time:     59 min
+ * Last modified: Thu Nov 28 11:30:33 2013 mstenber
+ * Edit time:     77 min
  *
  */
 
@@ -43,6 +43,79 @@ static void trickle_send(hcp_link l)
   l->send_time = 0;
 }
 
+static void hcp_prune_rec(hcp_node n)
+{
+  struct tlv_attr *tlvs, *a;
+  unsigned int rem;
+  hcp_t_node_data_neighbor ne;
+  hcp_node n2;
+
+  if (!n)
+    return;
+
+  /* Stop the iteration if we're already added to current
+   * generation. */
+  if (n->in_nodes.version == n->hcp->nodes.version)
+    return;
+
+  hcp_node_get_tlvs(n, &tlvs);
+
+  /* No TLVs? No point recursing (and this node will disappear). */
+  if (!tlvs)
+    return;
+
+  /* Refresh the entry - we clearly did reach it. */
+  vlist_add(&n->hcp->nodes, &n->in_nodes, n);
+
+  /* Look at it's neighbors. */
+  tlv_for_each_attr(a, tlvs, rem)
+    if (tlv_id(a) == HCP_T_NODE_DATA_NEIGHBOR)
+      if (tlv_len(a) == sizeof(hcp_t_node_data_neighbor_s))
+        {
+          ne = tlv_data(a);
+          n2 = hcp_find_node_by_hash(n->hcp, ne->neighbor_node_identifier_hash, false);
+          hcp_prune_rec(n2);
+        }
+}
+
+static void hcp_prune(hcp o)
+{
+  /* Prune the node graph. IOW, start at own node, flood fill, and zap
+   * anything that didn't seem appropriate. */
+  vlist_update(&o->nodes);
+  if (o->assume_bidirectional_reachability)
+    {
+      /* If we assume reachability is bidirectional, we can just
+       * traverse the graph. */
+      hcp_prune_rec(o->own_node);
+    }
+  else
+    {
+      hcp_link l;
+      hcp_neighbor ne;
+
+      /* We're always reachable. */
+      vlist_add(&o->nodes, &o->own_node->in_nodes, o->own_node);
+
+      /* Only neighbors we believe to be reachable are the ones we can
+       * find in our own link -> neighbor relations, with non-zero
+       * last_response. */
+      vlist_for_each_element(&o->links, l, in_links)
+        {
+          vlist_for_each_element(&l->neighbors, ne, in_neighbors)
+            {
+              if (ne->last_response)
+                {
+                  /* Ok, this is clearly reachable neighbor. */
+                  hcp_node n = hcp_find_node_by_hash(o, ne->node_identifier_hash, false);
+                  hcp_prune_rec(n);
+                }
+            }
+        }
+    }
+  vlist_flush(&o->nodes);
+}
+
 void hcp_run(hcp o)
 {
   hnetd_time_t next = 0;
@@ -50,7 +123,7 @@ void hcp_run(hcp o)
   hcp_link l;
   hcp_neighbor n, n2;
   int time_since_failed_join = now - o->join_failed_time;
-  
+
   /* Assumption: We're within RTC step here -> can use same timestamp
    * all the way. */
   o->now = now;
@@ -63,9 +136,27 @@ void hcp_run(hcp o)
    * replicating code. */
   hcp_self_flush(o->own_node);
 
+  if (o->neighbors_dirty)
+    {
+      hnetd_time_t delta =
+        HCP_MINIMUM_PRUNE_INTERVAL - (now - o->last_prune);
+
+      if (delta > 0)
+        {
+          next = TMIN(next, delta);
+        }
+      else
+        {
+          hcp_prune(o);
+          o->neighbors_dirty = false;
+          o->last_prune = now;
+        }
+    }
+
   /* Release the flag to allow more change-triggered zero timeouts to
-   * be scheduled. (We don't want to do this before hcp_node_get_tlvs
-   * for efficiency reasons.) */
+   * be scheduled. (We don't want to do this before we're done with
+   * our mutations of state that can be addressed by the ordering of
+   * events within hcp_run). */
   o->immediate_scheduled = false;
 
   /* First off: If the network hash is dirty, recalculate it (and hope
@@ -130,7 +221,8 @@ void hcp_run(hcp o)
       avl_for_each_element_safe(&l->neighbors.avl, n, in_neighbors.avl, n2)
         {
           hnetd_time_t next_time = HCP_INTERVAL_WORRIED
-            + o->assume_bidirectional_reachability ? n->last_heard
+            + o->assume_bidirectional_reachability
+            ? n->last_heard
             : n->last_response;
 
           /* Maybe we're not worried yet.. */

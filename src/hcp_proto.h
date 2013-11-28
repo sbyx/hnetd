@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Wed Nov 27 20:22:12 2013 mstenber
- * Edit time:     4 min
+ * Last modified: Thu Nov 28 10:15:53 2013 mstenber
+ * Edit time:     5 min
  *
  */
 
@@ -30,6 +30,8 @@
  */
 #define HCP_INTERVAL_RETRIES 3
 
+/* Don't do node pruning more often than this. */
+#define HCP_MINIMUM_PRUNE_INTERVAL (1*HNETD_TIME_PER_SECOND)
 
 /******************************************************************* TLV T's */
 

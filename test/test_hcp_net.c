@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Nov 27 21:34:34 2013 mstenber
- * Edit time:     116 min
+ * Last modified: Thu Nov 28 10:12:14 2013 mstenber
+ * Edit time:     119 min
  *
  */
 
@@ -129,7 +129,7 @@ void net_sim_set_connected(hcp_link l1, hcp_link l2, bool enabled)
   net_node node = container_of(o, net_node_s, n);
   net_sim s = node->s;
 
-  printf("connection %x -> %x %s\n", l1, l2, enabled ? "on" : "off");
+  /* printf("connection %x -> %x %s\n", l1, l2, enabled ? "on" : "off"); */
   if (enabled)
     {
       /* Add node */

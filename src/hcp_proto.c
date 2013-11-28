@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Nov 27 21:32:33 2013 mstenber
- * Edit time:     140 min
+ * Last modified: Thu Nov 28 11:19:24 2013 mstenber
+ * Edit time:     141 min
  *
  */
 
@@ -18,15 +18,6 @@
  * traffic from single- or multicast sources. The actual low-level IO
  * is performed in hcp_io.
  */
-
-/* TLV attribute iteration for raw buffer. */
-
-#define tlv_for_each_attr_raw(buf, len, attr, pos)      \
-for (pos = 0 ;                                          \
-     (pos + sizeof(struct tlv_attr)) <= (size_t)len     \
-       && (attr = ((struct tlv_attr *)(buf+pos)))       \
-       && (pos + tlv_pad_len(attr)) <= (size_t)len ;    \
-     pos += tlv_pad_len(attr))
 
 /***************************************************** Low-level TLV pushing */
 
@@ -250,7 +241,6 @@ handle_message(hcp_link l,
                bool multicast)
 {
   hcp o = l->hcp;
-  unsigned int pos;
   struct tlv_attr *a;
   hcp_node n;
   hcp_t_link_id lid = NULL;
@@ -265,7 +255,7 @@ handle_message(hcp_link l,
   uint32_t new_update_number;
 
   /* Validate that link id exists. */
-  tlv_for_each_attr_raw(data, len, a, pos)
+  tlv_for_each_in_buf(a, data, len)
     if (tlv_id(a) == HCP_T_LINK_ID)
       {
         /* Error to have multiple top level link id's. */
@@ -287,7 +277,7 @@ handle_message(hcp_link l,
 
   /* Estimates what's in the payload + handles the few
    * request messages we support. */
-  tlv_for_each_attr_raw(data, len, a, pos)
+  tlv_for_each_in_buf(a, data, len)
     {
       switch (tlv_id(a))
         {
@@ -341,7 +331,7 @@ handle_message(hcp_link l,
       /* Long form (has node states). */
       /* The exercise becomes just to ask for any node state that
        * differs from local and is more recent. */
-      tlv_for_each_attr_raw(data, len, a, pos)
+      tlv_for_each_in_buf(a, data, len)
         if (tlv_id(a) == HCP_T_NODE_STATE)
           {
             if (tlv_len(a) != sizeof(hcp_t_node_state_s))
@@ -359,7 +349,7 @@ handle_message(hcp_link l,
   /* Look for node state + node data. */
   ns = NULL;
   nd = NULL;
-  tlv_for_each_attr_raw(data, len, a, pos)
+  tlv_for_each_in_buf(a, data, len)
     switch(tlv_id(a))
       {
       case HCP_T_NODE_STATE:
