@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Tue Nov 26 15:45:40 2013 mstenber
- * Edit time:     135 min
+ * Last modified: Wed Nov 27 19:37:35 2013 mstenber
+ * Edit time:     143 min
  *
  */
 
@@ -18,13 +18,11 @@
  * long periods of time.. */
 
 #include "hnetd.h"
-#define hnetd_time hnetd_time_mock
 #include <stdlib.h>
 #define random random_mock
-static hnetd_time_t hnetd_time_mock(void);
 static int random_mock(void);
 #include "hcp.c"
-#include "hcp_recv.c"
+#include "hcp_proto.c"
 #include "hcp_timeout.c"
 #include "sput.h"
 #include "smock.h"
@@ -138,7 +136,7 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
     }
 }
 
-static hnetd_time_t hnetd_time_mock(void)
+hnetd_time_t hcp_io_time(hcp o __unused)
 {
   if (check_timing)
     return smock_pull_int("time");
@@ -403,6 +401,7 @@ static void hcp_ok(void)
    * structures (socket kill should take care of it in any case). */
   destroy_hcp(o);
 }
+
 int main(__unused int argc, __unused char **argv)
 {
   sput_start_testing();

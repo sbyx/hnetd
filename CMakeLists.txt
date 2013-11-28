@@ -7,7 +7,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -std=c99")
 add_definitions(-D_GNU_SOURCE -Wall -Wextra)
 
 # TODO: split platform logic
-set(HCP src/hcp.c src/hcp_io.c src/hcp_recv.c src/hcp_timeout.c)
+set(HCP src/hcp.c src/hcp_io.c src/hcp_proto.c src/hcp_timeout.c)
 add_executable(hnetd ${HCP} src/hnetd.c src/iface.c src/ipc.c src/platform-openwrt.c src/tlv.c src/prefix_utils.c)
 target_link_libraries(hnetd ubox ubus blobmsg_json)
 
@@ -27,11 +27,15 @@ target_link_libraries(test_hcp ubox ubus blobmsg_json)
 add_test(hcp test_hcp)
 add_dependencies(check test_hcp)
 
+add_executable(test_hcp_net src/tlv.c test/test_hcp_net.c)
+target_link_libraries(test_hcp_net ubox ubus blobmsg_json)
+add_test(hcp_net test_hcp_net)
+add_dependencies(check test_hcp_net)
+
 add_executable(test_hcp_nio src/tlv.c test/test_hcp_nio.c)
 target_link_libraries(test_hcp_nio ubox ubus blobmsg_json)
 add_test(hcp_nio test_hcp_nio)
 add_dependencies(check test_hcp_nio)
-
 
 # Installation rules
 install(TARGETS hnetd DESTINATION sbin/)

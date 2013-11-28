@@ -75,9 +75,9 @@ struct pa_iface_callbacks {
 
 struct pa_conf {
 	/* Delay between flooding announce and interface level
-	 * address assignment. */
+	 * address assignment.
+	 * default = 20 */
 	uint32_t commit_lap_delay;
-	uint32_t delete_lap_delay;
 
 	/* Enables ULA use
 	 * default = 1 */

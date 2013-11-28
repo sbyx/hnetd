@@ -6,104 +6,54 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Tue Nov 26 15:48:16 2013 mstenber
- * Edit time:     24 min
+ * Last modified: Wed Nov 27 21:33:02 2013 mstenber
+ * Edit time:     59 min
  *
  */
 
 #include "hcp_i.h"
 #include <assert.h>
 
-static void trickle_set_i(hcp_link l, hnetd_time_t now, int i)
+static void trickle_set_i(hcp_link l, int i)
 {
+  hnetd_time_t now = hcp_time(l->hcp);
+
   l->i = i;
   l->send_time = now + l->i * (1000 + random() % 1000) / 2000;
   l->interval_end_time = now + l->i;
 }
 
-static void trickle_upgrade(hcp_link l, hnetd_time_t now)
+static void trickle_upgrade(hcp_link l)
 {
   int i = l->i * 2;
+
   i = i < HCP_TRICKLE_IMIN ? HCP_TRICKLE_IMIN
     : i > HCP_TRICKLE_IMAX ? HCP_TRICKLE_IMAX : i;
-  trickle_set_i(l, now, i);
+  trickle_set_i(l, i);
 }
 
-#define HCP_T_NODE_STATE_V_SIZE (2 * HCP_HASH_LEN + 2 * 4)
-
-static void trickle_send(hcp_link l, hnetd_time_t now)
+static void trickle_send(hcp_link l)
 {
-  hcp_node n;
-  hcp o = l->hcp;
-  struct tlv_buf tb;
-  struct tlv_attr *a;
-  unsigned char *c;
-
   if (l->c < HCP_TRICKLE_K)
     {
-      memset(&tb, 0, sizeof(tb));
-      tlv_buf_init(&tb, 0); /* not passed anywhere */
-      vlist_for_each_element(&o->nodes, n, in_nodes)
-        {
-          a = tlv_new(&tb, HCP_T_NODE_STATE, HCP_T_NODE_STATE_V_SIZE);
-          if (!a)
-            {
-              tlv_buf_free(&tb);
-              return;
-            }
-          c = tlv_data(a);
-
-          memcpy(c, n->node_identifier_hash, HCP_HASH_LEN);
-          c += HCP_HASH_LEN;
-
-          *((uint32_t *)c) = cpu_to_be32(n->update_number);
-          c += 4;
-
-          *((uint32_t *)c) = cpu_to_be32(now - n->origination_time);
-          c += 4;
-
-          memcpy(c, n->node_data_hash, HCP_HASH_LEN);
-        }
-      tlv_fill_pad(tb.head);
-      /* -4 = not including the dummy TLV header */
-      /* rest = network state TLV size */
-      if ((tlv_pad_len(tb.head) - 4 + 4 + HCP_HASH_LEN)
-          > HCP_MAXIMUM_MULTICAST_SIZE)
-        {
-          /* Clear the buffer - just send the network state hash. */
-          tlv_buf_free(&tb);
-          tlv_buf_init(&tb, 0); /* not passed anywhere */
-        }
-      a = tlv_new(&tb, HCP_T_NETWORK_HASH, HCP_HASH_LEN);
-      if (!a)
-        {
-          tlv_buf_free(&tb);
-          return;
-        }
-      c = tlv_data(a);
-      memcpy(c, o->network_hash, HCP_HASH_LEN);
-      if (hcp_io_sendto(o,
-                        tlv_data(tb.head),
-                        tlv_len(tb.head),
-                        l->ifname,
-                        &o->multicast_address) < 0)
-        {
-          tlv_buf_free(&tb);
-          return;
-        }
-      tlv_buf_free(&tb);
+      if (!hcp_link_send_network_state(l, &l->hcp->multicast_address,
+                                       HCP_MAXIMUM_MULTICAST_SIZE))
+        return;
     }
   l->send_time = 0;
 }
 
-#define TMIN(x,y) ((x) == 0 ? (y) : (y) == 0 ? (x) : (x) < (y) ? (x) : (y))
-
 void hcp_run(hcp o)
 {
   hnetd_time_t next = 0;
-  hnetd_time_t now = hnetd_time();
+  hnetd_time_t now = hcp_io_time(o);
   hcp_link l;
-  int time_since_failed_join = (now - o->join_failed_time);
+  hcp_neighbor n, n2;
+  int time_since_failed_join = now - o->join_failed_time;
+  
+  /* Assumption: We're within RTC step here -> can use same timestamp
+   * all the way. */
+  o->now = now;
 
   /* If we weren't before, we are now; processing within timeout (no
    * sense scheduling extra timeouts within hcp_self_flush). */
@@ -111,7 +61,7 @@ void hcp_run(hcp o)
 
   /* Refresh locally originated data; by doing this, we can avoid
    * replicating code. */
-  hcp_self_flush(o->own_node, now);
+  hcp_self_flush(o->own_node);
 
   /* Release the flag to allow more change-triggered zero timeouts to
    * be scheduled. (We don't want to do this before hcp_node_get_tlvs
@@ -124,7 +74,9 @@ void hcp_run(hcp o)
     {
       unsigned char buf[HCP_HASH_LEN];
 
+      /* Store original network hash for future study. */
       memcpy(buf, o->network_hash, HCP_HASH_LEN);
+
       hcp_calculate_network_hash(o, o->network_hash);
       if (memcmp(buf, o->network_hash, HCP_HASH_LEN))
         {
@@ -133,7 +85,7 @@ void hcp_run(hcp o)
            * don't really count). */
           vlist_for_each_element(&o->links, l, in_links)
             if (!l->join_pending)
-              trickle_set_i(l, now, HCP_TRICKLE_IMIN);
+              trickle_set_i(l, HCP_TRICKLE_IMIN);
         }
       o->network_hash_dirty = false;
       /* printf("network_hash_dirty -> false\n"); */
@@ -146,8 +98,8 @@ void hcp_run(hcp o)
       if (l->join_pending)
         {
           if (time_since_failed_join >= HCP_REJOIN_INTERVAL
-              && hcp_link_join(l, now))
-            trickle_set_i(l, now, HCP_TRICKLE_IMIN);
+              && hcp_link_join(l))
+            trickle_set_i(l, HCP_TRICKLE_IMIN);
           else
             {
               next = TMIN(next, now + HCP_REJOIN_INTERVAL - (now - o->join_failed_time));
@@ -156,7 +108,7 @@ void hcp_run(hcp o)
         }
       if (l->interval_end_time <= now)
         {
-          trickle_upgrade(l, now);
+          trickle_upgrade(l);
           next = TMIN(next, l->send_time);
           continue;
         }
@@ -169,15 +121,52 @@ void hcp_run(hcp o)
               continue;
             }
 
-          trickle_send(l, now);
+          trickle_send(l);
         }
       next = TMIN(next, l->interval_end_time);
+
+      /* Look at neighbors we should be worried about.. */
+      /* vlist_for_each_element(&l->neighbors, n, in_neighbors) */
+      avl_for_each_element_safe(&l->neighbors.avl, n, in_neighbors.avl, n2)
+        {
+          hnetd_time_t next_time = HCP_INTERVAL_WORRIED
+            + o->assume_bidirectional_reachability ? n->last_heard
+            : n->last_response;
+
+          /* Maybe we're not worried yet.. */
+          if (next_time > now)
+            {
+              next = TMIN(next, next_time);
+              continue;
+            }
+
+          /* We _are_ worried. But should we ping right now? */
+          next_time = HCP_INTERVAL_WORRIED + n->last_ping;
+          if (next_time > now)
+            {
+              next = TMIN(next, next_time);
+              continue;
+            }
+
+          /* Yes, we should! */
+          if (n->ping_count++ == HCP_INTERVAL_RETRIES)
+            {
+              /* Zap the neighbor */
+              /* printf("neighbor gone\n"); */
+              vlist_delete(&l->neighbors, &n->in_neighbors);
+              continue;
+            }
+
+          /* Send a ping */
+          n->last_ping = now;
+          hcp_link_send_req_network_state(l, &n->last_address);
+          /* printf("pinging neighbor %d\n", n->ping_count); */
+        }
     }
 
-  /* Trickle algorithm should NOT cause any immediate scheduling. If
-   * it does, something is broken. */
-  assert(!o->immediate_scheduled);
-
-  if (next)
+  if (next && !o->immediate_scheduled)
     hcp_io_schedule(o, next-now);
+
+  /* Clear the cached time, it's most likely no longer valid. */
+  o->now = 0;
 }

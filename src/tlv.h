@@ -247,5 +247,4 @@ tlv_put_u64(struct tlv_buf *buf, int id, uint64_t val)
 	     (tlv_pad_len(pos) >= sizeof(struct tlv_attr)); \
 	     rem -= tlv_pad_len(pos), pos = tlv_next(pos))
 
-
 #endif

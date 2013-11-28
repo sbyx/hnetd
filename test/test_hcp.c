@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Tue Nov 26 10:01:14 2013 mstenber
- * Edit time:     22 min
+ * Last modified: Wed Nov 27 14:36:24 2013 mstenber
+ * Edit time:     31 min
  *
  */
 
@@ -50,7 +50,7 @@ void hcp_ext(void)
   sput_fail_unless(!r, "hcp_set_link_enabled eth1 (2nd true)");
 
   hcp_node_get_tlvs(n, &t);
-  sput_fail_unless(!tlv_attr_equal(t, tb.head), "tlvs should be different");
+  sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs should be same");
 
   r = hcp_set_link_enabled(o, "eth1", false);
   sput_fail_unless(r, "hcp_set_link_enabled eth1 (false)");
@@ -59,7 +59,7 @@ void hcp_ext(void)
   sput_fail_unless(!r, "hcp_set_link_enabled eth1 (2nd false)");
 
   hcp_node_get_tlvs(n, &t);
-  sput_fail_unless(!tlv_attr_equal(t, tb.head), "tlvs should be different");
+  sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs should be same");
 
   /* Make sure run doesn't blow things up */
   hcp_run(o);
@@ -87,6 +87,34 @@ void hcp_int(void)
 {
   /* If we want to do bit more whitebox unit testing of the whole hcp,
    * do it here. */
+  hcp_s s;
+  hcp o = &s;
+  unsigned char hwbuf[] = "foo";
+  hcp_node n;
+  hcp_link l;
+
+  memset(&s, 0, sizeof(s));
+  hcp_init(o, hwbuf, strlen((char *)hwbuf));
+
+  /* Make sure we can add nodes if we feel like it. */
+  unsigned char buf[HCP_HASH_LEN];
+  hcp_hash("bar", 3, buf);
+  n = hcp_find_node_by_hash(o, buf, false);
+  sput_fail_unless(!n, "hcp_find_node_by_hash w/ create=false => none");
+  n = hcp_find_node_by_hash(o, buf, true);
+  sput_fail_unless(n, "hcp_find_node_by_hash w/ create=false => !none");
+  sput_fail_unless(hcp_find_node_by_hash(o, buf, false), "should exist");
+  sput_fail_unless(hcp_find_node_by_hash(o, buf, false) == n, "still same");
+
+  /* Similarly, links */
+  const char *ifn = "foo";
+  l = hcp_find_link(o, ifn, false);
+  sput_fail_unless(!l, "hcp_find_link w/ create=false => none");
+  l = hcp_find_link(o, ifn, true);
+  sput_fail_unless(l, "hcp_find_link w/ create=false => !none");
+  sput_fail_unless(hcp_find_link(o, ifn, false) == l, "still same");
+
+  hcp_uninit(o);
 }
 
 int main(__unused int argc, __unused char **argv)

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Nov 26 14:24:57 2013 mstenber
- * Edit time:     76 min
+ * Last modified: Wed Nov 27 21:23:49 2013 mstenber
+ * Edit time:     91 min
  *
  */
 
@@ -23,9 +23,6 @@
  * packets going through.. */
 #define HCP_MAXIMUM_MULTICAST_SIZE 1280
 
-/* How big is one neighbor TLV? (incl. TLV header). */
-#define HCP_NEIGHBOR_TLV_SIZE (4 + 4 + HCP_HASH_LEN)
-
 #include <libubox/vlist.h>
 
 /* in6_addr */
@@ -33,12 +30,6 @@
 
 /* IFNAMSIZ */
 #include <net/if.h>
-
-/* Let's assume we use MD5 for the time being.. */
-#define HCP_HASH_LEN 16
-
-/* 64 bit version of the hash */
-#define HCP_HASH64_LEN 8
 
 /* Internal definitions for hcp.[ch] - do not touch or include! (This
  * is here mostly for test use.) */
@@ -48,6 +39,12 @@
 typedef uint32_t iid_t;
 
 struct hcp_struct {
+  /* Can we assume bidirectional reachability? */
+  bool assume_bidirectional_reachability;
+
+  /* cached current time; if zero, should ask hcp_io for it again */
+  hnetd_time_t now;
+
   /* nodes (as contained within the protocol, that is, raw TLV data blobs). */
   struct vlist_tree nodes;
 
@@ -91,6 +88,7 @@ struct hcp_struct {
   /* Multicast address */
   struct in6_addr multicast_address;
 
+  /* When did multicast join fail last time? */
   hnetd_time_t join_failed_time;
 };
 
@@ -107,6 +105,9 @@ struct hcp_link_struct {
 
   /* Name of the (local) link. */
   char ifname[IFNAMSIZ];
+
+  /* Address of the interface (_only_ used in testing) */
+  struct in6_addr address;
 
   /* Interface identifier - these should be unique over lifetime of
    * hcp process. */
@@ -139,6 +140,11 @@ struct hcp_neighbor_struct {
 
   /* When did they last respond to our message? */
   hnetd_time_t last_response;
+
+  /* If proactive mode is enabled, when did we last try to ping this
+   * one. */
+  hnetd_time_t last_ping;
+  int ping_count;
 };
 
 struct hcp_node_struct {
@@ -154,6 +160,7 @@ struct hcp_node_struct {
 
   /* Node state stuff */
   unsigned char node_data_hash[HCP_HASH_LEN];
+  bool node_data_hash_dirty; /* Something related to hash changed */
   hnetd_time_t origination_time; /* in monotonic time */
 
   /* TLV data for the node. All TLV data in one binary blob, as
@@ -179,17 +186,31 @@ struct hcp_tlv_struct {
 
 /* Internal or testing-only way to initialize hp struct _without_
  * dynamic allocations (and some of the steps omitted too). */
-bool hcp_init(hcp o, unsigned char *node_identifier, int len);
+bool hcp_init(hcp o, const void *node_identifier, int len);
+void hcp_uninit(hcp o);
+
+hcp_link hcp_find_link(hcp o, const char *ifname, bool create);
+hcp_node hcp_find_node_by_hash(hcp o, unsigned char *h, bool create);
+
+/* Private utility - shouldn't be used by clients. */
+bool hcp_node_set_tlvs(hcp_node n, struct tlv_attr *a);
 
 void hcp_hash(const void *buf, int len, unsigned char *dest);
+void hcp_schedule(hcp o);
 
 /* Flush own TLV changes to own node. */
-void hcp_self_flush(hcp_node n, hnetd_time_t now);
+void hcp_self_flush(hcp_node n);
 
 /* Calculate hash of the network state based on current nodes. */
 void hcp_calculate_network_hash(hcp o, unsigned char *dest);
 void hcp_calculate_node_data_hash(hcp_node n, unsigned char *dest);
 
+/* Utility functions to send frames. */
+bool hcp_link_send_network_state(hcp_link l,
+                                 struct in6_addr *dst,
+                                 size_t maximum_size);
+bool hcp_link_send_req_network_state(hcp_link l,
+                                     struct in6_addr *dst);
 
 
 /* Low-level interface module stuff. */
@@ -199,6 +220,7 @@ void hcp_io_uninit(hcp o);
 bool hcp_io_set_ifname_enabled(hcp o, const char *ifname, bool enabled);
 int hcp_io_get_hwaddr(const char *ifname, unsigned char *buf, int buf_left);
 void hcp_io_schedule(hcp o, int msecs);
+hnetd_time_t hcp_io_time(hcp o);
 
 ssize_t hcp_io_recvfrom(hcp o, void *buf, size_t len,
                         char *ifname,
@@ -209,6 +231,16 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
                       const struct in6_addr *dst);
 
 /* Multicast rejoin utility. (in hcp.c) */
-bool hcp_link_join(hcp_link l, hnetd_time_t now);
+bool hcp_link_join(hcp_link l);
+
+/* Inlined utilities. */
+static inline hnetd_time_t hcp_time(hcp o)
+{
+  if (!o->now)
+    return hcp_io_time(o);
+  return o->now;
+}
+
+#define TMIN(x,y) ((x) == 0 ? (y) : (y) == 0 ? (x) : (x) < (y) ? (x) : (y))
 
 #endif /* HCP_I_H */
