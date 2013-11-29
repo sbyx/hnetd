@@ -91,7 +91,7 @@ void prefix_canonical_t(void)
 	struct prefix p;
 	prefix_canonical(&p, &p_allones_67);
 
-	sput_fail_if(memcmp(&p, &p_allones_67_can, sizeof(&p)),
+	sput_fail_if(memcmp(&p, &p_allones_67_can, sizeof(struct prefix)),
 				"Canonical transform");
 }
 
