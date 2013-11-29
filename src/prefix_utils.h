@@ -43,7 +43,7 @@ bool prefix_contains(const struct prefix *p1,
  * Will be used in trees.
  * Returns zero if equals, positive if p1 > p2,
  * negative value otherwise.
- * A prefix with longer prefix length is always bigger.
+ * A prefix with longer prefix length is always smaller.
  * When prefix length is the same, bigger prefix value is bigger. */
 int prefix_cmp(const struct prefix *p1,
 		const struct prefix *p2);
