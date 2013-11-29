@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu Nov 28 12:09:40 2013 mstenber
+ * Last modified: Fri Nov 29 11:00:09 2013 mstenber
  * Edit time:     90 min
  *
  */
@@ -222,9 +222,9 @@ void hcp_run(hcp o)
       avl_for_each_element_safe(&l->neighbors.avl, n, in_neighbors.avl, n2)
         {
           hnetd_time_t next_time = HCP_INTERVAL_WORRIED
-            + o->assume_bidirectional_reachability
-            ? n->last_heard
-            : n->last_response;
+            + (o->assume_bidirectional_reachability
+               ? n->last_heard
+               : n->last_response);
 
           /* Maybe we're not worried yet.. */
           if (next_time > now)

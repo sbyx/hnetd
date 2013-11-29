@@ -6,13 +6,15 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Nov 28 12:10:45 2013 mstenber
+ * Last modified: Fri Nov 29 10:57:22 2013 mstenber
  * Edit time:     103 min
  *
  */
 
 #ifndef HCP_I_H
 #define HCP_I_H
+
+#include "hcp.h"
 
 #include <libubox/uloop.h>
 
@@ -33,8 +35,6 @@
 
 /* Internal definitions for hcp.[ch] - do not touch or include! (This
  * is here mostly for test use.) */
-
-#include "hcp.h"
 
 typedef uint32_t iid_t;
 

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Wed Nov 27 19:15:11 2013 mstenber
- * Edit time:     116 min
+ * Last modified: Fri Nov 29 11:02:56 2013 mstenber
+ * Edit time:     121 min
  *
  */
 
@@ -16,6 +16,8 @@
  * that just deal with buffers for input and output (thereby
  * facilitating unit testing without using real sockets). */
 
+/* In linux, fcntl.h includes something with __unused. Argh. So
+ * include it before hnetd.h.. */
 #include <fcntl.h>
 #include "hcp_i.h"
 #include <sys/ioctl.h>
@@ -30,8 +32,11 @@
 
 /* 'found' from odhcp6c */
 int
-hcp_io_get_hwaddr(const char *ifname, unsigned char *buf, int buf_left)
+hcp_io_get_hwaddr(const char *ifname __unused,
+                  unsigned char *buf __unused,
+                  int buf_left __unused)
 {
+#ifdef SIOCGIFINDEX
   struct ifreq ifr;
   int sock;
   int tocopy = buf_left < ETHER_ADDR_LEN ? buf_left : ETHER_ADDR_LEN;
@@ -47,6 +52,9 @@ hcp_io_get_hwaddr(const char *ifname, unsigned char *buf, int buf_left)
   memcpy(buf, ifr.ifr_hwaddr.sa_data, tocopy);
   close(sock);
   return tocopy;
+#else
+  return 0;
+#endif /* SIOCGIFINDEX */
 }
 
 static void _timeout(struct uloop_timeout *t)
@@ -79,7 +87,7 @@ bool hcp_io_init(hcp o)
   memset(&addr, 0, sizeof(addr));
   addr.sin6_family = AF_INET6;
   addr.sin6_port = HCP_PORT;
-  if (bind(s, &addr, sizeof(addr))<0)
+  if (bind(s, (struct sockaddr *)&addr, sizeof(addr))<0)
     return false;
 #endif
   if (setsockopt(s, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) < 0)
@@ -172,7 +180,8 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
   if (!(dst.sin6_scope_id = if_nametoindex(ifname)))
     return -1;
   dst.sin6_addr = *to;
-  return sendto(o->udp_socket, buf, len, flags, &dst, sizeof(dst));
+  return sendto(o->udp_socket, buf, len, flags,
+                (struct sockaddr *)&dst, sizeof(dst));
 }
 
 hnetd_time_t hcp_io_time(hcp o __unused)
