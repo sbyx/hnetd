@@ -168,6 +168,12 @@ static void platform_commit(struct uloop_timeout *t)
 		blobmsg_add_u32(&b, "preferred", preferred);
 		blobmsg_add_u32(&b, "valid", valid);
 
+		if (a->class) {
+			char *buf = blobmsg_alloc_string_buffer(&b, "class", 6);
+			snprintf(buf, 6, "%u", a->class);
+			blobmsg_add_string_buffer(&b);
+		}
+
 		blobmsg_close_table(&b, l);
 	}
 	blobmsg_close_array(&b, k);
@@ -200,6 +206,7 @@ enum {
 	PREFIX_ATTR_MASK,
 	PREFIX_ATTR_VALID,
 	PREFIX_ATTR_PREFERRED,
+	PREFIX_ATTR_CLASS,
 	PREFIX_ATTR_MAX,
 };
 
@@ -209,6 +216,7 @@ static const struct blobmsg_policy prefix_attrs[PREFIX_ATTR_MAX] = {
 	[PREFIX_ATTR_MASK] = { .name = "mask", .type = BLOBMSG_TYPE_INT32 },
 	[PREFIX_ATTR_PREFERRED] = { .name = "preferred", .type = BLOBMSG_TYPE_INT32 },
 	[PREFIX_ATTR_VALID] = { .name = "valid", .type = BLOBMSG_TYPE_INT32 },
+	[PREFIX_ATTR_CLASS] = { .name = "class", .type = BLOBMSG_TYPE_STRING },
 };
 
 
@@ -230,6 +238,7 @@ static void update_delegated(struct iface *c, struct blob_attr *prefixes)
 			hnetd_time_t preferred = HNETD_TIME_MAX;
 			hnetd_time_t valid = HNETD_TIME_MAX;
 			struct prefix p = {IN6ADDR_ANY_INIT, 0};
+			uint16_t class = 0;
 
 			if (!(a = tb[PREFIX_ATTR_ADDRESS]) ||
 					inet_pton(AF_INET6, blobmsg_get_string(a), &p.prefix) < 1)
@@ -246,7 +255,10 @@ static void update_delegated(struct iface *c, struct blob_attr *prefixes)
 			if ((a = tb[PREFIX_ATTR_VALID]))
 				valid = now + (blobmsg_get_u32(a) * HNETD_TIME_PER_SECOND);
 
-			iface_add_delegated(c, &p, valid, preferred);
+			if ((a = tb[PREFIX_ATTR_CLASS]))
+				class = atoi(blobmsg_get_string(a));
+
+			iface_add_delegated(c, &p, valid, preferred, class);
 		}
 	}
 

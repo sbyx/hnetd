@@ -112,7 +112,7 @@ static void update_prefix(__unused struct vlist_tree *t, struct vlist_node *node
 	struct iface_user *u;
 	list_for_each_entry(u, &users, head)
 		if (u->cb_prefix)
-			u->cb_prefix(u, &a->prefix, a->valid_until, a->preferred_until);
+			u->cb_prefix(u, &a->prefix, a->valid_until, a->preferred_until, a->class);
 
 	if (node_old)
 		free(a_old);
@@ -212,12 +212,14 @@ void iface_update_delegated(struct iface *c)
 
 
 void iface_add_delegated(struct iface *c, const struct prefix *p,
-		hnetd_time_t valid_until, hnetd_time_t preferred_until)
+		hnetd_time_t valid_until, hnetd_time_t preferred_until,
+		uint16_t class)
 {
 	struct iface_addr *a = calloc(1, sizeof(*a));
 	a->prefix = *p;
 	a->valid_until = valid_until;
 	a->preferred_until = preferred_until;
+	a->class = class;
 	vlist_add(&c->delegated, &a->node, &a->prefix);
 }
 
