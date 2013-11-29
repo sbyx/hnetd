@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Fri Nov 29 11:35:40 2013 mstenber
+ * Last modified: Fri Nov 29 14:27:47 2013 mstenber
  * Edit time:     136 min
  *
  */
@@ -31,6 +31,10 @@
 #include <arpa/inet.h>
 #include <libubox/usock.h>
 #include <ifaddrs.h>
+
+#ifdef __linux__
+#define AF_LINK AF_PACKET
+#endif /* __linux__ */
 
 int
 hcp_io_get_hwaddrs(unsigned char *buf, int buf_left)
