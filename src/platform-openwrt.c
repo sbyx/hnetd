@@ -125,7 +125,7 @@ static void platform_commit(struct uloop_timeout *t)
 		l = blobmsg_open_table(&b, NULL);
 
 		char *buf = blobmsg_alloc_string_buffer(&b, "ipaddr", INET_ADDRSTRLEN);
-		inet_ntop(AF_INET, &a->prefix.prefix.s6_addr32[3], buf, INET_ADDRSTRLEN);
+		inet_ntop(AF_INET, &a->prefix.prefix.s6_addr[12], buf, INET_ADDRSTRLEN);
 		blobmsg_add_string_buffer(&b);
 
 		buf = blobmsg_alloc_string_buffer(&b, "mask", 4);
