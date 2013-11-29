@@ -37,6 +37,10 @@ target_link_libraries(test_hcp_nio ubox ubus blobmsg_json)
 add_test(hcp_nio test_hcp_nio)
 add_dependencies(check test_hcp_nio)
 
+add_executable(test_prefix_utils src/prefix_utils.c test/test_prefix_utils.c)
+add_test(prefix_utils test_prefix_utils)
+add_dependencies(check test_prefix_utils)
+
 # Installation rules
 install(TARGETS hnetd DESTINATION sbin/)
 

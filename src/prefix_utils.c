@@ -181,7 +181,7 @@ const char *prefix_ntop_n(const struct prefix *prefix, size_t n,
 	if(n >= PREFIX_PRINT_BUFF_N)
 		return PREFIX_STRERR;
 
-	return prefix_ntop(&__prefix_tostring_buffers[n],
+	return prefix_ntop(__prefix_tostring_buffers[n],
 			PREFIX_MAXBUFFLEN, prefix, canonical);
 }
 

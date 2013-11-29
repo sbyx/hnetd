@@ -9,6 +9,7 @@
 #include "sput.h"
 
 #include <stdio.h>
+#include <stdbool.h>
 
 struct prefix p_allones_128 = {
 		.prefix = { .s6_addr = {
@@ -29,7 +30,7 @@ struct prefix p_allones_67_can = {
 				0xff,0xff, 0xff,0xff,  0xff,0xff, 0xff,0xff,
 				0xe0}},
 		.plen = 67 };
-static const char *p_allones_67_can_s = "ffff:ffff:ffff:ffff:e000/67";
+static const char *p_allones_67_can_s = "ffff:ffff:ffff:ffff:e000::/67";
 
 static struct prefix p1  = { { .s6_addr = {0x00,0x10}}, 12 };
 static const char *p1_s = "10::/12";
@@ -49,7 +50,7 @@ void prefix_print_nocan_t(void)
 	ret = prefix_ntop(buff, 5, &p_allones_128, false);
 	sput_fail_if(ret, "Buffer too short (1)");
 
-	ret = prefix_ntop(buff, PREFIX_MAXBUFFLEN - 1,
+	ret = prefix_ntop(buff, 43,
 			&p_allones_128, false);
 	sput_fail_if(ret, "Buffer too short (2)");
 
@@ -126,7 +127,7 @@ void prefix_cmp_t(void)
 			"Prefix compare diff. plen (1)");
 	sput_fail_unless(prefix_cmp(&p11, &p1) < 0,
 			"Prefix compare diff. plen (2)");
-	sput_fail_unless(prefix_cmp(&p_allones_67, &p_allones_128) < 0,
+	sput_fail_unless(prefix_cmp(&p_allones_67, &p_allones_128) > 0,
 			"Prefix compare diff. plen (3)");
 
 	sput_fail_unless(prefix_cmp(&p2, &p1) > 0,
@@ -158,7 +159,7 @@ void prefix_random_t(void)
 	sput_fail_unless(success, "Random prefix is in src prefix");
 }
 
-int main(int argc, char **argv)
+int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 {
   sput_start_testing();
   sput_enter_suite("prefix_utils"); /* optional */
