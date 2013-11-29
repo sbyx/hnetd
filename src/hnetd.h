@@ -5,7 +5,6 @@
 
 /* Haha. Got to love advanced IPv6 socket API being disabled by
  * default. */
-#define _DARWIN_C_SOURCE
 #define __APPLE_USE_RFC_3542
 
 #define IPV6_ADD_MEMBERSHIP IPV6_JOIN_GROUP

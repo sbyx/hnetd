@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Nov 28 12:03:24 2013 mstenber
- * Edit time:     292 min
+ * Last modified: Fri Nov 29 11:34:42 2013 mstenber
+ * Edit time:     294 min
  *
  */
 
@@ -240,10 +240,7 @@ hcp hcp_create(void)
   o = malloc(sizeof(*o));
   if (!o)
     return NULL;
-  /* XXX - this is very arbitrary and Linux-only. However, hopefully
-   * it is enough (should probably have ifname(s) as argument). */
-  c += hcp_io_get_hwaddr("eth0", c, sizeof(buf) + buf - c);
-  c += hcp_io_get_hwaddr("eth1", c, sizeof(buf) + buf - c);
+  c += hcp_io_get_hwaddrs(buf, sizeof(buf));
   if (c == buf)
     goto err;
   if (!hcp_init(o, buf, c-buf))

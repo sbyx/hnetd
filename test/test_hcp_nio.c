@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Thu Nov 28 12:10:53 2013 mstenber
- * Edit time:     145 min
+ * Last modified: Fri Nov 29 11:38:54 2013 mstenber
+ * Edit time:     146 min
  *
  */
 
@@ -61,12 +61,11 @@ bool hcp_io_set_ifname_enabled(hcp o, const char *ifname, bool enabled)
   return smock_pull_bool("set_enable_result");
 }
 
-int hcp_io_get_hwaddr(const char *ifname, unsigned char *buf, int buf_left)
+int hcp_io_get_hwaddrs(unsigned char *buf, int buf_left)
 {
-  unsigned char *r = smock_pull("get_hwaddr_buf");
-  int r_len = smock_pull_int("get_hwaddr_len");
+  unsigned char *r = smock_pull("get_hwaddrs_buf");
+  int r_len = smock_pull_int("get_hwaddrs_len");
 
-  smock_pull_string_is("get_hwaddr_ifname", ifname);
   memcpy(buf, r, r_len);
   sput_fail_unless(r_len <= buf_left, "result length reasonable");
   return r_len;
@@ -159,13 +158,8 @@ static char *dummy_ifname = "eth0";
 static void hcp_init_no_hwaddr(void)
 {
   /* Feed in fake hwaddr for eth0+eth1 (hardcoded, ugh) */
-  smock_push("get_hwaddr_ifname", dummy_ifname);
-  smock_push("get_hwaddr_buf", NULL);
-  smock_push_int("get_hwaddr_len", 0);
-
-  smock_push("get_hwaddr_ifname", "eth1");
-  smock_push("get_hwaddr_buf", NULL);
-  smock_push_int("get_hwaddr_len", 0);
+  smock_push("get_hwaddrs_buf", NULL);
+  smock_push_int("get_hwaddrs_len", 0);
 
   hcp o = hcp_create();
   sput_fail_unless(!o, "hcp_create -> !hcp");
@@ -177,13 +171,8 @@ static void hcp_init_iofail(void)
   char buf[4] = "foo";
 
   /* Feed in fake hwaddr for eth0+eth1 (hardcoded, ugh) */
-  smock_push("get_hwaddr_ifname", dummy_ifname);
-  smock_push("get_hwaddr_buf", buf);
-  smock_push_int("get_hwaddr_len", sizeof(buf));
-
-  smock_push("get_hwaddr_ifname", "eth1");
-  smock_push("get_hwaddr_buf", NULL);
-  smock_push_int("get_hwaddr_len", 0);
+  smock_push("get_hwaddrs_buf", buf);
+  smock_push_int("get_hwaddrs_len", sizeof(buf));
 
   /* io init succeeds */
   smock_push_bool("init_result", false);
@@ -198,13 +187,8 @@ static hcp create_hcp(void)
   char buf[4] = "foo";
 
   /* Feed in fake hwaddr for eth0+eth1 (hardcoded, ugh) */
-  smock_push("get_hwaddr_ifname", dummy_ifname);
-  smock_push("get_hwaddr_buf", buf);
-  smock_push_int("get_hwaddr_len", sizeof(buf));
-
-  smock_push("get_hwaddr_ifname", "eth1");
-  smock_push("get_hwaddr_buf", NULL);
-  smock_push_int("get_hwaddr_len", 0);
+  smock_push("get_hwaddrs_buf", buf);
+  smock_push_int("get_hwaddrs_len", sizeof(buf));
 
   /* io init succeeds */
   smock_push_bool("init_result", true);

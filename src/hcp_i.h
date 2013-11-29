@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Fri Nov 29 10:57:22 2013 mstenber
+ * Last modified: Fri Nov 29 11:39:19 2013 mstenber
  * Edit time:     103 min
  *
  */
@@ -32,9 +32,6 @@
 
 /* IFNAMSIZ */
 #include <net/if.h>
-
-/* Internal definitions for hcp.[ch] - do not touch or include! (This
- * is here mostly for test use.) */
 
 typedef uint32_t iid_t;
 
@@ -226,7 +223,7 @@ bool hcp_link_send_req_network_state(hcp_link l,
 bool hcp_io_init(hcp o);
 void hcp_io_uninit(hcp o);
 bool hcp_io_set_ifname_enabled(hcp o, const char *ifname, bool enabled);
-int hcp_io_get_hwaddr(const char *ifname, unsigned char *buf, int buf_left);
+int hcp_io_get_hwaddrs(unsigned char *buf, int buf_left);
 void hcp_io_schedule(hcp o, int msecs);
 hnetd_time_t hcp_io_time(hcp o);
 

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Fri Nov 29 11:02:56 2013 mstenber
- * Edit time:     121 min
+ * Last modified: Fri Nov 29 11:35:40 2013 mstenber
+ * Edit time:     136 min
  *
  */
 
@@ -16,10 +16,11 @@
  * that just deal with buffers for input and output (thereby
  * facilitating unit testing without using real sockets). */
 
-/* In linux, fcntl.h includes something with __unused. Argh. So
- * include it before hnetd.h.. */
-#include <fcntl.h>
 #include "hcp_i.h"
+#undef __unused
+/* In linux, fcntl.h includes something with __unused. Argh. */
+#include <fcntl.h>
+#define __unused __attribute__((unused))
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -29,32 +30,35 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <libubox/usock.h>
+#include <ifaddrs.h>
 
-/* 'found' from odhcp6c */
 int
-hcp_io_get_hwaddr(const char *ifname __unused,
-                  unsigned char *buf __unused,
-                  int buf_left __unused)
+hcp_io_get_hwaddrs(unsigned char *buf, int buf_left)
 {
-#ifdef SIOCGIFINDEX
-  struct ifreq ifr;
-  int sock;
-  int tocopy = buf_left < ETHER_ADDR_LEN ? buf_left : ETHER_ADDR_LEN;
+  struct ifaddrs *ia, *p;
+  int r = getifaddrs(&ia);
+  bool first = true;
+  void *a1 = buf, *a2 = buf + ETHER_ADDR_LEN;
 
-  sock = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-  if (sock<0)
+  if (buf_left < ETHER_ADDR_LEN * 2)
     return 0;
-  strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-  if (ioctl(sock, SIOCGIFINDEX, &ifr))
+  memset(buf, ETHER_ADDR_LEN * 2, 0);
+  if (r)
     return 0;
-  if (ioctl(sock, SIOCGIFHWADDR, &ifr))
+  for (p = ia ; p ; p = p->ifa_next)
+    if (p->ifa_addr->sa_family == AF_LINK)
+    {
+      void *a = &p->ifa_addr->sa_data[0];
+      if (first || memcmp(a1, a, ETHER_ADDR_LEN) < 0)
+        memcpy(a1, a, ETHER_ADDR_LEN);
+      if (first || memcmp(a2, a, ETHER_ADDR_LEN) > 0)
+        memcpy(a2, a, ETHER_ADDR_LEN);
+      first = false;
+    }
+  freeifaddrs(ia);
+  if (first)
     return 0;
-  memcpy(buf, ifr.ifr_hwaddr.sa_data, tocopy);
-  close(sock);
-  return tocopy;
-#else
-  return 0;
-#endif /* SIOCGIFINDEX */
+  return ETHER_ADDR_LEN * 2;
 }
 
 static void _timeout(struct uloop_timeout *t)

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Thu Nov 28 11:57:17 2013 mstenber
- * Edit time:     121 min
+ * Last modified: Fri Nov 29 11:39:49 2013 mstenber
+ * Edit time:     122 min
  *
  */
 
@@ -274,7 +274,7 @@ bool hcp_io_set_ifname_enabled(hcp o, const char *ifname, bool enabled)
   return true;
 }
 
-int hcp_io_get_hwaddr(const char *ifname, unsigned char *buf, int buf_left)
+int hcp_io_get_hwaddrs(unsigned char *buf, int buf_left)
 {
   return 0;
 }
