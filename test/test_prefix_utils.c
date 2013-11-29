@@ -5,7 +5,7 @@
  *
  */
 
-#include "../src/prefix_utils.h"
+#include "prefix_utils.h"
 #include "sput.h"
 
 #include <stdio.h>

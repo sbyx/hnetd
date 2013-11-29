@@ -58,11 +58,11 @@ void prefix_canonical(struct prefix *dst, const struct prefix *src);
 /* String returned in some cases */
 #define PREFIX_STRERR "*prefix_print_error*"
 /* Maximum needed space to print a prefix */
-#define PREFIX_MAXBUFFLEN 44
+#define PREFIX_MAXBUFFLEN INET6_ADDRSTRLEN + 4
 /* Number of available string buffer */
 #define PREFIX_PRINT_BUFF_N 4
 
-extern char **__prefix_tostring_buffers;
+extern char __prefix_tostring_buffers[PREFIX_PRINT_BUFF_N][PREFIX_MAXBUFFLEN];
 
 /* Writes the prefix into the specified buffer of length dst_len.
  * Returns dst upon success and NULL if buffer size is too small.
