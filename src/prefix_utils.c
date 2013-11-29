@@ -1,3 +1,10 @@
+/*
+ * Author: Pierre Pfister
+ *
+ * Prefixes manipulation utilities.
+ *
+ */
+
 #include "prefix_utils.h"
 
 #include <arpa/inet.h>
@@ -36,8 +43,8 @@ static int bmemcmp(const void *m1, const void *m2, size_t bitlen)
 	if(!rembit)
 		return 0;
 
-	uint8_t *p1 = (uint8_t *) m1 + bytes;
-	uint8_t *p2 = (uint8_t *) m2 + bytes;
+	uint8_t *p1 = ((uint8_t *) m1) + bytes;
+	uint8_t *p2 = ((uint8_t *) m2) + bytes;
 	uint8_t mask = (0xff >> (8 - rembit)) << (8 - rembit);
 
 	return ((int) (*p1 & mask)) - ((int) (*p2 & mask));
@@ -62,7 +69,7 @@ static void bbytecpy (uint8_t *dst, const uint8_t *src,
 /* Copy bits of memory from src to dst.
  * Starts from bit #frombit and copies nbits.
  */
-static void bmemcpy(void *dst, const void *src,
+void bmemcpy(void *dst, const void *src,
 		size_t frombit, size_t nbits)
 {
 	// First bit that should not be copied
@@ -70,8 +77,8 @@ static void bmemcpy(void *dst, const void *src,
 
 	size_t frombyte = frombit >> 3;
 	size_t tobyte = tobit >> 3;
-	uint8_t frombitrem = frombit &0x07;
-	uint8_t tobitrem = tobit &0x07;
+	uint8_t frombitrem = frombit & 0x07;
+	uint8_t tobitrem = tobit & 0x07;
 
 	dst+=frombyte;
 	src+=frombyte;
@@ -83,11 +90,10 @@ static void bmemcpy(void *dst, const void *src,
 
 	if(frombitrem) {
 		bbytecpy(dst, src, frombitrem, 8 - frombitrem);
-		dst++;
-		src++;
+		memcpy(dst + 1, src + 1, tobyte - frombyte - 1);
+	} else {
+		memcpy(dst, src, tobyte - frombyte);
 	}
-
-	memcpy(dst, src, tobyte - frombyte - 1);
 
 	if(tobitrem)
 		bbytecpy(dst + tobyte, src + tobyte, 0, tobitrem);
@@ -162,7 +168,7 @@ char *prefix_ntop(char *dst, size_t dst_len,
 	size_t remaining = dst_len - written;
 	char *end = dst + written;
 
-	if(snprintf(end, remaining, "/%u", to_use->plen) >= remaining)
+	if(snprintf(end, remaining, "/%u", to_use->plen) >= (int) remaining)
 		return NULL;
 
 	return dst;

@@ -42,6 +42,35 @@ static struct prefix p2  = { { .s6_addr = {0x00,0x20}}, 12 };
 static struct prefix px  = { { .s6_addr = {0x00,0x20, 0x01}}, 12 };
 static const char *px_s = "20:100::/12";
 
+void bmemcpy(void *dst, const void *src,
+		size_t frombit, size_t nbits);
+
+void bmemcpy_t(void)
+{
+	uint8_t u1[] = {0xff, 0xff, 0xff, 0xff};
+	uint8_t u2[] = {0x00, 0x00, 0x00, 0x00};
+	uint8_t u3[] = {0xff, 0xff, 0x00, 0x00};
+	uint8_t u4[] = {0x07, 0xff, 0xff, 0x00};
+	uint8_t u5[] = {0x01, 0xff, 0xff, 0xc0};
+	uint8_t dst[4];
+
+	bmemcpy(&dst, &u2, 0, 32);
+	sput_fail_if(memcmp(dst, u2, 4), "32bit copy");
+
+	memset(dst, 0, 4);
+	bmemcpy(&dst, &u1, 0, 16);
+	sput_fail_if(memcmp(dst, u3, 4), "16bit copy");
+
+	memset(dst, 0, 4);
+	bmemcpy(&dst, &u1, 5, 19);
+	sput_fail_if(memcmp(dst, u4, 4), "5 to 24 bits copy");
+
+	memset(dst, 0, 4);
+	bmemcpy(&dst, &u1, 7, 19);
+	sput_fail_if(memcmp(dst, u5, 4), "7 to 26 bits copy");
+
+}
+
 void prefix_print_nocan_t(void)
 {
 	char buff[PREFIX_MAXBUFFLEN];
@@ -118,7 +147,7 @@ void prefix_contains_t(void)
 	sput_fail_unless(prefix_contains(&p1, &p1f),
 			"p1 contains p1f");
 	sput_fail_if(prefix_contains(&p2, &p11),
-			"p2 do not contain &p11");
+			"p2 do not contain p11");
 }
 
 void prefix_cmp_t(void)
@@ -163,6 +192,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 {
   sput_start_testing();
   sput_enter_suite("prefix_utils"); /* optional */
+  sput_run_test(bmemcpy_t);
   sput_run_test(prefix_print_nocan_t);
   sput_run_test(prefix_equal_t);
   sput_run_test(prefix_canonical_t);

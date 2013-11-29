@@ -1,3 +1,10 @@
+/*
+ * Author: Pierre Pfister
+ *
+ * Prefixes manipulation utilities.
+ *
+ */
+
 #ifndef UTILS_H
 #define UTILS_H
 
