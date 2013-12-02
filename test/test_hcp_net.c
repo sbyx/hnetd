@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Dec  2 17:54:49 2013 mstenber
- * Edit time:     223 min
+ * Last modified: Mon Dec  2 17:58:19 2013 mstenber
+ * Edit time:     202 min
  *
  */
 
@@ -246,6 +246,7 @@ void net_sim_uninit(net_sim s)
   list_for_each_safe(p, pn, &s->nodes)
     {
       net_node n = container_of(p, net_node_s, h);
+      free(n->name);
       hcp_uninit(&n->n);
       free(n);
       c++;

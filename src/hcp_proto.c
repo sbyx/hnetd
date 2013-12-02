@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Mon Dec  2 17:34:49 2013 mstenber
- * Edit time:     184 min
+ * Last modified: Mon Dec  2 18:00:22 2013 mstenber
+ * Edit time:     187 min
  *
  */
 
@@ -480,6 +480,7 @@ handle_message(hcp_link l,
   else
     {
       L_DEBUG("tlv_put_raw failed");
+      tlv_buf_free(&tb);
     }
 }
 
