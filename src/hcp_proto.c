@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Mon Dec  2 15:11:43 2013 mstenber
- * Edit time:     171 min
+ * Last modified: Mon Dec  2 15:41:13 2013 mstenber
+ * Edit time:     178 min
  *
  */
 
@@ -24,33 +24,31 @@
 static bool _push_node_state_tlv(struct tlv_buf *tb, hcp_node n)
 {
   hnetd_time_t now = hcp_time(n->hcp);
-  struct tlv_attr *a = tlv_new(tb, HCP_T_NODE_STATE,
-                               sizeof(hcp_t_node_state_s));
   hcp_t_node_state s;
+  struct tlv_attr *a = tlv_new(tb, HCP_T_NODE_STATE, sizeof(*s));
 
   if (!a)
     return false;
   s = tlv_data(a);
   s->node_identifier_hash = n->node_identifier_hash;
   s->update_number = cpu_to_be32(n->update_number);
-  s->seconds_since_origination = cpu_to_be32(now - n->origination_time);
+  s->seconds_since_origination =
+    cpu_to_be32(now - n->origination_time) / HNETD_TIME_PER_SECOND;
   return true;
 }
 
 static bool _push_node_data_tlv(struct tlv_buf *tb, hcp_node n)
 {
   int s = n->tlv_container ? tlv_len(n->tlv_container) : 0;
-  struct tlv_attr *a = tlv_new(tb, HCP_T_NODE_DATA,
-                               sizeof(hcp_t_node_data_header_s) + s);
   hcp_t_node_data_header h;
+  struct tlv_attr *a = tlv_new(tb, HCP_T_NODE_DATA, sizeof(*h) + s);
 
   if (!a)
     return false;
   h = tlv_data(a);
   h->node_identifier_hash = n->node_identifier_hash;
   h->update_number = cpu_to_be32(n->update_number);
-  memcpy((unsigned char *)h + sizeof(hcp_t_node_data_header_s),
-         tlv_data(n->tlv_container), s);
+  memcpy((void *)h + sizeof(*h), tlv_data(n->tlv_container), s);
   return true;
 }
 
@@ -474,6 +472,7 @@ handle_message(hcp_link l,
       n->node_data_hash_dirty = true;
       o->network_hash_dirty = true;
       hcp_node_set_tlvs(n, tb.head);
+      n->origination_time = hcp_time(o) - be32_to_cpu(ns->seconds_since_origination) * HNETD_TIME_PER_SECOND;
       hcp_schedule(o);
     }
   else

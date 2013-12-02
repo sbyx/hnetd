@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Dec  2 15:16:52 2013 mstenber
- * Edit time:     189 min
+ * Last modified: Mon Dec  2 15:46:24 2013 mstenber
+ * Edit time:     194 min
  *
  */
 
@@ -84,10 +84,11 @@ void net_sim_init(net_sim s)
 
 bool net_sim_is_converged(net_sim s)
 {
-  net_node n;
-  struct list_head *p;
+  net_node n, n2;
+  struct list_head *p, *p2;
   bool first = true;
   hcp_hash h = NULL;
+  hcp_node hn;
 
   list_for_each(p, &s->nodes)
     {
@@ -105,6 +106,27 @@ bool net_sim_is_converged(net_sim s)
           L_DEBUG("not converged, network hash mismatch %llx <> %llx",
                   hcp_hash64(h), hcp_hash64(&n->n.network_hash));
           return false;
+        }
+    }
+  list_for_each(p, &s->nodes)
+    {
+      n = container_of(p, net_node_s, h);
+      list_for_each(p2, &s->nodes)
+        {
+          n2 = container_of(p2, net_node_s, h);
+          /* Make sure that the information about other node _is_ valid */
+          hn = hcp_find_node_by_hash(&n->n,
+                                     &n2->n.own_node->node_identifier_hash,
+                                     false);
+          sput_fail_unless(hn, "hcp_find_node_by_hash failed");
+          if (abs(n2->n.own_node->origination_time -
+                  hn->origination_time) > 2000)
+            {
+              L_DEBUG("origination time mismatch %lld <> %lld",
+                      (long long) n2->n.own_node->origination_time,
+                      (long long) hn->origination_time);
+              return false;
+            }
         }
     }
   return true;
