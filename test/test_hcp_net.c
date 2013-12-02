@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Dec  2 17:52:38 2013 mstenber
- * Edit time:     222 min
+ * Last modified: Mon Dec  2 17:54:49 2013 mstenber
+ * Edit time:     223 min
  *
  */
 
@@ -18,6 +18,12 @@
  * to Y" configuration entries that can change dynamically over the
  * time of the testcase.
  */
+
+#ifdef L_LEVEL
+#undef L_LEVEL
+#endif /* L_LEVEL */
+
+#define L_LEVEL 5
 
 #include "hcp.c"
 #include "hcp_proto.c"
@@ -244,10 +250,10 @@ void net_sim_uninit(net_sim s)
       free(n);
       c++;
     }
-  L_DEBUG("#nodes:%d elapsed:%.2fs unicasts:%d multicasts:%d",
-          c,
-          (float)(s->now - s->start) / HNETD_TIME_PER_SECOND,
-          s->sent_unicast, s->sent_multicast);
+  L_NOTICE("#nodes:%d elapsed:%.2fs unicasts:%d multicasts:%d",
+           c,
+           (float)(s->now - s->start) / HNETD_TIME_PER_SECOND,
+           s->sent_unicast, s->sent_multicast);
   list_for_each_safe(p, pn, &s->neighs)
     {
       net_neigh n = container_of(p, net_neigh_s, h);
