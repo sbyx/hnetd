@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Dec  2 16:44:01 2013 mstenber
- * Edit time:     194 min
+ * Last modified: Mon Dec  2 17:36:55 2013 mstenber
+ * Edit time:     212 min
  *
  */
 
@@ -120,7 +120,7 @@ bool net_sim_is_converged(net_sim s)
                                      false);
           sput_fail_unless(hn, "hcp_find_node_by_hash failed");
           if (abs(n2->n.own_node->origination_time -
-                  hn->origination_time) > 2000)
+                  hn->origination_time) > 5000)
             {
               L_DEBUG("origination time mismatch %lld <> %lld",
                       (long long) n2->n.own_node->origination_time,
@@ -541,7 +541,7 @@ void hcp_bird14(void)
       net_sim_set_connected(l2, l1, true);
     }
 
-  SIM_WHILE(&s, 10000, !net_sim_is_converged(&s));
+  SIM_WHILE(&s, 1000, !net_sim_is_converged(&s));
 
   sput_fail_unless(net_sim_find_hcp(&s, "b10")->nodes.avl.count == 11,
                    "b10 enough nodes");
@@ -556,6 +556,46 @@ void hcp_bird14(void)
   net_sim_uninit(&s);
 }
 
+static void raw_hcp_tube(unsigned int num_nodes)
+{
+  /* A LOT of routers connected in a tube (R1 R2 R3 .. RN). */
+  unsigned int i;
+  net_sim_s s;
+
+  net_sim_init(&s);
+  for (i = 0 ; i < num_nodes-1 ; i++)
+    {
+      char buf[128];
+
+      sprintf(buf, "node%d", i);
+      hcp n1 = net_sim_find_hcp(&s, buf);
+
+      sprintf(buf, "node%d", i+1);
+      hcp n2 = net_sim_find_hcp(&s, buf);
+
+      hcp_link l1 = net_sim_hcp_find_link(n1, "down");
+      hcp_link l2 = net_sim_hcp_find_link(n2, "up");
+      net_sim_set_connected(l1, l2, true);
+      net_sim_set_connected(l2, l1, true);
+    }
+  SIM_WHILE(&s, 10000, !net_sim_is_converged(&s));
+
+  sput_fail_unless(net_sim_find_hcp(&s, "node0")->nodes.avl.count == num_nodes,
+                   "enough nodes");
+
+  net_sim_uninit(&s);
+}
+
+void hcp_tube_small(void)
+{
+  raw_hcp_tube(5);
+}
+
+void hcp_tube_beyond_multicast(void)
+{
+  raw_hcp_tube(1400 / (HCP_HASH_LEN * 2 + TLV_SIZE));
+}
+
 int main(__unused int argc, __unused char **argv)
 {
   setbuf(stdout, NULL); /* so that it's in sync with stderr when redirected */
@@ -564,6 +604,8 @@ int main(__unused int argc, __unused char **argv)
   sput_enter_suite("hcp_net"); /* optional */
   sput_run_test(hcp_two);
   sput_run_test(hcp_bird14);
+  sput_run_test(hcp_tube_small);
+  sput_run_test(hcp_tube_beyond_multicast);
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();

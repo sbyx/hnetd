@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Thu Nov 28 11:50:56 2013 mstenber
- * Edit time:     6 min
+ * Last modified: Mon Dec  2 17:33:10 2013 mstenber
+ * Edit time:     7 min
  *
  */
 
@@ -73,7 +73,7 @@ typedef struct __packed {
 typedef struct __packed {
   hcp_hash_s node_identifier_hash;
   uint32_t update_number;
-  uint32_t seconds_since_origination;
+  uint32_t ms_since_origination;
   hcp_hash_s node_data_hash;
 } hcp_t_node_state_s, *hcp_t_node_state;
 
