@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Fri Nov 29 11:39:19 2013 mstenber
+ * Last modified: Mon Dec  2 12:58:02 2013 mstenber
  * Edit time:     103 min
  *
  */
@@ -207,8 +207,7 @@ void hcp_self_flush(hcp_node n);
 
 /* Various hash calculation utilities. */
 void hcp_calculate_hash(const void *buf, int len, hcp_hash dest);
-void hcp_calculate_network_hash(hcp o, hcp_hash dest);
-void hcp_calculate_node_data_hash(hcp_node n, hcp_hash dest);
+void hcp_calculate_network_hash(hcp o);
 
 /* Utility functions to send frames. */
 bool hcp_link_send_network_state(hcp_link l,

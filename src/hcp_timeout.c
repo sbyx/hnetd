@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Fri Nov 29 11:00:09 2013 mstenber
+ * Last modified: Mon Dec  2 12:58:45 2013 mstenber
  * Edit time:     90 min
  *
  */
@@ -169,7 +169,7 @@ void hcp_run(hcp o)
       /* Store original network hash for future study. */
       hcp_hash_s old_hash = o->network_hash;
 
-      hcp_calculate_network_hash(o, &o->network_hash);
+      hcp_calculate_network_hash(o);
       if (memcmp(&old_hash, &o->network_hash, HCP_HASH_LEN))
         {
           /* Shocker. The network hash changed -> reset _every_
@@ -179,8 +179,6 @@ void hcp_run(hcp o)
             if (!l->join_pending)
               trickle_set_i(l, HCP_TRICKLE_IMIN);
         }
-      o->network_hash_dirty = false;
-      /* printf("network_hash_dirty -> false\n"); */
     }
 
   vlist_for_each_element(&o->links, l, in_links)
