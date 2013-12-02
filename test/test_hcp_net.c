@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Dec  2 12:07:50 2013 mstenber
- * Edit time:     161 min
+ * Last modified: Mon Dec  2 13:01:16 2013 mstenber
+ * Edit time:     176 min
  *
  */
 
@@ -81,6 +81,30 @@ void net_sim_init(net_sim s)
   INIT_LIST_HEAD(&s->messages);
   /* 64 bits -> have to enjoy it.. */
   s->start = s->now = 12345678901234;
+}
+
+bool net_sim_is_converged(net_sim s)
+{
+  net_node n;
+  struct list_head *p;
+  bool first = true;
+  hcp_hash h = NULL;
+
+  list_for_each(p, &s->nodes)
+    {
+      n = container_of(p, net_node_s, h);
+      if (n->n.network_hash_dirty)
+        return false;
+      if (first)
+        {
+          h = &n->n.network_hash;
+          first = false;
+          continue;
+        }
+      if (memcmp(h, &n->n.network_hash, sizeof(hcp_hash_s)))
+        return false;
+    }
+  return true;
 }
 
 hcp net_sim_find_hcp(net_sim s, const char *name)
@@ -268,17 +292,17 @@ void net_sim_advance(net_sim s, hnetd_time_t t)
   printf("time = %lld\n", (long long int) (t - s->start));
 }
 
-#define SIM_WHILE(s, maxiter, criteria)                         \
-do {                                                            \
-  int iter = 0;                                                 \
-                                                                \
-  while((criteria) && iter < maxiter)                           \
-    {                                                           \
-      net_sim_run(s);                                           \
-      net_sim_advance(s, net_sim_next(s));                      \
-      iter++;                                                   \
-    }                                                           \
-  sput_fail_unless(!(criteria), "criteria at maxiter too");     \
+#define SIM_WHILE(s, maxiter, criteria)                 \
+do {                                                    \
+  int iter = 0;                                         \
+                                                        \
+  while((criteria) && iter < maxiter)                   \
+    {                                                   \
+      net_sim_run(s);                                   \
+      net_sim_advance(s, net_sim_next(s));              \
+      iter++;                                           \
+    }                                                   \
+  sput_fail_unless(!(criteria), "!criteria at end");    \
  } while(0)
 
 /********************************************************* Mocked interfaces */
@@ -411,16 +435,10 @@ void hcp_two(void)
   sput_fail_unless(avl_is_empty(&l1->neighbors.avl), "no l1 neighbors");
   sput_fail_unless(avl_is_empty(&l2->neighbors.avl), "no l2 neighbors");
 
-  /* connect l1+l2 -> should see neighbors */
+  /* connect l1+l2 -> should converge at some point */
   net_sim_set_connected(l1, l2, true);
   net_sim_set_connected(l2, l1, true);
-  SIM_WHILE(&s, 100,
-            avl_is_empty(&l1->neighbors.avl)
-            || avl_is_empty(&l2->neighbors.avl));
-
-  /* Network hashes should also become one at some point */
-  SIM_WHILE(&s, 100,
-            memcmp(&n1->network_hash, &n2->network_hash, HCP_HASH_LEN));
+  SIM_WHILE(&s, 100, !net_sim_is_converged(&s));
 
   sput_fail_unless(n1->nodes.avl.count == 2, "n1 nodes == 2");
   sput_fail_unless(n2->nodes.avl.count == 2, "n2 nodes == 2");
@@ -478,7 +496,6 @@ void hcp_bird14(void)
   net_sim_s s;
   int i;
   int num_connections = sizeof(nodeconnections) / sizeof(nodeconnections[0]);
-  hcp cpe, b10;
 
   net_sim_init(&s);
   for (i = 0 ; i < num_connections ; i++)
@@ -492,12 +509,11 @@ void hcp_bird14(void)
       net_sim_set_connected(l1, l2, true);
       net_sim_set_connected(l2, l1, true);
     }
-  cpe = net_sim_find_hcp(&s, "cpe");
-  b10 = net_sim_find_hcp(&s, "b10");
 
-  SIM_WHILE(&s, 10000,
-            cpe->nodes.avl.count != 11 ||
-            b10->nodes.avl.count != 11);
+  SIM_WHILE(&s, 10000, !net_sim_is_converged(&s));
+
+  sput_fail_unless(net_sim_find_hcp(&s, "b10")->nodes.avl.count == 11,
+                   "b10 enough nodes");
 
   sput_fail_unless(s.now - s.start < 6000, "should converge in minute");
 
