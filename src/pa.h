@@ -28,6 +28,13 @@ struct pa_rid {
 	uint8_t id[PA_RIDLEN];
 };
 
+#define PA_RID_L		"%02x%02x%02x%02x:%02x%02x%02x%02x:%02x%02x%02x%02x:%02x%02x%02x%02x"
+#define PA_RID_LA(rid)  (rid)->id[0], (rid)->id[1], (rid)->id[2], (rid)->id[3], \
+		(rid)->id[4], (rid)->id[5], (rid)->id[6], (rid)->id[7], \
+		(rid)->id[8], (rid)->id[9], (rid)->id[10], (rid)->id[11], \
+		(rid)->id[12], (rid)->id[13], (rid)->id[15], (rid)->id[15]
+
+
 typedef void *pa_t;
 
 /* Callbacks for flooding protocol. */
