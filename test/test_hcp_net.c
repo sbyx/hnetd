@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Dec  2 13:01:16 2013 mstenber
- * Edit time:     176 min
+ * Last modified: Mon Dec  2 14:43:27 2013 mstenber
+ * Edit time:     189 min
  *
  */
 
@@ -19,7 +19,6 @@
  * time of the testcase.
  */
 
-#include "hnetd.h"
 #include "hcp.c"
 #include "hcp_proto.c"
 #include "hcp_timeout.c"
@@ -102,7 +101,11 @@ bool net_sim_is_converged(net_sim s)
           continue;
         }
       if (memcmp(h, &n->n.network_hash, sizeof(hcp_hash_s)))
-        return false;
+        {
+          L_DEBUG("not converged, network hash mismatch %lx <> %lx",
+                  hcp_hash64(h), hcp_hash64(&n->n.network_hash));
+          return false;
+        }
     }
   return true;
 }
@@ -175,7 +178,7 @@ void net_sim_set_connected(hcp_link l1, hcp_link l2, bool enabled)
   net_node node = container_of(o, net_node_s, n);
   net_sim s = node->s;
 
-  /* printf("connection %x -> %x %s\n", l1, l2, enabled ? "on" : "off"); */
+  L_DEBUG("connection %p -> %p %s", l1, l2, enabled ? "on" : "off");
   if (enabled)
     {
       /* Add node */
@@ -289,7 +292,7 @@ void net_sim_advance(net_sim s, hnetd_time_t t)
 {
   sput_fail_unless(s->now <= t, "time moving forwards");
   s->now = t;
-  printf("time = %lld\n", (long long int) (t - s->start));
+  L_DEBUG("time = %lld", (long long int) (t - s->start));
 }
 
 #define SIM_WHILE(s, maxiter, criteria)                 \
@@ -391,6 +394,9 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
           && (is_multicast
               || memcmp(&n->dst->address, dst, sizeof(*dst)) == 0))
         {
+#if L_LEVEL >= 7
+          net_node node2 = container_of(n->dst->hcp, net_node_s, n);
+#endif /* L_LEVEL >= 7 */
           net_msg m = calloc(1, sizeof(*m));
           hnetd_time_t wt = s->now + MESSAGE_PROPAGATION_DELAY;
 
@@ -404,6 +410,9 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
           m->dst = *dst;
           m->readable_at = wt;
           list_add(&m->h, &s->messages);
+          L_DEBUG("sendto: %s/%s -> %s/%s (%d bytes %s)",
+                  node->name, l->ifname, node2->name, n->dst->ifname, (int)len,
+                  is_multicast ? "multicast" : "unicast");
         }
     }
   return -1;
@@ -526,6 +535,8 @@ void hcp_bird14(void)
 
 int main(__unused int argc, __unused char **argv)
 {
+  setbuf(stdout, NULL); /* so that it's in sync with stderr when redirected */
+  openlog("test_hcp_net", LOG_CONS | LOG_PERROR, LOG_DAEMON);
   sput_start_testing();
   sput_enter_suite("hcp_net"); /* optional */
   sput_run_test(hcp_two);

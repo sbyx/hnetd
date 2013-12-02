@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Mon Dec  2 12:58:45 2013 mstenber
- * Edit time:     90 min
+ * Last modified: Mon Dec  2 14:45:19 2013 mstenber
+ * Edit time:     99 min
  *
  */
 
@@ -60,6 +60,9 @@ static void hcp_prune_rec(hcp_node n)
 
   hcp_node_get_tlvs(n, &tlvs);
 
+  L_DEBUG("hcp_prune_rec %lx / %p = %p",
+          hcp_hash64(&n->node_identifier_hash), n, tlvs);
+
   /* No TLVs? No point recursing, unless the node is us (we have to
    * visit it always in any case). */
   if (!tlvs && n != n->hcp->own_node)
@@ -71,17 +74,32 @@ static void hcp_prune_rec(hcp_node n)
   /* Look at it's neighbors. */
   tlv_for_each_attr(a, tlvs, rem)
     if (tlv_id(a) == HCP_T_NODE_DATA_NEIGHBOR)
-      if (tlv_len(a) == sizeof(hcp_t_node_data_neighbor_s))
-        {
-          ne = tlv_data(a);
-          n2 = hcp_find_node_by_hash(n->hcp, &ne->neighbor_node_identifier_hash,
-                                     false);
-          hcp_prune_rec(n2);
-        }
+      {
+        if (tlv_len(a) == sizeof(hcp_t_node_data_neighbor_s))
+          {
+            ne = tlv_data(a);
+            n2 = hcp_find_node_by_hash(n->hcp,
+                                       &ne->neighbor_node_identifier_hash,
+                                       false);
+            if (n2)
+              hcp_prune_rec(n2);
+            else
+              {
+                L_DEBUG("unable to find node %lx -> ignoring",
+                        hcp_hash64(&ne->neighbor_node_identifier_hash));
+              }
+          }
+        else
+          {
+            L_INFO("invalid node data neighbor TLV size %d, ignoring",
+                   (int) tlv_len(a));
+          }
+      }
 }
 
 static void hcp_prune(hcp o)
 {
+  L_DEBUG("hcp_prune %p", o);
   /* Prune the node graph. IOW, start at own node, flood fill, and zap
    * anything that didn't seem appropriate. */
   vlist_update(&o->nodes);
@@ -101,7 +119,7 @@ static void hcp_prune(hcp o)
       vlist_add(&o->nodes, &n->in_nodes, n);
 
       /* Only neighbors we believe to be reachable are the ones we can
-       * find in our own link -> neighbor relations, with non-zero
+       * find in our own link -> nei ghbor relations, with non-zero
        * last_response. */
       vlist_for_each_element(&o->links, l, in_links)
         {
@@ -250,8 +268,8 @@ void hcp_run(hcp o)
 
           /* Send a ping */
           n->last_ping = now;
+          L_DEBUG("pinging neighbor %lx", hcp_hash64(&n->node_identifier_hash));
           hcp_link_send_req_network_state(l, &n->last_address);
-          /* printf("pinging neighbor %d\n", n->ping_count); */
         }
     }
 

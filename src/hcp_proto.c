@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu Nov 28 11:55:04 2013 mstenber
- * Edit time:     143 min
+ * Last modified: Mon Dec  2 14:54:31 2013 mstenber
+ * Edit time:     171 min
  *
  */
 
@@ -50,7 +50,7 @@ static bool _push_node_data_tlv(struct tlv_buf *tb, hcp_node n)
   h->node_identifier_hash = n->node_identifier_hash;
   h->update_number = cpu_to_be32(n->update_number);
   memcpy((unsigned char *)h + sizeof(hcp_t_node_data_header_s),
-         n->tlv_container, s);
+         tlv_data(n->tlv_container), s);
   return true;
 }
 
@@ -115,7 +115,7 @@ bool hcp_link_send_network_state(hcp_link l,
                              l->ifname,
                              dst);
       tlv_buf_free(&tb);
-      /* printf("hcp_link_send_network_state %p\n", l); */
+      L_DEBUG("hcp_link_send_network_state %p", l);
       return rc > 0;
     }
  err:
@@ -146,7 +146,7 @@ bool hcp_link_send_node_data(hcp_link l,
                              l->ifname,
                              dst);
       r = rc > 0;
-      /* printf("hcp_link_send_node_data %p\n", l); */
+      L_DEBUG("hcp_link_send_node_state %p", l);
     }
   tlv_buf_free(&tb);
   return r;
@@ -169,7 +169,7 @@ bool hcp_link_send_req_network_state(hcp_link l,
                              l->ifname,
                              dst);
       r = rc > 0;
-      /* printf("hcp_link_send_req_network_state %p\n", l); */
+      L_DEBUG("hcp_link_send_req_network_state %p", l);
     }
   tlv_buf_free(&tb);
   return r;
@@ -195,7 +195,7 @@ bool hcp_link_send_req_node_data(hcp_link l,
                              l->ifname,
                              dst);
       r = rc > 0;
-      /* printf("hcp_link_send_req_node_data %p\n", l); */
+      L_DEBUG("hcp_link_send_req_node_state %p", l);
     }
   tlv_buf_free(&tb);
   return r;
@@ -212,7 +212,7 @@ _heard(hcp_link l, hcp_t_link_id lid, struct in6_addr *src)
 
   memset(&nc, 0, sizeof(nc));
   nc.node_identifier_hash = lid->node_identifier_hash;
-  nc.iid = cpu_to_be32(lid->link_id);
+  nc.iid = be32_to_cpu(lid->link_id);
   n = vlist_find(&l->neighbors, &nc, &nc, in_neighbors);
   if (!n)
     {
@@ -222,7 +222,8 @@ _heard(hcp_link l, hcp_t_link_id lid, struct in6_addr *src)
         return NULL;
       memcpy(n, &nc, sizeof(nc));
       vlist_add(&l->neighbors, &n->in_neighbors, n);
-      /* printf("_heard - added new neighbor %p\n", n); */
+      L_DEBUG("_heard %lx on link %p",
+              hcp_hash64(&lid->node_identifier_hash), l);
     }
 
   n->last_address = *src;
@@ -259,15 +260,24 @@ handle_message(hcp_link l,
       {
         /* Error to have multiple top level link id's. */
         if (lid)
-          return;
+          {
+            L_INFO("got multiple link ids - ignoring");
+            return;
+          }
         if (tlv_len(a) == sizeof(hcp_t_link_id_s))
           lid = tlv_data(a);
         else
-          return; /* weird link id */
+          {
+            L_INFO("got invalid sized link ids - ignoring");
+            return; /* weird link id */
+          }
       }
 
   if (!lid)
-    return;
+    {
+      L_INFO("did not get link ids - ignoring");
+      return;
+    }
 
   ne = _heard(l, lid, src);
 
@@ -289,13 +299,19 @@ handle_message(hcp_link l,
         case HCP_T_REQ_NET_HASH:
           /* Ignore if in multicast. */
           if (multicast)
-            return;
+            {
+              L_INFO("ignoring req-net-hash in multicast");
+              return;
+            }
           (void)hcp_link_send_network_state(l, src, 0);
           return;
         case HCP_T_REQ_NODE_DATA:
           /* Ignore if in multicast. */
           if (multicast)
-            return;
+            {
+              L_INFO("ignoring req-net-hash in unicast");
+              return;
+            }
           if (tlv_len(a) == HCP_HASH_LEN)
             {
               n = hcp_find_node_by_hash(o, tlv_data(a), false);
@@ -319,12 +335,19 @@ handle_message(hcp_link l,
   if (nethash)
     {
       if (memcmp(nethash, &o->network_hash, HCP_HASH_LEN) == 0)
-        return;
+        {
+          L_DEBUG("received network state which is consistent");
+          return;
+        }
       /* Short form (raw network hash) */
       if (!nodestates)
         {
           if (multicast)
             (void)hcp_link_send_req_network_state(l, src);
+          else
+            {
+              L_INFO("unicast short form network status received - ignoring");
+            }
           return;
         }
       /* Long form (has node states). */
@@ -334,17 +357,35 @@ handle_message(hcp_link l,
         if (tlv_id(a) == HCP_T_NODE_STATE)
           {
             if (tlv_len(a) != sizeof(hcp_t_node_state_s))
-              return;
+              {
+                L_INFO("invalid length node state TLV received - ignoring");
+                return;
+              }
             ns = tlv_data(a);
             n = hcp_find_node_by_hash(o, &ns->node_identifier_hash, false);
-            if (!n || n->update_number < cpu_to_be32(ns->update_number))
-              hcp_link_send_req_node_data(l, src, ns);
+            new_update_number = be32_to_cpu(ns->update_number);
+            if (!n || n->update_number < new_update_number)
+              {
+                L_DEBUG("saw something new for %lx/%p (update number %d)",
+                        hcp_hash64(&ns->node_identifier_hash),
+                        n, new_update_number);
+                hcp_link_send_req_node_data(l, src, ns);
+              }
+            else
+              {
+                L_DEBUG("saw something old for %lx/%p (update number %d)",
+                        hcp_hash64(&ns->node_identifier_hash),
+                        n, new_update_number);
+              }
           }
       return;
     }
   /* We don't accept node data via multicast. */
   if (multicast)
-    return;
+    {
+      L_INFO("received node data via multicast, ignoring");
+      return;
+    }
   /* Look for node state + node data. */
   ns = NULL;
   nd = NULL;
@@ -353,38 +394,65 @@ handle_message(hcp_link l,
       {
       case HCP_T_NODE_STATE:
         if (ns)
-          return;
+          {
+            L_INFO("received multiple node state TLVs, ignoring");
+            return;
+          }
         if (tlv_len(a) != sizeof(hcp_t_node_state_s))
-          return;
+          {
+            L_INFO("received invalid node state TLVs, ignoring");
+            return;
+          }
         ns = tlv_data(a);
         break;
       case HCP_T_NODE_DATA:
         if (nd)
-          return;
+          {
+            L_INFO("received multiple node data TLVs, ignoring");
+            return;
+          }
         nd_len = tlv_len(a) - sizeof(hcp_t_node_data_header_s);
         if (nd_len < 0)
-          return;
+          {
+            L_INFO("received invalid node data TLV, ignoring");
+            return;
+          }
         nd = tlv_data(a);
         nd_data = (unsigned char *)nd + nd_len;
         break;
       }
   if (!ns || !nd)
-    return;
+    {
+      L_INFO("node data or node state TLV missing, ignoring");
+      return;
+    }
   /* If they're for different nodes, not interested. */
   if (memcmp(&ns->node_identifier_hash, &nd->node_identifier_hash, HCP_HASH_LEN))
-    return;
+    {
+      L_INFO("node data and state identifier mismatch, ignoring");
+      return;
+    }
   /* Is it actually valid? Should be same update #. */
   if (ns->update_number != nd->update_number)
-    return;
+    {
+      L_INFO("node data and state update number mismatch, ignoring");
+      return;
+    }
   /* Let's see if it's more recent. */
   n = hcp_find_node_by_hash(o, &ns->node_identifier_hash, true);
   if (!n)
     return;
-  new_update_number = cpu_to_be32(ns->update_number);
+  new_update_number = be32_to_cpu(ns->update_number);
   if (n->update_number >= new_update_number)
-    return;
+    {
+      L_DEBUG("received update number %d, but already have %d",
+              new_update_number, n->update_number);
+      return;
+    }
   if (hcp_node_is_self(n))
     {
+      L_DEBUG("received %d update number from network, own %d",
+              new_update_number, n->update_number);
       /* Don't accept updates to 'self' from network. Instead,
        * increment own update number. */
       n->update_number = new_update_number + 1;
@@ -400,11 +468,17 @@ handle_message(hcp_link l,
   tlv_buf_init(&tb, 0); /* not passed anywhere */
   if (tlv_put_raw(&tb, nd_data, nd_len))
     {
+      L_DEBUG("updated node %p %d -> %d",
+              n, n->update_number, new_update_number);
       n->update_number = new_update_number;
       n->node_data_hash_dirty = true;
       o->network_hash_dirty = true;
       hcp_node_set_tlvs(n, tb.head);
       hcp_schedule(o);
+    }
+  else
+    {
+      L_DEBUG("tlv_put_raw failed");
     }
 }
 

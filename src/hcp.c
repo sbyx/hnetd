@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Dec  2 13:09:27 2013 mstenber
- * Edit time:     306 min
+ * Last modified: Mon Dec  2 15:07:09 2013 mstenber
+ * Edit time:     336 min
  *
  */
 
@@ -40,6 +40,8 @@ void hcp_schedule(hcp o)
 
 bool hcp_node_set_tlvs(hcp_node n, struct tlv_attr *a)
 {
+  L_DEBUG("hcp_node_set_tlvs %lx/%p %p",
+          hcp_hash64(&n->node_identifier_hash), n, a);
   if (n->tlv_container)
     {
       if (a && tlv_attr_equal(n->tlv_container, a))
@@ -380,6 +382,7 @@ void hcp_self_flush(hcp_node n)
 
   if (o->links_dirty)
     {
+      o->links_dirty = false;
       /* Rather crude: We simply get rid of existing link TLVs, and
        * publish new ones. Assumption: Whatever is added using
        * hcp_add_tlv will have version=-1, and dynamically generated
@@ -396,7 +399,7 @@ void hcp_self_flush(hcp_node n)
 
               tlv_init(nt,
                        HCP_T_NODE_DATA_NEIGHBOR,
-                       sizeof(hcp_t_node_data_neighbor_s));
+                       TLV_SIZE + sizeof(hcp_t_node_data_neighbor_s));
               hcp_t_node_data_neighbor d = tlv_data(nt);
 
               d->neighbor_node_identifier_hash = ne->node_identifier_hash;
@@ -433,11 +436,15 @@ void hcp_self_flush(hcp_node n)
 
   /* Replace old state with new _if_ it's really new. */
   if (!hcp_node_set_tlvs(n, tb.head))
-    return;
+    {
+      L_DEBUG("state did not change -> nothing to flush");
+      return;
+    }
   n->update_number++;
   n->origination_time = hcp_time(o);
   o->network_hash_dirty = true;
   hcp_schedule(o);
+  L_DEBUG("hcp_self_flush %p -> update_number = %d", n, n->update_number);
 }
 
 void hcp_node_get_tlvs(hcp_node n, struct tlv_attr **r)
@@ -451,22 +458,28 @@ void hcp_node_get_tlvs(hcp_node n, struct tlv_attr **r)
 void hcp_calculate_node_data_hash(hcp_node n)
 {
   md5_ctx_t ctx;
-  struct tlv_attr h;
   int l;
+  uint32_t update_number;
+  unsigned char buf[TLV_SIZE + sizeof(hcp_t_node_data_header_s)];
+  struct tlv_attr *h = (struct tlv_attr *)buf;
+  hcp_t_node_data_header ndh = (void *)h + TLV_SIZE;
 
   if (!n->node_data_hash_dirty)
     return;
 
   l = n->tlv_container ? tlv_len(n->tlv_container) : 0;
-  tlv_init(&h, HCP_T_NODE_DATA, sizeof(n->update_number) + HCP_HASH_LEN + l);
+  tlv_init(h, HCP_T_NODE_DATA, sizeof(buf) + l);
+  ndh->node_identifer_hash = n->node_identifier_hash;
+  ndh->update_number = cpu_to_be32(n->update_number);
   md5_begin(&ctx);
-  md5_hash(&h, sizeof(h), &ctx);
-  md5_hash(&n->node_identifier_hash, HCP_HASH_LEN, &ctx);
-  md5_hash(&n->update_number, sizeof(n->update_number), &ctx);
+  md5_hash(buf, sizeof(buf), &ctx);
   if (l)
     md5_hash(tlv_data(n->tlv_container), l, &ctx);
   md5_end(&n->node_data_hash, &ctx);
   n->node_data_hash_dirty = false;
+  L_DEBUG("hcp_calculate_node_data_hash @%p %lx=%lx",
+          n->hcp, hcp_hash64(&n->node_identifier_hash),
+          hcp_hash64(&n->node_data_hash));
 }
 
 void hcp_calculate_network_hash(hcp o)
@@ -483,5 +496,7 @@ void hcp_calculate_network_hash(hcp o)
       md5_hash(&n->node_data_hash, HCP_HASH_LEN, &ctx);
     }
   md5_end(&o->network_hash, &ctx);
+  L_DEBUG("hcp_calculate_network_hash @%p =%lx",
+          o, hcp_hash64(&o->network_hash));
   o->network_hash_dirty = false;
 }
