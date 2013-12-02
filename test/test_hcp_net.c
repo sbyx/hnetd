@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Dec  2 12:04:40 2013 mstenber
- * Edit time:     158 min
+ * Last modified: Mon Dec  2 12:07:50 2013 mstenber
+ * Edit time:     161 min
  *
  */
 
@@ -75,6 +75,7 @@ typedef struct net_sim_t {
 
 void net_sim_init(net_sim s)
 {
+  memset(s, 0, sizeof(*s));
   INIT_LIST_HEAD(&s->nodes);
   INIT_LIST_HEAD(&s->neighs);
   INIT_LIST_HEAD(&s->messages);
