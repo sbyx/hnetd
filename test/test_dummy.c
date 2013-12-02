@@ -6,10 +6,16 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 12:51:48 2013 mstenber
- * Last modified: Tue Nov 26 11:01:59 2013 mstenber
- * Edit time:     13 min
+ * Last modified: Mon Dec  2 13:32:39 2013 mstenber
+ * Edit time:     14 min
  *
  */
+
+
+#ifdef L_LEVEL
+#undef L_LEVEL
+#endif /* L_LEVEL */
+#define L_LEVEL 7
 
 #include "hnetd.h"
 #include "sput.h"
@@ -29,6 +35,13 @@ int dummy_callback(int i)
 void sample(void)
 {
   int r;
+
+  L_DEBUG("debug");
+  L_INFO("info");
+  L_NOTICE("notice");
+  L_WARN("warn");
+  L_ERR("err");
+
   sput_fail_if(0, "0 isn't false!");
   sput_fail_unless(1, "1 isn't true!");
 
@@ -49,6 +62,7 @@ void sample(void)
 
 int main(__unused int argc, __unused char **argv)
 {
+  openlog("test_dummy", LOG_CONS | LOG_PERROR, LOG_DAEMON);
   sput_start_testing();
   sput_enter_suite("dummysuite"); /* optional */
   sput_run_test(sample);
@@ -56,4 +70,3 @@ int main(__unused int argc, __unused char **argv)
   sput_finish_testing();
   return sput_get_return_value();
 }
-
