@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Mon Dec  2 18:00:22 2013 mstenber
- * Edit time:     187 min
+ * Last modified: Mon Dec  2 18:04:58 2013 mstenber
+ * Edit time:     186 min
  *
  */
 
@@ -88,6 +88,7 @@ bool hcp_link_send_network_state(hcp_link l,
   struct tlv_buf tb;
   hcp_node n;
   hcp o = l->hcp;
+  bool r = false;
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
@@ -114,13 +115,12 @@ bool hcp_link_send_network_state(hcp_link l,
                              tlv_len(tb.head),
                              l->ifname,
                              dst);
-      tlv_buf_free(&tb);
       L_DEBUG("hcp_link_send_network_state %p", l);
-      return rc > 0;
+      r = rc > 0;
     }
  err:
   tlv_buf_free(&tb);
-  return false;
+  return r;
 }
 
 bool hcp_link_send_node_data(hcp_link l,
