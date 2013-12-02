@@ -6,13 +6,19 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Wed Nov 27 18:20:22 2013 mstenber
+ * Last modified: Mon Dec  2 13:25:15 2013 mstenber
  * Edit time:     61 min
  *
  */
 
 #ifndef HCP_H
 #define HCP_H
+
+#ifdef L_LEVEL
+#undef L_LEVEL
+#endif /* L_LEVEL */
+
+#define L_LEVEL 7
 
 #include "hnetd.h"
 #include "tlv.h"
