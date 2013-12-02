@@ -17,3 +17,6 @@ install_manifest.txt
 /hnetd
 /test_*
 .settings
+/coverage
+/coverage.info
+
