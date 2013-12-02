@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Dec  2 15:46:24 2013 mstenber
+ * Last modified: Mon Dec  2 16:44:01 2013 mstenber
  * Edit time:     194 min
  *
  */
@@ -546,11 +546,12 @@ void hcp_bird14(void)
   sput_fail_unless(net_sim_find_hcp(&s, "b10")->nodes.avl.count == 11,
                    "b10 enough nodes");
 
-  sput_fail_unless(s.now - s.start < 6000, "should converge in minute");
+  sput_fail_unless(s.now - s.start < 10 * HNETD_TIME_PER_SECOND,
+                   "should converge in 10 seconds");
 
   sput_fail_unless(s.sent_multicast < 500, "with 'few' multicast");
 
-  sput_fail_unless(s.sent_unicast < 2000, "with 'few' unicast");
+  sput_fail_unless(s.sent_unicast < 1000, "with 'few' unicast");
 
   net_sim_uninit(&s);
 }
