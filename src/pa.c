@@ -46,8 +46,8 @@
 #define PA_CONF_DFLT_NO_V4_IF_V6         0
 #define PA_CONF_DFLT_USE_RDM_ULA         1
 
-#define PA_CONF_DFLT_IFACE_REGISTER      iface_register_user
-#define PA_CONF_DFLT_IFACE_UNREGISTER      iface_unregister_user
+#define PA_CONF_DFLT_IFACE_REGISTER      NULL
+#define PA_CONF_DFLT_IFACE_UNREGISTER    NULL
 
 /* 10/8 */
 static struct prefix PA_CONF_DFLT_V4 = {
@@ -167,7 +167,8 @@ static void pa_lap_destroy(struct pa *pa, struct pa_lap *lap);
 /**************************************************************/
 
 /* avl_tree key comparator */
-static int pa_avl_prefix_cmp (const void *k1, const void *k2, void *ptr)
+static int pa_avl_prefix_cmp (const void *k1, const void *k2,
+		__attribute__((unused))void *ptr)
 {
 	int i = prefix_cmp((struct prefix *)k1, (struct prefix *)k2);
 	if(!i)
@@ -531,8 +532,8 @@ static void pa_lap_delayed_update_timeout(struct pa *pa, struct pa_lap *lap,
 	if(lap->delayed_flooding_time &&
 					(!timeout || lap->delayed_flooding_time < timeout))
 				timeout = lap->delayed_flooding_time;
-
-	pa_uloop_set(&lap->delayed_timeout, now, timeout);
+	if(timeout)
+		pa_uloop_set(&lap->delayed_timeout, now, timeout);
 }
 
 static void pa_lap_tellhcp(struct pa *pa, struct pa_lap *lap)
@@ -1203,9 +1204,11 @@ static void pa_ifu_intiface(struct iface_user *u,
 
 static void pa_ifu_pd(struct iface_user *u,
 			const struct prefix *prefix,
-			hnetd_time_t valid_until, hnetd_time_t preferred_until)
+			hnetd_time_t valid_until, hnetd_time_t preferred_until,
+			__attribute__((unused))uint16_t class)
 {
 	struct pa *pa = container_of(u, struct pa, ifu);
+	/* TODO: Manage class (or not)*/
 	/* Null because local */
 	struct pa_dp *dp = pa_dp_goc(pa, prefix, NULL);
 
@@ -1225,6 +1228,10 @@ int pa_set_conf(pa_t pat, const struct pa_conf *conf)
 
 	if(conf->use_ula && !conf->use_random_ula &&
 			!prefix_is_ipv6_ula(&conf->ula_prefix))
+		return -1;
+
+	if(!conf->iface_registration ||
+			!conf->iface_unregistration)
 		return -1;
 
 	memcpy(&pa->conf, conf, sizeof(struct pa_conf));
@@ -1252,7 +1259,7 @@ pa_t pa_create(const struct pa_conf *conf)
 
 	pa->pa_short_timeout = (struct uloop_timeout) { .cb = pa_do_uloop };
 	pa->pa_dp_timeout = (struct uloop_timeout) { .cb = pa_do_uloop };
-	pa->rid = (struct pa_rid) {};
+	pa->rid = (struct pa_rid) {.id = {} };
 
 	if(pa_set_conf(pa, conf)) {
 		free(pa);
