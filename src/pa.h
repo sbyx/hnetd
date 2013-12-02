@@ -108,16 +108,17 @@ struct pa_conf {
 	struct prefix v4_prefix;
 
 	/* The iface registration functions.
-	 * Default is iface_register_user and
-	 * iface_unregister_user (from iface.h).
-	 * This must not be modified unless for unit-testing. */
+	 * Default is NULL (for unit testing purposes).
+	 * Should be set to iface_register_user and
+	 * iface_unregister_user to operate with iface.h */
 	void (*iface_registration)(struct iface_user *user);
 	void (*iface_unregistration)(struct iface_user *user);
 
 };
 
 
-/* Sets conf values to defaults. */
+/* Sets conf values to defaults.
+ * IMPORTANT: You need to set iface_registration and iface_unregistration yourself ! */
 void pa_conf_default(struct pa_conf *);
 
 /* Initializes the prefix assignment algorithm with a default
