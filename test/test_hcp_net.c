@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Fri Nov 29 11:39:49 2013 mstenber
- * Edit time:     122 min
+ * Last modified: Mon Dec  2 12:04:40 2013 mstenber
+ * Edit time:     158 min
  *
  */
 
@@ -55,6 +55,7 @@ typedef struct {
 typedef struct {
   struct list_head h;
   struct net_sim_t *s;
+  char *name;
   hcp_s n;
   hnetd_time_t want_timeout_at;
   hnetd_time_t next_message_at;
@@ -67,6 +68,9 @@ typedef struct net_sim_t {
   struct list_head messages;
 
   hnetd_time_t now, start;
+
+  int sent_unicast;
+  int sent_multicast;
 } net_sim_s, *net_sim;
 
 void net_sim_init(net_sim s)
@@ -78,12 +82,23 @@ void net_sim_init(net_sim s)
   s->start = s->now = 12345678901234;
 }
 
-hcp net_sim_add_hcp(net_sim s, const char *name)
+hcp net_sim_find_hcp(net_sim s, const char *name)
 {
-  net_node n = calloc(1, sizeof(*n));
+  net_node n;
+  struct list_head *p;
   bool r;
 
+  list_for_each(p, &s->nodes)
+    {
+      n = container_of(p, net_node_s, h);
+      if (strcmp(n->name, name) == 0)
+        return &n->n;
+    }
+
+  n = calloc(1, sizeof(*n));
+  n->name = strdup(name);
   sput_fail_unless(n, "calloc net_node");
+  sput_fail_unless(n->name, "strdup name");
   n->s = s;
   r = hcp_init(&n->n, name, strlen(name));
   n->n.io_init_done = true; /* our IO doesn't really need init.. */
@@ -96,7 +111,14 @@ hcp net_sim_add_hcp(net_sim s, const char *name)
 
 hcp_link net_sim_hcp_find_link(hcp o, const char *name)
 {
-  hcp_link l = hcp_find_link(o, name, true);
+  hcp_link l;
+
+  l = hcp_find_link(o, name, false);
+
+  if (l)
+    return l;
+
+  l = hcp_find_link(o, name, true);
 
   sput_fail_unless(l, "hcp_find_link");
   if (l)
@@ -332,6 +354,10 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
   if (!l)
     return -1;
 
+  if (is_multicast)
+    s->sent_multicast++;
+  else
+    s->sent_unicast++;
   list_for_each(p, &s->neighs)
     {
       net_neigh n = container_of(p, net_neigh_s, h);
@@ -377,8 +403,8 @@ void hcp_two(void)
   hcp_link l2;
 
   net_sim_init(&s);
-  n1 = net_sim_add_hcp(&s, "n1");
-  n2 = net_sim_add_hcp(&s, "n2");
+  n1 = net_sim_find_hcp(&s, "n1");
+  n2 = net_sim_find_hcp(&s, "n2");
   l1 = net_sim_hcp_find_link(n1, "eth0");
   l2 = net_sim_hcp_find_link(n2, "eth1");
   sput_fail_unless(avl_is_empty(&l1->neighbors.avl), "no l1 neighbors");
@@ -417,11 +443,76 @@ void hcp_two(void)
   net_sim_uninit(&s);
 }
 
+/* 11 nodes represented, wired according to how they are wired in the
+ * test topology. */
+char *nodenames[] = {"cpe", "b1", "b2", "b3", "b4", "b5", "b6",
+                     "b7", "b8", "b9", "b10", NULL};
+typedef struct {
+  int src;
+  char *srclink;
+  int dst;
+  char *dstlink;
+} nodeconnection_s;
+
+nodeconnection_s nodeconnections[] = {
+  {0, "eth1", 1, "eth0"},
+  {0, "eth1", 2, "eth0"},
+  {1, "eth1", 5, "eth0"},
+  {1, "eth2", 2, "eth1"},
+  {1, "eth3", 9, "eth0"},
+  {2, "eth2", 3, "eth0"},
+  {3, "eth1", 4, "eth0"},
+  {4, "eth1", 8, "eth0"},
+  {4, "eth1", 9, "eth1"},
+  {5, "eth1", 6, "eth0"},
+  {6, "eth1", 9, "eth2"},
+  {6, "eth2", 7, "eth0"},
+  {7, "eth1", 10, "eth0"},
+  {8, "eth1", 10, "eth1"},
+  {9, "eth3", 10, "eth2"},
+};
+
+void hcp_bird14(void)
+{
+  net_sim_s s;
+  int i;
+  int num_connections = sizeof(nodeconnections) / sizeof(nodeconnections[0]);
+  hcp cpe, b10;
+
+  net_sim_init(&s);
+  for (i = 0 ; i < num_connections ; i++)
+    {
+      nodeconnection_s *c = &nodeconnections[i];
+      hcp n1 = net_sim_find_hcp(&s, nodenames[c->src]);
+      hcp_link l1 = net_sim_hcp_find_link(n1, c->srclink);
+      hcp n2 = net_sim_find_hcp(&s, nodenames[c->dst]);
+      hcp_link l2 = net_sim_hcp_find_link(n2, c->dstlink);
+
+      net_sim_set_connected(l1, l2, true);
+      net_sim_set_connected(l2, l1, true);
+    }
+  cpe = net_sim_find_hcp(&s, "cpe");
+  b10 = net_sim_find_hcp(&s, "b10");
+
+  SIM_WHILE(&s, 10000,
+            cpe->nodes.avl.count != 11 ||
+            b10->nodes.avl.count != 11);
+
+  sput_fail_unless(s.now - s.start < 6000, "should converge in minute");
+
+  sput_fail_unless(s.sent_multicast < 500, "with 'few' multicast");
+
+  sput_fail_unless(s.sent_unicast < 2000, "with 'few' unicast");
+
+  net_sim_uninit(&s);
+}
+
 int main(__unused int argc, __unused char **argv)
 {
   sput_start_testing();
   sput_enter_suite("hcp_net"); /* optional */
   sput_run_test(hcp_two);
+  sput_run_test(hcp_bird14);
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();
