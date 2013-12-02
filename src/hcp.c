@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Dec  2 15:07:09 2013 mstenber
- * Edit time:     336 min
+ * Last modified: Mon Dec  2 15:14:46 2013 mstenber
+ * Edit time:     338 min
  *
  */
 
@@ -40,7 +40,7 @@ void hcp_schedule(hcp o)
 
 bool hcp_node_set_tlvs(hcp_node n, struct tlv_attr *a)
 {
-  L_DEBUG("hcp_node_set_tlvs %lx/%p %p",
+  L_DEBUG("hcp_node_set_tlvs %llx/%p %p",
           hcp_hash64(&n->node_identifier_hash), n, a);
   if (n->tlv_container)
     {
@@ -459,7 +459,6 @@ void hcp_calculate_node_data_hash(hcp_node n)
 {
   md5_ctx_t ctx;
   int l;
-  uint32_t update_number;
   unsigned char buf[TLV_SIZE + sizeof(hcp_t_node_data_header_s)];
   struct tlv_attr *h = (struct tlv_attr *)buf;
   hcp_t_node_data_header ndh = (void *)h + TLV_SIZE;
@@ -469,7 +468,7 @@ void hcp_calculate_node_data_hash(hcp_node n)
 
   l = n->tlv_container ? tlv_len(n->tlv_container) : 0;
   tlv_init(h, HCP_T_NODE_DATA, sizeof(buf) + l);
-  ndh->node_identifer_hash = n->node_identifier_hash;
+  ndh->node_identifier_hash = n->node_identifier_hash;
   ndh->update_number = cpu_to_be32(n->update_number);
   md5_begin(&ctx);
   md5_hash(buf, sizeof(buf), &ctx);
@@ -477,7 +476,7 @@ void hcp_calculate_node_data_hash(hcp_node n)
     md5_hash(tlv_data(n->tlv_container), l, &ctx);
   md5_end(&n->node_data_hash, &ctx);
   n->node_data_hash_dirty = false;
-  L_DEBUG("hcp_calculate_node_data_hash @%p %lx=%lx",
+  L_DEBUG("hcp_calculate_node_data_hash @%p %llx=%llx",
           n->hcp, hcp_hash64(&n->node_identifier_hash),
           hcp_hash64(&n->node_data_hash));
 }
@@ -496,7 +495,7 @@ void hcp_calculate_network_hash(hcp o)
       md5_hash(&n->node_data_hash, HCP_HASH_LEN, &ctx);
     }
   md5_end(&o->network_hash, &ctx);
-  L_DEBUG("hcp_calculate_network_hash @%p =%lx",
+  L_DEBUG("hcp_calculate_network_hash @%p =%llx",
           o, hcp_hash64(&o->network_hash));
   o->network_hash_dirty = false;
 }

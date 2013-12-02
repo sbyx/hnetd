@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Mon Dec  2 14:54:31 2013 mstenber
+ * Last modified: Mon Dec  2 15:11:43 2013 mstenber
  * Edit time:     171 min
  *
  */
@@ -222,7 +222,7 @@ _heard(hcp_link l, hcp_t_link_id lid, struct in6_addr *src)
         return NULL;
       memcpy(n, &nc, sizeof(nc));
       vlist_add(&l->neighbors, &n->in_neighbors, n);
-      L_DEBUG("_heard %lx on link %p",
+      L_DEBUG("_heard %llx on link %p",
               hcp_hash64(&lid->node_identifier_hash), l);
     }
 
@@ -366,14 +366,14 @@ handle_message(hcp_link l,
             new_update_number = be32_to_cpu(ns->update_number);
             if (!n || n->update_number < new_update_number)
               {
-                L_DEBUG("saw something new for %lx/%p (update number %d)",
+                L_DEBUG("saw something new for %llx/%p (update number %d)",
                         hcp_hash64(&ns->node_identifier_hash),
                         n, new_update_number);
                 hcp_link_send_req_node_data(l, src, ns);
               }
             else
               {
-                L_DEBUG("saw something old for %lx/%p (update number %d)",
+                L_DEBUG("saw something old for %llx/%p (update number %d)",
                         hcp_hash64(&ns->node_identifier_hash),
                         n, new_update_number);
               }
