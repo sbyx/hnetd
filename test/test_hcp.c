@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Mon Dec  2 12:27:17 2013 mstenber
- * Edit time:     47 min
+ * Last modified: Mon Dec  2 17:14:33 2013 mstenber
+ * Edit time:     58 min
  *
  */
 
@@ -135,6 +135,8 @@ void hcp_int(void)
   unsigned char hwbuf[] = "foo";
   hcp_node n;
   hcp_link l;
+  struct tlv_buf tb;
+  struct tlv_attr *t1, *t2;
 
   hcp_init(o, hwbuf, strlen((char *)hwbuf));
 
@@ -151,6 +153,11 @@ void hcp_int(void)
   sput_fail_unless(hcp_find_node_by_hash(o, &h, false), "should exist");
   sput_fail_unless(hcp_find_node_by_hash(o, &h, false) == n, "still same");
 
+  n = hcp_get_first_node(o);
+  sput_fail_unless(n, "hcp_get_first_node");
+  n = hcp_node_get_next(n);
+  sput_fail_unless(n, "hcp_node_get_next");
+
   /* Similarly, links */
   const char *ifn = "foo";
   l = hcp_find_link(o, ifn, false);
@@ -159,7 +166,33 @@ void hcp_int(void)
   sput_fail_unless(l, "hcp_find_link w/ create=false => !none");
   sput_fail_unless(hcp_find_link(o, ifn, false) == l, "still same");
 
+  /* Play with run; initially should increment update number */
+  sput_fail_unless(o->own_node->update_number == 0, "update number ok");
+  hcp_run(o);
+  sput_fail_unless(o->own_node->update_number == 1, "update number ok");
+
+  /* but on second run, no */
+  hcp_run(o);
+  sput_fail_unless(o->own_node->update_number == 1, "update number ok");
+
+  memset(&tb, 0, sizeof(tb));
+  tlv_buf_init(&tb, 0);
+  t1 = tlv_put(&tb, 123, NULL, 0);
+  t2 = tlv_put(&tb, 124, NULL, 0);
+  hcp_add_tlv(o, t1);
+
+  /* Added TLV should trigger new update */
+  hcp_run(o);
+  sput_fail_unless(o->own_node->update_number == 2, "update number ok");
+
+  /* Adding/removing TLV should NOT trigger new update. */
+  hcp_add_tlv(o, t2);
+  hcp_remove_tlv(o, t2);
+  hcp_run(o);
+  sput_fail_unless(o->own_node->update_number == 2, "update number ok");
+  
   hcp_uninit(o);
+  tlv_buf_free(&tb);
 }
 
 int main(__unused int argc, __unused char **argv)

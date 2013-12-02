@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Fri Nov 29 11:38:54 2013 mstenber
- * Edit time:     146 min
+ * Last modified: Mon Dec  2 17:06:34 2013 mstenber
+ * Edit time:     147 min
  *
  */
 
@@ -201,6 +201,8 @@ static hcp create_hcp(void)
   smock_is_empty();
 
   /* clear the scheduled timeout - for now, we're empty slate anyway*/
+  smock_push_int("time", 0);
+  /* second one occurs from originating us (no caching due to 0 return value) */
   smock_push_int("time", 0);
   hcp_run(o);
   smock_is_empty();

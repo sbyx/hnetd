@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Dec  2 16:01:17 2013 mstenber
- * Edit time:     348 min
+ * Last modified: Mon Dec  2 16:59:52 2013 mstenber
+ * Edit time:     344 min
  *
  */
 
@@ -232,6 +232,7 @@ bool hcp_init(hcp o, const void *node_identifier, int len)
   if (!n)
     return false;
   o->own_node = n;
+  o->tlvs_dirty = true; /* by default, they are, even if no neighbors yet. */
   return true;
 }
 
