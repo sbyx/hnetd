@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Mon Dec  2 15:41:13 2013 mstenber
- * Edit time:     178 min
+ * Last modified: Mon Dec  2 16:06:14 2013 mstenber
+ * Edit time:     183 min
  *
  */
 
@@ -33,7 +33,7 @@ static bool _push_node_state_tlv(struct tlv_buf *tb, hcp_node n)
   s->node_identifier_hash = n->node_identifier_hash;
   s->update_number = cpu_to_be32(n->update_number);
   s->seconds_since_origination =
-    cpu_to_be32(now - n->origination_time) / HNETD_TIME_PER_SECOND;
+    cpu_to_be32((now - n->origination_time) / HNETD_TIME_PER_SECOND);
   return true;
 }
 
@@ -416,7 +416,7 @@ handle_message(hcp_link l,
             return;
           }
         nd = tlv_data(a);
-        nd_data = (unsigned char *)nd + nd_len;
+        nd_data = (unsigned char *)nd + sizeof(hcp_t_node_data_header_s);
         break;
       }
   if (!ns || !nd)

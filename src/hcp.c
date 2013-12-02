@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Dec  2 15:14:46 2013 mstenber
- * Edit time:     338 min
+ * Last modified: Mon Dec  2 16:01:17 2013 mstenber
+ * Edit time:     348 min
  *
  */
 
@@ -461,7 +461,7 @@ void hcp_calculate_node_data_hash(hcp_node n)
   int l;
   unsigned char buf[TLV_SIZE + sizeof(hcp_t_node_data_header_s)];
   struct tlv_attr *h = (struct tlv_attr *)buf;
-  hcp_t_node_data_header ndh = (void *)h + TLV_SIZE;
+  hcp_t_node_data_header ndh = tlv_data(h);
 
   if (!n->node_data_hash_dirty)
     return;
@@ -476,9 +476,10 @@ void hcp_calculate_node_data_hash(hcp_node n)
     md5_hash(tlv_data(n->tlv_container), l, &ctx);
   md5_end(&n->node_data_hash, &ctx);
   n->node_data_hash_dirty = false;
-  L_DEBUG("hcp_calculate_node_data_hash @%p %llx=%llx",
+  L_DEBUG("hcp_calculate_node_data_hash @%p %llx=%llx%s",
           n->hcp, hcp_hash64(&n->node_identifier_hash),
-          hcp_hash64(&n->node_data_hash));
+          hcp_hash64(&n->node_data_hash),
+          n == n->hcp->own_node ? " [self]" : "");
 }
 
 void hcp_calculate_network_hash(hcp o)
