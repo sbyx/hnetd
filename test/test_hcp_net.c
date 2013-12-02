@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Dec  2 17:58:19 2013 mstenber
- * Edit time:     202 min
+ * Last modified: Mon Dec  2 18:26:34 2013 mstenber
+ * Edit time:     242 min
  *
  */
 
@@ -239,33 +239,66 @@ void net_sim_set_connected(hcp_link l1, hcp_link l2, bool enabled)
     }
 }
 
+void net_sim_remove_node(net_sim s, net_node node)
+{
+  struct list_head *p, *pn;
+  hcp o = &node->n;
+
+  /* Remove from neighbors */
+  list_for_each_safe(p, pn, &s->neighs)
+    {
+      net_neigh n = container_of(p, net_neigh_s, h);
+      if (n->src->hcp == o || n->dst->hcp == o)
+        {
+          list_del(&n->h);
+          free(n);
+        }
+    }
+
+  /* Remove from messages */
+  list_for_each_safe(p, pn, &s->messages)
+    {
+      net_msg m = container_of(p, net_msg_s, h);
+      if (m->l->hcp == o)
+        {
+          list_del(&m->h);
+          free(m->buf);
+          free(m);
+        }
+    }
+
+  /* Remove from list of nodes */
+  list_del(&node->h);
+  free(node->name);
+  hcp_uninit(&node->n);
+  free(node);
+}
+
+void net_sim_remove_node_by_name(net_sim s, const char *name)
+{
+  hcp o = net_sim_find_hcp(s, name);
+  net_node node = container_of(o, net_node_s, n);
+  sput_fail_unless(o, "net_sim_find_hcp");
+  net_sim_remove_node(s, node);
+}
+
 void net_sim_uninit(net_sim s)
 {
   struct list_head *p, *pn;
   int c = 0;
+
   list_for_each_safe(p, pn, &s->nodes)
     {
-      net_node n = container_of(p, net_node_s, h);
-      free(n->name);
-      hcp_uninit(&n->n);
-      free(n);
+      net_node node = container_of(p, net_node_s, h);
+      net_sim_remove_node(s, node);
       c++;
     }
   L_NOTICE("#nodes:%d elapsed:%.2fs unicasts:%d multicasts:%d",
            c,
            (float)(s->now - s->start) / HNETD_TIME_PER_SECOND,
            s->sent_unicast, s->sent_multicast);
-  list_for_each_safe(p, pn, &s->neighs)
-    {
-      net_neigh n = container_of(p, net_neigh_s, h);
-      free(n);
-    }
-  list_for_each_safe(p, pn, &s->messages)
-    {
-      net_msg m = container_of(p, net_msg_s, h);
-      free(m->buf);
-      free(m);
-    }
+  sput_fail_unless(list_empty(&s->neighs), "no neighs");
+  sput_fail_unless(list_empty(&s->messages), "no messages");
 }
 
 hnetd_time_t net_sim_next(net_sim s)
@@ -537,14 +570,14 @@ nodeconnection_s nodeconnections[] = {
   {9, "eth3", 10, "eth2"},
 };
 
-static void raw_bird14(net_sim s)
+static void handle_connections(net_sim s,
+                               nodeconnection_s *c,
+                               int n_conns)
 {
   int i;
-  int num_connections = sizeof(nodeconnections) / sizeof(nodeconnections[0]);
 
-  for (i = 0 ; i < num_connections ; i++)
+  for (i = 0 ; i < n_conns ; i++)
     {
-      nodeconnection_s *c = &nodeconnections[i];
       hcp n1 = net_sim_find_hcp(s, nodenames[c->src]);
       hcp_link l1 = net_sim_hcp_find_link(n1, c->srclink);
       hcp n2 = net_sim_find_hcp(s, nodenames[c->dst]);
@@ -552,7 +585,15 @@ static void raw_bird14(net_sim s)
 
       net_sim_set_connected(l1, l2, true);
       net_sim_set_connected(l2, l1, true);
+      c++;
     }
+}
+
+static void raw_bird14(net_sim s)
+{
+  int num_connections = sizeof(nodeconnections) / sizeof(nodeconnections[0]);
+
+  handle_connections(s, &nodeconnections[0], num_connections);
 
   SIM_WHILE(s, 1000, !net_sim_is_converged(s));
 
@@ -565,6 +606,15 @@ static void raw_bird14(net_sim s)
   sput_fail_unless(s->sent_multicast < 500, "with 'few' multicast");
 
   sput_fail_unless(s->sent_unicast < 1000, "with 'few' unicast");
+
+  net_sim_remove_node_by_name(s, nodenames[0]);
+
+  /* Re-add the node */
+  (void)net_sim_find_hcp(s, nodenames[0]);
+
+  handle_connections(s, &nodeconnections[0], 2); /* Two first ones are needed */
+
+  SIM_WHILE(s, 1000, !net_sim_is_converged(s));
 }
 
 void hcp_bird14()
