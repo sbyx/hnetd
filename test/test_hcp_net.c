@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Dec  2 17:36:55 2013 mstenber
- * Edit time:     212 min
+ * Last modified: Mon Dec  2 17:52:38 2013 mstenber
+ * Edit time:     222 min
  *
  */
 
@@ -65,6 +65,8 @@ typedef struct net_sim_t {
   struct list_head nodes;
   struct list_head neighs;
   struct list_head messages;
+
+  bool assume_bidirectional_reachability;
 
   hnetd_time_t now, start;
 
@@ -151,6 +153,7 @@ hcp net_sim_find_hcp(net_sim s, const char *name)
   sput_fail_unless(n->name, "strdup name");
   n->s = s;
   r = hcp_init(&n->n, name, strlen(name));
+  n->n.assume_bidirectional_reachability = s->assume_bidirectional_reachability;
   n->n.io_init_done = true; /* our IO doesn't really need init.. */
   sput_fail_unless(r, "hcp_init");
   if (!r)
@@ -233,13 +236,18 @@ void net_sim_set_connected(hcp_link l1, hcp_link l2, bool enabled)
 void net_sim_uninit(net_sim s)
 {
   struct list_head *p, *pn;
-
+  int c = 0;
   list_for_each_safe(p, pn, &s->nodes)
     {
       net_node n = container_of(p, net_node_s, h);
       hcp_uninit(&n->n);
       free(n);
+      c++;
     }
+  L_DEBUG("#nodes:%d elapsed:%.2fs unicasts:%d multicasts:%d",
+          c,
+          (float)(s->now - s->start) / HNETD_TIME_PER_SECOND,
+          s->sent_unicast, s->sent_multicast);
   list_for_each_safe(p, pn, &s->neighs)
     {
       net_neigh n = container_of(p, net_neigh_s, h);
@@ -522,37 +530,52 @@ nodeconnection_s nodeconnections[] = {
   {9, "eth3", 10, "eth2"},
 };
 
-void hcp_bird14(void)
+static void raw_bird14(net_sim s)
 {
-  net_sim_s s;
   int i;
   int num_connections = sizeof(nodeconnections) / sizeof(nodeconnections[0]);
 
-  net_sim_init(&s);
   for (i = 0 ; i < num_connections ; i++)
     {
       nodeconnection_s *c = &nodeconnections[i];
-      hcp n1 = net_sim_find_hcp(&s, nodenames[c->src]);
+      hcp n1 = net_sim_find_hcp(s, nodenames[c->src]);
       hcp_link l1 = net_sim_hcp_find_link(n1, c->srclink);
-      hcp n2 = net_sim_find_hcp(&s, nodenames[c->dst]);
+      hcp n2 = net_sim_find_hcp(s, nodenames[c->dst]);
       hcp_link l2 = net_sim_hcp_find_link(n2, c->dstlink);
 
       net_sim_set_connected(l1, l2, true);
       net_sim_set_connected(l2, l1, true);
     }
 
-  SIM_WHILE(&s, 1000, !net_sim_is_converged(&s));
+  SIM_WHILE(s, 1000, !net_sim_is_converged(s));
 
-  sput_fail_unless(net_sim_find_hcp(&s, "b10")->nodes.avl.count == 11,
+  sput_fail_unless(net_sim_find_hcp(s, "b10")->nodes.avl.count == 11,
                    "b10 enough nodes");
 
-  sput_fail_unless(s.now - s.start < 10 * HNETD_TIME_PER_SECOND,
+  sput_fail_unless(s->now - s->start < 10 * HNETD_TIME_PER_SECOND,
                    "should converge in 10 seconds");
 
-  sput_fail_unless(s.sent_multicast < 500, "with 'few' multicast");
+  sput_fail_unless(s->sent_multicast < 500, "with 'few' multicast");
 
-  sput_fail_unless(s.sent_unicast < 1000, "with 'few' unicast");
+  sput_fail_unless(s->sent_unicast < 1000, "with 'few' unicast");
+}
 
+void hcp_bird14()
+{
+  net_sim_s s;
+
+  net_sim_init(&s);
+  raw_bird14(&s);
+  net_sim_uninit(&s);
+}
+
+void hcp_bird14_bidir()
+{
+  net_sim_s s;
+
+  net_sim_init(&s);
+  s.assume_bidirectional_reachability = true;
+  raw_bird14(&s);
   net_sim_uninit(&s);
 }
 
@@ -604,6 +627,7 @@ int main(__unused int argc, __unused char **argv)
   sput_enter_suite("hcp_net"); /* optional */
   sput_run_test(hcp_two);
   sput_run_test(hcp_bird14);
+  sput_run_test(hcp_bird14_bidir);
   sput_run_test(hcp_tube_small);
   sput_run_test(hcp_tube_beyond_multicast);
   sput_leave_suite(); /* optional */
