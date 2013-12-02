@@ -93,6 +93,6 @@ const char *prefix_ntop_n(const struct prefix *prefix,
 		bool canonical);
 
 #define PREFIX_TOSTRING(prefix, buff_number) \
-	prefix_ntop_n(prefix, buff_number, true);
+	prefix_ntop_n(prefix, buff_number, true)
 
 #endif
