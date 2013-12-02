@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Thu Nov 28 12:00:38 2013 mstenber
- * Edit time:     46 min
+ * Last modified: Mon Dec  2 12:27:17 2013 mstenber
+ * Edit time:     47 min
  *
  */
 
@@ -137,6 +137,9 @@ void hcp_int(void)
   hcp_link l;
 
   hcp_init(o, hwbuf, strlen((char *)hwbuf));
+
+  /* Make sure network hash is dirty. */
+  sput_fail_unless(o->network_hash_dirty, "network hash should be dirty");
 
   /* Make sure we can add nodes if we feel like it. */
   hcp_hash_s h;
