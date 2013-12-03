@@ -159,7 +159,7 @@ static int test_pa_timeout_cancel(struct uloop_timeout *timeout)
 	return 0;
 }
 
-static int test_pa_timeout_fire(struct uloop_timeout *timeout)
+static void test_pa_timeout_fire(struct uloop_timeout *timeout)
 {
 	sput_fail_unless(timeout->pending, "Timeout not pending");
 	if(timeout->pending) {
@@ -256,22 +256,18 @@ void pa_test_minimal(void)
 	struct px_update_call *px_update;
 	struct uloop_timeout *dp_to, *pa_to, *lap_to;
 	int ms;
-	struct prefix chosen_prefix = {};
+	struct prefix chosen_prefix;
+	chosen_prefix.plen = 0;
 
 	hnetd_time_t valid_until, preferred_until;
 
 	sput_fail_unless(smock_empty(), "Queue empty at test beginning");
 
-	/* Simple test.
-	 * We add one interface and one prefix (p1).
-	 * We need to get a lap on that interface. */
-	hnetd_time_t now = 0;
-
 	/* Creating iface */
 	iface.user->cb_intiface(iface.user, TEST_IFNAME_1, true);
 	/* This is supposed to create a schedule event */
 	pa_to = smock_pull(SMOCK_SET_TIMEOUT);
-	ms = smock_pull(SMOCK_SET_TIMEOUT_MS);
+	ms = smock_pull_int(SMOCK_SET_TIMEOUT_MS);
 	if(pa_to)
 		sput_fail_unless(ms == PA_SCHEDULE_RUNNEXT_MS, "Schedule delay");
 
@@ -284,11 +280,12 @@ void pa_test_minimal(void)
 	/* Creating prefix */
 	valid_until = 100000;
 	preferred_until = 50000;
-	iface.user->cb_prefix(iface.user, &p1, valid_until, preferred_until, 0);
+	iface.user->cb_prefix(iface.user, TEST_IFNAME_1, &p1, NULL /* todo exclude */,
+			valid_until, preferred_until, NULL, 0);
 
 	/* This will trigger a new scheduling */
 	pa_to = smock_pull(SMOCK_SET_TIMEOUT);
-	ms = smock_pull(SMOCK_SET_TIMEOUT_MS);
+	ms = smock_pull_int(SMOCK_SET_TIMEOUT_MS);
 	if(pa_to)
 		sput_fail_unless(ms == PA_SCHEDULE_RUNNEXT_MS, "Schedule delay");
 
@@ -316,7 +313,7 @@ void pa_test_minimal(void)
 
 	/* Scheduled dp */
 	dp_to = smock_pull(SMOCK_SET_TIMEOUT);
-	ms = smock_pull(SMOCK_SET_TIMEOUT_MS);
+	ms = smock_pull_int(SMOCK_SET_TIMEOUT_MS);
 	if(dp_to) {
 		/* The +1 is for free loops and imprecisions */
 		sput_fail_unless(ms == valid_until - now_time, "Delayed assignment delay");
@@ -336,7 +333,7 @@ void pa_test_minimal(void)
 
 	/* Scheduled PA */
 	pa_to = smock_pull(SMOCK_SET_TIMEOUT);
-	ms = smock_pull(SMOCK_SET_TIMEOUT_MS);
+	ms = smock_pull_int(SMOCK_SET_TIMEOUT_MS);
 	if(pa_to)
 		sput_fail_unless(ms == PA_SCHEDULE_RUNNEXT_MS, "Schedule delay");
 
@@ -349,9 +346,9 @@ void pa_test_minimal(void)
 
 	/* Delayed lap assignment */
 	lap_to = smock_pull(SMOCK_SET_TIMEOUT);
-	ms = smock_pull(SMOCK_SET_TIMEOUT_MS);
+	ms = smock_pull_int(SMOCK_SET_TIMEOUT_MS);
 	if(lap_to) {
-		sput_fail_unless(ms == conf.commit_lap_delay, "Delayed assignment delay");
+		sput_fail_unless(ms == (int) conf.commit_lap_delay, "Delayed assignment delay");
 		sput_fail_unless(lap_to->cb == pa_lap_delayed_cb, "Correct timeout callback");
 	}
 
@@ -418,7 +415,7 @@ void pa_test_minimal(void)
 	}
 
 	pa_to = smock_pull(SMOCK_SET_TIMEOUT);
-	ms = smock_pull(SMOCK_SET_TIMEOUT_MS);
+	ms = smock_pull_int(SMOCK_SET_TIMEOUT_MS);
 	if(pa_to)
 			sput_fail_unless(ms == PA_SCHEDULE_RUNNEXT_MS, "Schedule delay");
 
@@ -436,7 +433,7 @@ void pa_test_minimal(void)
 
 	/* Only pa should be scheduled here */
 	pa_to = smock_pull(SMOCK_SET_TIMEOUT);
-	ms = smock_pull(SMOCK_SET_TIMEOUT_MS);
+	ms = smock_pull_int(SMOCK_SET_TIMEOUT_MS);
 	if(pa_to)
 		sput_fail_unless(ms == PA_SCHEDULE_RUNNEXT_MS, "Schedule delay");
 

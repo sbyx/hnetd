@@ -1267,13 +1267,13 @@ static void pa_ifu_intiface(struct iface_user *u,
 	pa_iface_set_internal(pa, iface, enabled);
 }
 
-static void pa_ifu_pd(struct iface_user *u,
-			const struct prefix *prefix,
-			hnetd_time_t valid_until, hnetd_time_t preferred_until,
-			__attribute__((unused))uint16_t class)
+static void pa_ifu_pd(struct iface_user *u, const char *ifname,
+		const struct prefix *prefix, const struct prefix *excluded,
+		hnetd_time_t valid_until, hnetd_time_t preferred_until,
+		const void *dhcpv6_data, size_t dhcpv6_len)
 {
 	struct pa *pa = container_of(u, struct pa, ifu);
-	/* TODO: Manage class (or not)*/
+	/* TODO:Support dhcpv6 data and excluded */
 	/* Null because local */
 	struct pa_dp *dp = pa_dp_goc(pa, prefix, NULL);
 
@@ -1321,6 +1321,7 @@ pa_t pa_create(const struct pa_conf *conf)
 
 	pa->ifu.cb_intiface = pa_ifu_intiface;
 	pa->ifu.cb_prefix = pa_ifu_pd;
+	pa->ifu.cb_extdata = NULL; //TODO ?
 
 	pa->pa_short_timeout = (struct uloop_timeout) { .cb = pa_do_uloop };
 	pa->pa_dp_when = 0;
