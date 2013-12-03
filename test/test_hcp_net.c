@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Tue Dec  3 13:27:49 2013 mstenber
- * Edit time:     265 min
+ * Last modified: Tue Dec  3 14:15:20 2013 mstenber
+ * Edit time:     275 min
  *
  */
 
@@ -481,6 +481,32 @@ sanity_check_buf(void *buf, size_t len)
 
 }
 
+void _sendto(net_sim s, void *buf, size_t len, hcp_link sl, hcp_link dl,
+             const struct in6_addr *dst)
+{
+#if L_LEVEL >= 7
+  hcp o = dl->hcp;
+  net_node node = container_of(o, net_node_s, n);
+  bool is_multicast = memcmp(dst, &o->multicast_address, sizeof(*dst)) == 0;
+#endif /* L_LEVEL >= 7 */
+  net_msg m = calloc(1, sizeof(*m));
+  hnetd_time_t wt = s->now + MESSAGE_PROPAGATION_DELAY;
+
+  sput_fail_unless(m, "calloc neigh");
+  m->l = dl;
+  m->buf = malloc(len);
+  sput_fail_unless(m->buf, "malloc buf");
+  memcpy(m->buf, buf, len);
+  m->len = len;
+  m->src = sl->address;
+  m->dst = *dst;
+  m->readable_at = wt;
+  list_add(&m->h, &s->messages);
+  L_DEBUG("sendto: %s/%s -> %s/%s (%d bytes %s)",
+          node->name, l->ifname, node2->name, n->dst->ifname, (int)len,
+          is_multicast ? "multicast" : "unicast");
+}
+
 ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
                       const char *ifname,
                       const struct in6_addr *dst)
@@ -509,28 +535,11 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
       if (n->src == l
           && (is_multicast
               || memcmp(&n->dst->address, dst, sizeof(*dst)) == 0))
-        {
-#if L_LEVEL >= 7
-          net_node node2 = container_of(n->dst->hcp, net_node_s, n);
-#endif /* L_LEVEL >= 7 */
-          net_msg m = calloc(1, sizeof(*m));
-          hnetd_time_t wt = s->now + MESSAGE_PROPAGATION_DELAY;
-
-          sput_fail_unless(m, "calloc neigh");
-          m->l = n->dst;
-          m->buf = malloc(len);
-          sput_fail_unless(m->buf, "malloc buf");
-          memcpy(m->buf, buf, len);
-          m->len = len;
-          m->src = l->address;
-          m->dst = *dst;
-          m->readable_at = wt;
-          list_add(&m->h, &s->messages);
-          L_DEBUG("sendto: %s/%s -> %s/%s (%d bytes %s)",
-                  node->name, l->ifname, node2->name, n->dst->ifname, (int)len,
-                  is_multicast ? "multicast" : "unicast");
-        }
+        _sendto(s, buf, len, n->src, n->dst, dst);
     }
+  /* Loop at self too, just for fun. */
+  if (is_multicast)
+    _sendto(s, buf, len, l, l, dst);
   return -1;
 }
 

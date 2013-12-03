@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue Dec  3 10:36:45 2013 mstenber
- * Edit time:     188 min
+ * Last modified: Tue Dec  3 14:17:54 2013 mstenber
+ * Edit time:     191 min
  *
  */
 
@@ -269,7 +269,16 @@ handle_message(hcp_link l,
             return;
           }
         if (tlv_len(a) == sizeof(hcp_t_link_id_s))
-          lid = tlv_data(a);
+          {
+            lid = tlv_data(a);
+            if (memcmp(&lid->node_identifier_hash,
+                       &l->hcp->own_node->node_identifier_hash,
+                       HCP_HASH_LEN) == 0)
+              {
+                L_DEBUG("received looped message from self - ignoring");
+                return;
+              }
+          }
         else
           {
             L_INFO("got invalid sized link ids - ignoring");
