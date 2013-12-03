@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Fri Nov 29 14:27:47 2013 mstenber
- * Edit time:     136 min
+ * Last modified: Tue Dec  3 09:55:50 2013 mstenber
+ * Edit time:     157 min
  *
  */
 
@@ -71,6 +71,12 @@ static void _timeout(struct uloop_timeout *t)
   hcp_run(o);
 }
 
+static void _fd_callback(struct uloop_fd *u, unsigned int events __unused)
+{
+  hcp o = container_of(u, hcp_s, ufd);
+  hcp_poll(o);
+}
+
 bool hcp_io_init(hcp o)
 {
   int s;
@@ -94,7 +100,7 @@ bool hcp_io_init(hcp o)
   fcntl(s, F_SETFL, O_NONBLOCK);
   memset(&addr, 0, sizeof(addr));
   addr.sin6_family = AF_INET6;
-  addr.sin6_port = HCP_PORT;
+  addr.sin6_port = htons(HCP_PORT);
   if (bind(s, (struct sockaddr *)&addr, sizeof(addr))<0)
     return false;
 #endif
@@ -102,6 +108,11 @@ bool hcp_io_init(hcp o)
     return false;
   o->udp_socket = s;
   o->timeout.cb = _timeout;
+
+  memset(&o->ufd, 0, sizeof(o->ufd));
+  o->ufd.fd = o->udp_socket;
+  o->ufd.cb = _fd_callback;
+  uloop_fd_add(&o->ufd, ULOOP_READ);
   return true;
 }
 
@@ -110,6 +121,8 @@ void hcp_io_uninit(hcp o)
   close(o->udp_socket);
   /* clear the timer from uloop. */
   uloop_timeout_cancel(&o->timeout);
+  /* and the fd also. */
+  (void)uloop_fd_delete(&o->ufd);
 }
 
 bool hcp_io_set_ifname_enabled(hcp o,
@@ -120,12 +133,19 @@ bool hcp_io_set_ifname_enabled(hcp o,
 
   val.ipv6mr_multiaddr = o->multicast_address;
   if (!(val.ipv6mr_interface = if_nametoindex(ifname)))
-    goto fail;
+    {
+      L_ERR("unable to enable on %s - if_nametoindex: %s",
+            ifname, strerror(errno));
+      goto fail;
+    }
   if (setsockopt(o->udp_socket,
                  IPPROTO_IPV6,
                  enabled ? IPV6_ADD_MEMBERSHIP : IPV6_DROP_MEMBERSHIP,
                  (char *) &val, sizeof(val)) < 0)
-    goto fail;
+    {
+      L_ERR("unable to enable on %s - setsockopt:%s", ifname, strerror(errno));
+      goto fail;
+    }
   /* Yay. It succeeded(?). */
   return true;
 
@@ -164,16 +184,24 @@ ssize_t hcp_io_recvfrom(hcp o, void *buf, size_t len,
           {
             ipi6 = (struct in6_pktinfo *)CMSG_DATA(h);
             if (!if_indextoname(ipi6->ipi6_ifindex, ifname))
-              *ifname = 0;
+              {
+                *ifname = 0;
+                L_ERR("unable to receive - if_indextoname:%s",
+                      strerror(errno));
+              }
             *dst = ipi6->ipi6_addr;
           }
+      if (!*ifname)
+        {
+          L_ERR("unable to receive - no ifname");
+          return -1;
+        }
     }
   else
     {
       *ifname = 0;
+      L_DEBUG("unable to receive - recvmsg:%s", strerror(errno));
     }
-  if (!*ifname)
-    return -1;
   return l;
 }
 
@@ -183,13 +211,25 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
 {
   int flags = 0;
   struct sockaddr_in6 dst;
+  ssize_t r;
 
   memset(&dst, 0, sizeof(dst));
   if (!(dst.sin6_scope_id = if_nametoindex(ifname)))
-    return -1;
+    {
+      L_ERR("unable to send on %s - if_nametoindex: %s",
+            ifname, strerror(errno));
+      return -1;
+    }
+  dst.sin6_family = AF_INET6;
+  dst.sin6_port = htons(HCP_PORT);
   dst.sin6_addr = *to;
-  return sendto(o->udp_socket, buf, len, flags,
-                (struct sockaddr *)&dst, sizeof(dst));
+  r = sendto(o->udp_socket, buf, len, flags,
+             (struct sockaddr *)&dst, sizeof(dst));
+  if (r < 0)
+    {
+      L_ERR("unable to send on %s - sendto:%s", ifname, strerror(errno));
+    }
+  return r;
 }
 
 hnetd_time_t hcp_io_time(hcp o __unused)

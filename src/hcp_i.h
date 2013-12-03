@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Dec  2 15:54:12 2013 mstenber
+ * Last modified: Tue Dec  3 09:44:45 2013 mstenber
  * Edit time:     105 min
  *
  */
@@ -86,6 +86,9 @@ struct hcp_struct {
 
   /* UDP socket. */
   int udp_socket;
+
+  /* And it's corresponding uloop_fd */
+  struct uloop_fd ufd;
 
   /* Timeout for doing 'something' in hcp_io. */
   struct uloop_timeout timeout;
