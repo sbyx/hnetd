@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Dec  3 15:20:35 2013 mstenber
- * Edit time:     191 min
+ * Last modified: Tue Dec  3 15:34:39 2013 mstenber
+ * Edit time:     197 min
  *
  */
 
@@ -34,6 +34,7 @@
 
 #ifdef __linux__
 #define AF_LINK AF_PACKET
+#include <linux/if_packet.h>
 #endif /* __linux__ */
 
 const char *hex_repr(char *buf, void *data, int len)
@@ -49,31 +50,6 @@ const char *hex_repr(char *buf, void *data, int len)
   return r;
 }
 #define HEX_REPR(buf, len) hex_repr(alloca((len) * 2 + 1), buf, len)
-
-#ifdef __linux__
-
-/* 'found' from odhcp6c */
-int
-hcp_io_get_hwaddr(const char *ifname, unsigned char *buf, int buf_left)
-{
-  struct ifreq ifr;
-  int sock;
-  int tocopy = buf_left < ETHER_ADDR_LEN ? buf_left : ETHER_ADDR_LEN;
-
-  sock = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-  if (sock<0)
-    return 0;
-  strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-  if (ioctl(sock, SIOCGIFINDEX, &ifr))
-    return 0;
-  if (ioctl(sock, SIOCGIFHWADDR, &ifr))
-    return 0;
-  memcpy(buf, ifr.ifr_hwaddr.sa_data, tocopy);
-  close(sock);
-  return tocopy;
-}
-
-#endif /* __linux__ */
 
 int
 hcp_io_get_hwaddrs(unsigned char *buf, int buf_left)
@@ -94,12 +70,8 @@ hcp_io_get_hwaddrs(unsigned char *buf, int buf_left)
     {
       void *a = &p->ifa_addr->sa_data[0];
 #ifdef __linux__
-      unsigned char tbuf[ETHER_ADDR_LEN];
-
-      memset(tbuf, 0, sizeof(tbuf));
-      if (!hcp_io_get_hwaddr(p->ifa_name, tbuf, ETHER_ADDR_LEN))
-        continue;
-      a = tbuf;
+      struct sockaddr_ll *sll = (struct sockaddr_ll *) p->ifa_addr;
+      a = sll->sll_addr;
 #endif /* __linux__ */
       if (memcmp(a, zeroed_addr, sizeof(zeroed_addr)) == 0)
         continue;
