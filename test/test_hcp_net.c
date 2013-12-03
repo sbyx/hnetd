@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Tue Dec  3 10:37:25 2013 mstenber
- * Edit time:     250 min
+ * Last modified: Tue Dec  3 14:15:20 2013 mstenber
+ * Edit time:     275 min
  *
  */
 
@@ -25,8 +25,6 @@
 
 #define L_LEVEL 5
 
-#define L_PREFIX "test "
-
 #include "hcp.c"
 #include "hcp_proto.c"
 #include "hcp_timeout.c"
@@ -39,7 +37,8 @@
 
 hnetd_time_t now_time;
 
-#define MESSAGE_PROPAGATION_DELAY (random() % 100 + 1)
+#define MAXIMUM_PROPAGATION_DELAY 100
+#define MESSAGE_PROPAGATION_DELAY (random() % MAXIMUM_PROPAGATION_DELAY + 1)
 
 typedef struct {
   struct list_head h;
@@ -79,7 +78,11 @@ typedef struct net_sim_t {
   hnetd_time_t now, start;
 
   int sent_unicast;
+  hnetd_time_t last_unicast_sent;
   int sent_multicast;
+
+  int converged_count;
+  int not_converged_count;
 } net_sim_s, *net_sim;
 
 void net_sim_init(net_sim s)
@@ -115,6 +118,7 @@ bool net_sim_is_converged(net_sim s)
         {
           L_DEBUG("not converged, network hash mismatch %llx <> %llx",
                   hcp_hash64(h), hcp_hash64(&n->n.network_hash));
+          s->not_converged_count++;
           return false;
         }
     }
@@ -135,10 +139,13 @@ bool net_sim_is_converged(net_sim s)
               L_DEBUG("origination time mismatch %lld <> %lld",
                       (long long) n2->n.own_node->origination_time,
                       (long long) hn->origination_time);
+              s->not_converged_count++;
               return false;
             }
         }
     }
+
+  s->converged_count++;
   return true;
 }
 
@@ -474,6 +481,32 @@ sanity_check_buf(void *buf, size_t len)
 
 }
 
+void _sendto(net_sim s, void *buf, size_t len, hcp_link sl, hcp_link dl,
+             const struct in6_addr *dst)
+{
+#if L_LEVEL >= 7
+  hcp o = dl->hcp;
+  net_node node = container_of(o, net_node_s, n);
+  bool is_multicast = memcmp(dst, &o->multicast_address, sizeof(*dst)) == 0;
+#endif /* L_LEVEL >= 7 */
+  net_msg m = calloc(1, sizeof(*m));
+  hnetd_time_t wt = s->now + MESSAGE_PROPAGATION_DELAY;
+
+  sput_fail_unless(m, "calloc neigh");
+  m->l = dl;
+  m->buf = malloc(len);
+  sput_fail_unless(m->buf, "malloc buf");
+  memcpy(m->buf, buf, len);
+  m->len = len;
+  m->src = sl->address;
+  m->dst = *dst;
+  m->readable_at = wt;
+  list_add(&m->h, &s->messages);
+  L_DEBUG("sendto: %s/%s -> %s/%s (%d bytes %s)",
+          node->name, l->ifname, node2->name, n->dst->ifname, (int)len,
+          is_multicast ? "multicast" : "unicast");
+}
+
 ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
                       const char *ifname,
                       const struct in6_addr *dst)
@@ -491,7 +524,10 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
   if (is_multicast)
     s->sent_multicast++;
   else
-    s->sent_unicast++;
+    {
+      s->sent_unicast++;
+      s->last_unicast_sent = s->now;
+    }
   list_for_each(p, &s->neighs)
     {
       net_neigh n = container_of(p, net_neigh_s, h);
@@ -499,28 +535,11 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
       if (n->src == l
           && (is_multicast
               || memcmp(&n->dst->address, dst, sizeof(*dst)) == 0))
-        {
-#if L_LEVEL >= 7
-          net_node node2 = container_of(n->dst->hcp, net_node_s, n);
-#endif /* L_LEVEL >= 7 */
-          net_msg m = calloc(1, sizeof(*m));
-          hnetd_time_t wt = s->now + MESSAGE_PROPAGATION_DELAY;
-
-          sput_fail_unless(m, "calloc neigh");
-          m->l = n->dst;
-          m->buf = malloc(len);
-          sput_fail_unless(m->buf, "malloc buf");
-          memcpy(m->buf, buf, len);
-          m->len = len;
-          m->src = l->address;
-          m->dst = *dst;
-          m->readable_at = wt;
-          list_add(&m->h, &s->messages);
-          L_DEBUG("sendto: %s/%s -> %s/%s (%d bytes %s)",
-                  node->name, l->ifname, node2->name, n->dst->ifname, (int)len,
-                  is_multicast ? "multicast" : "unicast");
-        }
+        _sendto(s, buf, len, n->src, n->dst, dst);
     }
+  /* Loop at self too, just for fun. */
+  if (is_multicast)
+    _sendto(s, buf, len, l, l, dst);
   return -1;
 }
 
@@ -651,6 +670,26 @@ static void raw_bird14(net_sim s)
   handle_connections(s, &nodeconnections[0], 2); /* Two first ones are needed */
 
   SIM_WHILE(s, 1000, !net_sim_is_converged(s));
+
+  /* Then, simulate network for a while, keeping eye on how often it's
+   * NOT converged. */
+  int converged_count = s->converged_count;
+  int not_converged_count = s->not_converged_count;
+  int sent_unicast = s->sent_unicast;
+  hnetd_time_t convergence_time = s->now;
+
+  SIM_WHILE(s, 1000, !net_sim_is_converged(s) || iter < 900);
+  L_NOTICE("unicasts sent:%d after convergence, last %lld ms after convergence",
+           s->sent_unicast - sent_unicast, s->last_unicast_sent - convergence_time);
+#if 0
+  /* As we do reachability checking, this isn't valid.. unfortunately. */
+  sput_fail_unless((s->sent_unicast - sent_unicast) < 50,
+                   "did not send (many) unicasts");
+#endif /* 0 */
+  sput_fail_unless(s->not_converged_count == not_converged_count,
+                   "should stay converged");
+  sput_fail_unless(s->converged_count >= 900 + converged_count,
+                   "converged count rising");
 }
 
 void hcp_bird14()
