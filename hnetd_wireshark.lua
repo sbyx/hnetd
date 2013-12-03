@@ -7,8 +7,8 @@
 -- Copyright (c) 2013 cisco Systems, Inc.
 --
 -- Created:       Tue Dec  3 11:13:05 2013 mstenber
--- Last modified: Tue Dec  3 13:08:14 2013 mstenber
--- Edit time:     78 min
+-- Last modified: Tue Dec  3 13:42:07 2013 mstenber
+-- Edit time:     89 min
 --
 
 -- This is Lua module which provides VERY basic dissector for TLVs we
@@ -62,77 +62,87 @@ local tlvs = {
                   {4, f_upd}},
         recurse=true},
    [7]={name='.. key'},
-   [8]={name='.. neighbor', contents={{16, f_nid_hash,
-                                       4, f_rlid,
-                                       4, f_lid}},
+   [8]={name='.. neighbor', contents={{16, f_nid_hash},
+                                      {4, f_rlid},
+                                      {4, f_lid},
+                                     }
    },
 }
 
+
 function p_hcp.dissector(buffer, pinfo, tree)
    pinfo.cols.protocol = 'hcp'
-   function rec_decode(ofs, left, tree)
-      while left >= 4 
+
+   local rec_decode
+   local function data_decode(ofs, left, tlv, tree)
+      for i, v in ipairs(tlv.contents)
       do
-         local partial
-         local rid = buffer(ofs, 2)
-         local rlen = buffer(ofs+2, 2)
-         local id = rid:uint()
-         local len = rlen:uint() 
-         local bs = ''
-         local ps = ''
-         local tlv = tlvs[id] or {}
-         if tlv.name
+         local elen, ef = unpack(v)
+         if elen > left
          then
-            bs = ' (' .. tlv.name .. ')'
-         end
-         if len < 4
-         then
-            ps = ' (broken - len<4)'
-            partial = true
-         end
-         if len > left
-         then
-            len = left
-            ps = ' (partial)'
-            partial = true
-         end
-         local tree2 = tree:add(buffer(ofs, len), 
-                                string.format('TLV %d%s - %d data bytes%s',
-                                              id, bs, len, ps))
-         if partial
-         then
+            tree:append_text(string.format(' (!!! missing data - %d > %d (%s))',
+                                           elen, left, v))
             return
          end
-         local fid = tree2:add(f_id, rid)
-         fid:append_text(bs)
-         local flen = tree2:add(f_len, rlen)
-         if len > 4 
-         then
-            local fdata = tree2:add(f_data, buffer(ofs + 4, len - 4))
-            if tlv.contents
-            then
-               local cofs = ofs + 4
-               local clen = len - 4
-               for i, v in ipairs(tlv.contents)
-               do
-                  local elen, ef = unpack(v)
-                  if elen > clen
-                  then
-                     return
-                  end
-                  fdata:add(ef, buffer(cofs, elen))
-                  clen = clen - elen
-                  cofs = cofs + elen
-               end
-               if tlv.recurse 
-               then
-                  rec_decode(cofs, clen, fdata)
-               end
-            end
-         end
-         left = left - len
-         ofs = ofs + len
+         tree:add(ef, buffer(ofs, elen))
+         left = left - elen
+         ofs = ofs + elen
       end
+      if tlv.recurse 
+      then
+         rec_decode(ofs, left, tree)
+      end
+   end
+
+   rec_decode = function (ofs, left, tree)
+      if left < 4
+      then
+         return
+      end
+      local partial
+      local rid = buffer(ofs, 2)
+      local rlen = buffer(ofs+2, 2)
+      local id = rid:uint()
+      local len = rlen:uint() 
+      local bs = ''
+      local ps = ''
+      local tlv = tlvs[id] or {}
+      if tlv.name
+      then
+         bs = ' (' .. tlv.name .. ')'
+      end
+      if len < 4
+      then
+         ps = ' (broken - len<4)'
+         partial = true
+      end
+      if len > left
+      then
+         len = left
+         ps = ' (partial)'
+         partial = true
+      end
+      local tree2 = tree:add(buffer(ofs, len), 
+                             string.format('TLV %d%s - %d data bytes%s',
+                                           id, bs, len, ps))
+      if partial
+      then
+         return
+      end
+      local fid = tree2:add(f_id, rid)
+      fid:append_text(bs)
+      local flen = tree2:add(f_len, rlen)
+      if len > 4 
+      then
+         local fdata = tree2:add(f_data, buffer(ofs + 4, len - 4))
+         if tlv.contents
+         then
+            -- skip the tlv header (that's why +- 4)
+            data_decode(ofs + 4, len - 4, tlv, fdata)
+         end
+      end
+      -- recursively decode the rest too, hrr :)
+      rec_decode(ofs + len, left - len, tree)
    end
    rec_decode(0, buffer:len(), tree:add(p_hcp, buffer()))
 end
