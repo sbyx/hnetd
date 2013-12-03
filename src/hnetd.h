@@ -10,6 +10,10 @@
 #define L_LEVEL HNETD_DEFAULT_L_LEVEL
 #endif /* !L_LEVEL */
 
+#ifndef L_PREFIX
+#define L_PREFIX ""
+#endif /* !L_PREFIX */
+
 #ifdef __APPLE__
 
 /* Haha. Got to love advanced IPv6 socket API being disabled by
@@ -44,31 +48,31 @@ static inline hnetd_time_t hnetd_time(void) {
 
 // Logging macros
 #if L_LEVEL >= 3
-#define L_ERR(...)	syslog(LOG_ERR, __VA_ARGS__)
+#define L_ERR(...)	syslog(LOG_ERR, L_PREFIX __VA_ARGS__)
 #else
 #define L_ERR(...)
 #endif
 
 #if L_LEVEL >= 4
-#define L_WARN(...)	syslog(LOG_WARNING, __VA_ARGS__)
+#define L_WARN(...)	syslog(LOG_WARNING, L_PREFIX __VA_ARGS__)
 #else
 #define L_WARN(...)
 #endif
 
 #if L_LEVEL >= 5
-#define L_NOTICE(...)	syslog(LOG_NOTICE, __VA_ARGS__)
+#define L_NOTICE(...)	syslog(LOG_NOTICE, L_PREFIX __VA_ARGS__)
 #else
 #define L_NOTICE(...)
 #endif
 
 #if L_LEVEL >= 6
-#define L_INFO(...)	syslog(LOG_INFO, __VA_ARGS__)
+#define L_INFO(...)	syslog(LOG_INFO, L_PREFIX __VA_ARGS__)
 #else
 #define L_INFO(...)
 #endif
 
 #if L_LEVEL >= 7
-#define L_DEBUG(...)	syslog(LOG_DEBUG, __VA_ARGS__)
+#define L_DEBUG(...)	syslog(LOG_DEBUG, L_PREFIX __VA_ARGS__)
 #else
 #define L_DEBUG(...)
 #endif
