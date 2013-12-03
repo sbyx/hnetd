@@ -1,6 +1,15 @@
 #ifndef HNETD_H
 #define HNETD_H
 
+/* Anything up to INFO is compiled in by default; syslog can be used
+ * to filter them out. DEBUG can be quite spammy and isn't enabled by
+ * default. */
+#define HNETD_DEFAULT_L_LEVEL 6
+
+#ifndef L_LEVEL
+#define L_LEVEL HNETD_DEFAULT_L_LEVEL
+#endif /* !L_LEVEL */
+
 #ifdef __APPLE__
 
 /* Haha. Got to love advanced IPv6 socket API being disabled by
