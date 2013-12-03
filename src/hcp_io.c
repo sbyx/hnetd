@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Dec  3 10:55:07 2013 mstenber
- * Edit time:     158 min
+ * Last modified: Tue Dec  3 13:45:55 2013 mstenber
+ * Edit time:     161 min
  *
  */
 
@@ -81,6 +81,7 @@ bool hcp_io_init(hcp o)
 {
   int s;
   int on = 1;
+  int off = 0;
 #if 0
   /* Could also use usock here; however, it uses getaddrinfo, which
    * doesn't seem to work when e.g. default routes aren't currently
@@ -105,7 +106,15 @@ bool hcp_io_init(hcp o)
     return false;
 #endif
   if (setsockopt(s, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) < 0)
-    return false;
+    {
+      L_ERR("unable to setsockopt IPV6_RECVPKTINFO:%s", strerror(errno));
+      return false;
+    }
+  if (setsockopt(s, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &off, sizeof(off)) < 0)
+    {
+      L_ERR("unable to setsockopt IPV6_MULTICAST_LOOP:%s", strerror(errno));
+      return false;
+    }
   o->udp_socket = s;
   o->timeout.cb = _timeout;
 
