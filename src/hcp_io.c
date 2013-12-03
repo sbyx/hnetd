@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Dec  3 13:45:55 2013 mstenber
- * Edit time:     161 min
+ * Last modified: Tue Dec  3 15:07:44 2013 mstenber
+ * Edit time:     190 min
  *
  */
 
@@ -36,6 +36,45 @@
 #define AF_LINK AF_PACKET
 #endif /* __linux__ */
 
+const char *hex_repr(char *buf, void *data, int len)
+{
+  char *r = buf;
+
+  while (len--)
+    {
+      sprintf(buf, "%02X", (int) *((unsigned char *)data));
+      buf += 2;
+      data++;
+    }
+  return r;
+}
+#define HEX_REPR(buf, len) hex_repr(alloca((len) * 2 + 1), buf, len)
+
+#ifdef __linux__
+
+/* 'found' from odhcp6c */
+int
+hcp_io_get_hwaddr(const char *ifname, unsigned char *buf, int buf_left)
+{
+  struct ifreq ifr;
+  int sock;
+  int tocopy = buf_left < ETHER_ADDR_LEN ? buf_left : ETHER_ADDR_LEN;
+
+  sock = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+  if (sock<0)
+    return 0;
+  strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
+  if (ioctl(sock, SIOCGIFINDEX, &ifr))
+    return 0;
+  if (ioctl(sock, SIOCGIFHWADDR, &ifr))
+    return 0;
+  memcpy(buf, ifr.ifr_hwaddr.sa_data, tocopy);
+  close(sock);
+  return tocopy;
+}
+
+#endif /* __linux__ */
+
 int
 hcp_io_get_hwaddrs(unsigned char *buf, int buf_left)
 {
@@ -43,6 +82,8 @@ hcp_io_get_hwaddrs(unsigned char *buf, int buf_left)
   int r = getifaddrs(&ia);
   bool first = true;
   void *a1 = buf, *a2 = buf + ETHER_ADDR_LEN;
+  int addrs = 0;
+  unsigned char zeroed_addr[] = {0, 0, 0, 0, 0, 0};
 
   if (buf_left < ETHER_ADDR_LEN * 2)
     return 0;
@@ -53,15 +94,30 @@ hcp_io_get_hwaddrs(unsigned char *buf, int buf_left)
     if (p->ifa_addr->sa_family == AF_LINK)
     {
       void *a = &p->ifa_addr->sa_data[0];
+#ifdef __linux__
+      unsigned char tbuf[ETHER_ADDR_LEN];
+
+      memset(tbuf, 0, sizeof(tbuf));
+      if (!hcp_io_get_hwaddr(p->ifa_name, tbuf, ETHER_ADDR_LEN))
+        continue;
+      a = tbuf;
+#endif /* __linux__ */
+      if (memcmp(a, zeroed_addr, sizeof(zeroed_addr)) == 0)
+        continue;
       if (first || memcmp(a1, a, ETHER_ADDR_LEN) < 0)
         memcpy(a1, a, ETHER_ADDR_LEN);
       if (first || memcmp(a2, a, ETHER_ADDR_LEN) > 0)
         memcpy(a2, a, ETHER_ADDR_LEN);
       first = false;
+      addrs++;
     }
+  L_INFO("hcp_io_get_hwaddrs => %s", HEX_REPR(buf, ETHER_ADDR_LEN * 2));
   freeifaddrs(ia);
   if (first)
-    return 0;
+    {
+      L_ERR("hcp_io_get_hwaddrs failed - no AF_LINK addresses");
+      return 0;
+    }
   return ETHER_ADDR_LEN * 2;
 }
 

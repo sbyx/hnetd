@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Mon Dec  2 17:14:33 2013 mstenber
+ * Last modified: Tue Dec  3 14:59:06 2013 mstenber
  * Edit time:     58 min
  *
  */
@@ -197,6 +197,8 @@ void hcp_int(void)
 
 int main(__unused int argc, __unused char **argv)
 {
+  setbuf(stdout, NULL); /* so that it's in sync with stderr when redirected */
+  openlog("test_hcp", LOG_CONS | LOG_PERROR, LOG_DAEMON);
   sput_start_testing();
   sput_enter_suite("hcp"); /* optional */
   sput_run_test(tlv_iter);
