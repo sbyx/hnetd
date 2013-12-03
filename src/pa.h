@@ -82,8 +82,8 @@ struct pa_iface_callbacks {
 
 struct pa_conf {
 	/* Delay between flooding announce and interface level
-	 * address assignment.
-	 * default = 20 */
+	 * address assignment (in hnetd_time_t unit).
+	 * default = 20 * HNETD_TIME_PER_SECOND */
 	uint32_t commit_lap_delay;
 
 	/* Enables ULA use
@@ -115,17 +115,15 @@ struct pa_conf {
 	struct prefix v4_prefix;
 
 	/* The iface registration functions.
-	 * Default is NULL (for unit testing purposes).
-	 * Should be set to iface_register_user and
-	 * iface_unregister_user to operate with iface.h */
+	 * Defaults are iface_register_user and
+	 * iface_unregister_user from iface.h. */
 	void (*iface_registration)(struct iface_user *user);
 	void (*iface_unregistration)(struct iface_user *user);
 
 };
 
 
-/* Sets conf values to defaults.
- * IMPORTANT: You need to set iface_registration and iface_unregistration yourself ! */
+/* Sets conf values to defaults. */
 void pa_conf_default(struct pa_conf *);
 
 /* Initializes the prefix assignment algorithm with a default

@@ -38,7 +38,7 @@
 
 #define PA_RIDCMP(r1, r2) memcmp(r1, r2, PA_RIDLEN)
 
-#define PA_CONF_DFLT_COMMIT_LAP_DELAY  20
+#define PA_CONF_DFLT_COMMIT_LAP_DELAY  20 * HNETD_TIME_PER_SECOND
 
 #define PA_CONF_DFLT_USE_ULA             1
 #define PA_CONF_DFLT_NO_ULA_IF_V6        1
@@ -46,8 +46,8 @@
 #define PA_CONF_DFLT_NO_V4_IF_V6         0
 #define PA_CONF_DFLT_USE_RDM_ULA         1
 
-#define PA_CONF_DFLT_IFACE_REGISTER      NULL
-#define PA_CONF_DFLT_IFACE_UNREGISTER    NULL
+#define PA_CONF_DFLT_IFACE_REGISTER      iface_register_user
+#define PA_CONF_DFLT_IFACE_UNREGISTER    iface_unregister_user
 
 /* 10/8 */
 static struct prefix PA_CONF_DFLT_V4 = {
@@ -149,6 +149,8 @@ struct pa {
 	bool started;   /* Whether the pa is started */
 	bool scheduled; /* Schedule time */
 	struct uloop_timeout pa_short_timeout; /* PA short delay schedule */
+
+	hnetd_time_t pa_dp_when; /* When the dp event is scheduled */
 	struct uloop_timeout pa_dp_timeout; /* For dp events */
 /* Ways of optimizing the pa algorithm */
 #define PA_TODO_ALL    0xffff
@@ -245,7 +247,8 @@ static void pa_uloop_set(struct uloop_timeout *timeout,
 {
 	hnetd_time_t delay;
 	if(!when) {
-		uloop_timeout_cancel(timeout);
+		if(timeout->pending)
+			uloop_timeout_cancel(timeout);
 		return;
 	}
 
@@ -254,8 +257,8 @@ static void pa_uloop_set(struct uloop_timeout *timeout,
 
 	delay = when - now;
 
-	if(delay)
-		++delay; /* To avoid free loops caused by imprecision */
+	//if(delay)
+	//	++delay; /* To avoid free loops caused by imprecision */
 
 	if(delay > INTMAX_MAX)
 		delay = INTMAX_MAX;
@@ -562,8 +565,8 @@ static void pa_lap_delayed_update_timeout(struct pa *pa, struct pa_lap *lap,
 	if(lap->delayed_flooding_time &&
 					(!timeout || lap->delayed_flooding_time < timeout))
 				timeout = lap->delayed_flooding_time;
-	if(timeout)
-		pa_uloop_set(&lap->delayed_timeout, now, timeout);
+
+	pa_uloop_set(&lap->delayed_timeout, now, timeout);
 }
 
 static void pa_lap_tellhcp(struct pa *pa, struct pa_lap *lap)
@@ -644,7 +647,8 @@ static void pa_lap_destroy(struct pa *pa, struct pa_lap *lap)
 	pa_lap_setflood(pa, lap, false);
 
 	/* Cancel timer if set */
-	uloop_timeout_cancel(&lap->delayed_timeout);
+	if(lap->delayed_timeout.pending)
+		uloop_timeout_cancel(&lap->delayed_timeout);
 
 	list_remove(&lap->dp_le);
 	list_remove(&lap->if_le);
@@ -961,8 +965,6 @@ void pa_do(struct pa *pa)
 
 	/* This is at the beginning because any modification
 	 * to laps should make the algorithm run again */
-	if(!pa->todo_flags)
-		return;
 	pa->scheduled = false;
 	pa->todo_flags = 0;
 
@@ -984,7 +986,10 @@ void pa_do(struct pa *pa)
 			timeout = dp->valid_until;
 		}
 	}
-	pa_uloop_set(&pa->pa_dp_timeout, now, timeout);
+	if(timeout != pa->pa_dp_when) {
+		pa->pa_dp_when = timeout;
+		pa_uloop_set(&pa->pa_dp_timeout, now, timeout);
+	}
 
 
 	/* TODO: Decide whether to generate ULAs or IPv4 */
@@ -1149,7 +1154,7 @@ void pa_do(struct pa *pa)
 					pa_lap_setflood(pa, lap, true);
 
 				if(pa->conf.commit_lap_delay) {
-					timeout = now + HNETD_TIME_PER_SECOND * pa->conf.commit_lap_delay;
+					timeout = now + pa->conf.commit_lap_delay;
 					pa_lap_setassign_delayed(pa, lap, timeout, now, true,
 							PA_DF_NOT_IF_LATER_AND_EQUAL);
 				} else {
@@ -1181,6 +1186,12 @@ void pa_do(struct pa *pa)
 		}
 		pa_iface_set_dodhcp(pa, iface, own);
 	}
+}
+
+static void pa_dp_do_uloop(struct uloop_timeout *t)
+{
+	struct pa *pa = container_of(t, struct pa, pa_dp_timeout);
+	pa_do(pa);
 }
 
 static void pa_do_uloop(struct uloop_timeout *t)
@@ -1312,7 +1323,8 @@ pa_t pa_create(const struct pa_conf *conf)
 	pa->ifu.cb_prefix = pa_ifu_pd;
 
 	pa->pa_short_timeout = (struct uloop_timeout) { .cb = pa_do_uloop };
-	pa->pa_dp_timeout = (struct uloop_timeout) { .cb = pa_do_uloop };
+	pa->pa_dp_when = 0;
+	pa->pa_dp_timeout = (struct uloop_timeout) { .cb = pa_dp_do_uloop };
 	pa->rid = (struct pa_rid) {.id = {} };
 
 	if(pa_set_conf(pa, conf)) {
@@ -1321,7 +1333,7 @@ pa_t pa_create(const struct pa_conf *conf)
 	}
 
 	L_NOTICE(PA_L_PX"New pa structure created");
-	pa_schedule(pa, PA_TODO_ALL);
+	/* Don't schedule PA here because no iface or dp yet... */
 
 	return pa;
 }
