@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Dec  3 15:07:44 2013 mstenber
- * Edit time:     190 min
+ * Last modified: Tue Dec  3 15:20:35 2013 mstenber
+ * Edit time:     191 min
  *
  */
 
@@ -80,7 +80,6 @@ hcp_io_get_hwaddrs(unsigned char *buf, int buf_left)
 {
   struct ifaddrs *ia, *p;
   int r = getifaddrs(&ia);
-  bool first = true;
   void *a1 = buf, *a2 = buf + ETHER_ADDR_LEN;
   int addrs = 0;
   unsigned char zeroed_addr[] = {0, 0, 0, 0, 0, 0};
@@ -104,16 +103,15 @@ hcp_io_get_hwaddrs(unsigned char *buf, int buf_left)
 #endif /* __linux__ */
       if (memcmp(a, zeroed_addr, sizeof(zeroed_addr)) == 0)
         continue;
-      if (first || memcmp(a1, a, ETHER_ADDR_LEN) < 0)
+      if (!addrs || memcmp(a1, a, ETHER_ADDR_LEN) < 0)
         memcpy(a1, a, ETHER_ADDR_LEN);
-      if (first || memcmp(a2, a, ETHER_ADDR_LEN) > 0)
+      if (!addrs || memcmp(a2, a, ETHER_ADDR_LEN) > 0)
         memcpy(a2, a, ETHER_ADDR_LEN);
-      first = false;
       addrs++;
     }
   L_INFO("hcp_io_get_hwaddrs => %s", HEX_REPR(buf, ETHER_ADDR_LEN * 2));
   freeifaddrs(ia);
-  if (first)
+  if (!addrs)
     {
       L_ERR("hcp_io_get_hwaddrs failed - no AF_LINK addresses");
       return 0;
