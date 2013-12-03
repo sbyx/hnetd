@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Dec  2 18:26:34 2013 mstenber
- * Edit time:     242 min
+ * Last modified: Tue Dec  3 10:37:25 2013 mstenber
+ * Edit time:     250 min
  *
  */
 
@@ -24,6 +24,8 @@
 #endif /* L_LEVEL */
 
 #define L_LEVEL 5
+
+#define L_PREFIX "test "
 
 #include "hcp.c"
 #include "hcp_proto.c"
@@ -439,6 +441,39 @@ ssize_t hcp_io_recvfrom(hcp o, void *buf, size_t len,
   return -1;
 }
 
+void
+sanity_check_buf(void *buf, size_t len)
+{
+  struct tlv_attr *a, *last = NULL;
+  int a_len;
+  int last_len;
+  bool ok = true;
+  tlv_for_each_in_buf(a, buf, len)
+    {
+      a_len = tlv_pad_len(a);
+      if (last)
+        {
+          if (memcmp(last, a, last_len < a_len ? last_len : a_len) >= 0)
+            {
+              ok = false;
+              L_ERR("ordering error - %s >= %s",
+                    TLV_REPR(last), TLV_REPR(a));
+            }
+        }
+      last = a;
+      last_len = a_len;
+      /* XXX - some better way to determine recursion? */
+      switch (tlv_id(a))
+        {
+        case HCP_T_NODE_DATA:
+          sanity_check_buf(tlv_data(a), tlv_len(a));
+          break;
+        }
+    }
+  sput_fail_unless(ok, "ordering error");
+
+}
+
 ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
                       const char *ifname,
                       const struct in6_addr *dst)
@@ -452,6 +487,7 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
   if (!l)
     return -1;
 
+  sanity_check_buf(buf, len);
   if (is_multicast)
     s->sent_multicast++;
   else

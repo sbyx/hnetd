@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Mon Dec  2 17:33:10 2013 mstenber
- * Edit time:     7 min
+ * Last modified: Tue Dec  3 10:35:13 2013 mstenber
+ * Edit time:     8 min
  *
  */
 
@@ -37,14 +37,14 @@
 
 enum {
   /* Request TLVs (not to be really stored anywhere) */
-  HCP_T_REQ_NET_HASH = 1, /* empty */
-  HCP_T_REQ_NODE_DATA = 5, /* = just normal hash */
+  HCP_T_REQ_NET_HASH = 2, /* empty */
+  HCP_T_REQ_NODE_DATA = 3, /* = just normal hash */
 
   /* This should be included in every message to facilitate neighbor
    * discovery of peers. */
-  HCP_T_LINK_ID = 3,
+  HCP_T_LINK_ID = 1,
 
-  HCP_T_NETWORK_HASH = 2, /* = just normal hash */
+  HCP_T_NETWORK_HASH = 5, /* = just normal hash */
  /* not implemented */
   HCP_T_NODE_STATE = 4,
 

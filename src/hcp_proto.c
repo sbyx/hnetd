@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Mon Dec  2 18:04:58 2013 mstenber
- * Edit time:     186 min
+ * Last modified: Tue Dec  3 10:36:45 2013 mstenber
+ * Edit time:     188 min
  *
  */
 
@@ -92,6 +92,9 @@ bool hcp_link_send_network_state(hcp_link l,
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
+
+  if (!_push_link_id_tlv(&tb, l))
+    goto err;
   vlist_for_each_element(&o->nodes, n, in_nodes)
     if (!_push_node_state_tlv(&tb, n))
       goto err;
@@ -106,9 +109,10 @@ bool hcp_link_send_network_state(hcp_link l,
       /* Clear the buffer - just send the network state hash. */
       tlv_buf_free(&tb);
       tlv_buf_init(&tb, 0); /* not passed anywhere */
+      if (!_push_link_id_tlv(&tb, l))
+        goto err;
     }
-  if (_push_link_id_tlv(&tb, l)
-      && _push_network_state_tlv(&tb, o))
+  if (_push_network_state_tlv(&tb, o))
     {
       int rc = hcp_io_sendto(o,
                              tlv_data(tb.head),
