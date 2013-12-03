@@ -60,6 +60,18 @@ static void iface_notify_internal_state(struct iface *c, bool enabled)
 }
 
 
+static void iface_notify_data_state(struct iface *c, bool enabled)
+{
+	void *data = (enabled) ? c->dhcpv6_data_in : NULL;
+	size_t len = (enabled) ? c->dhcpv6_len_in : 0;
+
+	struct iface_user *u;
+	list_for_each_entry(u, &users, head)
+		if (u->cb_extdata)
+			u->cb_extdata(u, c->ifname, data, len);
+}
+
+
 int iface_init(void)
 {
 	// TODO: pa_iface_subscribe(NULL, &pa_cb);
@@ -100,11 +112,13 @@ static void update_addr(struct vlist_tree *t, struct vlist_node *node_new, struc
 }
 
 // Update address if necessary (node_new: addr that will be present, node_old: addr that was present)
-static void update_prefix(__unused struct vlist_tree *t, struct vlist_node *node_new, struct vlist_node *node_old)
+static void update_prefix(struct vlist_tree *t, struct vlist_node *node_new, struct vlist_node *node_old)
 {
 	struct iface_addr *a_new = container_of(node_new, struct iface_addr, node);
 	struct iface_addr *a_old = container_of(node_old, struct iface_addr, node);
 	struct iface_addr *a = (node_new) ? a_new : a_old;
+
+	struct iface *c = container_of(t, struct iface, delegated);
 
 	if (node_old && !node_new)
 		a_old->valid_until = -1;
@@ -112,7 +126,9 @@ static void update_prefix(__unused struct vlist_tree *t, struct vlist_node *node
 	struct iface_user *u;
 	list_for_each_entry(u, &users, head)
 		if (u->cb_prefix)
-			u->cb_prefix(u, &a->prefix, a->valid_until, a->preferred_until, a->class);
+			u->cb_prefix(u, c->ifname, &a->prefix, &a->excluded,
+					a->valid_until, a->preferred_until,
+					a->dhcpv6_data, a->dhcpv6_len);
 
 	if (node_old)
 		free(a_old);
@@ -138,6 +154,8 @@ void iface_remove(struct iface *c)
 	// If interface was internal, let subscribers know of removal
 	if (c->internal)
 		iface_notify_internal_state(c, false);
+	else
+		iface_notify_data_state(c, false);
 
 	list_del(&c->head);
 	vlist_flush_all(&c->assigned);
@@ -146,7 +164,8 @@ void iface_remove(struct iface *c)
 	if (c->platform)
 		platform_iface_free(c);
 
-	free(c->domain);
+	free(c->dhcpv6_data_in);
+	free(c->dhcpv6_data_out);
 	free(c);
 }
 
@@ -167,6 +186,7 @@ static void iface_discover_border(struct iface *c)
 	bool internal = !c->v4leased && avl_is_empty(&c->delegated.avl);
 	if (c->internal != internal) {
 		c->internal = internal;
+		iface_notify_data_state(c, internal);
 		iface_notify_internal_state(c, internal);
 		platform_set_internal(c, internal);
 	}
@@ -211,15 +231,19 @@ void iface_update_delegated(struct iface *c)
 }
 
 
-void iface_add_delegated(struct iface *c, const struct prefix *p,
+void iface_add_delegated(struct iface *c,
+		const struct prefix *p, const struct prefix *excluded,
 		hnetd_time_t valid_until, hnetd_time_t preferred_until,
-		uint16_t class)
+		const void *dhcpv6_data, size_t dhcpv6_len)
 {
-	struct iface_addr *a = calloc(1, sizeof(*a));
+	struct iface_addr *a = calloc(1, sizeof(*a) + dhcpv6_len);
 	a->prefix = *p;
+	if (excluded)
+		a->excluded = *excluded;
 	a->valid_until = valid_until;
 	a->preferred_until = preferred_until;
-	a->class = class;
+	a->dhcpv6_len = dhcpv6_len;
+	memcpy(a->dhcpv6_data, dhcpv6_data, dhcpv6_len);
 	vlist_add(&c->delegated, &a->node, &a->prefix);
 }
 
@@ -228,4 +252,15 @@ void iface_commit_delegated(struct iface *c)
 {
 	vlist_flush(&c->delegated);
 	iface_discover_border(c);
+}
+
+
+void iface_set_dhcpv6_data(struct iface *c, const void *dhcpv6_data, size_t dhcpv6_len)
+{
+	if (c->dhcpv6_len_in != dhcpv6_len || memcmp(c->dhcpv6_data_in, dhcpv6_data, dhcpv6_len)) {
+		c->dhcpv6_data_in = realloc(c->dhcpv6_data_in, dhcpv6_len);
+		memcpy(c->dhcpv6_data_in, dhcpv6_data, dhcpv6_len);
+		c->dhcpv6_len_in = dhcpv6_len;
+		iface_notify_data_state(c, true);
+	}
 }

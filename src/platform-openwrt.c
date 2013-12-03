@@ -13,6 +13,7 @@
 #include <libubox/blobmsg.h>
 #include <libubus.h>
 
+#include "dhcpv6.h"
 #include "platform.h"
 #include "iface.h"
 
@@ -168,10 +169,17 @@ static void platform_commit(struct uloop_timeout *t)
 		blobmsg_add_u32(&b, "preferred", preferred);
 		blobmsg_add_u32(&b, "valid", valid);
 
-		if (a->class) {
-			char *buf = blobmsg_alloc_string_buffer(&b, "class", 6);
-			snprintf(buf, 6, "%u", a->class);
-			blobmsg_add_string_buffer(&b);
+		uint8_t *oend = &a->dhcpv6_data[a->dhcpv6_len], *odata;
+		uint16_t olen, otype;
+		dhcpv6_for_each_option(a->dhcpv6_data, oend, otype, olen, odata) {
+#ifdef EXT_PREFIX_CLASS
+			if (otype == DHCPV6_OPT_PREFIX_CLASS && olen == 2) {
+				uint16_t class = (uint16_t)odata[0] << 8 | (uint16_t)odata[1];
+				char *buf = blobmsg_alloc_string_buffer(&b, "class", 6);
+				snprintf(buf, 6, "%u", class);
+				blobmsg_add_string_buffer(&b);
+			}
+#endif
 		}
 
 		blobmsg_close_table(&b, l);
@@ -179,12 +187,6 @@ static void platform_commit(struct uloop_timeout *t)
 	blobmsg_close_array(&b, k);
 
 	k = blobmsg_open_table(&b, "data");
-
-	if (c->domain) {
-		l = blobmsg_open_array(&b, "domain");
-		blobmsg_add_string(&b, NULL, c->domain);
-		blobmsg_close_array(&b, l);
-	}
 
 	const char *service = (c->internal && c->linkowner) ? "server" : "disabled";
 	blobmsg_add_string(&b, "ra", service);
@@ -206,6 +208,7 @@ enum {
 	PREFIX_ATTR_MASK,
 	PREFIX_ATTR_VALID,
 	PREFIX_ATTR_PREFERRED,
+	PREFIX_ATTR_EXCLUDED,
 	PREFIX_ATTR_CLASS,
 	PREFIX_ATTR_MAX,
 };
@@ -215,6 +218,7 @@ static const struct blobmsg_policy prefix_attrs[PREFIX_ATTR_MAX] = {
 	[PREFIX_ATTR_ADDRESS] = { .name = "address", .type = BLOBMSG_TYPE_STRING },
 	[PREFIX_ATTR_MASK] = { .name = "mask", .type = BLOBMSG_TYPE_INT32 },
 	[PREFIX_ATTR_PREFERRED] = { .name = "preferred", .type = BLOBMSG_TYPE_INT32 },
+	[PREFIX_ATTR_EXCLUDED] = { .name = "excluded", .type = BLOBMSG_TYPE_STRING },
 	[PREFIX_ATTR_VALID] = { .name = "valid", .type = BLOBMSG_TYPE_INT32 },
 	[PREFIX_ATTR_CLASS] = { .name = "class", .type = BLOBMSG_TYPE_STRING },
 };
@@ -238,7 +242,7 @@ static void update_delegated(struct iface *c, struct blob_attr *prefixes)
 			hnetd_time_t preferred = HNETD_TIME_MAX;
 			hnetd_time_t valid = HNETD_TIME_MAX;
 			struct prefix p = {IN6ADDR_ANY_INIT, 0};
-			uint16_t class = 0;
+			struct prefix ex = {IN6ADDR_ANY_INIT, 0};
 
 			if (!(a = tb[PREFIX_ATTR_ADDRESS]) ||
 					inet_pton(AF_INET6, blobmsg_get_string(a), &p.prefix) < 1)
@@ -255,10 +259,31 @@ static void update_delegated(struct iface *c, struct blob_attr *prefixes)
 			if ((a = tb[PREFIX_ATTR_VALID]))
 				valid = now + (blobmsg_get_u32(a) * HNETD_TIME_PER_SECOND);
 
-			if ((a = tb[PREFIX_ATTR_CLASS]))
-				class = atoi(blobmsg_get_string(a));
+			if ((a = tb[PREFIX_ATTR_EXCLUDED])) {
+				char *addr, *prefix, *saveptr;
+				if ((addr = strtok_r(blobmsg_get_string(a), "/", &saveptr)) &&
+						(prefix = strtok_r(NULL, "", &saveptr)) &&
+						inet_pton(AF_INET6, addr, &ex.prefix) == 1)
+					ex.plen = atoi(prefix);
+			}
 
-			iface_add_delegated(c, &p, valid, preferred, class);
+			void *data = NULL;
+			size_t len = 0;
+
+#ifdef EXT_PREFIX_CLASS
+			struct dhcpv6_prefix_class pclass = {
+				.type = htons(DHCPV6_OPT_PREFIX_CLASS),
+				.len = htons(2),
+				.class = htons(atoi(blobmsg_get_string(a)))
+			};
+
+			if ((a = tb[PREFIX_ATTR_CLASS])) {
+				data = &pclass;
+				len = sizeof(pclass);
+			}
+#endif
+
+			iface_add_delegated(c, &p, &ex, valid, preferred, data, len);
 		}
 	}
 
