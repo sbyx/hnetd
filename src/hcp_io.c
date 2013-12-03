@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Dec  3 09:55:50 2013 mstenber
- * Edit time:     157 min
+ * Last modified: Tue Dec  3 10:55:07 2013 mstenber
+ * Edit time:     158 min
  *
  */
 
@@ -134,8 +134,8 @@ bool hcp_io_set_ifname_enabled(hcp o,
   val.ipv6mr_multiaddr = o->multicast_address;
   if (!(val.ipv6mr_interface = if_nametoindex(ifname)))
     {
-      L_ERR("unable to enable on %s - if_nametoindex: %s",
-            ifname, strerror(errno));
+      L_DEBUG("unable to enable on %s - if_nametoindex: %s",
+              ifname, strerror(errno));
       goto fail;
     }
   if (setsockopt(o->udp_socket,
