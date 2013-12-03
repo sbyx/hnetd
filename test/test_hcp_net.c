@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Tue Dec  3 10:37:25 2013 mstenber
- * Edit time:     250 min
+ * Last modified: Tue Dec  3 13:27:49 2013 mstenber
+ * Edit time:     265 min
  *
  */
 
@@ -25,8 +25,6 @@
 
 #define L_LEVEL 5
 
-#define L_PREFIX "test "
-
 #include "hcp.c"
 #include "hcp_proto.c"
 #include "hcp_timeout.c"
@@ -39,7 +37,8 @@
 
 hnetd_time_t now_time;
 
-#define MESSAGE_PROPAGATION_DELAY (random() % 100 + 1)
+#define MAXIMUM_PROPAGATION_DELAY 100
+#define MESSAGE_PROPAGATION_DELAY (random() % MAXIMUM_PROPAGATION_DELAY + 1)
 
 typedef struct {
   struct list_head h;
@@ -79,7 +78,11 @@ typedef struct net_sim_t {
   hnetd_time_t now, start;
 
   int sent_unicast;
+  hnetd_time_t last_unicast_sent;
   int sent_multicast;
+
+  int converged_count;
+  int not_converged_count;
 } net_sim_s, *net_sim;
 
 void net_sim_init(net_sim s)
@@ -115,6 +118,7 @@ bool net_sim_is_converged(net_sim s)
         {
           L_DEBUG("not converged, network hash mismatch %llx <> %llx",
                   hcp_hash64(h), hcp_hash64(&n->n.network_hash));
+          s->not_converged_count++;
           return false;
         }
     }
@@ -135,10 +139,13 @@ bool net_sim_is_converged(net_sim s)
               L_DEBUG("origination time mismatch %lld <> %lld",
                       (long long) n2->n.own_node->origination_time,
                       (long long) hn->origination_time);
+              s->not_converged_count++;
               return false;
             }
         }
     }
+
+  s->converged_count++;
   return true;
 }
 
@@ -491,7 +498,10 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
   if (is_multicast)
     s->sent_multicast++;
   else
-    s->sent_unicast++;
+    {
+      s->sent_unicast++;
+      s->last_unicast_sent = s->now;
+    }
   list_for_each(p, &s->neighs)
     {
       net_neigh n = container_of(p, net_neigh_s, h);
@@ -651,6 +661,26 @@ static void raw_bird14(net_sim s)
   handle_connections(s, &nodeconnections[0], 2); /* Two first ones are needed */
 
   SIM_WHILE(s, 1000, !net_sim_is_converged(s));
+
+  /* Then, simulate network for a while, keeping eye on how often it's
+   * NOT converged. */
+  int converged_count = s->converged_count;
+  int not_converged_count = s->not_converged_count;
+  int sent_unicast = s->sent_unicast;
+  hnetd_time_t convergence_time = s->now;
+
+  SIM_WHILE(s, 1000, !net_sim_is_converged(s) || iter < 900);
+  L_NOTICE("unicasts sent:%d after convergence, last %lld ms after convergence",
+           s->sent_unicast - sent_unicast, s->last_unicast_sent - convergence_time);
+#if 0
+  /* As we do reachability checking, this isn't valid.. unfortunately. */
+  sput_fail_unless((s->sent_unicast - sent_unicast) < 50,
+                   "did not send (many) unicasts");
+#endif /* 0 */
+  sput_fail_unless(s->not_converged_count == not_converged_count,
+                   "should stay converged");
+  sput_fail_unless(s->converged_count >= 900 + converged_count,
+                   "converged count rising");
 }
 
 void hcp_bird14()
