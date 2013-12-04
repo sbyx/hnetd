@@ -48,14 +48,22 @@ struct pa_flood_callbacks {
 	 * @param priv Private pointer as provided by subscriber */
 	void (*updated_lap)(const struct prefix *prefix, const char *ifname,
 							int to_delete, void *priv);
+
 	/* Called whenever a locally delegated prefix is modified.
 	 * @param prefix The assigned prefix
+	 * @param prefix Some subprefix that must not be assigned
+	 * @param dp_ifname Delegating side interface (NULL if not delegated)
 	 * @param valid_until End of validity date or zero when the ldp should
 	 *        be deleted
 	 * @param preferred_until When the prefix will not be preferred anymore
+	 * @param dhcpv6_data Data provided by the delegating dhcpv6 server (NULL if no data)
+	 * @param dhcpv6_len The length of the dhcpv6 data (0 if not data)
 	 * @param priv Private pointer as provided by subscriber */
-	void (*updated_ldp)(const struct prefix *prefix, hnetd_time_t valid_until,
-							hnetd_time_t preferred_until, void *priv);
+	void (*updated_ldp)(const struct prefix *prefix,
+				const struct prefix *excluded, const char *dp_ifname,
+				hnetd_time_t valid_until, hnetd_time_t preferred_until,
+				const void *dhcpv6_data, size_t dhcpv6_len,
+				void *priv);
 };
 
 struct pa_iface_callbacks {
@@ -68,10 +76,13 @@ struct pa_iface_callbacks {
 	 * @param valid_until End of validity date or zero when the prefix should
 	 *        be deleted
 	 * @param preferred_until When the prefix will not be preferred anymore
+	 * @param dhcpv6_data Data provided by the delegating dhcpv6 server (NULL if no data)
+	 * @param dhcpv6_len The length of the dhcpv6 data (0 if not data)
 	 * @param priv Private pointer as provided by subscriber */
 	void (*update_prefix)(const struct prefix *p, const char *ifname,
-						hnetd_time_t valid_until,
-						hnetd_time_t preferred_until, void *priv);
+						hnetd_time_t valid_until, hnetd_time_t preferred_until,
+						const void *dhcpv6_data, size_t dhcpv6_len,
+						void *priv);
 
 	/* When interface ownership changes.
 	 * @param ifname The interface name
@@ -171,12 +182,18 @@ int pa_update_eap(pa_t, const struct prefix *prefix,
 /* Flooding protocol must call that function whenever a delegated
  * prefix advertised by some *other* node is modified or deleted.
  * @param prefix The delegated prefix
+ * @param rid Prefix owner's router id
+ * @param excluded Prefix to not assign (NULL if not assigned)
  * @param valid_until Time when the prefix becomes invalid (0 for deletion)
  * @param preferred_until - Time when the prefix is not preferred anymore.
+ * @param dhcpv6_data Data provided by the delegating dhcpv6 server (NULL if no data)
+ * @param dhcpv6_len The length of the dhcpv6 data (0 if not data)
  * @return 0 on success. A different value on error. */
 int pa_update_edp(pa_t, const struct prefix *prefix,
 				const struct pa_rid *rid,
-				hnetd_time_t valid_until, hnetd_time_t preferred_until);
+				const struct prefix *excluded,
+				hnetd_time_t valid_until, hnetd_time_t preferred_until,
+				const void *dhcpv6_data, size_t dhcpv6_len);
 
 #endif
 

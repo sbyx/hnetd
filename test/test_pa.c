@@ -173,9 +173,11 @@ static void test_pa_timeout_fire(struct uloop_timeout *timeout)
 	do {if(a) {sput_fail_if(a, test); return;} } while(0)
 
 static void dmy_update_prefix(const struct prefix *p, const char *ifname,
-						hnetd_time_t valid_until,
-						hnetd_time_t preferred_until, void *priv)
+		hnetd_time_t valid_until, hnetd_time_t preferred_until,
+		const void *dhcpv6_data, size_t dhcpv6_len,
+		void *priv)
 {
+	//TODO: Save other arguments
 	printf("dmy_update_prefix\n");
 	struct px_update_call *pxu = new_px_update(p, ifname, valid_until, preferred_until, priv);
 	SPUT_FAIL_AND_RETURN_IF(!pxu, "new_px_update");
@@ -199,9 +201,13 @@ static void dmy_updated_lap(const struct prefix *prefix, const char *ifname,
 	smock_push(SMOCK_LAP_UPDATE, lau);
 }
 
-static void dmy_updated_ldp(const struct prefix *prefix, hnetd_time_t valid_until,
-							hnetd_time_t preferred_until, void *priv)
+static void dmy_updated_ldp(const struct prefix *prefix,
+		const struct prefix *excluded, const char *dp_ifname,
+		hnetd_time_t valid_until, hnetd_time_t preferred_until,
+		const void *dhcpv6_data, size_t dhcpv6_len,
+		void *priv)
 {
+	//TODO: Save others
 	printf("dmy_updated_ldp\n");
 	struct ldp_update_call *ldu = new_ldp_update(prefix, valid_until, preferred_until, priv);
 	SPUT_FAIL_AND_RETURN_IF(!ldu, "new_ldp_update");
@@ -280,7 +286,8 @@ void pa_test_minimal(void)
 	/* Creating prefix */
 	valid_until = 100000;
 	preferred_until = 50000;
-	iface.user->cb_prefix(iface.user, TEST_IFNAME_1, &p1, NULL /* todo exclude */,
+	//TODO: Use exclude and dhcp
+	iface.user->cb_prefix(iface.user, TEST_IFNAME_1, &p1, NULL,
 			valid_until, preferred_until, NULL, 0);
 
 	/* This will trigger a new scheduling */

@@ -69,6 +69,7 @@ struct pa_iface {
 
 	struct list_head laps; /* laps on that iface */
 	struct list_head eaps; /* eaps on that iface */
+	struct list_head dps;  /* dps on that iface */
 };
 
 /* Locally assigned prefix */
@@ -127,6 +128,15 @@ struct pa_dp {
 	struct list_head laps;        /* laps attached to that prefix */
 	bool local;                   /* Whether we own that assignment */
 	struct pa_rid rid;            /* If not local, source rid */
+
+	bool excluded_valid;          /* Whether there are an excluded prefix */
+	struct prefix excluded;
+
+	size_t dhcpv6_len;            /* dhcpv6 data length (or 0) */
+	void *dhcpv6_data;      /* dhcpv6 data (or NULL) */
+
+	struct pa_iface *iface;       /* When local, delegating side iface */
+	struct list_head if_le;       /* When iface is not null, this is linked in iface dps */
 };
 
 struct pa {
@@ -174,6 +184,7 @@ struct pa {
 /**************************************************************/
 static void pa_eap_iface_assign(struct pa *pa, struct pa_eap *eap, struct pa_iface *iface);
 static void pa_lap_destroy(struct pa *pa, struct pa_lap *lap);
+static int pa_dp_iface_assign(struct pa *pa, struct pa_dp *dp, struct pa_iface *iface);
 
 /**************************************************************/
 /*********************** Utilities ****************************/
@@ -286,6 +297,7 @@ static struct pa_iface *pa_iface_goc(struct pa *pa, const char *ifname)
 	strcpy(iface->ifname, ifname);
 	list_init_head(&iface->eaps);
 	list_init_head(&iface->laps);
+	list_init_head(&iface->dps);
 	iface->internal = 0;
 	iface->do_dhcp = 0;
 	list_add(&iface->le, &pa->ifaces);
@@ -309,11 +321,19 @@ static void pa_iface_rmlaps(struct pa *pa, struct pa_iface *iface)
 static void pa_iface_destroy(struct pa *pa, struct pa_iface *iface)
 {
 	struct pa_eap *eap;
+	struct pa_dp *dp;
 
 	L_INFO(PA_L_PX"Destroying "PA_IF_L, PA_IF_LA(iface));
 
 	/* Destroys all laps */
 	pa_iface_rmlaps(pa, iface);
+
+	if(!(list_empty(&iface->dps) && list_empty(&iface->eaps)))
+		L_WARN(PA_L_PX"Should not destroy "PA_IF_L" while it has eaps or dps", PA_IF_LA(iface));
+
+	/* Remove iface from all dps */
+	list_for_each_entry(dp, &iface->dps, if_le)
+		pa_dp_iface_assign(pa, dp, NULL);
 
 	/* Remove iface from all eaps */
 	list_for_each_entry(eap, &iface->eaps, if_le)
@@ -331,8 +351,8 @@ static void pa_iface_cleanmaybe(struct pa *pa,
 	if(iface->internal)
 		return;
 
-	if(list_empty(&iface->eaps)) {
-		/* We don't need an external iface with no eaps */
+	if(list_empty(&iface->eaps) && list_empty(&iface->dps)) {
+		/* We don't need an external iface with no eaps or dps */
 		pa_iface_destroy(pa, iface);
 	} else {
 		/* External ifaces can't have laps */
@@ -582,7 +602,9 @@ static void pa_lap_telliface(struct pa *pa, struct pa_lap *lap)
 		pa->ifcb.update_prefix(&lap->prefix, lap->iface->ifname,
 				(lap->assigned)?lap->dp->valid_until:0,
 						(lap->assigned)?lap->dp->preferred_until:0,
-								pa->fcb.priv);
+						lap->dp->dhcpv6_data,
+						lap->dp->dhcpv6_len,
+						pa->fcb.priv);
 }
 
 static void pa_lap_setflood(struct pa *pa, struct pa_lap *lap,
@@ -760,6 +782,132 @@ struct pa_dp *pa_dp_get(struct pa *pa, const struct prefix *p,
 	return NULL;
 }
 
+/* Returns whether there was a change */
+static int pa_dp_iface_assign(struct pa *pa,
+		struct pa_dp *dp, struct pa_iface *iface)
+{
+	if(dp->iface == iface)
+		return 0;
+
+	if(dp->iface)
+		list_remove(&dp->if_le);
+
+	dp->iface = iface;
+
+	if(dp->iface)
+		list_add(&dp->if_le, &iface->dps);
+
+	L_DEBUG(PA_L_PX"Assigning "PA_DP_L" to "PA_IF_L, PA_DP_LA(dp, 1), PA_IF_LA(iface));
+
+	pa_schedule(pa, PA_TODO_ALL);
+
+	return 1;
+}
+
+/* Returns whether there was a change */
+static int pa_dp_iface_assignbyname(struct pa *pa,
+		struct pa_dp *dp, const char *ifname)
+{
+	struct pa_iface *iface = NULL;
+	if(ifname && strlen(ifname)) {
+		iface = pa_iface_goc(pa, ifname);
+
+		if(iface == NULL)
+			return 0;
+	}
+
+	pa_dp_iface_assign(pa, dp, iface);
+	return 1;
+}
+
+/* Returns whether there was a change */
+static int pa_dp_excluded_set(struct pa *pa,
+		struct pa_dp *dp, const struct prefix *excluded)
+{
+	struct pa_lap *lap;
+
+	/* Already no excluded */
+	if(!excluded && !dp->excluded_valid)
+		return 0;
+
+	/* Excluded are identical */
+	if(excluded && dp->excluded_valid && !prefix_cmp(excluded, &dp->prefix))
+		return 0;
+
+	L_DEBUG(PA_L_PX"Set "PA_DP_L" excluded prefix to %s", PA_DP_LA(dp, 1),
+			(excluded)?PREFIX_TOSTRING(excluded, 2):"NULL");
+
+	dp->excluded_valid = !!excluded;
+	if(excluded)
+		memcpy(&dp->excluded, excluded, sizeof(struct prefix));
+
+	/* The excluded prefix just changed. Which means we need to destroy lap
+	 * that has become invalid. */
+	bool destroy = false;
+	list_for_each_entry(lap, &dp->laps, dp_le) {
+		if(prefix_contains(excluded, &lap->prefix)) {
+			pa_lap_destroy(pa, lap);
+			destroy = true;
+		}
+	}
+
+	if(destroy)
+		pa_schedule(pa, PA_TODO_ALL);
+
+	return 1;
+}
+
+/* Updates dhcpv6 data
+   Returns whether there was a change */
+static int pa_dp_dhcpv6_set(struct pa *pa,
+		struct pa_dp *dp,
+		const void *dhcpv6_data, size_t dhcpv6_len)
+{
+	if(!dhcpv6_data)
+		dhcpv6_len = 0;
+
+	/* No change */
+	if(!dhcpv6_len && !dp->dhcpv6_data)
+		return 0;
+
+	/* No change */
+	if(dhcpv6_len && dhcpv6_len == dp->dhcpv6_len &&
+			!memcmp(dp->dhcpv6_data, dhcpv6_data, dhcpv6_len))
+		return 0;
+
+	L_DEBUG(PA_L_PX"Set "PA_DP_L" dhcpv6 data (length %d)",
+			PA_DP_LA(dp, 1), (int) dhcpv6_len);
+
+	if(dp->dhcpv6_data)
+		free(dp->dhcpv6_data);
+
+	if(dhcpv6_len) {
+		if(!(dp->dhcpv6_data = malloc(dhcpv6_len))) {
+			L_WARN(PA_L_PX"Malloc failed for "PA_DP_L" dhcpv6 data assign", PA_DP_LA(dp, 1));
+		} else {
+			memcpy(dp->dhcpv6_data, dhcpv6_data, dhcpv6_len);
+		}
+	} else {
+		dp->dhcpv6_data = NULL;
+		dp->dhcpv6_len = 0;
+	}
+
+	return 1;
+}
+
+static void pa_dp_tell_hcp(struct pa *pa,
+		struct pa_dp *dp)
+{
+	//Notify hcp iff local
+	if(dp->local && pa->fcb.updated_ldp)
+			pa->fcb.updated_ldp(&dp->prefix, /* prefix */
+								(dp->excluded_valid)?&dp->excluded:NULL,
+								(dp->iface)?dp->iface->ifname:NULL,
+								dp->valid_until, dp->preferred_until,
+								dp->dhcpv6_data, dp->dhcpv6_len,
+								pa->fcb.priv);
+}
+
 /* Creates an empty unused dp with the given prefix */
 static struct pa_dp *pa_dp_create(struct pa *pa,
 		const struct prefix *prefix,
@@ -773,6 +921,9 @@ static struct pa_dp *pa_dp_create(struct pa *pa,
 	list_init_head(&dp->laps);
 	dp->valid_until = 0;
 	dp->preferred_until = 0;
+	dp->dhcpv6_data = NULL;
+	dp->dhcpv6_len = 0;
+	dp->iface = NULL;
 	if(!rid) {
 		dp->local = 1;
 	} else {
@@ -827,10 +978,13 @@ static void pa_dp_destroy(struct pa *pa, struct pa_dp *dp)
 		}
 	}
 
+	dp->valid_until = 0;
+	dp->preferred_until = 0;
 	//Notify hcp iff local
-	if(dp->local && pa->fcb.updated_ldp)
-			pa->fcb.updated_ldp(&dp->prefix, 0,
-					0, pa->fcb.priv);
+	pa_dp_tell_hcp(pa, dp);
+
+	/* Unlink dp if linked */
+	pa_dp_iface_assign(pa, dp, NULL);
 
 	//Remove that dp from database
 	list_remove(&dp->le);
@@ -840,9 +994,13 @@ static void pa_dp_destroy(struct pa *pa, struct pa_dp *dp)
 	pa_schedule(pa, PA_TODO_ALL);
 }
 
-static void pa_dp_update_raw(struct pa *pa, struct pa_dp *dp,
+static int pa_dp_times_set(struct pa *pa, struct pa_dp *dp,
 		hnetd_time_t valid_until,hnetd_time_t preferred_until)
 {
+	if(valid_until == dp->valid_until &&
+				preferred_until == dp->preferred_until)
+			return 0;
+
 	dp->valid_until = valid_until;
 	dp->preferred_until = preferred_until;
 
@@ -851,25 +1009,27 @@ static void pa_dp_update_raw(struct pa *pa, struct pa_dp *dp,
 
 	pa_schedule(pa, PA_TODO_ALL);
 
-	/* Must tell hcp about changes */
-	if(dp->local && pa->fcb.updated_ldp) {
-		pa->fcb.updated_ldp(&dp->prefix, dp->valid_until,
-				dp->preferred_until, pa->fcb.priv);
-	}
+	return 1;
 }
 
 static void pa_dp_update(struct pa *pa, struct pa_dp *dp,
-		hnetd_time_t valid_until,hnetd_time_t preferred_until)
+		const char *ifname,
+		const struct prefix *excluded,
+		hnetd_time_t valid_until, hnetd_time_t preferred_until,
+		const void *dhcpv6_data, size_t dhcpv6_len)
 {
-	if(valid_until == dp->valid_until &&
-			preferred_until == dp->preferred_until)
-		return;
-
 	if(!valid_until) {
-		pa_dp_destroy(pa, dp);
-	} else {
-		pa_dp_update_raw(pa, dp, valid_until, preferred_until);
+		pa_dp_destroy(pa, dp); /* That already tells hcp */
+	} else if(pa_dp_times_set(pa, dp, valid_until, preferred_until) ||
+			pa_dp_dhcpv6_set(pa, dp, dhcpv6_data, dhcpv6_len) ||
+			pa_dp_excluded_set(pa, dp, excluded) ||
+			pa_dp_iface_assignbyname(pa, dp, ifname)) {
+		if(dp->local)
+			pa_dp_tell_hcp(pa, dp);
+
+		//TODO: Tell iface about laps changes (timings, dhcpv6data)
 	}
+	pa_dp_times_set(pa, dp,valid_until, preferred_until);
 }
 
 static void pa_dp_cleanmaybe(struct pa *pa, struct pa_dp *dp,
@@ -1229,7 +1389,9 @@ int pa_update_eap(pa_t pa, const struct prefix *prefix,
 
 int pa_update_edp(pa_t pa, const struct prefix *prefix,
 		const struct pa_rid *rid,
-		hnetd_time_t valid_until, hnetd_time_t preferred_until)
+		const struct prefix *excluded,
+		hnetd_time_t valid_until, hnetd_time_t preferred_until,
+		const void *dhcpv6_data, size_t dhcpv6_len)
 {
 	struct pa_dp *dp;
 
@@ -1239,7 +1401,9 @@ int pa_update_edp(pa_t pa, const struct prefix *prefix,
 	if(!(dp = pa_dp_goc(pa, prefix, rid)))
 		return -1;
 
-	pa_dp_update(pa, dp, valid_until, preferred_until);
+	pa_dp_update(pa, dp, NULL, excluded,
+			valid_until, preferred_until,
+			dhcpv6_data, dhcpv6_len);
 	return 0;
 }
 
@@ -1268,14 +1432,16 @@ static void pa_ifu_pd(struct iface_user *u, const char *ifname,
 		const void *dhcpv6_data, size_t dhcpv6_len)
 {
 	struct pa *pa = container_of(u, struct pa, ifu);
-	/* TODO:Support dhcpv6 data and excluded */
+
 	/* Null because local */
 	struct pa_dp *dp = pa_dp_goc(pa, prefix, NULL);
 
 	if(!dp)
 		return;
 
-	pa_dp_update(pa, dp, valid_until, preferred_until);
+	pa_dp_update(pa, dp, ifname, excluded,
+		valid_until, preferred_until,
+		dhcpv6_data, dhcpv6_len);
 }
 
 /**************************************************************/
