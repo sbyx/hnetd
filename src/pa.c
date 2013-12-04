@@ -220,19 +220,17 @@ void pa_conf_default(struct pa_conf *conf)
 	conf->iface_unregistration = PA_CONF_DFLT_IFACE_UNREGISTER;
 }
 
-void pa_flood_subscribe(pa_t pat, const struct pa_flood_callbacks *cb)
+void pa_flood_subscribe(pa_t pa, const struct pa_flood_callbacks *cb)
 {
 	L_DEBUG(PA_L_PX"Flooding protocol just subscribed (%d,%d)",
 			!!cb->updated_lap, !!cb->updated_ldp);
-	struct pa *pa = (struct pa *)pat;
 	memcpy(&pa->fcb, cb, sizeof(struct pa_flood_callbacks));
 }
 
-void pa_iface_subscribe(pa_t pat, const struct pa_iface_callbacks *cb)
+void pa_iface_subscribe(pa_t pa, const struct pa_iface_callbacks *cb)
 {
 	L_DEBUG(PA_L_PX"Iface just subscribed (%d,%d)",
 				!!cb->update_link_owner, !!cb->update_prefix);
-	struct pa *pa = (struct pa *)pat;
 	memcpy(&pa->ifcb, cb, sizeof(struct pa_iface_callbacks));
 }
 
@@ -1205,9 +1203,8 @@ static void pa_do_uloop(struct uloop_timeout *t)
 /********************* hcp interface **************************/
 /**************************************************************/
 
-void pa_set_rid(pa_t pat, const struct pa_rid *rid)
+void pa_set_rid(pa_t pa, const struct pa_rid *rid)
 {
-	struct pa *pa = (struct pa *)pat;
 	if(!PA_RIDCMP(&pa->rid, rid))
 		return;
 
@@ -1217,11 +1214,10 @@ void pa_set_rid(pa_t pat, const struct pa_rid *rid)
 }
 
 /* Called by hcp when it wants to update an eap */
-int pa_update_eap(pa_t pat, const struct prefix *prefix,
+int pa_update_eap(pa_t pa, const struct prefix *prefix,
 		const struct pa_rid *rid,
 		const char *ifname, bool to_delete)
 {
-	struct pa *pa = (struct pa *)pat;
 	struct pa_eap *eap;
 
 	if(!(eap = pa_eap_goc(pa, prefix, ifname, rid)))
@@ -1231,11 +1227,10 @@ int pa_update_eap(pa_t pat, const struct prefix *prefix,
 	return 0;
 }
 
-int pa_update_edp(pa_t pat, const struct prefix *prefix,
+int pa_update_edp(pa_t pa, const struct prefix *prefix,
 		const struct pa_rid *rid,
 		hnetd_time_t valid_until, hnetd_time_t preferred_until)
 {
-	struct pa *pa = (struct pa *)pat;
 	struct pa_dp *dp;
 
 	if(!rid) /* Do not accept local dps */
@@ -1287,10 +1282,8 @@ static void pa_ifu_pd(struct iface_user *u, const char *ifname,
 /********************* main management ************************/
 /**************************************************************/
 
-int pa_set_conf(pa_t pat, const struct pa_conf *conf)
+int pa_set_conf(pa_t pa, const struct pa_conf *conf)
 {
-	struct pa *pa = (struct pa *)pat;
-
 	if(conf->use_ula && !conf->use_random_ula &&
 			!prefix_is_ipv6_ula(&conf->ula_prefix))
 		return -1;
@@ -1339,10 +1332,8 @@ pa_t pa_create(const struct pa_conf *conf)
 	return pa;
 }
 
-int pa_start(pa_t pat)
+int pa_start(pa_t pa)
 {
-	struct pa *pa = (struct pa *)pat;
-
 	if(pa->started)
 		return -1;
 
@@ -1358,9 +1349,8 @@ int pa_start(pa_t pat)
 	return 0;
 }
 
-void pa_destroy(pa_t pat)
+void pa_destroy(pa_t pa)
 {
-	struct pa *pa = (struct pa *)pat;
 	struct pa_iface *iface;
 	struct pa_dp *dp;
 	struct pa_eap *eap;

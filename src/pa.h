@@ -35,7 +35,7 @@ struct pa_rid {
 		(rid)->id[12], (rid)->id[13], (rid)->id[15], (rid)->id[15]
 
 
-typedef void *pa_t;
+typedef struct pa *pa_t;
 
 /* Callbacks for flooding protocol. */
 struct pa_flood_callbacks {
