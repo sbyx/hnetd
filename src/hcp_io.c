@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Dec  3 15:34:39 2013 mstenber
- * Edit time:     197 min
+ * Last modified: Wed Dec  4 11:30:10 2013 mstenber
+ * Edit time:     199 min
  *
  */
 
@@ -36,20 +36,6 @@
 #define AF_LINK AF_PACKET
 #include <linux/if_packet.h>
 #endif /* __linux__ */
-
-const char *hex_repr(char *buf, void *data, int len)
-{
-  char *r = buf;
-
-  while (len--)
-    {
-      sprintf(buf, "%02X", (int) *((unsigned char *)data));
-      buf += 2;
-      data++;
-    }
-  return r;
-}
-#define HEX_REPR(buf, len) hex_repr(alloca((len) * 2 + 1), buf, len)
 
 int
 hcp_io_get_hwaddrs(unsigned char *buf, int buf_left)
