@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Wed Dec  4 11:54:11 2013 mstenber
+ * Last modified: Wed Dec  4 12:56:35 2013 mstenber
  * Edit time:     66 min
  *
  */
@@ -14,6 +14,10 @@
 #include "hcp.h"
 #include "sput.h"
 #include "smock.h"
+
+/* Fake structures to keep pa's default config happy. */
+void *iface_register_user;
+void *iface_unregister_user;
 
 /**************************************************************** Test cases */
 

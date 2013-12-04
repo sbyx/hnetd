@@ -7,8 +7,8 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -std=c99")
 add_definitions(-D_GNU_SOURCE -Wall -Wextra)
 
 # TODO: split platform logic
-set(HCP src/hcp.c src/hcp_notify.c src/hcp_io.c src/hcp_proto.c src/hcp_timeout.c)
-add_executable(hnetd ${HCP} src/hnetd.c src/iface.c src/ipc.c src/platform-openwrt.c src/tlv.c src/prefix_utils.c)
+set(HCP src/hcp.c src/hcp_notify.c src/hcp_io.c src/hcp_pa.c src/hcp_proto.c src/hcp_timeout.c)
+add_executable(hnetd ${HCP} src/hnetd.c src/iface.c src/ipc.c src/platform-openwrt.c src/tlv.c src/prefix_utils.c src/pa.c)
 target_link_libraries(hnetd ubox ubus blobmsg_json)
 
 # Unit test stuff
@@ -30,7 +30,7 @@ target_link_libraries(test_tlv ubox ubus blobmsg_json)
 add_test(tlv test_tlv)
 add_dependencies(check test_tlv)
 
-add_executable(test_hcp ${HCP} src/tlv.c test/test_hcp.c)
+add_executable(test_hcp ${HCP} src/pa.c src/prefix_utils.c src/tlv.c test/test_hcp.c)
 target_link_libraries(test_hcp ubox ubus blobmsg_json)
 add_test(hcp test_hcp)
 add_dependencies(check test_hcp)

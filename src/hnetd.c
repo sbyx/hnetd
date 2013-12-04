@@ -25,13 +25,15 @@
 
 #include <libubox/uloop.h>
 
-#include "hcp.h"
+#include "hcp_pa.h"
 #include "ipc.h"
 #include "platform.h"
 
 int main(__unused int argc, char* const argv[])
 {
 	hcp h;
+	struct pa_conf pa_conf;
+	pa_t pa;
 	int c;
 
 	if (strstr(argv[0], "hnet-call"))
@@ -63,10 +65,22 @@ int main(__unused int argc, char* const argv[])
 		srandom(seed);
 	}
 
+	pa_conf_default(&pa_conf);
+	pa = pa_create(&pa_conf);
+	if (!pa) {
+		L_ERR("Unable to initialize PA");
+		return 13;
+	}
+
 	h = hcp_create();
 	if (!h) {
 		L_ERR("Unable to initialize HCP");
 		return 42;
+	}
+
+	if (!hcp_connect_pa(h, pa)) {
+		L_ERR("Unable to connect hcp and pa");
+		return 17;
 	}
 
 	/* XXX - add real command line parsing at some point. For the
@@ -80,6 +94,9 @@ int main(__unused int argc, char* const argv[])
 			break;
 		}
 	}
+
+	/* Fire up the prefix assignment code. */
+	pa_start(pa);
 
 	uloop_run();
 	return 0;

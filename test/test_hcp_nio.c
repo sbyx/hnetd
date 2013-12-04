@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Wed Dec  4 11:51:35 2013 mstenber
- * Edit time:     175 min
+ * Last modified: Wed Dec  4 13:27:02 2013 mstenber
+ * Edit time:     154 min
  *
  */
 
@@ -152,8 +152,7 @@ static int random_mock(void)
   return random();
 }
 
-/*********************************************************** Fake subscriber */
-
+/********************************************************** Fake subscribers */
 
 static void dummy_tlv_cb(hcp_subscriber s,
                          hcp_node n, struct tlv_attr *tlv, bool add)
@@ -178,8 +177,11 @@ static void dummy_node_cb(hcp_subscriber s, hcp_node n, bool add)
   smock_pull_bool_is("node_callback", add);
 }
 
-static hcp_subscriber_s dummy_subscriber = {
-  .tlv_change_callback = dummy_tlv_cb,
+static hcp_subscriber_s dummy_subscriber_1 = {
+  .tlv_change_callback = dummy_tlv_cb
+};
+
+static hcp_subscriber_s dummy_subscriber_2 = {
   .node_change_callback = dummy_node_cb
 };
 
@@ -318,7 +320,8 @@ static void hcp_ok(void)
   /* Pushing in a new subscriber should result in us being called. */
   smock_is_empty();
   smock_push_bool("node_callback", true);
-  hcp_subscribe(o, &dummy_subscriber);
+  hcp_subscribe(o, &dummy_subscriber_1);
+  hcp_subscribe(o, &dummy_subscriber_2);
 
   smock_is_empty();
   one_join(true);
@@ -467,7 +470,8 @@ static void hcp_ok(void)
   smock_push_int("tlv_callback", -TLV_ID_D);
   smock_push_int("tlv_callback", -TLV_ID_B);
   smock_push_bool("node_callback", false);
-  hcp_unsubscribe(o, &dummy_subscriber);
+  hcp_unsubscribe(o, &dummy_subscriber_1);
+  hcp_unsubscribe(o, &dummy_subscriber_2);
   smock_is_empty();
 
   /* Re-enable checks */
