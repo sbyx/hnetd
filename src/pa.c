@@ -171,7 +171,7 @@ struct pa {
 #define PA_EAP_LA(eap, buffid) 	PREFIX_TOSTRING(&(eap)->prefix, buffid), PA_RID_LA(&(eap)->rid)
 
 #define PA_IF_L 	"pa_iface '%s'"
-#define PA_IF_LA(iface)	(iface)->ifname
+#define PA_IF_LA(iface)	(iface)?(iface)->ifname:"NULL"
 
 #define PA_LAP_L				"lap %s%%%s"
 #define PA_LAP_LA(lap, buffid)	PREFIX_TOSTRING(&(lap)->prefix, buffid), (lap)->iface->ifname
@@ -886,11 +886,31 @@ static int pa_dp_dhcpv6_set(struct pa *pa,
 			L_WARN(PA_L_PX"Malloc failed for "PA_DP_L" dhcpv6 data assign", PA_DP_LA(dp, 1));
 		} else {
 			memcpy(dp->dhcpv6_data, dhcpv6_data, dhcpv6_len);
+			dp->dhcpv6_len = dhcpv6_len;
 		}
 	} else {
 		dp->dhcpv6_data = NULL;
 		dp->dhcpv6_len = 0;
 	}
+
+	return 1;
+}
+
+
+static int pa_dp_times_set(struct pa *pa, struct pa_dp *dp,
+		hnetd_time_t valid_until,hnetd_time_t preferred_until)
+{
+	if(valid_until == dp->valid_until &&
+				preferred_until == dp->preferred_until)
+			return 0;
+
+	dp->valid_until = valid_until;
+	dp->preferred_until = preferred_until;
+
+	L_DEBUG(PA_L_PX"Updating dp "PA_DP_L" with times (%ld, %ld)",
+			PA_DP_LA(dp, 1), valid_until, preferred_until);
+
+	pa_schedule(pa, PA_TODO_ALL);
 
 	return 1;
 }
@@ -978,38 +998,16 @@ static void pa_dp_destroy(struct pa *pa, struct pa_dp *dp)
 		}
 	}
 
-	dp->valid_until = 0;
-	dp->preferred_until = 0;
+	pa_dp_iface_assign(pa, dp, NULL);
+	pa_dp_dhcpv6_set(pa, dp, NULL, 0);
+	pa_dp_times_set(pa, dp, 0, 0);
+
 	//Notify hcp iff local
 	pa_dp_tell_hcp(pa, dp);
-
-	/* Unlink dp if linked */
-	pa_dp_iface_assign(pa, dp, NULL);
 
 	//Remove that dp from database
 	list_remove(&dp->le);
 	free(dp);
-
-	/* Run algo again */
-	pa_schedule(pa, PA_TODO_ALL);
-}
-
-static int pa_dp_times_set(struct pa *pa, struct pa_dp *dp,
-		hnetd_time_t valid_until,hnetd_time_t preferred_until)
-{
-	if(valid_until == dp->valid_until &&
-				preferred_until == dp->preferred_until)
-			return 0;
-
-	dp->valid_until = valid_until;
-	dp->preferred_until = preferred_until;
-
-	L_DEBUG(PA_L_PX"Updating dp "PA_DP_L" with times (%ld, %ld)",
-			PA_DP_LA(dp, 1), valid_until, preferred_until);
-
-	pa_schedule(pa, PA_TODO_ALL);
-
-	return 1;
 }
 
 static void pa_dp_update(struct pa *pa, struct pa_dp *dp,
@@ -1250,6 +1248,7 @@ void pa_do(struct pa *pa)
 					 * assignments. */
 					if(!pa_prefix_checkcollision(pa, &eap->prefix, iface, &eap->rid,
 							true, true)) {
+						L_DEBUG(PA_L_PX"Choosing "PA_EAP_L" from neighbor ", PA_EAP_LA(eap, 1));
 						prefix = &eap->prefix;
 #if PA_ALGO == PA_ALGO_ARKKO
 						own = false; /* The other guy owns it */
@@ -1273,10 +1272,12 @@ void pa_do(struct pa *pa)
 					/* Let's choose a prefix for our own assignment */
 					if(!pa_get_newprefix_storage(pa, iface, dp, &new_prefix)) {
 						/* Got one from stable storage */
+						L_DEBUG(PA_L_PX"Got prefix from storage %s", PREFIX_TOSTRING(&new_prefix, 1));
 						prefix = &new_prefix;
 						own = true;
 					} else if(!pa_get_newprefix_random(pa, iface, dp, &new_prefix)) {
 						/* Got one from random choice */
+						L_DEBUG(PA_L_PX"Created random prefix %s", PREFIX_TOSTRING(&new_prefix, 1));
 						prefix = &new_prefix;
 						own = true;
 					}

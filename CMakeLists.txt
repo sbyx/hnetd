@@ -49,7 +49,7 @@ add_executable(test_prefix_utils src/prefix_utils.c test/test_prefix_utils.c)
 add_test(prefix_utils test_prefix_utils)
 add_dependencies(check test_prefix_utils)
 
-add_executable(test_pa test/test_pa.c src/prefix_utils.c)
+add_executable(test_pa test/test_pa.c)
 target_link_libraries(test_pa ubox)
 add_test(pa test_pa)
 add_dependencies(check test_pa)

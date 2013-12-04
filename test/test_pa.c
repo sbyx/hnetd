@@ -12,12 +12,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <libubox/uloop.h>
+#include <fcntl.h>
 
 #define L_LEVEL 7
 #include "hnetd.h"
 #include "sput.h"
 #include "smock.h"
 #include "iface.h"
+
+/***************************************************** Test behaviour */
+static bool test_schedule_events = false;
+static bool mask_random = false;
+
+#define SMOCK_RANDOM_QUEUE "random queue"
 
 /***************************************************** Mask for pa.c */
 
@@ -38,6 +45,19 @@ static hnetd_time_t test_pa_time(void) {
 
 static int test_pa_timeout_set(struct uloop_timeout *timeout, int ms);
 static int test_pa_timeout_cancel(struct uloop_timeout *timeout);
+
+static int test_pa_random() {
+	printf("Called random\n");
+	if(mask_random) {
+		return smock_pull_int(SMOCK_RANDOM_QUEUE);
+	}
+	return random();
+}
+
+#define random test_pa_random
+
+/* prefix_utils */
+#include "prefix_utils.c"
 
 /* pa.c */
 #include "pa.c"
@@ -65,6 +85,8 @@ struct px_update_call {
 	struct prefix prefix;
 	hnetd_time_t valid_until;
 	hnetd_time_t preferred_until;
+	size_t dhcpv6_len;
+	const void * dhcpv6_data; /* NOT COPIED */
 	void *priv;
 };
 
@@ -79,17 +101,24 @@ struct ldp_update_call {
 	struct prefix prefix;
 	hnetd_time_t valid_until;
 	hnetd_time_t preferred_until;
+	size_t dhcpv6_len;
+	const void *dhcpv6_data; /* NOT COPIED */
+	const char *dp_ifname; /* NOT COPIED */
+	struct prefix excluded;
 	void *priv;
 };
 
 static struct px_update_call *new_px_update(const struct prefix *p, const char *ifname,
-						hnetd_time_t valid_until,
-						hnetd_time_t preferred_until, void *priv)
+						hnetd_time_t valid_until, hnetd_time_t preferred_until,
+						const void * dhcpv6_data, size_t dhcpv6_len,
+						void *priv)
 {
 	struct px_update_call *px;
 	if(!(px = malloc(sizeof(struct px_update_call))))
 		return NULL;
 
+	px->dhcpv6_data = dhcpv6_data;
+	px->dhcpv6_len = dhcpv6_len;
 	px->prefix = *p;
 	strcpy(px->ifname, ifname);
 	px->preferred_until = preferred_until;
@@ -127,17 +156,23 @@ static struct lap_update_call *new_lap_update(const struct prefix *prefix, const
 	return lapu;
 }
 
-static struct ldp_update_call *new_ldp_update(const struct prefix *prefix, hnetd_time_t valid_until,
-		hnetd_time_t preferred_until, void *priv)
+static struct ldp_update_call *new_ldp_update(const struct prefix *prefix,
+		const struct prefix *excluded, const char *dp_ifname,
+		hnetd_time_t valid_until, hnetd_time_t preferred_until,
+		const void *dhcpv6_data, size_t dhcpv6_len,
+		void *priv)
 {
 	struct ldp_update_call *ldpu;
 	if(!(ldpu = malloc(sizeof(struct ldp_update_call))))
 		return NULL;
 
+	ldpu->dhcpv6_data = dhcpv6_data;
+	ldpu->dhcpv6_len = dhcpv6_len;
 	ldpu->preferred_until = preferred_until;
 	ldpu->valid_until = valid_until;
 	ldpu->prefix = *prefix;
 	ldpu->priv = priv;
+	ldpu->dp_ifname = dp_ifname;
 
 	return ldpu;
 }
@@ -146,8 +181,10 @@ static int test_pa_timeout_set(struct uloop_timeout *timeout, int ms)
 {
 	printf("Timeout set called\n");
 	timeout->pending = 1;
-	smock_push(SMOCK_SET_TIMEOUT, timeout);
-	smock_push_int(SMOCK_SET_TIMEOUT_MS, ms);
+	if(test_schedule_events) {
+		smock_push(SMOCK_SET_TIMEOUT, timeout);
+		smock_push_int(SMOCK_SET_TIMEOUT_MS, ms);
+	}
 	return 0;
 }
 
@@ -155,7 +192,9 @@ static int test_pa_timeout_cancel(struct uloop_timeout *timeout)
 {
 	printf("Timeout cancel called\n");
 	timeout->pending = 0;
-	smock_push(SMOCK_CANCEL_TIMEOUT, timeout);
+	if(test_schedule_events) {
+		smock_push(SMOCK_CANCEL_TIMEOUT, timeout);
+	}
 	return 0;
 }
 
@@ -179,7 +218,7 @@ static void dmy_update_prefix(const struct prefix *p, const char *ifname,
 {
 	//TODO: Save other arguments
 	printf("dmy_update_prefix\n");
-	struct px_update_call *pxu = new_px_update(p, ifname, valid_until, preferred_until, priv);
+	struct px_update_call *pxu = new_px_update(p, ifname, valid_until, preferred_until, dhcpv6_data, dhcpv6_len, priv);
 	SPUT_FAIL_AND_RETURN_IF(!pxu, "new_px_update");
 	smock_push(SMOCK_PREFIX_UPDATE, pxu);
 }
@@ -209,7 +248,8 @@ static void dmy_updated_ldp(const struct prefix *prefix,
 {
 	//TODO: Save others
 	printf("dmy_updated_ldp\n");
-	struct ldp_update_call *ldu = new_ldp_update(prefix, valid_until, preferred_until, priv);
+	struct ldp_update_call *ldu = new_ldp_update(prefix, excluded, dp_ifname,
+			valid_until, preferred_until, dhcpv6_data, dhcpv6_len, priv);
 	SPUT_FAIL_AND_RETURN_IF(!ldu, "new_ldp_update");
 	smock_push(SMOCK_LDP_UPDATE, ldu);
 }
@@ -238,6 +278,8 @@ static struct prefix p1 = {
 static struct pa_conf conf;
 
 #define TEST_IFNAME_1 "iface0"
+#define TEST_DHCPV6_DATA "DHCPV DATA -----"
+#define TEST_DHCPV6_LEN strlen(TEST_DHCPV6_DATA) + 1
 
 static void dmy_iface_register_user(struct iface_user *user) {
 	iface.user = user;
@@ -249,6 +291,14 @@ static void dmy_iface_unregister_user(__attribute__((unused))struct iface_user *
 	iface.registered = 0;
 }
 
+static void test_pa_push_random(const int *int_array, size_t array_len)
+{
+	int i;
+	for(i=0; i<array_len; i++) {
+		smock_push_int(SMOCK_RANDOM_QUEUE, int_array[i]);
+	}
+}
+
 
 /* This test adds one dp and one iface,
  * with nobody else on the link. And then removes it.
@@ -256,6 +306,9 @@ static void dmy_iface_unregister_user(__attribute__((unused))struct iface_user *
  * all scheduled timeouts. */
 void pa_test_minimal(void)
 {
+	test_schedule_events = 1;
+	mask_random = 0;
+
 	struct lap_update_call *lap_update;
 	struct ldp_update_call *ldp_update;
 	struct link_update_call *link_update;
@@ -286,9 +339,9 @@ void pa_test_minimal(void)
 	/* Creating prefix */
 	valid_until = 100000;
 	preferred_until = 50000;
-	//TODO: Use exclude and dhcp
+	//TODO: Use exclude
 	iface.user->cb_prefix(iface.user, TEST_IFNAME_1, &p1, NULL,
-			valid_until, preferred_until, NULL, 0);
+			valid_until, preferred_until, TEST_DHCPV6_DATA, TEST_DHCPV6_LEN);
 
 	/* This will trigger a new scheduling */
 	pa_to = smock_pull(SMOCK_SET_TIMEOUT);
@@ -303,6 +356,11 @@ void pa_test_minimal(void)
 		sput_fail_unless(ldp_update->valid_until == valid_until, "Correct valid lifetime");
 		sput_fail_unless(ldp_update->priv == &hcp.floodcb, "Correct private field");
 		sput_fail_if(prefix_cmp(&ldp_update->prefix, &p1), "Correct dp value");
+		sput_fail_unless(ldp_update->dhcpv6_len == TEST_DHCPV6_LEN, "Correct dhcpv6 len value");
+		if(ldp_update->dhcpv6_len == TEST_DHCPV6_LEN) {
+			sput_fail_if(memcmp(ldp_update->dhcpv6_data, TEST_DHCPV6_DATA, TEST_DHCPV6_LEN), "Correct dhcpv6 data value");
+		}
+		sput_fail_if(strcmp(ldp_update->dp_ifname, TEST_IFNAME_1), "Correct dp_ifname value");
 		free(ldp_update);
 	}
 
@@ -383,6 +441,10 @@ void pa_test_minimal(void)
 		sput_fail_unless(px_update->valid_until == valid_until, "Correct valid lifetime");
 		sput_fail_if(prefix_cmp(&px_update->prefix, &chosen_prefix), "Correct lap prefix");
 		sput_fail_if(px_update->priv == &iface.ifcb, "Correct private field");
+		sput_fail_unless(px_update->dhcpv6_len == TEST_DHCPV6_LEN, "Correct dhcpv6 len value");
+		if(px_update->dhcpv6_len == TEST_DHCPV6_LEN) {
+			sput_fail_if(memcmp(px_update->dhcpv6_data, TEST_DHCPV6_DATA, TEST_DHCPV6_LEN), "Correct dhcpv6 data value");
+		}
 	}
 
 	/* Assignment should not schedule anything new */
@@ -456,14 +518,15 @@ void pa_test_minimal(void)
  * and checks if everything is ok */
 void pa_test_init(void)
 {
+	test_schedule_events = 1;
+	mask_random = 0;
+
 	int res, ms;
 	struct uloop_timeout *to;
 
 	now_time = 0;
 
 	pa_conf_default(&conf);
-	//conf.iface_registration = dmy_iface_register_user;
-	//conf.iface_unregistration = dmy_iface_unregister_user;
 	conf.commit_lap_delay = 20000;
 	pa = pa_create(&conf);
 	sput_fail_unless(pa, "Initialize pa");
@@ -501,6 +564,14 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 {
 	sput_start_testing();
 	sput_enter_suite("Prefix assignment algorithm (pa.c)"); /* optional */
+
+	int urandom_fd;
+	if ((urandom_fd = open("/dev/urandom", O_CLOEXEC | O_RDONLY)) >= 0) {
+		unsigned int seed;
+		read(urandom_fd, &seed, sizeof(seed));
+		close(urandom_fd);
+		srandom(seed);
+	}
 
 	openlog("hnetd_test_pa", LOG_PERROR | LOG_PID, LOG_DAEMON);
 
