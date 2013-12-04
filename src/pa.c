@@ -1020,9 +1020,9 @@ static void pa_dp_update(struct pa *pa, struct pa_dp *dp,
 {
 	if(!valid_until) {
 		pa_dp_destroy(pa, dp); /* That already tells hcp */
-	} else if(pa_dp_times_set(pa, dp, valid_until, preferred_until) ||
-			pa_dp_dhcpv6_set(pa, dp, dhcpv6_data, dhcpv6_len) ||
-			pa_dp_excluded_set(pa, dp, excluded) ||
+	} else if(pa_dp_times_set(pa, dp, valid_until, preferred_until) |
+			pa_dp_dhcpv6_set(pa, dp, dhcpv6_data, dhcpv6_len) |
+			pa_dp_excluded_set(pa, dp, excluded) |
 			pa_dp_iface_assignbyname(pa, dp, ifname)) {
 		if(dp->local)
 			pa_dp_tell_hcp(pa, dp);
@@ -1098,7 +1098,8 @@ static int pa_get_newprefix_random(struct pa *pa, struct pa_iface *iface,
 
 	for(i=0; i<PA_MAX_RANDOM_ROUNDS; i++) {
 		prefix_random(&dp->prefix, new_prefix, plen);
-		if(!pa_prefix_checkcollision(pa, new_prefix, NULL, NULL, true, true))
+		if( !(dp->excluded_valid && prefix_contains(&dp->excluded, new_prefix)) &&
+				!pa_prefix_checkcollision(pa, new_prefix, NULL, NULL, true, true))
 			return 0;
 	}
 
