@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Dec  3 09:44:45 2013 mstenber
- * Edit time:     105 min
+ * Last modified: Wed Dec  4 10:30:48 2013 mstenber
+ * Edit time:     109 min
  *
  */
 
@@ -98,6 +98,9 @@ struct hcp_struct {
 
   /* When did multicast join fail last time? */
   hnetd_time_t join_failed_time;
+
+  /* List of subscribers to change notifications. */
+  struct list_head subscribers;
 };
 
 typedef struct hcp_link_struct hcp_link_s, *hcp_link;
@@ -222,6 +225,13 @@ bool hcp_link_send_network_state(hcp_link l,
                                  size_t maximum_size);
 bool hcp_link_send_req_network_state(hcp_link l,
                                      struct in6_addr *dst);
+
+
+/* Subscription stuff (hcp_notify.c) */
+void hcp_notify_subscribers_tlvs_changed(hcp_node n,
+                                         struct tlv_attr *a_old,
+                                         struct tlv_attr *a_new);
+void hcp_notify_subscribers_node_changed(hcp_node n, bool add);
 
 
 /* Low-level interface module stuff. */

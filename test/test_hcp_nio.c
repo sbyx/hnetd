@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Mon Dec  2 17:06:34 2013 mstenber
- * Edit time:     147 min
+ * Last modified: Wed Dec  4 11:09:47 2013 mstenber
+ * Edit time:     151 min
  *
  */
 
@@ -22,6 +22,7 @@
 #define random random_mock
 static int random_mock(void);
 #include "hcp.c"
+#include "hcp_notify.c"
 #include "hcp_proto.c"
 #include "hcp_timeout.c"
 #include "sput.h"
@@ -150,6 +151,33 @@ static int random_mock(void)
 #undef random
   return random();
 }
+
+/*********************************************************** Fake subscriber */
+
+
+static void dummy_tlv_cb(hcp_subscriber s,
+                         hcp_node n, struct tlv_attr *tlv, bool add)
+{
+  sput_fail_unless(s, "subscriber provided");
+  sput_fail_unless(s->tlv_change_callback == dummy_tlv_cb, "tlv cb set");
+  sput_fail_unless(n, "node set");
+  sput_fail_unless(tlv, "tlv set");
+  smock_pull_bool_is("tlv_callback", add);
+}
+
+static void dummy_node_cb(hcp_subscriber s, hcp_node n, bool add)
+{
+  sput_fail_unless(s, "subscriber provided");
+  sput_fail_unless(s->node_change_callback == dummy_node_cb, "node cb set");
+  sput_fail_unless(n, "node set");
+  smock_pull_bool_is("node_callback", add);
+}
+
+static hcp_subscriber_s dummy_subscriber = {
+  .tlv_change_callback = dummy_tlv_cb,
+  .node_change_callback = dummy_node_cb
+};
+
 
 /******************************************************* Start of test cases */
 
@@ -281,6 +309,11 @@ static void hcp_ok(void)
   hcp o = create_hcp();
   int t = 123000;
   int i;
+
+  /* Pushing in a new subscriber should result in us being called. */
+  smock_is_empty();
+  smock_push_bool("node_callback", true);
+  hcp_subscribe(o, &dummy_subscriber);
 
   smock_is_empty();
   one_join(true);

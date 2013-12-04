@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Dec  2 16:59:52 2013 mstenber
- * Edit time:     344 min
+ * Last modified: Wed Dec  4 11:09:10 2013 mstenber
+ * Edit time:     353 min
  *
  */
 
@@ -49,8 +49,11 @@ bool hcp_node_set_tlvs(hcp_node n, struct tlv_attr *a)
           free(a);
           return false;
         }
+      hcp_notify_subscribers_tlvs_changed(n, n->tlv_container, a);
       free(n->tlv_container);
     }
+  else
+    hcp_notify_subscribers_tlvs_changed(n, NULL, a);
   n->tlv_container = a;
   n->hcp->network_hash_dirty = true;
   n->node_data_hash_dirty = true;
@@ -72,10 +75,14 @@ static void update_node(__unused struct vlist_tree *t,
   if (n_old)
     {
       hcp_node_set_tlvs(n_old, NULL);
+      hcp_notify_subscribers_node_changed(n_old, false);
       free(n_old);
     }
   if (n_new)
-    n_new->node_data_hash_dirty = true;
+    {
+      n_new->node_data_hash_dirty = true;
+      hcp_notify_subscribers_node_changed(n_new, true);
+    }
   o->network_hash_dirty = true;
   o->neighbors_dirty = true;
   hcp_schedule(o);
@@ -221,6 +228,7 @@ bool hcp_init(hcp o, const void *node_identifier, int len)
   hcp_hash_s h;
 
   memset(o, 0, sizeof(*o));
+  INIT_LIST_HEAD(&o->subscribers);
   vlist_init(&o->nodes, compare_nodes, update_node);
   o->nodes.keep_old = true;
   vlist_init(&o->tlvs, compare_tlvs, update_tlv);
@@ -448,11 +456,11 @@ void hcp_self_flush(hcp_node n)
   L_DEBUG("hcp_self_flush %p -> update_number = %d", n, n->update_number);
 }
 
-void hcp_node_get_tlvs(hcp_node n, struct tlv_attr **r)
+struct tlv_attr *hcp_node_get_tlvs(hcp_node n)
 {
   if (hcp_node_is_self(n))
     hcp_self_flush(n);
-  *r = n->tlv_container;
+  return n->tlv_container;
 }
 
 

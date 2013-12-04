@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Tue Dec  3 14:15:20 2013 mstenber
- * Edit time:     275 min
+ * Last modified: Wed Dec  4 10:16:03 2013 mstenber
+ * Edit time:     276 min
  *
  */
 
@@ -26,6 +26,7 @@
 #define L_LEVEL 5
 
 #include "hcp.c"
+#include "hcp_notify.c"
 #include "hcp_proto.c"
 #include "hcp_timeout.c"
 #include "sput.h"

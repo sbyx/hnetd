@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Mon Dec  2 15:16:25 2013 mstenber
+ * Last modified: Wed Dec  4 10:29:24 2013 mstenber
  * Edit time:     99 min
  *
  */
@@ -58,7 +58,7 @@ static void hcp_prune_rec(hcp_node n)
   if (n->in_nodes.version == n->hcp->nodes.version)
     return;
 
-  hcp_node_get_tlvs(n, &tlvs);
+  tlvs = hcp_node_get_tlvs(n);
 
   L_DEBUG("hcp_prune_rec %llx / %p = %p",
           hcp_hash64(&n->node_identifier_hash), n, tlvs);

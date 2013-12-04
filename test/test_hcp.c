@@ -6,13 +6,16 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Tue Dec  3 14:59:06 2013 mstenber
- * Edit time:     58 min
+ * Last modified: Wed Dec  4 11:06:06 2013 mstenber
+ * Edit time:     66 min
  *
  */
 
 #include "hcp.h"
 #include "sput.h"
+#include "smock.h"
+
+/**************************************************************** Test cases */
 
 void tlv_iter(void)
 {
@@ -79,7 +82,7 @@ void hcp_ext(void)
   r = hcp_add_tlv(o, t_data);
   sput_fail_unless(r, "hcp_add_tlv ok (should work)");
 
-  hcp_node_get_tlvs(n, &t);
+  t = hcp_node_get_tlvs(n);
   sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs consistent");
 
   /* Should be able to enable it on a link. */
@@ -92,7 +95,7 @@ void hcp_ext(void)
   r = hcp_set_link_enabled(o, "eth1", true);
   sput_fail_unless(!r, "hcp_set_link_enabled eth1 (2nd true)");
 
-  hcp_node_get_tlvs(n, &t);
+  t = hcp_node_get_tlvs(n);
   sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs should be same");
 
   r = hcp_set_link_enabled(o, "eth1", false);
@@ -101,7 +104,7 @@ void hcp_ext(void)
   r = hcp_set_link_enabled(o, "eth1", false);
   sput_fail_unless(!r, "hcp_set_link_enabled eth1 (2nd false)");
 
-  hcp_node_get_tlvs(n, &t);
+  t = hcp_node_get_tlvs(n);
   sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs should be same");
 
   /* Make sure run doesn't blow things up */
