@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Wed Dec  4 12:02:26 2013 mstenber
+ * Last modified: Wed Dec  4 12:53:07 2013 mstenber
  * Edit time:     354 min
  *
  */
@@ -297,14 +297,17 @@ static hcp_tlv _add_tlv(hcp o, struct tlv_attr *tlv)
   return t;
 }
 
-bool hcp_add_tlv(hcp o, struct tlv_attr *tlv)
+struct tlv_attr *hcp_add_tlv(hcp o, struct tlv_attr *tlv)
 {
   hcp_tlv t = _add_tlv(o, tlv);
 
-  /* These are not expired. */
   if (t)
-    t->in_tlvs.version = -1;
-  return t != NULL;
+    {
+      /* These are not expired. */
+      t->in_tlvs.version = -1;
+      return &t->tlv;
+    }
+  return NULL;
 }
 
 bool hcp_remove_tlv(hcp o, struct tlv_attr *tlv)

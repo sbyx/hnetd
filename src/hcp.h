@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Wed Dec  4 10:28:37 2013 mstenber
- * Edit time:     82 min
+ * Last modified: Wed Dec  4 12:51:11 2013 mstenber
+ * Edit time:     85 min
  *
  */
 
@@ -88,8 +88,12 @@ hcp_node hcp_get_first_node(hcp o);
 
 /**
  * Publish a single TLV.
+ *
+ * @return The newly allocated TLV, which is valid until
+ * hcp_remove_tlv is called for it (or a pointer to a TLV that
+ * tlv_attr_equal's it).
  */
-bool hcp_add_tlv(hcp o, struct tlv_attr *tlv);
+struct tlv_attr *hcp_add_tlv(hcp o, struct tlv_attr *tlv);
 
 /**
  * Remove a single TLV.
