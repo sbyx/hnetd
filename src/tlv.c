@@ -264,6 +264,29 @@ tlv_attr_equal(const struct tlv_attr *a1, const struct tlv_attr *a2)
 	return !memcmp(a1, a2, tlv_pad_len(a1));
 }
 
+int
+tlv_attr_cmp(const struct tlv_attr *a1, const struct tlv_attr *a2)
+{
+	int r;
+	int s1, s2;
+
+	if (!a1 && !a2)
+		return 0;
+	/* NULL attribute is always 'first', being empty. */
+	if (!a1)
+		return -1;
+	if (!a2)
+		return 1;
+	s1 = tlv_pad_len(a1);
+	s2 = tlv_pad_len(a2);
+	r = memcmp(a1, a2, s1 < s2 ? s1 : s2);
+	if (r)
+		return r;
+	if (s1 == s2)
+		return 0;
+	return s1 < s2 ? -1 : 1;
+}
+
 struct tlv_attr *
 tlv_memdup(struct tlv_attr *attr)
 {

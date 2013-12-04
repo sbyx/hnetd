@@ -183,6 +183,7 @@ extern void tlv_init(struct tlv_attr *attr, int id, unsigned int len);
 extern void tlv_fill_pad(struct tlv_attr *attr);
 extern void tlv_set_raw_len(struct tlv_attr *attr, unsigned int len);
 extern bool tlv_attr_equal(const struct tlv_attr *a1, const struct tlv_attr *a2);
+extern int tlv_attr_cmp(const struct tlv_attr *a1, const struct tlv_attr *a2);
 extern int tlv_buf_init(struct tlv_buf *buf, int id);
 extern void tlv_buf_free(struct tlv_buf *buf);
 extern void tlv_buf_grow(struct tlv_buf *buf, int required);
