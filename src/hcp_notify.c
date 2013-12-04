@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 10:04:30 2013 mstenber
- * Last modified: Wed Dec  4 10:54:40 2013 mstenber
- * Edit time:     23 min
+ * Last modified: Wed Dec  4 11:22:20 2013 mstenber
+ * Edit time:     25 min
  *
  */
 
@@ -50,19 +50,17 @@ void hcp_unsubscribe(hcp o, hcp_subscriber s)
 /* This can be only used in a loop which makes sure that the p stays
  * valid. It ensures that next TLV won't exceed the end, and if it
  * would, p is invalidated and loop aborts. */
-#define ENSURE_VALID(p, end)                    \
-do {                                            \
-  if ((end - TLV_SIZE) < (void *)p)             \
-    {                                           \
-      p = NULL;                                 \
-      break;                                    \
-    }                                           \
-  if ((end - tlv_pad_len(p)) < (void *)p)       \
-    {                                           \
-      p = NULL;                                 \
-      break;                                    \
-    }                                           \
- } while(0)
+#define ENSURE_VALID(p, end)            \
+if ((end - TLV_SIZE) < (void *)p)       \
+  {                                     \
+    p = NULL;                           \
+    break;                              \
+  }                                     \
+if ((end - tlv_pad_len(p)) < (void *)p) \
+  {                                     \
+    p = NULL;                           \
+    break;                              \
+  }
 
 void hcp_notify_subscribers_tlvs_changed(hcp_node n,
                                          struct tlv_attr *a_old,
