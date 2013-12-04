@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Wed Dec  4 11:09:47 2013 mstenber
- * Edit time:     151 min
+ * Last modified: Wed Dec  4 11:51:35 2013 mstenber
+ * Edit time:     175 min
  *
  */
 
@@ -162,11 +162,16 @@ static void dummy_tlv_cb(hcp_subscriber s,
   sput_fail_unless(s->tlv_change_callback == dummy_tlv_cb, "tlv cb set");
   sput_fail_unless(n, "node set");
   sput_fail_unless(tlv, "tlv set");
-  smock_pull_bool_is("tlv_callback", add);
+  L_NOTICE("tlv callback %s/%s %s",
+           HCP_NODE_REPR(n), TLV_REPR(tlv), add ? "add" : "remove");
+  int exp_v = (add ? 1 : -1) * tlv_id(tlv);
+  smock_pull_int_is("tlv_callback", exp_v);
 }
 
 static void dummy_node_cb(hcp_subscriber s, hcp_node n, bool add)
 {
+  L_NOTICE("node callback %s %s",
+           HCP_NODE_REPR(n), add ? "add" : "remove");
   sput_fail_unless(s, "subscriber provided");
   sput_fail_unless(s->node_change_callback == dummy_node_cb, "node cb set");
   sput_fail_unless(n, "node set");
@@ -397,25 +402,77 @@ static void hcp_ok(void)
   /* Ok, Trickle was in a stable state 'long' time. Make sure the
    * state resets once we push something new in. */
   struct tlv_attr ta;
-  printf("add tlv a\n");
-  tlv_init(&ta, 123, 4);
+  L_NOTICE("add tlv a");
+#define TLV_ID_A 123
+#define TLV_ID_B 125
+#define TLV_ID_C 127
+#define TLV_ID_D 124
+  tlv_init(&ta, TLV_ID_A, 4);
   smock_push_int("schedule", 0);
   hcp_add_tlv(o, &ta);
   smock_is_empty();
 
-  printf("add tlv b\n");
-  tlv_init(&ta, 124, 4);
+  L_NOTICE("add tlv b");
+  tlv_init(&ta, TLV_ID_B, 4);
   /* should NOT cause extra schedule! */
   hcp_add_tlv(o, &ta);
   smock_is_empty();
 
+  L_NOTICE("running.");
   printf("last run starting\n");
   smock_push_int("time", t);
   smock_push_int("random", 0);
   smock_push_int("schedule", HCP_TRICKLE_IMIN / 2);
+
+  /* Should get notification about two added TLVs. */
+  smock_push_int("tlv_callback", TLV_ID_A);
+  smock_push_int("tlv_callback", TLV_ID_B);
   hcp_run(o);
   smock_is_empty();
 
+  /* Adding / removing last entry have special handling. So let's
+   * test both by adding and removing tlv c (which > a, b). */
+
+  /* Our interest in timing has waned by now though, so we disable
+   * those checks. */
+  check_timing = false;
+  check_random = false;
+
+  /* So, let's add one more TLV. Make sure we get notification about it. */
+  L_NOTICE("add tlv c");
+  tlv_init(&ta, TLV_ID_C, 4);
+  hcp_add_tlv(o, &ta);
+  smock_push_int("tlv_callback", TLV_ID_C);
+  hcp_run(o);
+  smock_is_empty();
+
+  /* Remove it. */
+  L_NOTICE("remove tlv c");
+  hcp_remove_tlv(o, &ta);
+  smock_push_int("tlv_callback", -TLV_ID_C);
+  hcp_run(o);
+  smock_is_empty();
+
+  /* Add TLV D in the middle. */
+  L_NOTICE("add tlv d");
+  tlv_init(&ta, TLV_ID_D, 4);
+  hcp_add_tlv(o, &ta);
+  smock_push_int("tlv_callback", TLV_ID_D);
+  hcp_run(o);
+  smock_is_empty();
+
+  /* Unsubscribing should result in callbacks too. */
+  L_NOTICE("unsubscribe");
+  smock_push_int("tlv_callback", -TLV_ID_A);
+  smock_push_int("tlv_callback", -TLV_ID_D);
+  smock_push_int("tlv_callback", -TLV_ID_B);
+  smock_push_bool("node_callback", false);
+  hcp_unsubscribe(o, &dummy_subscriber);
+  smock_is_empty();
+
+  /* Re-enable checks */
+  check_timing = true;
+  check_random = true;
 
   /* no unregisters at end, as we first kill io, and then flush
    * structures (socket kill should take care of it in any case). */
@@ -424,6 +481,8 @@ static void hcp_ok(void)
 
 int main(__unused int argc, __unused char **argv)
 {
+  setbuf(stdout, NULL); /* so that it's in sync with stderr when redirected */
+  openlog("test_hcp_nio", LOG_CONS | LOG_PERROR, LOG_DAEMON);
   sput_start_testing();
   sput_enter_suite("hcp_nio"); /* optional */
   sput_run_test(hcp_init_no_hwaddr);
