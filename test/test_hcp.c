@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Wed Dec  4 11:06:06 2013 mstenber
+ * Last modified: Wed Dec  4 11:54:11 2013 mstenber
  * Edit time:     66 min
  *
  */
@@ -16,49 +16,6 @@
 #include "smock.h"
 
 /**************************************************************** Test cases */
-
-void tlv_iter(void)
-{
-  struct tlv_buf tb;
-  struct tlv_attr *a, *a1, *a2, *a3;
-  int c;
-  unsigned int rem;
-  void *tmp;
-
-  /* Initialize test structure. */
-  memset(&tb, 0, sizeof(tb));
-  tlv_buf_init(&tb, 0);
-  a1 = tlv_new(&tb, 1, 0);
-  a2 = tlv_new(&tb, 2, 1);
-  a3 = tlv_new(&tb, 3, 4);
-  sput_fail_unless(a1 && a2 && a3, "a1-a3 create");
-
-  /* Make sure iteration is sane. */
-  c = 0;
-  tlv_for_each_attr(a, tb.head, rem)
-    c++;
-  sput_fail_unless(c == 3, "right iter result 1");
-
-  /* remove 3 bytes -> a3 header complete but not body. */
-  tlv_init(tb.head, 0, tlv_raw_len(tb.head) - 3);
-  c = 0;
-  tlv_for_each_attr(a, tb.head, rem)
-    c++;
-  sput_fail_unless(c == 2, "right iter result 2");
-
-  /* remove 2 bytes -> a3 header not complete (no body). */
-  tlv_init(tb.head, 0, tlv_raw_len(tb.head) - 2);
-  c = 0;
-  tmp = malloc(tlv_raw_len(tb.head));
-  memcpy(tmp, tb.head, tlv_raw_len(tb.head));
-  tlv_for_each_attr(a, tmp, rem)
-    c++;
-  sput_fail_unless(c == 2, "right iter result 3");
-  free(tmp);
-
-  /* Free structures. */
-  tlv_buf_free(&tb);
-}
 
 void hcp_ext(void)
 {
@@ -204,7 +161,6 @@ int main(__unused int argc, __unused char **argv)
   openlog("test_hcp", LOG_CONS | LOG_PERROR, LOG_DAEMON);
   sput_start_testing();
   sput_enter_suite("hcp"); /* optional */
-  sput_run_test(tlv_iter);
   sput_run_test(hcp_ext);
   sput_run_test(hcp_int);
   sput_leave_suite(); /* optional */

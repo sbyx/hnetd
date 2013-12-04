@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Wed Dec  4 11:09:10 2013 mstenber
- * Edit time:     353 min
+ * Last modified: Wed Dec  4 12:02:26 2013 mstenber
+ * Edit time:     354 min
  *
  */
 
@@ -94,17 +94,7 @@ compare_tlvs(const void *a, const void *b, void *ptr __unused)
 {
   hcp_tlv t1 = (hcp_tlv) a, t2 = (hcp_tlv) b;
 
-  if (tlv_attr_equal(&t1->tlv, &t2->tlv))
-    return 0;
-
-  {
-    int s1 = tlv_pad_len(&t1->tlv);
-    int s2 = tlv_pad_len(&t2->tlv);
-    int s = s1 < s2 ? s1 : s2;
-    int r = memcmp(&t1->tlv, &t2->tlv, s);
-
-    return r;
-  }
+  return tlv_attr_cmp(&t1->tlv, &t2->tlv);
 }
 
 static void update_tlv(struct vlist_tree *t,

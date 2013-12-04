@@ -25,6 +25,11 @@ add_executable(test_dummy test/test_dummy.c)
 add_test(dummy test_dummy)
 add_dependencies(check test_dummy)
 
+add_executable(test_tlv src/tlv.c test/test_tlv.c)
+target_link_libraries(test_tlv ubox ubus blobmsg_json)
+add_test(tlv test_tlv)
+add_dependencies(check test_tlv)
+
 add_executable(test_hcp ${HCP} src/tlv.c test/test_hcp.c)
 target_link_libraries(test_hcp ubox ubus blobmsg_json)
 add_test(hcp test_hcp)

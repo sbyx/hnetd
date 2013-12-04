@@ -264,11 +264,13 @@ tlv_attr_equal(const struct tlv_attr *a1, const struct tlv_attr *a2)
 	return !memcmp(a1, a2, tlv_pad_len(a1));
 }
 
+/* Note: This is on-the-wire cmp operation. Therefore, the ids (where
+ * endianness matters) may not behave quite as expected on
+ * wrong-endian hosts. */
 int
 tlv_attr_cmp(const struct tlv_attr *a1, const struct tlv_attr *a2)
 {
 	int r;
-	int s1, s2;
 
 	if (!a1 && !a2)
 		return 0;
@@ -277,14 +279,10 @@ tlv_attr_cmp(const struct tlv_attr *a1, const struct tlv_attr *a2)
 		return -1;
 	if (!a2)
 		return 1;
-	s1 = tlv_pad_len(a1);
-	s2 = tlv_pad_len(a2);
-	r = memcmp(a1, a2, s1 < s2 ? s1 : s2);
+	r = memcmp(a1, a2, sizeof(*a1));
 	if (r)
 		return r;
-	if (s1 == s2)
-		return 0;
-	return s1 < s2 ? -1 : 1;
+	return memcmp(a1, a2, tlv_pad_len(a1));
 }
 
 struct tlv_attr *
