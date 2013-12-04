@@ -47,11 +47,6 @@ int main(__unused int argc, char* const argv[])
 		return 2;
 	}
 
-	if (iface_init()) {
-		L_ERR("Failed to init platform: %s", strerror(errno));
-		return 3;
-	}
-
 	if (ipc_init()) {
 		L_ERR("Failed to init IPC: %s", strerror(errno));
 		return 5;
@@ -94,6 +89,9 @@ int main(__unused int argc, char* const argv[])
 			break;
 		}
 	}
+
+	/* Init ipc */
+	iface_init(pa);
 
 	/* Fire up the prefix assignment code. */
 	pa_start(pa);

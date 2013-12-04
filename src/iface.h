@@ -76,8 +76,10 @@ struct iface {
 };
 
 
+#include "pa.h"
+
 // Generic initializer to be called by main()
-int iface_init(void);
+int iface_init(pa_t pa);
 
 // Get an interface by name
 struct iface* iface_get(const char *ifname);

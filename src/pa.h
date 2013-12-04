@@ -17,6 +17,8 @@
 #include <stdint.h>
 #include <time.h>
 
+typedef struct pa *pa_t;
+
 #include "hnetd.h"
 #include "iface.h"
 #include "prefix_utils.h"
@@ -34,8 +36,6 @@ struct pa_rid {
 		(rid)->id[8], (rid)->id[9], (rid)->id[10], (rid)->id[11], \
 		(rid)->id[12], (rid)->id[13], (rid)->id[15], (rid)->id[15]
 
-
-typedef struct pa *pa_t;
 
 /* Callbacks for flooding protocol. */
 struct pa_flood_callbacks {

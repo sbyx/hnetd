@@ -78,9 +78,9 @@ static void iface_notify_data_state(struct iface *c, bool enabled)
 }
 
 
-int iface_init(void)
+int iface_init(pa_t pa)
 {
-	// TODO: pa_iface_subscribe(NULL, &pa_cb);
+	pa_iface_subscribe(pa, &pa_cb);
 	return platform_init();
 }
 
