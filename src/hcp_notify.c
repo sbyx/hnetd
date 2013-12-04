@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 10:04:30 2013 mstenber
- * Last modified: Wed Dec  4 11:22:20 2013 mstenber
- * Edit time:     25 min
+ * Last modified: Wed Dec  4 13:18:08 2013 mstenber
+ * Edit time:     33 min
  *
  */
 
@@ -16,6 +16,10 @@
  */
 
 #include "hcp_i.h"
+
+#define NODE_CHANGE_CALLBACK(s, n, add) \
+  if (s->node_change_callback)          \
+    s->node_change_callback(s, n, add)
 
 void hcp_subscribe(hcp o, hcp_subscriber s)
 {
@@ -26,9 +30,10 @@ void hcp_subscribe(hcp o, hcp_subscriber s)
   list_add(&s->lh, &o->subscribers);
   hcp_for_each_node(o, n)
     {
-      s->node_change_callback(s, n, true);
-      hcp_node_for_each_tlv(n, a, i)
-        s->tlv_change_callback(s, n, a, true);
+      NODE_CHANGE_CALLBACK(s, n, true);
+      if (s->tlv_change_callback)
+        hcp_node_for_each_tlv(n, a, i)
+          s->tlv_change_callback(s, n, a, true);
     }
 }
 
@@ -40,9 +45,10 @@ void hcp_unsubscribe(hcp o, hcp_subscriber s)
 
   hcp_for_each_node(o, n)
     {
-      hcp_node_for_each_tlv(n, a, i)
-        s->tlv_change_callback(s, n, a, false);
-      s->node_change_callback(s, n, false);
+      if (s->tlv_change_callback)
+        hcp_node_for_each_tlv(n, a, i)
+          s->tlv_change_callback(s, n, a, false);
+      NODE_CHANGE_CALLBACK(s, n, false);
     }
   list_del(&s->lh);
 }
@@ -75,6 +81,10 @@ void hcp_notify_subscribers_tlvs_changed(hcp_node n,
     {
       struct tlv_attr *op = a_old ? tlv_data(a_old) : NULL;
       struct tlv_attr *np = a_new ? tlv_data(a_new) : NULL;
+
+      /* If subscriber isn't interested, just skip. */
+      if (!s->tlv_change_callback)
+        continue;
 
       /* Keep two pointers, one for old, one for new. */
 
@@ -128,5 +138,5 @@ void hcp_notify_subscribers_node_changed(hcp_node n, bool add)
   hcp_subscriber s;
 
   list_for_each_entry(s, &n->hcp->subscribers, lh)
-    s->node_change_callback(s, n, add);
+    NODE_CHANGE_CALLBACK(s, n, add);
 }
