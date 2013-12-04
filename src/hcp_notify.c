@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 10:04:30 2013 mstenber
- * Last modified: Wed Dec  4 13:18:08 2013 mstenber
- * Edit time:     33 min
+ * Last modified: Wed Dec  4 13:30:07 2013 mstenber
+ * Edit time:     34 min
  *
  */
 
@@ -32,8 +32,10 @@ void hcp_subscribe(hcp o, hcp_subscriber s)
     {
       NODE_CHANGE_CALLBACK(s, n, true);
       if (s->tlv_change_callback)
-        hcp_node_for_each_tlv(n, a, i)
-          s->tlv_change_callback(s, n, a, true);
+        {
+          hcp_node_for_each_tlv(n, a, i)
+            s->tlv_change_callback(s, n, a, true);
+        }
     }
 }
 
@@ -46,8 +48,10 @@ void hcp_unsubscribe(hcp o, hcp_subscriber s)
   hcp_for_each_node(o, n)
     {
       if (s->tlv_change_callback)
-        hcp_node_for_each_tlv(n, a, i)
-          s->tlv_change_callback(s, n, a, false);
+        {
+          hcp_node_for_each_tlv(n, a, i)
+            s->tlv_change_callback(s, n, a, false);
+        }
       NODE_CHANGE_CALLBACK(s, n, false);
     }
   list_del(&s->lh);
