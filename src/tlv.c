@@ -282,7 +282,8 @@ tlv_attr_cmp(const struct tlv_attr *a1, const struct tlv_attr *a2)
 	r = memcmp(a1, a2, sizeof(*a1));
 	if (r)
 		return r;
-	return memcmp(a1, a2, tlv_pad_len(a1));
+	/* Padding we ignore */
+	return memcmp(a1, a2, tlv_raw_len(a1));
 }
 
 struct tlv_attr *

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 11:53:11 2013 mstenber
- * Last modified: Wed Dec  4 12:13:57 2013 mstenber
- * Edit time:     11 min
+ * Last modified: Wed Dec  4 13:03:50 2013 mstenber
+ * Edit time:     15 min
  *
  */
 
@@ -91,6 +91,11 @@ void tlv_cmp(void)
   TLV_NEXT();
   tlv_init(a, 24, 4);
 
+  /* TLV with _one_ content > 0s */
+  TLV_NEXT();
+  tlv_init(a, 24, 5);
+  *((char *)tlv_data(a)) = 'x';
+
   /* TLV with content of 0s */
   TLV_NEXT();
   tlv_init(a, 24, 8);
@@ -112,9 +117,12 @@ void tlv_cmp(void)
     for (j = 0 ; j < first_free ; j++)
       {
         int r = tlv_attr_cmp(tlvs[i], tlvs[j]);
+        bool eq = tlv_attr_equal(tlvs[i], tlvs[j]);
 
         L_NOTICE("comparing %s, %s",
                  TLV_REPR(tlvs[i]), TLV_REPR(tlvs[j]));
+        sput_fail_unless(!eq == !(i == j),
+                         "tlv_attr_equal on board");
         if (i == j)
           sput_fail_unless(r == 0, "not matching own");
         else if (i < j)
