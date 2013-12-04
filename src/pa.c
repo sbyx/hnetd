@@ -1098,7 +1098,8 @@ static int pa_get_newprefix_random(struct pa *pa, struct pa_iface *iface,
 
 	for(i=0; i<PA_MAX_RANDOM_ROUNDS; i++) {
 		prefix_random(&dp->prefix, new_prefix, plen);
-		if(!pa_prefix_checkcollision(pa, new_prefix, NULL, NULL, true, true))
+		if( !(dp->excluded_valid && prefix_contains(&dp->excluded, new_prefix)) &&
+				!pa_prefix_checkcollision(pa, new_prefix, NULL, NULL, true, true))
 			return 0;
 	}
 
