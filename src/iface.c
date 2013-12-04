@@ -8,7 +8,9 @@
 #include "pa.h"
 
 static void iface_update_prefix(const struct prefix *p, const char *ifname,
-		hnetd_time_t valid_until, hnetd_time_t preferred_until, void *priv);
+		hnetd_time_t valid_until, hnetd_time_t preferred_until,
+		const void *dhcpv6_data, size_t dhcpv6_len,
+		__unused void *priv);
 static void iface_update_link_owner(const char *ifname, bool owner, void *priv);
 
 static struct list_head interfaces = LIST_HEAD_INIT(interfaces);
@@ -20,7 +22,9 @@ static struct pa_iface_callbacks pa_cb = {
 
 
 static void iface_update_prefix(const struct prefix *p, const char *ifname,
-		hnetd_time_t valid_until, hnetd_time_t preferred_until, __unused void *priv)
+		hnetd_time_t valid_until, hnetd_time_t preferred_until,
+		const void *dhcpv6_data, size_t dhcpv6_len,
+		__unused void *priv)
 {
 	struct iface *c = iface_get(ifname);
 	assert(c != NULL && c->platform != NULL);
@@ -30,10 +34,12 @@ static void iface_update_prefix(const struct prefix *p, const char *ifname,
 		if (a)
 			vlist_delete(&c->assigned, &a->node);
 	} else { // Create / update action
-		struct iface_addr *a = calloc(1, sizeof(*a));
+		struct iface_addr *a = calloc(1, sizeof(*a) + dhcpv6_len);
 		a->prefix = *p;
 		a->valid_until = valid_until;
 		a->preferred_until = preferred_until;
+		a->dhcpv6_len = dhcpv6_len;
+		memcpy(a->dhcpv6_data, dhcpv6_data, dhcpv6_len);
 		vlist_add(&c->assigned, &a->node, &a->prefix);
 	}
 }
