@@ -73,7 +73,7 @@ int main(__unused int argc, char* const argv[])
 		return 42;
 	}
 
-	if (!hcp_connect_pa(h, pa)) {
+	if (!hcp_pa_glue_create(h, pa)) {
 		L_ERR("Unable to connect hcp and pa");
 		return 17;
 	}
