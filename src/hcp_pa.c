@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Thu Dec  5 11:17:04 2013 mstenber
- * Edit time:     117 min
+ * Last modified: Thu Dec  5 11:51:03 2013 mstenber
+ * Edit time:     120 min
  *
  */
 
@@ -42,8 +42,6 @@
 
 #include "hcp_pa.h"
 #include "hcp_i.h"
-
-typedef struct hcp_glue_struct hcp_glue_s, *hcp_glue;
 
 typedef struct {
   struct vlist_node in_dps;
@@ -409,7 +407,7 @@ static void _updated_ldp(const struct prefix *prefix,
 }
 
 
-bool hcp_connect_pa(hcp o, pa_t pa)
+hcp_glue hcp_pa_glue_create(hcp o, pa_t pa)
 {
   struct pa_rid *rid = (struct pa_rid *)&o->own_node->node_identifier_hash;
   hcp_glue g = calloc(1, sizeof(*g));
@@ -436,5 +434,11 @@ bool hcp_connect_pa(hcp o, pa_t pa)
   pa_flood_subscribe(pa, &pa_cbs);
   hcp_subscribe(o, &g->subscriber);
 
-  return true;
+  return g;
+}
+
+void hcp_pa_glue_destroy(hcp_glue g)
+{
+  vlist_flush_all(&g->dps);
+  free(g);
 }

@@ -327,7 +327,12 @@ bool hcp_remove_tlv(hcp o, struct tlv_attr *tlv)
 hcp_link hcp_find_link_by_name(hcp o, const char *ifname, bool create)
 {
   hcp_link cl = container_of(ifname, hcp_link_s, ifname[0]);
-  hcp_link l = vlist_find(&o->links, cl, cl, in_links);
+  hcp_link l;
+
+  if (!ifname)
+    return NULL;
+
+  l = vlist_find(&o->links, cl, cl, in_links);
 
   if (create && !l)
     {

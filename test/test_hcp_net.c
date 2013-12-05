@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Thu Dec  5 10:52:11 2013 mstenber
- * Edit time:     276 min
+ * Last modified: Thu Dec  5 12:05:35 2013 mstenber
+ * Edit time:     301 min
  *
  */
 
@@ -29,12 +29,18 @@
 #include "hcp_notify.c"
 #include "hcp_proto.c"
 #include "hcp_timeout.c"
+#include "hcp_pa.c"
+#include "prefix_utils.c"
 #include "sput.h"
 
 /* Lots of stubs here, rather not put __unused all over the place. */
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
 /*********************************************** Fake network infrastructure */
+
+struct pa {
+  struct pa_flood_callbacks cbs;
+};
 
 hnetd_time_t now_time;
 
@@ -64,8 +70,12 @@ typedef struct {
   struct net_sim_t *s;
   char *name;
   hcp_s n;
+  struct pa pa;
+  hcp_glue g;
   hnetd_time_t want_timeout_at;
   hnetd_time_t next_message_at;
+  int updated_eap;
+  int updated_edp;
 } net_node_s, *net_node;
 
 typedef struct net_sim_t {
@@ -175,6 +185,9 @@ hcp net_sim_find_hcp(net_sim s, const char *name)
   if (!r)
     return NULL;
   list_add(&n->h, &s->nodes);
+  /* Glue it to pa */
+  if (!(n->g = hcp_pa_glue_create(&n->n, &n->pa)))
+    return NULL;
   return &n->n;
 }
 
@@ -276,6 +289,9 @@ void net_sim_remove_node(net_sim s, net_node node)
           free(m);
         }
     }
+
+  /* Kill glue. */
+  hcp_pa_glue_destroy(node->g);
 
   /* Remove from list of nodes */
   list_del(&node->h);
@@ -389,6 +405,52 @@ do {                                                    \
  } while(0)
 
 /********************************************************* Mocked interfaces */
+
+void pa_flood_subscribe(pa_t pa, const struct pa_flood_callbacks *cbs)
+{
+  pa->cbs = *cbs;
+  sput_fail_unless(pa->cbs.priv, "priv set");
+}
+
+void pa_set_rid(pa_t pa, const struct pa_rid *rid)
+{
+  net_node node = container_of(pa, net_node_s, pa);
+  hcp o = &node->n;
+
+  sput_fail_unless(memcmp(rid,
+                          &o->own_node->node_identifier_hash,
+                          HCP_HASH_LEN) == 0,
+                   "rid same");
+
+}
+
+
+int pa_update_eap(pa_t pa, const struct prefix *prefix,
+                  const struct pa_rid *rid,
+                  const char *ifname, bool to_delete)
+{
+  net_node node = container_of(pa, net_node_s, pa);
+
+  sput_fail_unless(prefix, "prefix set");
+  sput_fail_unless(rid, "rid set");
+  node->updated_eap++;
+  return 0;
+}
+
+int pa_update_edp(pa_t pa, const struct prefix *prefix,
+                  const struct pa_rid *rid,
+                  const struct prefix *excluded,
+                  hnetd_time_t valid_until, hnetd_time_t preferred_until,
+                  const void *dhcpv6_data, size_t dhcpv6_len)
+{
+  net_node node = container_of(pa, net_node_s, pa);
+
+  sput_fail_unless(prefix, "prefix set");
+  sput_fail_unless(rid, "rid set");
+  sput_fail_unless(!excluded, "excluded not set");
+  node->updated_edp++;
+  return 0;
+}
 
 bool hcp_io_init(hcp o)
 {
@@ -554,6 +616,16 @@ hnetd_time_t hcp_io_time(hcp o)
 
 /**************************************************************** Test cases */
 
+struct prefix p1 = {
+  .prefix = { .s6_addr = {
+      0x20, 0x01, 0x00, 0x01}},
+  .plen = 54 };
+
+struct prefix p2 = {
+  .prefix = { .s6_addr = {
+      0x20, 0x02, 0x00, 0x01}},
+  .plen = 54 };
+
 void hcp_two(void)
 {
   net_sim_s s;
@@ -561,6 +633,7 @@ void hcp_two(void)
   hcp n2;
   hcp_link l1;
   hcp_link l2;
+  net_node node1, node2;
 
   net_sim_init(&s);
   n1 = net_sim_find_hcp(&s, "n1");
@@ -577,6 +650,30 @@ void hcp_two(void)
 
   sput_fail_unless(n1->nodes.avl.count == 2, "n1 nodes == 2");
   sput_fail_unless(n2->nodes.avl.count == 2, "n2 nodes == 2");
+
+
+  /* Play with the prefix API. Feed in stuff! */
+  node1 = container_of(n1, net_node_s, n);
+  node2 = container_of(n2, net_node_s, n);
+
+  /* First, fake delegated prefixes */
+  _updated_ldp(&p1, NULL,
+               "eth0", s.now + 123, s.now + 1,
+               NULL, 0, node1->g);
+  _updated_ldp(&p2, NULL,
+               NULL, s.now + 123, s.now + 1,
+               NULL, 0, node1->g);
+
+  SIM_WHILE(&s, 1000,
+            node2->updated_edp != 2);
+
+  /* Then fake prefix assignment */
+  p1.plen = 64;
+  p2.plen = 64;
+  _updated_lap(&p1, "eth0", false, node1->g);
+  _updated_lap(&p2, NULL, false, node1->g);
+  SIM_WHILE(&s, 1000,
+            node2->updated_eap != 2);
 
   /* disconnect on one side (=> unidirectional traffic) => should at
    * some point disappear. */
