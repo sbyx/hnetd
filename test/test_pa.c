@@ -112,7 +112,7 @@ struct ldp_update_call {
 	size_t dhcpv6_len;
 	const void *dhcpv6_data; /* NOT COPIED */
 	const char *dp_ifname; /* NOT COPIED */
-	struct prefix *excluded; /* NOT COPIED */
+	const struct prefix *excluded; /* NOT COPIED */
 	void *priv;
 };
 
@@ -287,10 +287,10 @@ static struct prefix p1_1 = {
 		.prefix = { .s6_addr = {
 				0x20, 0x01, 0x20, 0x01, 0xff, 0xff, 0xff, 0x10}},
 		.plen = 60 };
-static struct prefix p1_2 = {
+/*static struct prefix p1_2 = {
 		.prefix = { .s6_addr = {
 				0x20, 0x01, 0x20, 0x01, 0xff, 0xff, 0xff, 0x20}},
-		.plen = 60 };
+		.plen = 60 };*/
 static struct prefix p1_20 = {
 		.prefix = { .s6_addr = {
 				0x20, 0x01, 0x20, 0x01, 0xff, 0xff, 0xff, 0x20}},
@@ -303,10 +303,10 @@ static struct prefix p1_22 = {
 		.prefix = { .s6_addr = {
 				0x20, 0x01, 0x20, 0x01, 0xff, 0xff, 0xff, 0x22}},
 		.plen = 64 };
-static struct prefix p1_23 = {
+/*static struct prefix p1_23 = {
 		.prefix = { .s6_addr = {
 				0x20, 0x01, 0x20, 0x01, 0xff, 0xff, 0xff, 0x23}},
-		.plen = 64 };
+		.plen = 64 };*/
 
 static struct pa_conf conf;
 
@@ -330,7 +330,7 @@ static void dmy_iface_unregister_user(__attribute__((unused))struct iface_user *
 static void test_pa_random_push(const int *int_array, size_t array_len)
 {
 	int i;
-	for(i=0; i<array_len; i++) {
+	for(i=0; i< (int) array_len; i++) {
 		smock_push_int(SMOCK_RANDOM_QUEUE, int_array[i]);
 	}
 }
@@ -378,7 +378,6 @@ void pa_test_multiple_ifaces(void)
 	struct prefix *to_use_1 = &p1_20;
 	struct prefix *to_use_2 = &p1_21;
 	struct prefix *to_use_3 = &p1_22;
-	struct prefix *to_use_4 = &p1_23;
 
 	struct lap_update_call *lap1, *lap2;
 	struct link_update_call *l1, *l2;
@@ -514,7 +513,7 @@ void pa_test_collisions(void) {
 	struct prefix *not_excluded_bis = &p1_21;
 	struct prefix *not_excluded_tier = &p1_22;
 	struct ldp_update_call *ldp;
-	struct lap_update_call *lap, *lap2;
+	struct lap_update_call *lap;
 	struct link_update_call *link;
 	struct px_update_call *px;
 	struct pa_iface *pa_iface;
