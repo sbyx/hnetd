@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Wed Dec  4 12:53:07 2013 mstenber
- * Edit time:     354 min
+ * Last_neighast modified: Thu Dec  5 10:34:22 2013 mstenber
+ * Edit time:     359 min
  *
  */
 
@@ -324,7 +324,7 @@ bool hcp_remove_tlv(hcp o, struct tlv_attr *tlv)
   return true;
 }
 
-hcp_link hcp_find_link(hcp o, const char *ifname, bool create)
+hcp_link hcp_find_link_by_name(hcp o, const char *ifname, bool create)
 {
   hcp_link cl = container_of(ifname, hcp_link_s, ifname[0]);
   hcp_link l = vlist_find(&o->links, cl, cl, in_links);
@@ -343,9 +343,19 @@ hcp_link hcp_find_link(hcp o, const char *ifname, bool create)
   return l;
 }
 
+hcp_link hcp_find_link_by_id(hcp o, uint32_t link_id)
+{
+  hcp_link l;
+  /* XXX - this could be also made more efficient. Oh well. */
+  vlist_for_each_element(&o->links, l, in_links)
+    if (l->iid == link_id)
+      return l;
+  return NULL;
+}
+
 bool hcp_set_link_enabled(hcp o, const char *ifname, bool enabled)
 {
-  hcp_link old = hcp_find_link(o, ifname, false);
+  hcp_link old = hcp_find_link_by_name(o, ifname, false);
 
   if (!enabled)
     {
@@ -356,7 +366,7 @@ bool hcp_set_link_enabled(hcp o, const char *ifname, bool enabled)
     }
   if (old)
     return false;
-  return hcp_find_link(o, ifname, true) != NULL;
+  return hcp_find_link_by_name(o, ifname, true) != NULL;
 }
 
 
@@ -417,6 +427,9 @@ void hcp_self_flush(hcp_node n)
 
   if (!o->tlvs_dirty)
     return;
+
+  hcp_notify_subscribers_about_to_republish_tlvs(n);
+
   /* Dump the contents of hcp->tlvs to single tlv_buf. */
   /* Based on whether or not that would cause change in things, 'do stuff'. */
   memset(&tb, 0, sizeof(tb));

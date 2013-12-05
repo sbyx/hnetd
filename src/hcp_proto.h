@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Tue Dec  3 10:35:13 2013 mstenber
- * Edit time:     8 min
+ * Last modified: Thu Dec  5 09:01:39 2013 mstenber
+ * Edit time:     22 min
  *
  */
 
@@ -54,6 +54,11 @@ enum {
 
   HCP_T_CUSTOM = 9, /* not implemented */
 
+  HCP_T_DELEGATED_PREFIX = 42, /* may contain TLVs */
+  HCP_T_ASSIGNED_PREFIX = 43, /* may contain TLVs */
+
+  HCP_T_DHCPV6_OPTIONS = 45, /* contains just raw DHCPv6 options */
+
   HCP_T_SIGNATURE = 0xFFFF /* not implemented */
 };
 
@@ -89,6 +94,22 @@ typedef struct __packed {
   uint32_t neighbor_link_id;
   uint32_t link_id;
 } hcp_t_node_data_neighbor_s, *hcp_t_node_data_neighbor;
+
+/* HCP_T_DELEGATED_PREFIX */
+typedef struct __packed {
+  uint32_t link_id;
+  uint32_t ms_valid_at_origination;
+  uint32_t ms_preferred_at_origination;
+  uint8_t prefix_length_bits;
+  /* Prefix data, padded so that ends at 4 byte boundary (0s). */
+} hcp_t_delegated_prefix_header_s, *hcp_t_delegated_prefix_header;
+
+/* HCP_T_ASSIGNED_PREFIX */
+typedef struct __packed {
+  uint32_t link_id;
+  uint8_t prefix_length_bits;
+  /* Prefix data, padded so that ends at 4 byte boundary (0s). */
+} hcp_t_assigned_prefix_header_s, *hcp_t_assigned_prefix_header;
 
 /**************************************************************** Addressing */
 

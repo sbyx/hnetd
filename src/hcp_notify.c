@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 10:04:30 2013 mstenber
- * Last modified: Wed Dec  4 13:30:07 2013 mstenber
- * Edit time:     34 min
+ * Last modified: Thu Dec  5 09:09:41 2013 mstenber
+ * Edit time:     35 min
  *
  */
 
@@ -143,4 +143,14 @@ void hcp_notify_subscribers_node_changed(hcp_node n, bool add)
 
   list_for_each_entry(s, &n->hcp->subscribers, lh)
     NODE_CHANGE_CALLBACK(s, n, add);
+}
+
+
+void hcp_notify_subscribers_about_to_republish_tlvs(hcp_node n)
+{
+  hcp_subscriber s;
+
+  list_for_each_entry(s, &n->hcp->subscribers, lh)
+    if (s->republish_callback)
+      s->republish_callback(s);
 }

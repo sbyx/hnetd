@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Dec  4 10:16:03 2013 mstenber
+ * Last modified: Thu Dec  5 10:52:11 2013 mstenber
  * Edit time:     276 min
  *
  */
@@ -178,18 +178,18 @@ hcp net_sim_find_hcp(net_sim s, const char *name)
   return &n->n;
 }
 
-hcp_link net_sim_hcp_find_link(hcp o, const char *name)
+hcp_link net_sim_hcp_find_link_by_name(hcp o, const char *name)
 {
   hcp_link l;
 
-  l = hcp_find_link(o, name, false);
+  l = hcp_find_link_by_name(o, name, false);
 
   if (l)
     return l;
 
-  l = hcp_find_link(o, name, true);
+  l = hcp_find_link_by_name(o, name, true);
 
-  sput_fail_unless(l, "hcp_find_link");
+  sput_fail_unless(l, "hcp_find_link_by_name");
   if (l)
     {
       /* Initialize the address - in rather ugly way. We just hash
@@ -514,7 +514,7 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
 {
   net_node node = container_of(o, net_node_s, n);
   net_sim s = node->s;
-  hcp_link l = hcp_find_link(o, ifname, false);
+  hcp_link l = hcp_find_link_by_name(o, ifname, false);
   bool is_multicast = memcmp(dst, &o->multicast_address, sizeof(*dst)) == 0;
   struct list_head *p;
 
@@ -565,8 +565,8 @@ void hcp_two(void)
   net_sim_init(&s);
   n1 = net_sim_find_hcp(&s, "n1");
   n2 = net_sim_find_hcp(&s, "n2");
-  l1 = net_sim_hcp_find_link(n1, "eth0");
-  l2 = net_sim_hcp_find_link(n2, "eth1");
+  l1 = net_sim_hcp_find_link_by_name(n1, "eth0");
+  l2 = net_sim_hcp_find_link_by_name(n2, "eth1");
   sput_fail_unless(avl_is_empty(&l1->neighbors.avl), "no l1 neighbors");
   sput_fail_unless(avl_is_empty(&l2->neighbors.avl), "no l2 neighbors");
 
@@ -635,9 +635,9 @@ static void handle_connections(net_sim s,
   for (i = 0 ; i < n_conns ; i++)
     {
       hcp n1 = net_sim_find_hcp(s, nodenames[c->src]);
-      hcp_link l1 = net_sim_hcp_find_link(n1, c->srclink);
+      hcp_link l1 = net_sim_hcp_find_link_by_name(n1, c->srclink);
       hcp n2 = net_sim_find_hcp(s, nodenames[c->dst]);
-      hcp_link l2 = net_sim_hcp_find_link(n2, c->dstlink);
+      hcp_link l2 = net_sim_hcp_find_link_by_name(n2, c->dstlink);
 
       net_sim_set_connected(l1, l2, true);
       net_sim_set_connected(l2, l1, true);
@@ -729,8 +729,8 @@ static void raw_hcp_tube(unsigned int num_nodes)
       sprintf(buf, "node%d", i+1);
       hcp n2 = net_sim_find_hcp(&s, buf);
 
-      hcp_link l1 = net_sim_hcp_find_link(n1, "down");
-      hcp_link l2 = net_sim_hcp_find_link(n2, "up");
+      hcp_link l1 = net_sim_hcp_find_link_by_name(n1, "down");
+      hcp_link l2 = net_sim_hcp_find_link_by_name(n2, "up");
       net_sim_set_connected(l1, l2, true);
       net_sim_set_connected(l2, l1, true);
     }

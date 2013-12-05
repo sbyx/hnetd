@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Dec  4 11:32:38 2013 mstenber
+ * Last modified: Thu Dec  5 10:53:48 2013 mstenber
  * Edit time:     110 min
  *
  */
@@ -200,7 +200,8 @@ struct hcp_tlv_struct {
 bool hcp_init(hcp o, const void *node_identifier, int len);
 void hcp_uninit(hcp o);
 
-hcp_link hcp_find_link(hcp o, const char *ifname, bool create);
+hcp_link hcp_find_link_by_name(hcp o, const char *ifname, bool create);
+hcp_link hcp_find_link_by_id(hcp o, uint32_t link_id);
 hcp_node hcp_find_node_by_hash(hcp o, const hcp_hash h, bool create);
 
 /* Private utility - shouldn't be used by clients. */
@@ -232,7 +233,7 @@ void hcp_notify_subscribers_tlvs_changed(hcp_node n,
                                          struct tlv_attr *a_old,
                                          struct tlv_attr *a_new);
 void hcp_notify_subscribers_node_changed(hcp_node n, bool add);
-
+void hcp_notify_subscribers_about_to_republish_tlvs(hcp_node n);
 
 /* Low-level interface module stuff. */
 

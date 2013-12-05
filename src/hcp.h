@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Wed Dec  4 12:51:11 2013 mstenber
- * Edit time:     85 min
+ * Last modified: Thu Dec  5 09:04:52 2013 mstenber
+ * Edit time:     86 min
  *
  */
 
@@ -36,6 +36,13 @@ struct hcp_subscriber_struct {
    * undefined (and most likely bad) behavior.
    */
   struct list_head lh;
+
+  /**
+   * About to republish local TLVs notification.
+   *
+   * This is when TLVs with relative timestamps should be refreshed.
+   */
+  void (*republish_callback)(hcp_subscriber r);
 
   /**
    * TLV change notification.

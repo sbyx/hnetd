@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Wed Dec  4 12:56:35 2013 mstenber
+ * Last modified: Thu Dec  5 10:52:05 2013 mstenber
  * Edit time:     66 min
  *
  */
@@ -124,11 +124,11 @@ void hcp_int(void)
 
   /* Similarly, links */
   const char *ifn = "foo";
-  l = hcp_find_link(o, ifn, false);
-  sput_fail_unless(!l, "hcp_find_link w/ create=false => none");
-  l = hcp_find_link(o, ifn, true);
-  sput_fail_unless(l, "hcp_find_link w/ create=false => !none");
-  sput_fail_unless(hcp_find_link(o, ifn, false) == l, "still same");
+  l = hcp_find_link_by_name(o, ifn, false);
+  sput_fail_unless(!l, "hcp_find_link_by_name w/ create=false => none");
+  l = hcp_find_link_by_name(o, ifn, true);
+  sput_fail_unless(l, "hcp_find_link_by_name w/ create=false => !none");
+  sput_fail_unless(hcp_find_link_by_name(o, ifn, false) == l, "still same");
 
   /* Play with run; initially should increment update number */
   sput_fail_unless(o->own_node->update_number == 0, "update number ok");

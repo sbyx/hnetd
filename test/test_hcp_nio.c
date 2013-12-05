@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Wed Dec  4 13:27:02 2013 mstenber
- * Edit time:     154 min
+ * Last modified: Thu Dec  5 09:35:11 2013 mstenber
+ * Edit time:     156 min
  *
  */
 
@@ -177,12 +177,22 @@ static void dummy_node_cb(hcp_subscriber s, hcp_node n, bool add)
   smock_pull_bool_is("node_callback", add);
 }
 
+static void dummy_republish_cb(hcp_subscriber s __unused)
+{
+  L_NOTICE("republish callback");
+  smock_pull("republish_callback");
+}
+
 static hcp_subscriber_s dummy_subscriber_1 = {
   .tlv_change_callback = dummy_tlv_cb
 };
 
 static hcp_subscriber_s dummy_subscriber_2 = {
   .node_change_callback = dummy_node_cb
+};
+
+static hcp_subscriber_s dummy_subscriber_3 = {
+  .republish_callback = dummy_republish_cb
 };
 
 
@@ -322,6 +332,7 @@ static void hcp_ok(void)
   smock_push_bool("node_callback", true);
   hcp_subscribe(o, &dummy_subscriber_1);
   hcp_subscribe(o, &dummy_subscriber_2);
+  hcp_subscribe(o, &dummy_subscriber_3);
 
   smock_is_empty();
   one_join(true);
@@ -430,6 +441,7 @@ static void hcp_ok(void)
   /* Should get notification about two added TLVs. */
   smock_push_int("tlv_callback", TLV_ID_A);
   smock_push_int("tlv_callback", TLV_ID_B);
+  smock_push_bool("republish_callback", true);
   hcp_run(o);
   smock_is_empty();
 
@@ -446,6 +458,7 @@ static void hcp_ok(void)
   tlv_init(&ta, TLV_ID_C, 4);
   hcp_add_tlv(o, &ta);
   smock_push_int("tlv_callback", TLV_ID_C);
+  smock_push_bool("republish_callback", true);
   hcp_run(o);
   smock_is_empty();
 
@@ -453,6 +466,7 @@ static void hcp_ok(void)
   L_NOTICE("remove tlv c");
   hcp_remove_tlv(o, &ta);
   smock_push_int("tlv_callback", -TLV_ID_C);
+  smock_push_bool("republish_callback", true);
   hcp_run(o);
   smock_is_empty();
 
@@ -461,6 +475,7 @@ static void hcp_ok(void)
   tlv_init(&ta, TLV_ID_D, 4);
   hcp_add_tlv(o, &ta);
   smock_push_int("tlv_callback", TLV_ID_D);
+  smock_push_bool("republish_callback", true);
   hcp_run(o);
   smock_is_empty();
 
@@ -472,6 +487,7 @@ static void hcp_ok(void)
   smock_push_bool("node_callback", false);
   hcp_unsubscribe(o, &dummy_subscriber_1);
   hcp_unsubscribe(o, &dummy_subscriber_2);
+  hcp_unsubscribe(o, &dummy_subscriber_3);
   smock_is_empty();
 
   /* Re-enable checks */

@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue Dec  3 14:17:54 2013 mstenber
+ * Last modified: Thu Dec  5 10:51:33 2013 mstenber
  * Edit time:     191 min
  *
  */
@@ -510,7 +510,7 @@ void hcp_poll(hcp o)
   while ((read = hcp_io_recvfrom(o, buf, sizeof(buf), srcif, &src, &dst)) > 0)
     {
       /* First off. If it's off some link we aren't supposed to use, ignore. */
-      l = hcp_find_link(o, srcif, false);
+      l = hcp_find_link_by_name(o, srcif, false);
       if (!l)
         continue;
       /* If it's multicast, it's valid if and only if it's aimed at
