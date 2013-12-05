@@ -36,7 +36,7 @@
 
 #define PA_MAX_RANDOM_ROUNDS	20
 
-#define PA_RIDCMP(r1, r2) memcmp(r1, r2, PA_RIDLEN)
+#define PA_RIDCMP(r1, r2) memcmp((r1)->id, (r2)->id, PA_RIDLEN)
 
 #define PA_CONF_DFLT_COMMIT_LAP_DELAY  20 * HNETD_TIME_PER_SECOND
 
@@ -200,6 +200,13 @@ static int pa_avl_prefix_cmp (const void *k1, const void *k2,
 	return (i>0)?1:-1;
 }
 
+static int pa_ridcmp_debug(struct pa_rid *r1, struct pa_rid *r2) {
+	int i = memcmp((r1)->id, (r2)->id, PA_RIDLEN);
+	L_DEBUG(PA_L_PX"Comparing two rids "PA_RID_L" ? "PA_RID_L" => %d", PA_RID_LA(r1), PA_RID_LA(r2), i);
+
+	return i;
+}
+
 /**************************************************************/
 /************************ pa general **************************/
 /**************************************************************/
@@ -360,17 +367,6 @@ static void pa_iface_cleanmaybe(struct pa *pa,
 	}
 }
 
-static void pa_iface_set_internal(struct pa *pa,
-		struct pa_iface *iface, bool internal)
-{
-	if(iface->internal != internal)
-		pa_schedule(pa, PA_TODO_ALL);
-
-	L_INFO(PA_L_PX"Changing "PA_IF_L" internal flag to (%d)", PA_IF_LA(iface), internal);
-	iface->internal = internal;
-	pa_iface_cleanmaybe(pa, iface);
-}
-
 static void pa_iface_set_dodhcp(struct pa *pa,
 		struct pa_iface *iface, bool do_dhcp)
 {
@@ -388,6 +384,23 @@ static void pa_iface_set_dodhcp(struct pa *pa,
 	if(pa->ifcb.update_link_owner)
 		pa->ifcb.update_link_owner(iface->ifname, do_dhcp,
 				pa->ifcb.priv);
+}
+
+static void pa_iface_set_internal(struct pa *pa,
+		struct pa_iface *iface, bool internal)
+{
+	if(iface->internal != internal)
+		pa_schedule(pa, PA_TODO_ALL);
+
+	L_INFO(PA_L_PX"Changing "PA_IF_L" internal flag to (%d)", PA_IF_LA(iface), internal);
+	iface->internal = internal;
+
+	if(!iface->internal)
+		pa_iface_set_dodhcp(pa, iface, false);
+
+	pa_schedule(pa, PA_TODO_ALL);
+
+	pa_iface_cleanmaybe(pa, iface);
 }
 
 /**************************************************************/
@@ -463,6 +476,7 @@ static struct pa_eap *pa_eap_create(struct pa *pa, const struct prefix *prefix,
 	memcpy(&eap->rid, rid, sizeof(struct pa_rid));
 	memcpy(&eap->prefix, prefix, sizeof(struct prefix));
 
+	eap->avl_node.key = &eap->prefix;
 	if(avl_insert(&pa->eaps, &eap->avl_node))
 		goto insert;
 
@@ -541,7 +555,7 @@ static struct pa_lap *pa_lap_create(struct pa *pa, const struct prefix *prefix,
 	lap->invalid = false; /* For pa algo */
 	lap->own = false;
 	memcpy(&lap->prefix, prefix, sizeof(struct prefix));
-
+	lap->avl_node.key = &lap->prefix;
 	lap->pa = pa;
 	if(avl_insert(&pa->laps, &lap->avl_node)) {
 		free(lap);
@@ -773,10 +787,10 @@ struct pa_dp *pa_dp_get(struct pa *pa, const struct prefix *p,
 		const struct pa_rid *rid)
 {
 	struct pa_dp *dp;
-
+	L_DEBUG(PA_L_PX"Looking for dp with prefix %s", PREFIX_TOSTRING(p, 1));
 	list_for_each_entry(dp, &pa->dps, le) {
-		if(!prefix_cmp(p, &dp->prefix) &&
-				 ((rid)?(!PA_RIDCMP(&pa->rid, rid)):dp->local))
+		if((!prefix_cmp(p, &dp->prefix)) &&
+				((dp->local && !rid)||(!dp->local && rid && !PA_RIDCMP(&dp->rid, rid))))
 			return dp;
 	}
 	return NULL;
@@ -991,6 +1005,7 @@ static void pa_dp_destroy(struct pa *pa, struct pa_dp *dp)
 				break;
 			}
 		}
+		L_DEBUG(PA_L_PX"Considering "PA_LAP_L" adoption by another dp (%d)", PA_LAP_LA(lap, 1), found);
 		if(found) {
 			pa_lap_setdp(pa, lap, s_dp);
 		} else {
@@ -1054,9 +1069,8 @@ static bool pa_prefix_checkcollision(struct pa *pa, struct prefix *prefix,
 		avl_for_each_element(&pa->eaps, eap, avl_node) {
 			if((!exclude_iface || eap->iface != exclude_iface) &&
 					prefix_contains(&eap->prefix, prefix) &&
-					(!rid ||  PA_RIDCMP(&eap->rid, rid) > 0)) {
+					(!rid ||  PA_RIDCMP(&eap->rid, rid) > 0))
 				return true;
-			}
 		}
 	}
 
@@ -1064,9 +1078,8 @@ static bool pa_prefix_checkcollision(struct pa *pa, struct prefix *prefix,
 		avl_for_each_element(&pa->laps, lap, avl_node) {
 			if((!exclude_iface || lap->iface != exclude_iface) &&
 					prefix_contains(&lap->prefix, prefix) &&
-					(!rid || PA_RIDCMP(&pa->rid, rid) > 0)) {
+					(!rid || PA_RIDCMP(&pa->rid, rid) > 0))
 				return true;
-			}
 		}
 	}
 
@@ -1099,6 +1112,7 @@ static int pa_get_newprefix_random(struct pa *pa, struct pa_iface *iface,
 		if( !(dp->excluded_valid && prefix_contains(&dp->excluded, new_prefix)) &&
 				!pa_prefix_checkcollision(pa, new_prefix, NULL, NULL, true, true))
 			return 0;
+		L_DEBUG(PA_L_PX" Random prefix %s can't be used", PREFIX_TOSTRING(new_prefix, 1));
 	}
 
 	return -1;
@@ -1197,6 +1211,8 @@ void pa_do(struct pa *pa)
 				}
 			}
 
+			if(lap) { L_DEBUG(PA_L_PX""PA_LAP_L" found on "PA_IF_L, PA_LAP_LA(lap, 1), PA_IF_LA(iface)); }
+
 			/* See whether someone else made an assignment
 			 * on that same link. Keep the highest rid. */
 			eap = NULL;
@@ -1206,6 +1222,8 @@ void pa_do(struct pa *pa)
 					eap = s_eap;
 				}
 			}
+
+			if(eap) { L_DEBUG(PA_L_PX""PA_EAP_L" found on "PA_IF_L, PA_EAP_LA(eap, 1), PA_IF_LA(iface)); }
 
 			/* See whether we have highest router id on that link */
 			link_highest_rid = true;
@@ -1218,12 +1236,19 @@ void pa_do(struct pa *pa)
 
 
 			/* See if someone overrides our assignment */
-			if(lap && eap && PA_RIDCMP(&eap->rid, &pa->rid) &&
-					prefix_cmp(&lap->prefix, &eap->prefix)) {
-				/* We have a lap but a guy with higher priority
-				 * disagrees with us. We need to override ours. */
-				pa_lap_destroy(pa, lap);
-				lap = NULL;
+			if(lap && eap && PA_RIDCMP(&eap->rid, &pa->rid) > 0) {
+
+				if(prefix_cmp(&lap->prefix, &eap->prefix) ||
+						lap->own) {
+					/* We have a lap but a guy with higher priority
+					 * disagrees with us. We need to override ours.
+					 * OR
+					 *  We agree on the prefix, but we shouldn't own it.
+					 *  Let's destroy it.
+					 *  TODO: Find softer solution */
+					pa_lap_destroy(pa, lap);
+					lap = NULL;
+				}
 			}
 
 			if(lap && lap->own &&
@@ -1530,12 +1555,14 @@ void pa_destroy(pa_t pa)
 
 	/* Destroy all interfaces
 	 * This will also delete all laps */
-	while((iface = list_first_entry(&pa->ifaces, struct pa_iface, le))) {
+	while(!list_empty(&pa->ifaces)) {
+		iface = list_first_entry(&pa->ifaces, struct pa_iface, le);
 		pa_iface_destroy(pa, iface);
 	}
 
 	/* Destroy all dps */
-	while((dp = list_first_entry(&pa->dps, struct pa_dp, le))) {
+	while(!list_empty(&pa->dps)) {
+		dp = list_first_entry(&pa->dps, struct pa_dp, le);
 		pa_dp_destroy(pa, dp);
 	}
 
