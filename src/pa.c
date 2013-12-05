@@ -199,14 +199,14 @@ static int pa_avl_prefix_cmp (const void *k1, const void *k2,
 		return 0;
 	return (i>0)?1:-1;
 }
-
+/*
 static int pa_ridcmp_debug(struct pa_rid *r1, struct pa_rid *r2) {
 	int i = memcmp((r1)->id, (r2)->id, PA_RIDLEN);
 	L_DEBUG(PA_L_PX"Comparing two rids "PA_RID_L" ? "PA_RID_L" => %d", PA_RID_LA(r1), PA_RID_LA(r2), i);
 
 	return i;
 }
-
+*/
 /**************************************************************/
 /************************ pa general **************************/
 /**************************************************************/
