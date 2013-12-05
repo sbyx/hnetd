@@ -54,6 +54,11 @@ target_link_libraries(test_pa ubox)
 add_test(pa test_pa)
 add_dependencies(check test_pa)
 
+add_executable(test_pa_store test/test_pa_store.c src/prefix_utils.c)
+target_link_libraries(test_pa_store ubox)
+add_test(pa_store test_pa_store)
+add_dependencies(check test_pa_store)
+
 # Installation rules
 install(TARGETS hnetd DESTINATION sbin/)
 
