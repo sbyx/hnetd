@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Thu Dec  5 11:51:03 2013 mstenber
- * Edit time:     120 min
+ * Last modified: Thu Dec  5 12:15:29 2013 mstenber
+ * Edit time:     126 min
  *
  */
 
@@ -131,7 +131,7 @@ static hcp_link _find_local_link(hcp_node onode, uint32_t olink_no)
   /* We're lazy and just compare published information; we _could_
    * of course also look at per-link and per-neighbor structures,
    * but this is simpler.. */
-  hcp_node_for_each_tlv(o->own_node, a, i)
+  hcp_node_for_each_tlv_i(o->own_node, a, i)
     if (tlv_id(a) == HCP_T_NODE_DATA_NEIGHBOR)
       {
         hcp_t_node_data_neighbor nh = tlv_data(a);
@@ -259,7 +259,7 @@ static void _republish_cb(hcp_subscriber s)
     {
       if (n == o->own_node)
         continue;
-      hcp_node_for_each_tlv(n, a, i)
+      hcp_node_for_each_tlv_i(n, a, i)
         {
           if (tlv_id(a) == HCP_T_ASSIGNED_PREFIX)
             _update_a_tlv(g, n, a, true);
@@ -323,7 +323,7 @@ static void _updated_lap(const struct prefix *prefix, const char *ifname,
   struct prefix p;
   hcp_glue g = priv;
   hcp o = g->hcp;
-  int mlen = TLV_SIZE + sizeof(hcp_t_assigned_prefix_header_s) + 16;
+  int mlen = TLV_SIZE + sizeof(hcp_t_assigned_prefix_header_s) + 16 + 3;
   unsigned char buf[mlen];
   struct tlv_attr *a = (struct tlv_attr *) buf;
   int plen = (prefix->plen + 7) / 8;
@@ -331,6 +331,7 @@ static void _updated_lap(const struct prefix *prefix, const char *ifname,
   hcp_t_assigned_prefix_header ah;
   hcp_link l;
 
+  memset(buf, 0, mlen);
   p = *prefix;
   prefix_canonical(&p, &p);
   /* XXX - what if links renumber? let's hope they don't */

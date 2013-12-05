@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Thu Dec  5 12:05:35 2013 mstenber
- * Edit time:     301 min
+ * Last modified: Thu Dec  5 12:17:24 2013 mstenber
+ * Edit time:     302 min
  *
  */
 
@@ -290,13 +290,14 @@ void net_sim_remove_node(net_sim s, net_node node)
         }
     }
 
-  /* Kill glue. */
-  hcp_pa_glue_destroy(node->g);
-
   /* Remove from list of nodes */
   list_del(&node->h);
   free(node->name);
   hcp_uninit(&node->n);
+
+  /* Kill glue (has to be done _after_ hcp_uninit). */
+  hcp_pa_glue_destroy(node->g);
+
   free(node);
 }
 

@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Dec  5 10:53:48 2013 mstenber
+ * Last modified: Thu Dec  5 12:11:43 2013 mstenber
  * Edit time:     110 min
  *
  */
@@ -280,5 +280,8 @@ static inline const char *hex_repr(char *buf, void *data, int len)
 #define HEX_REPR(buf, len) hex_repr(alloca((len) * 2 + 1), buf, len)
 
 #define HCP_NODE_REPR(n) HEX_REPR(&n->node_identifier_hash, HCP_HASH_LEN)
+
+#define hcp_node_for_each_tlv_i(n, a, i) \
+  tlv_for_each_attr(a, (n)->tlv_container, i)
 
 #endif /* HCP_I_H */
