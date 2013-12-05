@@ -54,6 +54,12 @@ target_link_libraries(test_pa ubox)
 add_test(pa test_pa)
 add_dependencies(check test_pa)
 
+add_executable(test_iface test/test_iface.c)
+target_link_libraries(test_iface ubox)
+add_test(iface test_iface)
+add_dependencies(check test_iface)
+
+
 # Installation rules
 install(TARGETS hnetd DESTINATION sbin/)
 
