@@ -198,6 +198,38 @@ static void platform_commit(struct uloop_timeout *t)
 
 	blobmsg_close_table(&b, k);
 
+
+	// DNS options
+	const size_t dns_max = 4;
+	size_t dns_cnt = 0;
+	struct in6_addr dns[dns_max];
+
+	// Add per interface DHCPv6 options
+	uint8_t *oend = ((uint8_t*)c->dhcpv6_data_out) + c->dhcpv6_len_out, *odata;
+	uint16_t olen, otype;
+	dhcpv6_for_each_option(c->dhcpv6_data_out, oend, otype, olen, odata) {
+		if (otype == DHCPV6_OPT_DNS_SERVERS) {
+			size_t cnt = olen / sizeof(*dns);
+			if (cnt + dns_cnt > dns_max)
+				cnt = dns_max - dns_cnt;
+
+			memcpy(&dns[dns_cnt], odata, cnt * sizeof(*dns));
+			dns_cnt += cnt;
+		}
+	}
+
+	if (dns_cnt) {
+		k = blobmsg_open_array(&b, "dns");
+
+		for (size_t i = 0; i < dns_cnt; ++i) {
+			char *buf = blobmsg_alloc_string_buffer(&b, NULL, INET6_ADDRSTRLEN);
+			inet_ntop(AF_INET6, &dns[i], buf, INET6_ADDRSTRLEN);
+			blobmsg_add_string_buffer(&b);
+		}
+
+		blobmsg_close_array(&b, k);
+	}
+
 	// TODO: test return code
 	ubus_invoke(ubus, ubus_network_interface, "proto_update", b.head, NULL, NULL, 1000);
 }
@@ -224,17 +256,39 @@ static const struct blobmsg_policy prefix_attrs[PREFIX_ATTR_MAX] = {
 };
 
 
+
+enum {
+	IFACE_ATTR_IFNAME,
+	IFACE_ATTR_PROTO,
+	IFACE_ATTR_PREFIX,
+	IFACE_ATTR_V4ADDR,
+	IFACE_ATTR_DELEGATION,
+	IFACE_ATTR_DNS,
+	IFACE_ATTR_MAX,
+};
+
+
+static const struct blobmsg_policy iface_attrs[IFACE_ATTR_MAX] = {
+	[IFACE_ATTR_IFNAME] = { .name = "l3_device", .type = BLOBMSG_TYPE_STRING },
+	[IFACE_ATTR_PROTO] = { .name = "proto", .type = BLOBMSG_TYPE_STRING },
+	[IFACE_ATTR_PREFIX] = { .name = "ipv6-prefix", .type = BLOBMSG_TYPE_ARRAY },
+	[IFACE_ATTR_V4ADDR] = { .name = "ipv4-address", .type = BLOBMSG_TYPE_ARRAY },
+	[IFACE_ATTR_DELEGATION] = { .name = "delegation", .type = BLOBMSG_TYPE_BOOL },
+	[IFACE_ATTR_DNS] = { .name = "dns-server", .type = BLOBMSG_TYPE_ARRAY },
+};
+
+
 // Decode and analyze all delegated prefixes and commit them to iface
-static void update_delegated(struct iface *c, struct blob_attr *prefixes)
+static void update_delegated(struct iface *c, struct blob_attr *tb[IFACE_ATTR_MAX])
 {
 	iface_update_delegated(c);
 
-	if (prefixes) {
+	if (tb[IFACE_ATTR_PREFIX]) {
 		hnetd_time_t now = hnetd_time();
 		struct blob_attr *k;
 		unsigned rem;
 
-		blobmsg_for_each_attr(k, prefixes, rem) {
+		blobmsg_for_each_attr(k, tb[IFACE_ATTR_PREFIX], rem) {
 			struct blob_attr *tb[PREFIX_ATTR_MAX], *a;
 			blobmsg_parse(prefix_attrs, PREFIX_ATTR_MAX, tb,
 					blobmsg_data(k), blobmsg_data_len(k));
@@ -288,25 +342,37 @@ static void update_delegated(struct iface *c, struct blob_attr *prefixes)
 	}
 
 	iface_commit_delegated(c);
+
+
+	const size_t dns_max = 4;
+	size_t dns_cnt = 0;
+	struct {
+		uint16_t type;
+		uint16_t len;
+		struct in6_addr addr[dns_max];
+	} dns;
+
+	if (tb[IFACE_ATTR_DNS]) {
+		struct blob_attr *k;
+		unsigned rem;
+
+		blobmsg_for_each_attr(k, tb[IFACE_ATTR_DNS], rem) {
+			if (dns_cnt >= dns_max || blobmsg_type(k) != BLOBMSG_TYPE_STRING ||
+					inet_pton(AF_INET6, blobmsg_data(k), &dns.addr[dns_cnt]) < 1)
+				continue;
+
+			++dns_cnt;
+		}
+	}
+
+	if (dns_cnt) {
+		dns.type = htons(DHCPV6_OPT_DNS_SERVERS);
+		dns.len = htons(dns_cnt * sizeof(struct in6_addr));
+		iface_set_dhcpv6_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns));
+	} else {
+		iface_set_dhcpv6_received(c, NULL, 0);
+	}
 }
-
-
-enum {
-	IFACE_ATTR_IFNAME,
-	IFACE_ATTR_PROTO,
-	IFACE_ATTR_PREFIX,
-	IFACE_ATTR_V4ADDR,
-	IFACE_ATTR_DELEGATION,
-	IFACE_ATTR_MAX,
-};
-
-static const struct blobmsg_policy iface_attrs[IFACE_ATTR_MAX] = {
-	[IFACE_ATTR_IFNAME] = { .name = "l3_device", .type = BLOBMSG_TYPE_STRING },
-	[IFACE_ATTR_PROTO] = { .name = "proto", .type = BLOBMSG_TYPE_STRING },
-	[IFACE_ATTR_PREFIX] = { .name = "ipv6-prefix", .type = BLOBMSG_TYPE_ARRAY },
-	[IFACE_ATTR_V4ADDR] = { .name = "ipv4-address", .type = BLOBMSG_TYPE_ARRAY },
-	[IFACE_ATTR_DELEGATION] = { .name = "delegation", .type = BLOBMSG_TYPE_BOOL },
-};
 
 
 // Decode and analyze netifd interface status blob
@@ -333,7 +399,7 @@ static void platform_update(void *data, size_t len)
 
 		if (!strcmp(proto, "dhcpv6")) {
 			// Our nested DHCPv6 client interface
-			update_delegated(c, tb[IFACE_ATTR_PREFIX]);
+			update_delegated(c, tb);
 		} else if (!strcmp(proto, "dhcp")) {
 			// Our nested DHCP client interface
 			bool v4leased = false;
@@ -361,7 +427,7 @@ static void platform_update(void *data, size_t len)
 		if (!c && !empty)
 			c = iface_create(ifname, NULL);
 
-		update_delegated(c, tb[IFACE_ATTR_PREFIX]);
+		update_delegated(c, tb);
 
 		// Likewise, if all prefixes are gone, delete the interface
 		if (c && empty)

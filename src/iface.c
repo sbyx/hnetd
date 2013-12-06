@@ -97,6 +97,18 @@ void iface_unregister_user(struct iface_user *user)
 }
 
 
+void iface_set_dhcpv6_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len)
+{
+	struct iface *c = iface_get(ifname);
+	if (c && (c->dhcpv6_len_out != dhcpv6_len || memcmp(c->dhcpv6_data_out, dhcpv6_data, dhcpv6_len))) {
+		c->dhcpv6_data_out = realloc(c->dhcpv6_data_out, dhcpv6_len);
+		memcpy(c->dhcpv6_data_out, dhcpv6_data, dhcpv6_len);
+		c->dhcpv6_len_out = dhcpv6_len;
+		platform_set_dhcpv6_send(c, c->dhcpv6_data_out, c->dhcpv6_len_out);
+	}
+}
+
+
 // Compare if two addresses are identical
 static int compare_addrs(const void *a, const void *b, void *ptr __attribute__((unused)))
 {
@@ -189,7 +201,8 @@ static void iface_discover_border(struct iface *c)
 		return;
 
 	// Perform border-discovery (border on DHCPv4 assignment or DHCPv6-PD)
-	bool internal = !c->v4leased && avl_is_empty(&c->delegated.avl);
+	bool internal = avl_is_empty(&c->delegated.avl) &&
+			!c->v4leased && !c->dhcpv6_len_in;
 	if (c->internal != internal) {
 		c->internal = internal;
 		iface_notify_data_state(c, internal);
@@ -261,12 +274,14 @@ void iface_commit_delegated(struct iface *c)
 }
 
 
-void iface_set_dhcpv6_data(struct iface *c, const void *dhcpv6_data, size_t dhcpv6_len)
+void iface_set_dhcpv6_received(struct iface *c, const void *dhcpv6_data, size_t dhcpv6_len)
 {
 	if (c->dhcpv6_len_in != dhcpv6_len || memcmp(c->dhcpv6_data_in, dhcpv6_data, dhcpv6_len)) {
 		c->dhcpv6_data_in = realloc(c->dhcpv6_data_in, dhcpv6_len);
 		memcpy(c->dhcpv6_data_in, dhcpv6_data, dhcpv6_len);
 		c->dhcpv6_len_in = dhcpv6_len;
-		iface_notify_data_state(c, true);
+
+		if (!c->internal)
+			iface_notify_data_state(c, true);
 	}
 }

@@ -36,6 +36,8 @@ void iface_register_user(struct iface_user *user);
 // Unregister user for interface events, do NOT call this from the callback itself!
 void iface_unregister_user(struct iface_user *user);
 
+// Update DHCPv6 out data
+void iface_set_dhcpv6_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len);
 
 
 // Internal API to platform
@@ -107,5 +109,8 @@ void iface_commit_delegated(struct iface *c);
 // Set DHCPv4 leased flag and rerun border discovery
 void iface_set_v4leased(struct iface *c, bool v4leased);
 
+
+// Set DHCPv6 data received
+void iface_set_dhcpv6_received(struct iface *c, const void *dhcpv6_data, size_t dhcpv6_len);
 
 #endif
