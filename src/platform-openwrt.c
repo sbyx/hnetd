@@ -104,6 +104,13 @@ void platform_set_owner(struct iface *c,
 }
 
 
+void platform_set_dhcpv6_send(struct iface *c,
+		__unused const void *dhcpv6_data, __unused size_t len)
+{
+	platform_set_internal(c, false);
+}
+
+
 // Commit platform changes to netifd
 static void platform_commit(struct uloop_timeout *t)
 {
