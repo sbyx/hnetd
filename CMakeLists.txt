@@ -41,6 +41,11 @@ target_link_libraries(test_hcp_net ubox ubus blobmsg_json)
 add_test(hcp_net test_hcp_net)
 add_dependencies(check test_hcp_net)
 
+add_executable(test_hcp_pa ${HCP_NIO} test/test_hcp_pa.c)
+target_link_libraries(test_hcp_pa ubox ubus blobmsg_json)
+add_test(hcp_pa test_hcp_pa)
+add_dependencies(check test_hcp_pa)
+
 add_executable(test_hcp_nio src/tlv.c test/test_hcp_nio.c)
 target_link_libraries(test_hcp_nio ubox ubus blobmsg_json)
 add_test(hcp_nio test_hcp_nio)
