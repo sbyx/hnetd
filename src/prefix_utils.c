@@ -12,8 +12,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-char __prefix_tostring_buffers[PREFIX_PRINT_BUFF_N][PREFIX_MAXBUFFLEN];
-
 struct prefix ipv4_in_ipv6_prefix = {
 		.prefix = { .s6_addr = {
 				0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00,
@@ -172,22 +170,5 @@ char *prefix_ntop(char *dst, size_t dst_len,
 		return NULL;
 
 	return dst;
-}
-
-const char *prefix_ntop_s(char *dst, size_t dst_len,
-		const struct prefix *prefix,
-		bool canonical)
-{
-	return prefix_ntop(dst, dst_len, prefix, canonical)?dst:PREFIX_STRERR;
-}
-
-const char *prefix_ntop_n(const struct prefix *prefix, size_t n,
-		bool canonical)
-{
-	if(n >= PREFIX_PRINT_BUFF_N)
-		return PREFIX_STRERR;
-
-	return prefix_ntop(__prefix_tostring_buffers[n],
-			PREFIX_MAXBUFFLEN, prefix, canonical);
 }
 

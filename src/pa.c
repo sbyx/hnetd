@@ -1,12 +1,15 @@
 /* Loglevel redefinition */
 #define PA_L_LEVEL 7
 #define PA_L_PX "pa - "
+
 #ifdef PA_L_LEVEL
 #ifdef L_LEVEL
-	#undef L_LEVEL
+#undef L_LEVEL
 #endif
-	#define L_LEVEL PA_L_LEVEL
+#define L_LEVEL PA_L_LEVEL
 #endif
+
+#define L_PREFIX PA_L_PX
 
 #include "pa.h"
 
@@ -168,16 +171,16 @@ struct pa {
 };
 
 #define PA_EAP_L				 "eap '%s'@"PA_RID_L
-#define PA_EAP_LA(eap, buffid) 	PREFIX_TOSTRING(&(eap)->prefix, buffid), PA_RID_LA(&(eap)->rid)
+#define PA_EAP_LA(eap) 	PREFIX_REPR(&(eap)->prefix), PA_RID_LA(&(eap)->rid)
 
 #define PA_IF_L 	"pa_iface '%s'"
 #define PA_IF_LA(iface)	(iface)?(iface)->ifname:"NULL"
 
 #define PA_LAP_L				"lap %s%%%s"
-#define PA_LAP_LA(lap, buffid)	PREFIX_TOSTRING(&(lap)->prefix, buffid), (lap)->iface->ifname
+#define PA_LAP_LA(lap)	PREFIX_REPR(&(lap)->prefix), (lap)->iface->ifname
 
 #define PA_DP_L				"dp %s(local=%d)"
-#define PA_DP_LA(dp, buffid)	PREFIX_TOSTRING(&(dp)->prefix, buffid), (dp)->local
+#define PA_DP_LA(dp)	PREFIX_REPR(&(dp)->prefix), (dp)->local
 
 /**************************************************************/
 /*********************** Prototypes ***************************/
@@ -202,7 +205,7 @@ static int pa_avl_prefix_cmp (const void *k1, const void *k2,
 /*
 static int pa_ridcmp_debug(struct pa_rid *r1, struct pa_rid *r2) {
 	int i = memcmp((r1)->id, (r2)->id, PA_RIDLEN);
-	L_DEBUG(PA_L_PX"Comparing two rids "PA_RID_L" ? "PA_RID_L" => %d", PA_RID_LA(r1), PA_RID_LA(r2), i);
+	L_DEBUG("Comparing two rids "PA_RID_L" ? "PA_RID_L" => %d", PA_RID_LA(r1), PA_RID_LA(r2), i);
 
 	return i;
 }
@@ -213,7 +216,7 @@ static int pa_ridcmp_debug(struct pa_rid *r1, struct pa_rid *r2) {
 
 static void pa_schedule(struct pa *pa, uint32_t todo_flags)
 {
-	L_DEBUG(PA_L_PX"Scheduling prefix assignment algorithm");
+	L_DEBUG("Scheduling prefix assignment algorithm");
 	pa->todo_flags |= todo_flags;
 	if(pa->started && pa->todo_flags && !pa->scheduled) {
 		uloop_timeout_set(&pa->pa_short_timeout, PA_SCHEDULE_RUNNEXT_MS);
@@ -240,14 +243,14 @@ void pa_conf_default(struct pa_conf *conf)
 
 void pa_flood_subscribe(pa_t pa, const struct pa_flood_callbacks *cb)
 {
-	L_DEBUG(PA_L_PX"Flooding protocol just subscribed (%d,%d)",
+	L_DEBUG("Flooding protocol just subscribed (%d,%d)",
 			!!cb->updated_lap, !!cb->updated_ldp);
 	memcpy(&pa->fcb, cb, sizeof(struct pa_flood_callbacks));
 }
 
 void pa_iface_subscribe(pa_t pa, const struct pa_iface_callbacks *cb)
 {
-	L_DEBUG(PA_L_PX"Iface just subscribed (%d,%d)",
+	L_DEBUG("Iface just subscribed (%d,%d)",
 				!!cb->update_link_owner, !!cb->update_prefix);
 	memcpy(&pa->ifcb, cb, sizeof(struct pa_iface_callbacks));
 }
@@ -309,7 +312,7 @@ static struct pa_iface *pa_iface_goc(struct pa *pa, const char *ifname)
 	iface->do_dhcp = 0;
 	list_add(&iface->le, &pa->ifaces);
 
-	L_INFO(PA_L_PX"Creating new "PA_IF_L, PA_IF_LA(iface));
+	L_INFO("Creating new "PA_IF_L, PA_IF_LA(iface));
 
 	return iface;
 }
@@ -317,7 +320,7 @@ static struct pa_iface *pa_iface_goc(struct pa *pa, const char *ifname)
 /* Removes all laps from that interface */
 static void pa_iface_rmlaps(struct pa *pa, struct pa_iface *iface)
 {
-	L_DEBUG(PA_L_PX"Removing all laps from "PA_IF_L, PA_IF_LA(iface));
+	L_DEBUG("Removing all laps from "PA_IF_L, PA_IF_LA(iface));
 	struct pa_lap *lap;
 	struct pa_lap *slap;
 	list_for_each_entry_safe(lap, slap, &iface->laps, if_le)
@@ -330,13 +333,13 @@ static void pa_iface_destroy(struct pa *pa, struct pa_iface *iface)
 	struct pa_eap *eap;
 	struct pa_dp *dp;
 
-	L_INFO(PA_L_PX"Destroying "PA_IF_L, PA_IF_LA(iface));
+	L_INFO("Destroying "PA_IF_L, PA_IF_LA(iface));
 
 	/* Destroys all laps */
 	pa_iface_rmlaps(pa, iface);
 
 	if(!(list_empty(&iface->dps) && list_empty(&iface->eaps)))
-		L_WARN(PA_L_PX"Should not destroy "PA_IF_L" while it has eaps or dps", PA_IF_LA(iface));
+		L_WARN("Should not destroy "PA_IF_L" while it has eaps or dps", PA_IF_LA(iface));
 
 	/* Remove iface from all dps */
 	list_for_each_entry(dp, &iface->dps, if_le)
@@ -373,7 +376,7 @@ static void pa_iface_set_dodhcp(struct pa *pa,
 	if(iface->do_dhcp == do_dhcp)
 		return;
 
-	L_INFO(PA_L_PX"Changing "PA_IF_L" do_dhcp flag to (%d)", PA_IF_LA(iface), do_dhcp);
+	L_INFO("Changing "PA_IF_L" do_dhcp flag to (%d)", PA_IF_LA(iface), do_dhcp);
 	iface->do_dhcp = do_dhcp;
 
 	/* When iface ownership changes,
@@ -392,7 +395,7 @@ static void pa_iface_set_internal(struct pa *pa,
 	if(iface->internal != internal)
 		pa_schedule(pa, PA_TODO_ALL);
 
-	L_INFO(PA_L_PX"Changing "PA_IF_L" internal flag to (%d)", PA_IF_LA(iface), internal);
+	L_INFO("Changing "PA_IF_L" internal flag to (%d)", PA_IF_LA(iface), internal);
 	iface->internal = internal;
 
 	if(!iface->internal)
@@ -422,7 +425,7 @@ static void pa_eap_iface_assign(struct pa *pa,
 	if(eap->iface)
 		list_add(&eap->if_le, &iface->eaps);
 
-	L_DEBUG(PA_L_PX"Assigning "PA_EAP_L" to "PA_IF_L, PA_EAP_LA(eap, 1), PA_IF_LA(iface));
+	L_DEBUG("Assigning "PA_EAP_L" to "PA_IF_L, PA_EAP_LA(eap), PA_IF_LA(iface));
 	pa_schedule(pa, PA_TODO_ALL);
 }
 
@@ -480,7 +483,7 @@ static struct pa_eap *pa_eap_create(struct pa *pa, const struct prefix *prefix,
 	if(avl_insert(&pa->eaps, &eap->avl_node))
 		goto insert;
 
-	L_INFO(PA_L_PX"Creating "PA_EAP_L, PA_EAP_LA(eap, 1));
+	L_INFO("Creating "PA_EAP_L, PA_EAP_LA(eap));
 
 	/* New eap means we rerun algo */
 	pa_schedule(pa, PA_TODO_ALL);
@@ -500,7 +503,7 @@ static void pa_eap_destroy(struct pa *pa, struct pa_eap *eap)
 	avl_delete(&pa->eaps, &eap->avl_node);
 	free(eap);
 
-	L_INFO(PA_L_PX"Destroying "PA_EAP_L, PA_EAP_LA(eap, 1));
+	L_INFO("Destroying "PA_EAP_L, PA_EAP_LA(eap));
 
 	/* Destoyed eap, we rerun algo */
 	pa_schedule(pa, PA_TODO_ALL);
@@ -575,7 +578,7 @@ static struct pa_lap *pa_lap_create(struct pa *pa, const struct prefix *prefix,
 	lap->delayed_assign_time = 0;
 	lap->delayed_flooding_time = 0;
 	lap->delayed_delete_time = 0;
-	L_INFO(PA_L_PX"Creating "PA_LAP_L, PA_LAP_LA(lap, 1));
+	L_INFO("Creating "PA_LAP_L, PA_LAP_LA(lap));
 
 	pa_schedule(pa, PA_TODO_ALL);
 
@@ -632,7 +635,7 @@ static void pa_lap_setflood(struct pa *pa, struct pa_lap *lap,
 	if(enable == lap->flooded)
 		return;
 
-	L_INFO(PA_L_PX"Setting "PA_LAP_L" flood flag to %d", PA_LAP_LA(lap, 1), enable);
+	L_INFO("Setting "PA_LAP_L" flood flag to %d", PA_LAP_LA(lap), enable);
 	lap->flooded = enable;
 
 	pa_lap_tellhcp(pa, lap);
@@ -650,7 +653,7 @@ static void pa_lap_setassign(struct pa *pa, struct pa_lap *lap,
 	if(enable == lap->assigned)
 		return;
 
-	L_INFO(PA_L_PX"Setting "PA_LAP_L" assign flag to %d", PA_LAP_LA(lap, 1), enable);
+	L_INFO("Setting "PA_LAP_L" assign flag to %d", PA_LAP_LA(lap), enable);
 	lap->assigned = enable;
 
 	pa_lap_telliface(pa, lap);
@@ -666,7 +669,7 @@ static void pa_lap_setdp(struct pa *pa, struct pa_lap *lap,
 	lap->dp = dp;
 	list_add(&lap->dp_le, &dp->laps);
 
-	L_DEBUG(PA_L_PX"Setting "PA_LAP_L" prefix to "PA_DP_L, PA_LAP_LA(lap, 1), PA_DP_LA(dp, 2));
+	L_DEBUG("Setting "PA_LAP_L" prefix to "PA_DP_L, PA_LAP_LA(lap), PA_DP_LA(dp));
 
 	if(lap->assigned)
 		pa_lap_telliface(pa, lap);
@@ -690,7 +693,7 @@ static void pa_lap_destroy(struct pa *pa, struct pa_lap *lap)
 	avl_delete(&pa->laps, &lap->avl_node);
 	free(lap);
 
-	L_INFO(PA_L_PX"Destroying "PA_LAP_L, PA_LAP_LA(lap, 1));
+	L_INFO("Destroying "PA_LAP_L, PA_LAP_LA(lap));
 	pa_schedule(pa, PA_TODO_ALL);
 }
 
@@ -709,8 +712,8 @@ static void pa_lap_setdelete_delayed(struct pa *pa, struct pa_lap *lap,
 			when > lap->delayed_delete_time)
 		return;
 
-	L_DEBUG(PA_L_PX"Delayed delete of "PA_LAP_L" in %ld ms",
-			PA_LAP_LA(lap, 1), when - now);
+	L_DEBUG("Delayed delete of "PA_LAP_L" in %ld ms",
+			PA_LAP_LA(lap), when - now);
 
 	lap->delayed_delete_time = when;
 	pa_lap_delayed_update_timeout(pa, lap, now);
@@ -730,8 +733,8 @@ static void pa_lap_setassign_delayed(struct pa *pa, struct pa_lap *lap,
 				when > lap->delayed_assign_time)
 			return;
 
-	L_DEBUG(PA_L_PX"Delayed assignment of "PA_LAP_L" in %ld ms to (%d)",
-			PA_LAP_LA(lap, 1), when - now, assign);
+	L_DEBUG("Delayed assignment of "PA_LAP_L" in %ld ms to (%d)",
+			PA_LAP_LA(lap), when - now, assign);
 
 	lap->delayed_assign_time = when;
 	lap->delayed_assign = assign;
@@ -752,8 +755,8 @@ static void pa_lap_setflooding_delayed(struct pa *pa, struct pa_lap *lap,
 					when > lap->delayed_flooding_time)
 				return;
 
-	L_DEBUG(PA_L_PX"Delayed flooding of "PA_LAP_L" in %ld ms to (%d)",
-				PA_LAP_LA(lap, 1), when - now, flood);
+	L_DEBUG("Delayed flooding of "PA_LAP_L" in %ld ms to (%d)",
+				PA_LAP_LA(lap), when - now, flood);
 
 	lap->delayed_flooding_time = when;
 	lap->delayed_flooding = flood;
@@ -787,7 +790,7 @@ struct pa_dp *pa_dp_get(struct pa *pa, const struct prefix *p,
 		const struct pa_rid *rid)
 {
 	struct pa_dp *dp;
-	L_DEBUG(PA_L_PX"Looking for dp with prefix %s", PREFIX_TOSTRING(p, 1));
+	L_DEBUG("Looking for dp with prefix %s", PREFIX_REPR(p));
 	list_for_each_entry(dp, &pa->dps, le) {
 		if((!prefix_cmp(p, &dp->prefix)) &&
 				((dp->local && !rid)||(!dp->local && rid && !PA_RIDCMP(&dp->rid, rid))))
@@ -811,7 +814,7 @@ static int pa_dp_iface_assign(struct pa *pa,
 	if(dp->iface)
 		list_add(&dp->if_le, &iface->dps);
 
-	L_DEBUG(PA_L_PX"Assigning "PA_DP_L" to "PA_IF_L, PA_DP_LA(dp, 1), PA_IF_LA(iface));
+	L_DEBUG("Assigning "PA_DP_L" to "PA_IF_L, PA_DP_LA(dp), PA_IF_LA(iface));
 
 	pa_schedule(pa, PA_TODO_ALL);
 
@@ -848,8 +851,8 @@ static int pa_dp_excluded_set(struct pa *pa,
 	if(excluded && dp->excluded_valid && !prefix_cmp(excluded, &dp->prefix))
 		return 0;
 
-	L_DEBUG(PA_L_PX"Set "PA_DP_L" excluded prefix to %s", PA_DP_LA(dp, 1),
-			(excluded)?PREFIX_TOSTRING(excluded, 2):"NULL");
+	L_DEBUG("Set "PA_DP_L" excluded prefix to %s", PA_DP_LA(dp),
+			(excluded)?PREFIX_REPR(excluded):"NULL");
 
 	dp->excluded_valid = !!excluded;
 	if(excluded)
@@ -889,15 +892,15 @@ static int pa_dp_dhcpv6_set(struct pa *pa,
 			!memcmp(dp->dhcpv6_data, dhcpv6_data, dhcpv6_len))
 		return 0;
 
-	L_DEBUG(PA_L_PX"Set "PA_DP_L" dhcpv6 data (length %d)",
-			PA_DP_LA(dp, 1), (int) dhcpv6_len);
+	L_DEBUG("Set "PA_DP_L" dhcpv6 data (length %d)",
+			PA_DP_LA(dp), (int) dhcpv6_len);
 
 	if(dp->dhcpv6_data)
 		free(dp->dhcpv6_data);
 
 	if(dhcpv6_len) {
 		if(!(dp->dhcpv6_data = malloc(dhcpv6_len))) {
-			L_WARN(PA_L_PX"Malloc failed for "PA_DP_L" dhcpv6 data assign", PA_DP_LA(dp, 1));
+			L_WARN("Malloc failed for "PA_DP_L" dhcpv6 data assign", PA_DP_LA(dp));
 		} else {
 			memcpy(dp->dhcpv6_data, dhcpv6_data, dhcpv6_len);
 			dp->dhcpv6_len = dhcpv6_len;
@@ -921,8 +924,8 @@ static int pa_dp_times_set(struct pa *pa, struct pa_dp *dp,
 	dp->valid_until = valid_until;
 	dp->preferred_until = preferred_until;
 
-	L_DEBUG(PA_L_PX"Updating dp "PA_DP_L" with times (%ld, %ld)",
-			PA_DP_LA(dp, 1), valid_until, preferred_until);
+	L_DEBUG("Updating dp "PA_DP_L" with times (%ld, %ld)",
+			PA_DP_LA(dp), valid_until, preferred_until);
 
 	pa_schedule(pa, PA_TODO_ALL);
 
@@ -967,7 +970,7 @@ static struct pa_dp *pa_dp_create(struct pa *pa,
 
 	list_add(&dp->le, &pa->dps); /* Adding dp */
 
-	L_DEBUG(PA_L_PX"Creating "PA_DP_L, PA_DP_LA(dp, 1));
+	L_DEBUG("Creating "PA_DP_L, PA_DP_LA(dp));
 
 	/* Rerun algo. when new dp */
 	pa_schedule(pa, PA_TODO_ALL);
@@ -992,7 +995,7 @@ static void pa_dp_destroy(struct pa *pa, struct pa_dp *dp)
 	struct pa_dp *s_dp;
 	bool found;
 
-	L_DEBUG(PA_L_PX"Destroying "PA_DP_L, PA_DP_LA(dp, 1));
+	L_DEBUG("Destroying "PA_DP_L, PA_DP_LA(dp));
 
 	/* Destoy all laps attached to that dp.
 	 * If we can't reattach the lap to another dp (temporarly) */
@@ -1005,7 +1008,7 @@ static void pa_dp_destroy(struct pa *pa, struct pa_dp *dp)
 				break;
 			}
 		}
-		L_DEBUG(PA_L_PX"Considering "PA_LAP_L" adoption by another dp (%d)", PA_LAP_LA(lap, 1), found);
+		L_DEBUG("Considering "PA_LAP_L" adoption by another dp (%d)", PA_LAP_LA(lap), found);
 		if(found) {
 			pa_lap_setdp(pa, lap, s_dp);
 		} else {
@@ -1103,7 +1106,7 @@ static int pa_get_newprefix_random(struct pa *pa, struct pa_iface *iface,
 	} else if (dp->prefix.plen == 104) { //IPv4
 		plen = 120;
 	} else {
-		L_WARN(PA_L_PX"Delegated prefix length (%d) not supported", dp->prefix.plen);
+		L_WARN("Delegated prefix length (%d) not supported", dp->prefix.plen);
 		return -1;
 	}
 
@@ -1112,7 +1115,7 @@ static int pa_get_newprefix_random(struct pa *pa, struct pa_iface *iface,
 		if( !(dp->excluded_valid && prefix_contains(&dp->excluded, new_prefix)) &&
 				!pa_prefix_checkcollision(pa, new_prefix, NULL, NULL, true, true))
 			return 0;
-		L_DEBUG(PA_L_PX" Random prefix %s can't be used", PREFIX_TOSTRING(new_prefix, 1));
+		L_DEBUG(" Random prefix %s can't be used", PREFIX_REPR(new_prefix));
 	}
 
 	return -1;
@@ -1132,7 +1135,7 @@ void pa_do(struct pa *pa)
 
 	now = hnetd_time();
 
-	L_DEBUG(PA_L_PX"Running prefix assignment algorithm");
+	L_DEBUG("Running prefix assignment algorithm");
 
 	/* This is at the beginning because any modification
 	 * to laps should make the algorithm run again */
@@ -1178,8 +1181,8 @@ void pa_do(struct pa *pa)
 
 		/* Go through all dps */
 		list_for_each_entry(dp, &pa->dps, le) {
-			L_DEBUG(PA_L_PX"Considering "PA_DP_L" on "PA_IF_L,
-					PA_DP_LA(dp, 1), PA_IF_LA(iface));
+			L_DEBUG("Considering "PA_DP_L" on "PA_IF_L,
+					PA_DP_LA(dp), PA_IF_LA(iface));
 
 			/* Check if the dp doesn't contain another smaller dp */
 			found = false;
@@ -1211,7 +1214,7 @@ void pa_do(struct pa *pa)
 				}
 			}
 
-			if(lap) { L_DEBUG(PA_L_PX""PA_LAP_L" found on "PA_IF_L, PA_LAP_LA(lap, 1), PA_IF_LA(iface)); }
+			if(lap) { L_DEBUG(PA_LAP_L" found on "PA_IF_L, PA_LAP_LA(lap), PA_IF_LA(iface)); }
 
 			/* See whether someone else made an assignment
 			 * on that same link. Keep the highest rid. */
@@ -1223,7 +1226,7 @@ void pa_do(struct pa *pa)
 				}
 			}
 
-			if(eap) { L_DEBUG(PA_L_PX""PA_EAP_L" found on "PA_IF_L, PA_EAP_LA(eap, 1), PA_IF_LA(iface)); }
+			if(eap) { L_DEBUG(PA_EAP_L" found on "PA_IF_L, PA_EAP_LA(eap), PA_IF_LA(iface)); }
 
 			/* See whether we have highest router id on that link */
 			link_highest_rid = true;
@@ -1273,7 +1276,7 @@ void pa_do(struct pa *pa)
 					 * assignments. */
 					if(!pa_prefix_checkcollision(pa, &eap->prefix, iface, &eap->rid,
 							true, true)) {
-						L_DEBUG(PA_L_PX"Choosing "PA_EAP_L" from neighbor ", PA_EAP_LA(eap, 1));
+						L_DEBUG("Choosing "PA_EAP_L" from neighbor ", PA_EAP_LA(eap));
 						prefix = &eap->prefix;
 #if PA_ALGO == PA_ALGO_ARKKO
 						own = false; /* The other guy owns it */
@@ -1297,12 +1300,12 @@ void pa_do(struct pa *pa)
 					/* Let's choose a prefix for our own assignment */
 					if(!pa_get_newprefix_storage(pa, iface, dp, &new_prefix)) {
 						/* Got one from stable storage */
-						L_DEBUG(PA_L_PX"Got prefix from storage %s", PREFIX_TOSTRING(&new_prefix, 1));
+						L_DEBUG("Got prefix from storage %s", PREFIX_REPR(&new_prefix));
 						prefix = &new_prefix;
 						own = true;
 					} else if(!pa_get_newprefix_random(pa, iface, dp, &new_prefix)) {
 						/* Got one from random choice */
-						L_DEBUG(PA_L_PX"Created random prefix %s", PREFIX_TOSTRING(&new_prefix, 1));
+						L_DEBUG("Created random prefix %s", PREFIX_REPR(&new_prefix));
 						prefix = &new_prefix;
 						own = true;
 					}
@@ -1313,7 +1316,7 @@ void pa_do(struct pa *pa)
 					lap = pa_lap_create(pa, prefix, iface, dp);
 					lap->own = own; /* Important to know whether we are owner. */
 				} else if (link_highest_rid && !wait_for_neigh) {
-					L_WARN(PA_L_PX"Could not generate a prefix for interface %s", iface->ifname);
+					L_WARN("Could not generate a prefix for interface %s", iface->ifname);
 				}
 			}
 
@@ -1395,7 +1398,7 @@ void pa_set_rid(pa_t pa, const struct pa_rid *rid)
 	if(!PA_RIDCMP(&pa->rid, rid))
 		return;
 
-	L_NOTICE(PA_L_PX"Setting router id to "PA_RID_L, PA_RID_LA(rid));
+	L_NOTICE("Setting router id to "PA_RID_L, PA_RID_LA(rid));
 	memcpy(&pa->rid, rid, sizeof(struct pa_rid));
 	pa_schedule(pa, PA_TODO_ALL);
 }
@@ -1519,7 +1522,7 @@ pa_t pa_create(const struct pa_conf *conf)
 		return NULL;
 	}
 
-	L_NOTICE(PA_L_PX"New pa structure created");
+	L_NOTICE("New pa structure created");
 	/* Don't schedule PA here because no iface or dp yet... */
 
 	return pa;
@@ -1538,7 +1541,7 @@ int pa_start(pa_t pa)
 	if(pa->conf.iface_registration)
 		pa->conf.iface_registration(&pa->ifu);
 
-	L_NOTICE(PA_L_PX"Pa structure started");
+	L_NOTICE("Pa structure started");
 	return 0;
 }
 
@@ -1571,7 +1574,7 @@ void pa_destroy(pa_t pa)
 		pa_eap_destroy(pa, eap);
 	}
 
-	L_NOTICE(PA_L_PX"Pa structure destroyed");
+	L_NOTICE("Pa structure destroyed");
 	free(pa);
 }
 

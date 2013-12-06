@@ -82,21 +82,6 @@ void prefix_print_nocan_t(void)
 	ret = prefix_ntop(buff, 43,
 			&p_allones_128, false);
 	sput_fail_if(ret, "Buffer too short (2)");
-
-	ret = prefix_ntop_s(buff, 5, &p_allones_128, false);
-	sput_fail_if(strcmp(ret, PREFIX_STRERR), "Should return error string");
-
-	ret = prefix_ntop_s(buff, PREFIX_MAXBUFFLEN,
-				&p_allones_128, false);
-	sput_fail_if(strcmp(ret, p_allones_128_s), "Print all_ones/128");
-
-	ret = prefix_ntop_s(buff, PREFIX_MAXBUFFLEN,
-			&p1, false);
-	sput_fail_if(strcmp(ret, p1_s), "Print p1");
-
-	ret = prefix_ntop_s(buff, PREFIX_MAXBUFFLEN,
-			&px, false);
-	sput_fail_if(strcmp(ret, px_s), "Print px");
 }
 
 void prefix_equal_t(void)
@@ -134,6 +119,19 @@ void prefix_print_can_t(void)
 
 	ret = prefix_ntop(buff, PREFIX_MAXBUFFLEN, &p_allones_67, false);
 	sput_fail_if(strcmp(ret, p_allones_67_s), "Non canonical prefix print");
+
+
+	ret = prefix_ntop(buff, PREFIX_MAXBUFFLEN,
+				&p_allones_128, false);
+	sput_fail_if(strcmp(ret, p_allones_128_s), "Print all_ones/128");
+
+	ret = prefix_ntop(buff, PREFIX_MAXBUFFLEN,
+			&p1, false);
+	sput_fail_if(strcmp(ret, p1_s), "Print p1");
+
+	ret = prefix_ntop(buff, PREFIX_MAXBUFFLEN,
+			&px, false);
+	sput_fail_if(strcmp(ret, px_s), "Print px");
 }
 
 void prefix_contains_t(void)

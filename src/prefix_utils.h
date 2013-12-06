@@ -61,15 +61,8 @@ int prefix_random(const struct prefix *p, struct prefix *dst,
  * src and dst can be the same pointer. */
 void prefix_canonical(struct prefix *dst, const struct prefix *src);
 
-
-/* String returned in some cases */
-#define PREFIX_STRERR "*prefix_print_error*"
 /* Maximum needed space to print a prefix */
-#define PREFIX_MAXBUFFLEN INET6_ADDRSTRLEN + 4
-/* Number of available string buffer */
-#define PREFIX_PRINT_BUFF_N 4
-
-extern char __prefix_tostring_buffers[PREFIX_PRINT_BUFF_N][PREFIX_MAXBUFFLEN];
+#define PREFIX_MAXBUFFLEN (INET6_ADDRSTRLEN + 4)
 
 /* Writes the prefix into the specified buffer of length dst_len.
  * Returns dst upon success and NULL if buffer size is too small.
@@ -79,20 +72,14 @@ char *prefix_ntop(char *dst, size_t dst_len,
 		const struct prefix *prefix,
 		bool canonical);
 
-/* This function behaves like prefix_ntop but the string
- * PREFIX_STRERR is returned if the buffer size it too small. */
-const char *prefix_ntop_s(char *dst, size_t dst_len,
-		const struct prefix *prefix,
-		bool canonical);
+/* This is provided as an option, to have prefix_ntop with
+ * heap-allocated destination buffer (if we run out of heap, we have
+ * lot bigger problems too so little need to worry here). */
+#define PREFIX_NTOP(p, canonical)  \
+	prefix_ntop(alloca(PREFIX_MAXBUFFLEN), PREFIX_MAXBUFFLEN, p, canonical)
 
-/* This function behaves like prefix_ntop but uses one of the
- * pre-allocated buffers. Returns PREFIX_STRERR if and only if
- * n is >= PREFIX_PRINT_BUFF_N */
-const char *prefix_ntop_n(const struct prefix *prefix,
-		size_t buff_id,
-		bool canonical);
-
-#define PREFIX_TOSTRING(prefix, buff_number) \
-	prefix_ntop_n(prefix, buff_number, true)
+/* Convenience variant of PREFIX_NTOP, which just chooses to
+ * canonicalize the prefix. */
+#define PREFIX_REPR(p) PREFIX_NTOP(p, true)
 
 #endif
