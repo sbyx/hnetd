@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Fri Dec  6 19:02:44 2013 mstenber
- * Edit time:     2 min
+ * Last modified: Fri Dec  6 19:20:11 2013 mstenber
+ * Edit time:     9 min
  *
  */
 
@@ -97,14 +97,12 @@ void net_sim_init(net_sim s)
 bool net_sim_is_converged(net_sim s)
 {
   net_node n, n2;
-  struct list_head *p, *p2;
   bool first = true;
   hcp_hash h = NULL;
   hcp_node hn;
 
-  list_for_each(p, &s->nodes)
+  list_for_each_entry(n, &s->nodes, h)
     {
-      n = container_of(p, net_node_s, h);
       if (n->n.network_hash_dirty)
         return false;
       if (first)
@@ -121,12 +119,10 @@ bool net_sim_is_converged(net_sim s)
           return false;
         }
     }
-  list_for_each(p, &s->nodes)
+  list_for_each_entry(n, &s->nodes, h)
     {
-      n = container_of(p, net_node_s, h);
-      list_for_each(p2, &s->nodes)
+      list_for_each_entry(n2, &s->nodes, h)
         {
-          n2 = container_of(p2, net_node_s, h);
           /* Make sure that the information about other node _is_ valid */
           hn = hcp_find_node_by_hash(&n->n,
                                      &n2->n.own_node->node_identifier_hash,
@@ -151,12 +147,10 @@ bool net_sim_is_converged(net_sim s)
 hcp net_sim_find_hcp(net_sim s, const char *name)
 {
   net_node n;
-  struct list_head *p;
   bool r;
 
-  list_for_each(p, &s->nodes)
+  list_for_each_entry(n, &s->nodes, h)
     {
-      n = container_of(p, net_node_s, h);
       if (strcmp(n->name, name) == 0)
         return &n->n;
     }
@@ -219,12 +213,14 @@ void net_sim_set_connected(hcp_link l1, hcp_link l2, bool enabled)
   hcp o = l1->hcp;
   net_node node = container_of(o, net_node_s, n);
   net_sim s = node->s;
+  net_neigh n;
+
 
   L_DEBUG("connection %p -> %p %s", l1, l2, enabled ? "on" : "off");
   if (enabled)
     {
       /* Add node */
-      net_neigh n = calloc(1, sizeof(*n));
+      n = calloc(1, sizeof(*n));
 
       sput_fail_unless(n, "calloc net_neigh");
       n->src = l1;
@@ -233,13 +229,9 @@ void net_sim_set_connected(hcp_link l1, hcp_link l2, bool enabled)
     }
   else
     {
-      struct list_head *p;
-
       /* Remove node */
-      list_for_each(p, &s->neighs)
+      list_for_each_entry(n, &s->neighs, h)
         {
-          net_neigh n = container_of(p, net_neigh_s, h);
-
           if (n->src == l1 && n->dst == l2)
             {
               list_del(&n->h);
@@ -254,11 +246,11 @@ void net_sim_remove_node(net_sim s, net_node node)
 {
   struct list_head *p, *pn;
   hcp o = &node->n;
+  net_neigh n, nn;
 
   /* Remove from neighbors */
-  list_for_each_safe(p, pn, &s->neighs)
+  list_for_each_entry_safe(n, nn, &s->neighs, h)
     {
-      net_neigh n = container_of(p, net_neigh_s, h);
       if (n->src->hcp == o || n->dst->hcp == o)
         {
           list_del(&n->h);
@@ -392,6 +384,8 @@ do {                                                    \
     }                                                   \
   sput_fail_unless(!(criteria), "!criteria at end");    \
  } while(0)
+
+/************************************************* Mocked interface - hcp_io */
 
 bool hcp_io_init(hcp o)
 {
@@ -554,5 +548,26 @@ hnetd_time_t hcp_io_time(hcp o)
 
   return s->now;
 }
+
+/**************************************** (Partially mocked) interface - pa  */
+
+void pa_flood_subscribe(pa_t pa, const struct pa_flood_callbacks *cbs)
+{
+  pa->cbs = *cbs;
+  sput_fail_unless(pa->cbs.priv, "priv set");
+}
+
+void pa_set_rid(pa_t pa, const struct pa_rid *rid)
+{
+  net_node node = container_of(pa, net_node_s, pa);
+  hcp o = &node->n;
+
+  sput_fail_unless(memcmp(rid,
+                          &o->own_node->node_identifier_hash,
+                          HCP_HASH_LEN) == 0,
+                   "rid same");
+
+}
+
 
 #endif /* NET_SIM_H */

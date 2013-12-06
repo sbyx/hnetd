@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Fri Dec  6 19:05:08 2013 mstenber
+ * Last modified: Fri Dec  6 19:08:54 2013 mstenber
  * Edit time:     319 min
  *
  */
@@ -26,25 +26,6 @@
 #include "sput.h"
 
 /********************************************************* Mocked interfaces */
-
-void pa_flood_subscribe(pa_t pa, const struct pa_flood_callbacks *cbs)
-{
-  pa->cbs = *cbs;
-  sput_fail_unless(pa->cbs.priv, "priv set");
-}
-
-void pa_set_rid(pa_t pa, const struct pa_rid *rid)
-{
-  net_node node = container_of(pa, net_node_s, pa);
-  hcp o = &node->n;
-
-  sput_fail_unless(memcmp(rid,
-                          &o->own_node->node_identifier_hash,
-                          HCP_HASH_LEN) == 0,
-                   "rid same");
-
-}
-
 
 int pa_update_eap(pa_t pa, const struct prefix *prefix,
                   const struct pa_rid *rid,
