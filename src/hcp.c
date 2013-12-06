@@ -7,7 +7,7 @@
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
  * Last_neighast modified: Thu Dec  5 10:34:22 2013 mstenber
- * Edit time:     359 min
+ * Edit time:     361 min
  *
  */
 
@@ -231,6 +231,7 @@ bool hcp_init(hcp o, const void *node_identifier, int len)
     return false;
   o->own_node = n;
   o->tlvs_dirty = true; /* by default, they are, even if no neighbors yet. */
+  o->first_free_iid = 1;
   return true;
 }
 

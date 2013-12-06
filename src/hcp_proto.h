@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Thu Dec  5 09:01:39 2013 mstenber
- * Edit time:     22 min
+ * Last modified: Fri Dec  6 21:07:06 2013 mstenber
+ * Edit time:     26 min
  *
  */
 
@@ -32,6 +32,8 @@
 
 /* Don't do node pruning more often than this. */
 #define HCP_MINIMUM_PRUNE_INTERVAL (1*HNETD_TIME_PER_SECOND)
+
+/* 0 = reserved link id. note it somewhere. */
 
 /******************************************************************* TLV T's */
 
@@ -97,7 +99,9 @@ typedef struct __packed {
 
 /* HCP_T_DELEGATED_PREFIX */
 typedef struct __packed {
-  uint32_t link_id;
+  /* uint32_t link_id; I don't think this is reasonable; by
+   * definition, the links we get delegated things should be OUTSIDE
+   * this protocol or something weird is going on. */
   uint32_t ms_valid_at_origination;
   uint32_t ms_preferred_at_origination;
   uint8_t prefix_length_bits;
