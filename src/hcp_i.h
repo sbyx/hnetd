@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Fri Dec  6 20:44:04 2013 mstenber
- * Edit time:     111 min
+ * Last modified: Fri Dec  6 22:13:01 2013 mstenber
+ * Edit time:     112 min
  *
  */
 
@@ -269,5 +269,8 @@ static inline hnetd_time_t hcp_time(hcp o)
 
 #define hcp_node_for_each_tlv_i(n, a, i) \
   tlv_for_each_attr(a, (n)->tlv_container, i)
+
+#define ROUND_BITS_TO_BYTES(b) (((b) + 7) / 8)
+#define ROUND_BYTES_TO_4BYTES(b) ((((b) + 3) / 4) * 4)
 
 #endif /* HCP_I_H */

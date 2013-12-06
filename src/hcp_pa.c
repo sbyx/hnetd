@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Fri Dec  6 19:51:26 2013 mstenber
- * Edit time:     126 min
+ * Last modified: Fri Dec  6 22:16:55 2013 mstenber
+ * Edit time:     164 min
  *
  */
 
@@ -160,7 +160,7 @@ static void _update_a_tlv(hcp_glue g, hcp_node n,
   memset(&p, 0, sizeof(p));
   ah = tlv_data(tlv);
   p.plen = ah->prefix_length_bits;
-  plen = (p.plen + 7) / 8;
+  plen = ROUND_BITS_TO_BYTES(p.plen);
   if (tlv_len(tlv) < (sizeof(*ah) + plen))
     return;
   memcpy(&p, tlv_data(tlv) + sizeof(*ah), plen);
@@ -187,7 +187,7 @@ static void _update_d_tlv(hcp_glue g, hcp_node n,
   memset(&p, 0, sizeof(p));
   dh = tlv_data(tlv);
   p.plen = dh->prefix_length_bits;
-  plen = (p.plen + 7) / 8;
+  plen = ROUND_BITS_TO_BYTES(p.plen);
   if (tlv_len(tlv) < (sizeof(*dh) + plen))
     return;
   memcpy(&p, tlv_data(tlv) + sizeof(*dh), plen);
@@ -202,6 +202,38 @@ static void _update_d_tlv(hcp_glue g, hcp_node n,
       preferred = n->origination_time + be32_to_cpu(dh->ms_preferred_at_origination);
     }
   /* XXX - handle dhcpv6 data */
+  unsigned int flen = sizeof(hcp_t_delegated_prefix_header_s) + plen;
+  if (tlv_len(tlv) > flen)
+    {
+      struct tlv_attr *stlv;
+      int left;
+      void *start;
+
+      /* Account for prefix padding */
+      flen = ROUND_BYTES_TO_4BYTES(flen);
+
+      start = tlv_data(tlv) + flen;
+      left = tlv_len(tlv) - flen;
+      L_DEBUG("considering what is at offset %d->%d: %s",
+              sizeof(hcp_t_delegated_prefix_header_s) + plen,
+              flen,
+              HEX_REPR(start, left));
+      /* Now, flen is actually padded length of stuff, _before_ DHCPv6
+       * options. */
+      tlv_for_each_in_buf(stlv, start, left)
+        {
+          if (tlv_id(stlv) == HCP_T_DHCPV6_OPTIONS)
+            {
+              dhcpv6_data = tlv_data(stlv);
+              dhcpv6_len = tlv_len(stlv);
+            }
+          else
+            {
+              L_NOTICE("unknown delegated prefix option seen:%d", tlv_id(stlv));
+            }
+        }
+    }
+
   (void)pa_update_edp(g->pa,
                       &p,
                       (struct pa_rid *)&n->node_identifier_hash,
@@ -216,6 +248,11 @@ static void _tlv_cb(hcp_subscriber s,
                     hcp_node n, struct tlv_attr *tlv, bool add)
 {
   hcp_glue g = container_of(s, hcp_glue_s, subscriber);
+
+  L_NOTICE("_tlv_cb %s %s %s",
+           add ? "add" : "remove",
+           HCP_NODE_REPR(n),
+           TLV_REPR(tlv));
 
   /* Ignore our own TLV changes (otherwise bad things might happen) */
   if (hcp_node_is_self(n))
@@ -243,9 +280,7 @@ static void _republish_cb(hcp_subscriber s)
   hcp_dp dp;
   int len, flen, plen;
   struct tlv_attr *t, *st;
-  struct tlv_attr tmp;
   hcp_t_delegated_prefix_header dph;
-  hcp_link l;
   hcp_node n;
   struct tlv_attr *a;
   int i;
@@ -271,27 +306,27 @@ static void _republish_cb(hcp_subscriber s)
       if (dp->dp_tlv)
         hcp_remove_tlv(o, dp->dp_tlv);
 
-
       /* Determine how much space we need for TLV. */
-      plen = (dp->prefix.plen + 7) / 8;
+      plen = ROUND_BITS_TO_BYTES(dp->prefix.plen);
       flen = TLV_SIZE + sizeof(hcp_t_delegated_prefix_header_s) + plen;
-      tlv_init(&tmp, 0, flen);
-      len = tlv_pad_len(&tmp);
+      len = ROUND_BYTES_TO_4BYTES(flen);
       if (dp->dhcpv6_len)
-        len += TLV_SIZE + (dp->dhcpv6_len + 3) / 4;
+        len += TLV_SIZE + ROUND_BYTES_TO_4BYTES(dp->dhcpv6_len);
       t = calloc(1, len);
       if (t)
         {
           tlv_init(t, HCP_T_DELEGATED_PREFIX, flen);
           dph = tlv_data(t);
-          /* Copy content to the tlv */
-          l = hcp_find_link_by_name(o, dp->ifname, false);
-          if (l)
-            dph->link_id = cpu_to_be32(l->iid);
-          dph->ms_valid_at_origination =
-            cpu_to_be32(dp->valid_until >= now ? dp->valid_until - now : 0);
-          dph->ms_preferred_at_origination =
-            cpu_to_be32(dp->preferred_until >= now ? dp->preferred_until - now : 0);
+          if (dp->valid_until >= now)
+            dph->ms_valid_at_origination =
+              cpu_to_be32(dp->valid_until - now);
+          else
+            dph->ms_valid_at_origination = 0;
+          if (dp->preferred_until >= now)
+            dph->ms_preferred_at_origination =
+              cpu_to_be32(dp->preferred_until - now);
+          else
+            dph->ms_preferred_at_origination = 0;
           dph->prefix_length_bits = dp->prefix.plen;
           dph++;
           memcpy(dph, &dp->prefix, plen);
@@ -326,7 +361,7 @@ static void _updated_lap(const struct prefix *prefix, const char *ifname,
   int mlen = TLV_SIZE + sizeof(hcp_t_assigned_prefix_header_s) + 16 + 3;
   unsigned char buf[mlen];
   struct tlv_attr *a = (struct tlv_attr *) buf;
-  int plen = (prefix->plen + 7) / 8;
+  int plen = ROUND_BITS_TO_BYTES(prefix->plen);
   int flen = TLV_SIZE + sizeof(hcp_t_delegated_prefix_header_s) + plen;
   hcp_t_assigned_prefix_header ah;
   hcp_link l;
@@ -359,8 +394,7 @@ static void _updated_ldp(const struct prefix *prefix,
 {
   hcp_glue g = priv;
   hcp o = g->hcp;
-  hnetd_time_t now = hcp_time(g->hcp);
-  bool add = valid_until > now;
+  bool add = valid_until != 0;
   hcp_dp dp = _find_or_create_dp(g, prefix, add);
 
   /* Nothing to update, and it was delete. Do nothing. */

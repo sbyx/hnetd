@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu Dec  5 10:51:33 2013 mstenber
- * Edit time:     191 min
+ * Last modified: Fri Dec  6 21:30:04 2013 mstenber
+ * Edit time:     198 min
  *
  */
 
@@ -21,8 +21,6 @@
 
 /***************************************************** Low-level TLV pushing */
 
-#define MS_PER_SECOND 1000
-
 static bool _push_node_state_tlv(struct tlv_buf *tb, hcp_node n)
 {
   hnetd_time_t now = hcp_time(n->hcp);
@@ -34,8 +32,7 @@ static bool _push_node_state_tlv(struct tlv_buf *tb, hcp_node n)
   s = tlv_data(a);
   s->node_identifier_hash = n->node_identifier_hash;
   s->update_number = cpu_to_be32(n->update_number);
-  s->ms_since_origination =
-    cpu_to_be32((now - n->origination_time) * MS_PER_SECOND / HNETD_TIME_PER_SECOND);
+  s->ms_since_origination = cpu_to_be32(now - n->origination_time);
   return true;
 }
 
@@ -486,8 +483,11 @@ handle_message(hcp_link l,
       n->update_number = new_update_number;
       n->node_data_hash_dirty = true;
       o->network_hash_dirty = true;
+      n->origination_time = hcp_time(o) - be32_to_cpu(ns->ms_since_origination);
+      L_DEBUG("received origination time:%lld (-%d)",
+              n->origination_time,
+              (int)be32_to_cpu(ns->ms_since_origination));
       hcp_node_set_tlvs(n, tb.head);
-      n->origination_time = hcp_time(o) - be32_to_cpu(ns->ms_since_origination) * HNETD_TIME_PER_SECOND / MS_PER_SECOND;
       hcp_schedule(o);
     }
   else

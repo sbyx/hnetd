@@ -7,7 +7,7 @@
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
  * Last_neighast modified: Thu Dec  5 10:34:22 2013 mstenber
- * Edit time:     361 min
+ * Edit time:     364 min
  *
  */
 
@@ -443,6 +443,7 @@ void hcp_self_flush(hcp_node n)
   vlist_for_each_element(&o->tlvs, t, in_tlvs)
     if (!tlv_put_raw(&tb, &t->tlv, tlv_pad_len(&t->tlv)))
       {
+        L_ERR("hcp_self_flush: tlv_put_raw failed?!?");
         tlv_buf_free(&tb);
         return;
       }
@@ -458,14 +459,15 @@ void hcp_self_flush(hcp_node n)
   /* Replace old state with new _if_ it's really new. */
   if (!hcp_node_set_tlvs(n, tb.head))
     {
-      L_DEBUG("state did not change -> nothing to flush");
+      L_DEBUG("hcp_self_flush: state did not change -> nothing to flush");
       return;
     }
   n->update_number++;
   n->origination_time = hcp_time(o);
   o->network_hash_dirty = true;
   hcp_schedule(o);
-  L_DEBUG("hcp_self_flush %p -> update_number = %d", n, n->update_number);
+  L_DEBUG("hcp_self_flush: %p -> update_number = %d @ %lld",
+          n, n->update_number, n->origination_time);
 }
 
 struct tlv_attr *hcp_node_get_tlvs(hcp_node n)

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Fri Dec  6 21:12:32 2013 mstenber
- * Edit time:     16 min
+ * Last modified: Fri Dec  6 21:23:32 2013 mstenber
+ * Edit time:     19 min
  *
  */
 
@@ -97,7 +97,8 @@ void net_sim_init(net_sim s)
   INIT_LIST_HEAD(&s->neighs);
   INIT_LIST_HEAD(&s->messages);
   /* 64 bits -> have to enjoy it.. */
-  s->start = s->now = 12345678901234;
+  /* s->start = s->now = 12345678901234; */
+  s->start = s->now = 10000000000000; /* easier to see deltas in abs. values */
 }
 
 bool net_sim_is_converged(net_sim s)
@@ -484,7 +485,8 @@ void _sendto(net_sim s, void *buf, size_t len, hcp_link sl, hcp_link dl,
 {
 #if L_LEVEL >= 7
   hcp o = dl->hcp;
-  net_node node = container_of(o, net_node_s, n);
+  net_node node1 = container_of(sl->hcp, net_node_s, n);
+  net_node node2 = container_of(dl->hcp, net_node_s, n);
   bool is_multicast = memcmp(dst, &o->multicast_address, sizeof(*dst)) == 0;
 #endif /* L_LEVEL >= 7 */
   net_msg m = calloc(1, sizeof(*m));
@@ -501,7 +503,7 @@ void _sendto(net_sim s, void *buf, size_t len, hcp_link sl, hcp_link dl,
   m->readable_at = wt;
   list_add(&m->h, &s->messages);
   L_DEBUG("sendto: %s/%s -> %s/%s (%d bytes %s)",
-          node->name, l->ifname, node2->name, n->dst->ifname, (int)len,
+          node1->name, sl->ifname, node2->name, dl->ifname, (int)len,
           is_multicast ? "multicast" : "unicast");
 }
 

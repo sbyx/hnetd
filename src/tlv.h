@@ -252,6 +252,11 @@ static inline const char *hex_repr(char *buf, const void *data, int len)
 {
   char *r = buf;
 
+  if (!len)
+    {
+      *r = 0;
+      return r;
+    }
   while (len--)
     {
       sprintf(buf, "%02X", (int) *((unsigned char *)data));
