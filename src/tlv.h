@@ -248,14 +248,31 @@ tlv_put_u64(struct tlv_buf *buf, int id, uint64_t val)
 #define tlv_for_each_attr(pos, attr, x) \
   x = attr ? tlv_len(attr) : 0; tlv_for_each_in_buf(pos, tlv_data(attr), x)
 
+static inline const char *hex_repr(char *buf, const void *data, int len)
+{
+  char *r = buf;
+
+  while (len--)
+    {
+      sprintf(buf, "%02X", (int) *((unsigned char *)data));
+      buf += 2;
+      data++;
+    }
+  return r;
+}
+
+#define HEX_REPR(buf, len) hex_repr(alloca((len) * 2 + 1), buf, len)
 
 static inline const char *
 tlv_repr(struct tlv_attr *a, char *buf, int buf_len)
 {
-  snprintf(buf, buf_len, "<TLV id=%d, len=%d>", tlv_id(a), tlv_len(a));
+  snprintf(buf, buf_len, "<TLV id=%d,len=%d: %s>",
+           tlv_id(a), tlv_len(a),
+           HEX_REPR(tlv_data(a), tlv_len(a)));
   return buf;
 }
 
-#define TLV_REPR(a) tlv_repr(a, alloca(128), 128)
+#define TLV_REPR_LEN(a) (32 + 2 * tlv_len(a))
+#define TLV_REPR(a) tlv_repr(a, alloca(TLV_REPR_LEN(a)), TLV_REPR_LEN(a))
 
 #endif

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Dec  5 12:11:43 2013 mstenber
- * Edit time:     110 min
+ * Last modified: Fri Dec  6 20:44:04 2013 mstenber
+ * Edit time:     111 min
  *
  */
 
@@ -264,20 +264,6 @@ static inline hnetd_time_t hcp_time(hcp o)
 }
 
 #define TMIN(x,y) ((x) == 0 ? (y) : (y) == 0 ? (x) : (x) < (y) ? (x) : (y))
-
-static inline const char *hex_repr(char *buf, void *data, int len)
-{
-  char *r = buf;
-
-  while (len--)
-    {
-      sprintf(buf, "%02X", (int) *((unsigned char *)data));
-      buf += 2;
-      data++;
-    }
-  return r;
-}
-#define HEX_REPR(buf, len) hex_repr(alloca((len) * 2 + 1), buf, len)
 
 #define HCP_NODE_REPR(n) HEX_REPR(&n->node_identifier_hash, HCP_HASH_LEN)
 
