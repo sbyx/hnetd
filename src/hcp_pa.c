@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Thu Dec  5 12:15:29 2013 mstenber
+ * Last modified: Fri Dec  6 19:51:26 2013 mstenber
  * Edit time:     126 min
  *
  */
@@ -75,7 +75,7 @@ compare_dps(const void *a, const void *b, void *ptr __unused)
 {
   hcp_dp t1 = (hcp_dp) a, t2 = (hcp_dp) b;
 
-  return memcmp(&t1->prefix, &t2->prefix, sizeof(t1->prefix));
+  return prefix_cmp(&t1->prefix, &t2->prefix);
 }
 
 static void update_dp(struct vlist_tree *t,
