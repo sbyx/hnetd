@@ -3,6 +3,16 @@
  *
  */
 
+/* Loglevel redefinition */
+#define PAS_L_LEVEL 7
+#define PAS_L_PX "pa-store - "
+#ifdef PAS_L_LEVEL
+#ifdef L_LEVEL
+	#undef L_LEVEL
+#endif
+	#define L_LEVEL PAS_L_LEVEL
+#endif
+
 #include "pa_store.h"
 
 #include <libubox/list.h>
@@ -20,7 +30,6 @@
 
 #define PAS_TYPE_AP  0x00
 #define PAS_TYPE_ULA 0x01
-
 
 struct pa_store {
 	char *db_file;
@@ -98,17 +107,46 @@ static void pas_ap_promote(struct pa_store *store, struct pas_ap *ap, struct pas
 	list_add(&ap->st_le, &store->aps);
 }
 
-static int pas_ap_read(struct pa_store *store, FILE *f)
+static int pas_ifname_write(char *ifname, FILE *f)
 {
-	size_t res;
-	struct prefix p;
-	if((res = fread(&p.prefix, sizeof(struct in6_addr), 1, f)) != sizeof(struct in6_addr))
+	if(fprintf(f, "%s", ifname) <= 0 || fputc('\0', f) < 0)
 		return -1;
+	return 0;
+}
 
-	if((res = fread(&p.plen, 1, 1, f)) != 1)
-		return -1;
+static int pas_ifname_read(char *ifname, FILE *f)
+{
+	int c;
+	char *ptr = ifname;
+	char *max = ifname + IFNAMSIZ; //First not valid
+	while((c = fgetc(f))) {
+		if(c < 0 || ptr == max)
+			return -1;
 
-//TODO
+		*(ptr++) = (char) c;
+		if(!c)
+			return 0;
+	}
+
+	return strlen(ifname)?0:-1;
+}
+
+static int pas_prefix_write(struct prefix *p, FILE *f)
+{
+	L_DEBUG(PAS_L_PX"Writing prefix %s", PREFIX_TOSTRING(p, 1));
+	if(fwrite(&p->prefix, sizeof(struct in6_addr), 1, f) != 1 ||
+				fwrite(&p->plen, 1, 1, f) != 1)
+				return -1;
+		return 0;
+}
+
+static int pas_prefix_read(struct prefix *p, FILE *f)
+{
+	L_DEBUG(PAS_L_PX"Trying to read prefix");
+	if(fread(&p->prefix, sizeof(struct in6_addr), 1, f) != 1 ||
+			fread(&p->plen, 1, 1, f) != 1)
+			return -1;
+	L_DEBUG(PAS_L_PX"Read prefix %s", PREFIX_TOSTRING(p, 1));
 	return 0;
 }
 
@@ -138,6 +176,27 @@ static struct pas_iface *pas_iface_add(struct pa_store *store, const char *ifnam
 	return iface;
 }
 
+static struct pas_ap *pas_ap_add_by_ifname(struct pa_store *store,
+		const char *ifname, const struct prefix *prefix)
+{
+	struct pas_ap *ap;
+	struct pas_iface *iface;
+
+	if(!(iface = pas_iface_get(store, ifname)))
+		iface = pas_iface_add(store, ifname);
+
+	if(!iface)
+		return NULL;
+
+	if((ap = pas_ap_get(store, prefix))) {
+		pas_ap_promote(store, ap, iface);
+	} else {
+		ap = pas_ap_add(store, iface, prefix);
+	}
+
+	return ap;
+}
+
 static void pas_iface_delete(struct pas_iface *iface)
 {
 	struct pas_ap *ap, *sap;
@@ -159,46 +218,77 @@ static void pas_empty(struct pa_store *store)
 	store->ula_valid = 0;
 }
 
+static int pas_ula_load(struct pa_store *store, FILE *f)
+{
+	struct prefix p;
+	if(pas_prefix_read(&p, f))
+		return -1;
+
+	memcpy(&store->ula, &p, sizeof(struct prefix));
+	store->ula_valid = 1;
+	return 0;
+}
+
+static int pas_ula_save(struct pa_store *store, FILE *f)
+{
+	if(pas_prefix_write(&store->ula, f))
+		return -1;
+	return 0;
+}
+
+static int pas_ap_load(struct pa_store *store, FILE *f)
+{
+	struct prefix p;
+	char ifname[IFNAMSIZ];
+	if(pas_prefix_read(&p, f) ||
+			pas_ifname_read(ifname, f) ||
+			!pas_ap_add_by_ifname(store, ifname, &p))
+		return -1;
+
+	return 0;
+}
+
+static int pas_ap_save(struct pas_ap *ap, FILE *f)
+{
+	if(pas_prefix_write(&ap->prefix, f) || pas_ifname_write(ap->iface->ifname, f))
+		return -1;
+	return 0;
+}
+
 /* Loads the file.
- * returns -1 if the file cannot be written.*/
+ * returns -1 if the file cannot be written.
+ * Entries are stored from the oldest to the newest. */
 static int pas_load(struct pa_store *store)
 {
+	L_DEBUG(PAS_L_PX"Loading from file %s", store->db_file);
 
 	FILE *f;
-	struct prefix prefix;
-	char ifname[IFNAMSIZ];
 	uint8_t type;
-	size_t res;
-	int err;
+	int err = 0;
+
+	/* Test authorizations */
+
+	if(!(f = fopen(store->db_file, "r"))) {
+		return -1;
+	}
 
 	pas_empty(store);
 
-	/* Test authorizations */
-	f = fopen(store->db_file, "a+");
-	if(!f)
-		return -1;
-
-	/* Read */
-	rewind(f);
-
-	while(1) {
+	while(!err) {
 		/* Get type */
-		err = 0;
-		if((res = fread(&type, 1, 1, f)) != 1)
+		if(fread(&type, 1, 1, f) != 1)
 			break;
 
 		switch (type) {
 			case PAS_TYPE_AP:
-					if((err = pas_ap_read(store, f)))
-						break;
+				err = pas_ap_load(store, f);
 				break;
 			case PAS_TYPE_ULA:
-				/*if((err = pas_ula_read(store, f)))
-						break;*/
+				err = pas_ula_load(store, f);
 				break;
 			default:
+				L_DEBUG(PAS_L_PX"Invalid type");
 				return -2;
-				break;
 		}
 	}
 
@@ -210,7 +300,29 @@ static int pas_load(struct pa_store *store)
  * returns -1 if the file cannot be written. */
 static int pas_save(struct pa_store *store)
 {
+	L_DEBUG(PAS_L_PX"Saving into file %s", store->db_file);
+
+	FILE *f;
+	struct pas_ap *ap;
+	char type;
+	if(!(f = fopen(store->db_file, "w")))
+		return -1;
+	type = PAS_TYPE_ULA;
+
+	if(store->ula_valid &&
+			((fwrite(&type, 1, 1, f) != 1) || pas_ula_save(store, f) ))
+		goto err;
+
+	type = PAS_TYPE_AP;
+	list_for_each_entry_reverse(ap, &store->aps, st_le) {
+		if((fwrite(&type, 1, 1, f) != 1) || pas_ap_save(ap, f))
+			goto err;
+	}
+	fclose(f);
 	return 0;
+err:
+	fclose(f);
+	return -1;
 }
 
 struct pa_store *pa_store_create(const char *db_file_path) {
@@ -253,22 +365,7 @@ void pa_store_destroy(struct pa_store *store) {
 int pa_store_prefix_add(struct pa_store *store,
 		const char *ifname, const struct prefix *prefix)
 {
-	struct pas_ap *ap;
-	struct pas_iface *iface;
-
-	if(!(iface = pas_iface_get(store, ifname)))
-		iface = pas_iface_add(store, ifname);
-
-	if(!iface)
-		return -1;
-
-	if((ap = pas_ap_get(store, prefix))) {
-		pas_ap_promote(store, ap, iface);
-	} else {
-		ap = pas_ap_add(store, iface, prefix);
-	}
-
-	if(!ap)
+	if(!pas_ap_add_by_ifname(store, ifname, prefix))
 		return -1;
 
 	return pas_save(store);
@@ -297,11 +394,12 @@ const struct prefix *pa_store_prefix_get(struct pa_store *store,
 	return NULL;
 }
 
-void pa_store_ula_set(struct pa_store *store,
+int pa_store_ula_set(struct pa_store *store,
 		const struct prefix *prefix)
 {
 	memcpy(&store->ula, prefix, sizeof(struct prefix));
 	store->ula_valid = 1;
+	return pas_save(store);
 }
 
 const struct prefix *pa_store_ula_get(struct pa_store *store)
