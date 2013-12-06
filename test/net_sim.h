@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Fri Dec  6 19:20:11 2013 mstenber
- * Edit time:     9 min
+ * Last modified: Fri Dec  6 19:39:38 2013 mstenber
+ * Edit time:     12 min
  *
  */
 
@@ -32,8 +32,14 @@ struct pa {
   struct pa_flood_callbacks cbs;
 };
 
+#ifndef MAXIMUM_PROPAGATION_DELAY
 #define MAXIMUM_PROPAGATION_DELAY 100
+#endif /* !MAXIMUM_PROPAGATION_DELAY */
+#if MAXIMUM_PROPAGATION_DELAY > 0
 #define MESSAGE_PROPAGATION_DELAY (random() % MAXIMUM_PROPAGATION_DELAY + 1)
+#else
+#define MESSAGE_PROPAGATION_DELAY 1
+#endif
 
 typedef struct {
   struct list_head h;
