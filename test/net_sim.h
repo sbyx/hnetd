@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Fri Dec  6 19:39:38 2013 mstenber
- * Edit time:     12 min
+ * Last modified: Fri Dec  6 21:12:32 2013 mstenber
+ * Edit time:     16 min
  *
  */
 
@@ -316,19 +316,17 @@ void net_sim_uninit(net_sim s)
 
 hnetd_time_t net_sim_next(net_sim s)
 {
-  struct list_head *p;
   hnetd_time_t v = 0;
   net_node n;
+  net_msg m;
 
-  list_for_each(p, &s->nodes)
+  list_for_each_entry(n, &s->nodes, h)
     {
-      n = container_of(p, net_node_s, h);
       n->next_message_at = 0;
       v = TMIN(v, n->want_timeout_at);
     }
-  list_for_each(p, &s->messages)
+  list_for_each_entry(m, &s->messages, h)
     {
-      net_msg m = container_of(p, net_msg_s, h);
       hcp o = m->l->hcp;
 
       n = container_of(o, net_node_s, n);
@@ -340,27 +338,24 @@ hnetd_time_t net_sim_next(net_sim s)
 
 int net_sim_poll(net_sim s)
 {
-  struct list_head *p;
-  hnetd_time_t n = net_sim_next(s);
+  net_node n;
+  hnetd_time_t nt = net_sim_next(s);
   int i = 0;
 
-  if (n <= s->now)
+  if (nt > s->now)
+    return 0;
+  list_for_each_entry(n, &s->nodes, h)
     {
-      list_for_each(p, &s->nodes)
+      if (n->want_timeout_at && n->want_timeout_at <= s->now)
         {
-          net_node n = container_of(p, net_node_s, h);
-
-          if (n->want_timeout_at && n->want_timeout_at <= s->now)
-            {
-              n->want_timeout_at = 0;
-              hcp_run(&n->n);
-              i++;
-            }
-          if (n->next_message_at && n->next_message_at <= s->now)
-            {
-              hcp_poll(&n->n);
-              i++;
-            }
+          n->want_timeout_at = 0;
+          hcp_run(&n->n);
+          i++;
+        }
+      if (n->next_message_at && n->next_message_at <= s->now)
+        {
+          hcp_poll(&n->n);
+          i++;
         }
     }
   return i;
@@ -428,13 +423,12 @@ ssize_t hcp_io_recvfrom(hcp o, void *buf, size_t len,
                         struct in6_addr *src,
                         struct in6_addr *dst)
 {
-  struct list_head *p;
   net_node node = container_of(o, net_node_s, n);
   net_sim s = node->s;
+  net_msg m;
 
-  list_for_each(p, &s->messages)
+  list_for_each_entry(m, &s->messages, h)
     {
-      net_msg m = container_of(p, net_msg_s, h);
       if (m->l->hcp == o && m->readable_at <= s->now)
         {
           int s = m->len > len ? len : m->len;
@@ -443,7 +437,7 @@ ssize_t hcp_io_recvfrom(hcp o, void *buf, size_t len,
           *src = m->src;
           *dst = m->dst;
           memcpy(buf, m->buf, s);
-          list_del(p);
+          list_del(&m->h);
           free(m->buf);
           free(m);
           return s;
@@ -481,7 +475,7 @@ sanity_check_buf(void *buf, size_t len)
           break;
         }
     }
-  sput_fail_unless(ok, "ordering error");
+  sput_fail_unless(ok, "tlv ordering valid");
 
 }
 
@@ -519,7 +513,7 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
   net_sim s = node->s;
   hcp_link l = hcp_find_link_by_name(o, ifname, false);
   bool is_multicast = memcmp(dst, &o->multicast_address, sizeof(*dst)) == 0;
-  struct list_head *p;
+  net_neigh n;
 
   if (!l)
     return -1;
@@ -532,10 +526,8 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
       s->sent_unicast++;
       s->last_unicast_sent = s->now;
     }
-  list_for_each(p, &s->neighs)
+  list_for_each_entry(n, &s->neighs, h)
     {
-      net_neigh n = container_of(p, net_neigh_s, h);
-
       if (n->src == l
           && (is_multicast
               || memcmp(&n->dst->address, dst, sizeof(*dst)) == 0))
