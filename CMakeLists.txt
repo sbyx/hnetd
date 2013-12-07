@@ -3,7 +3,7 @@ project(hnetd C)
 
 set(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -std=c99")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -std=c99 -DL_LEVEL=7") # debug build
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -std=c99 -DL_LEVEL=7") # debug build
 
 add_definitions(-D_GNU_SOURCE -Wall -Wextra)
 

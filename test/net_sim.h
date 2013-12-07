@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Sat Dec  7 11:41:29 2013 mstenber
- * Edit time:     20 min
+ * Last modified: Sat Dec  7 11:58:44 2013 mstenber
+ * Edit time:     21 min
  *
  */
 
@@ -223,7 +223,8 @@ void net_sim_set_connected(hcp_link l1, hcp_link l2, bool enabled)
   net_neigh n;
 
 
-  L_DEBUG("connection %p -> %p %s", l1, l2, enabled ? "on" : "off");
+  L_DEBUG("connection %p/%d -> %p/%d %s",
+          l1, l1->iid, l2, l2->iid, enabled ? "on" : "off");
   if (enabled)
     {
       /* Add node */

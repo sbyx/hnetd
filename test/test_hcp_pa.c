@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:15:44 2013 mstenber
- * Last modified: Sat Dec  7 18:26:34 2013 mstenber
- * Edit time:     104 min
+ * Last modified: Sat Dec  7 11:59:15 2013 mstenber
+ * Edit time:     118 min
  *
  */
 
@@ -98,11 +98,12 @@ int pa_update_eap(pa_t pa, const struct prefix *prefix,
   net_node node = container_of(pa, net_node_s, pa);
   eap e;
 
-  L_NOTICE("pa_update_eap %s %s / %s@%s",
+  L_NOTICE("pa_update_eap %s %s / %s@%s at %lld",
            to_delete ? "delete" : "upsert",
            HEX_REPR(rid, HCP_HASH_LEN),
            PREFIX_REPR(prefix),
-           ifname ? ifname : "?");
+           ifname ? ifname : "?",
+           node->s->now);
   sput_fail_unless(prefix, "prefix set");
   sput_fail_unless(rid, "rid set");
   node->updated_eap++;
@@ -132,11 +133,12 @@ int pa_update_edp(pa_t pa, const struct prefix *prefix,
   net_node node = container_of(pa, net_node_s, pa);
   edp e;
 
-  L_NOTICE("pa_update_edp %s / %s v%lld p%lld (+ %d dhcpv6)",
+  L_NOTICE("pa_update_edp %s / %s v%lld p%lld (+ %d dhcpv6) at %lld",
            HEX_REPR(rid, HCP_HASH_LEN),
            PREFIX_REPR(prefix),
            valid_until, preferred_until,
-           (int)dhcpv6_len);
+           (int)dhcpv6_len,
+           node->s->now);
   sput_fail_unless(prefix, "prefix set");
   sput_fail_unless(rid, "rid set");
   sput_fail_unless(!excluded, "excluded not set");
@@ -198,7 +200,7 @@ void hcp_pa_two(void)
   hcp n1;
   hcp n2;
   hcp_link l1;
-  hcp_link l2;
+  hcp_link l2, l22;
   net_node node1, node2;
   eap ea;
   edp ed;
@@ -211,12 +213,14 @@ void hcp_pa_two(void)
   n2 = net_sim_find_hcp(&s, "n2");
   l1 = net_sim_hcp_find_link_by_name(n1, "eth0");
   l2 = net_sim_hcp_find_link_by_name(n2, "eth1");
+  l22 = net_sim_hcp_find_link_by_name(n2, "eth2");
   sput_fail_unless(avl_is_empty(&l1->neighbors.avl), "no l1 neighbors");
   sput_fail_unless(avl_is_empty(&l2->neighbors.avl), "no l2 neighbors");
 
   /* connect l1+l2 -> should converge at some point */
   net_sim_set_connected(l1, l2, true);
   net_sim_set_connected(l2, l1, true);
+
   SIM_WHILE(&s, 100, !net_sim_is_converged(&s));
 
   L_DEBUG("converged, feeding in ldp");
@@ -228,6 +232,7 @@ void hcp_pa_two(void)
   /* Play with the prefix API. Feed in stuff! */
   node1 = container_of(n1, net_node_s, n);
   node2 = container_of(n2, net_node_s, n);
+
 
   /* First, fake delegated prefixes */
   hnetd_time_t p1_valid = s.start;
@@ -367,15 +372,22 @@ void hcp_pa_two(void)
   ea = list_entry(ea->rp.lh.next, eap_s, rp.lh);
   sput_fail_unless(prefix_cmp(&ea->rp.p, &p2) == 0, "p2 same");
   sput_fail_unless(ea->updated == s.now, "updated now");
-
-  /* Third element */
-  sput_fail_unless(ea->rp.lh.next != &eaps, "eaps has >= 3");
-  ea = list_entry(ea->rp.lh.next, eap_s, rp.lh);
-  sput_fail_unless(prefix_cmp(&ea->rp.p, &p3) == 0, "p3 same");
-  sput_fail_unless(ea->updated == s.now, "updated now");
+  sput_fail_unless(strcmp(ea->ifname, "eth1") == 0, "eth1");
 
   /* The end */
-  sput_fail_unless(ea->rp.lh.next == &eaps, "eaps had 3");
+  sput_fail_unless(ea->rp.lh.next == &eaps, "eaps had 2");
+
+  /* switch from l2 to l22 to connect n2's side; eventually the ifname
+   * on p2 prefix in eaps should reflect that. */
+  net_sim_set_connected(l1, l2, false);
+  net_sim_set_connected(l2, l1, false);
+  net_sim_set_connected(l1, l22, true);
+  net_sim_set_connected(l22, l1, true);
+
+  SIM_WHILE(&s, 1000,
+            (!(ea=_find_rp(&p2, &eaps, 0))
+             || strcmp(ea->ifname, "eth2")!=0));
+
   net_sim_uninit(&s);
 }
 
