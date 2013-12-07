@@ -47,8 +47,9 @@ const struct prefix *pa_store_prefix_get(struct pa_store *store,
 /* Sets the saved ula value.
  * @arg store An initialized pa_store struct.
  * @arg prefix The ula prefix to save.
+ * @return 0 on success, -1 on error
  */
-void pa_store_ula_set(struct pa_store *store,
+int pa_store_ula_set(struct pa_store *store,
 		const struct prefix *prefix);
 
 /* Get the saved ula prefix value.
