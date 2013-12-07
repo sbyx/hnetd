@@ -7,7 +7,7 @@
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
  * Last_neighast modified: Thu Dec  5 10:34:22 2013 mstenber
- * Edit time:     367 min
+ * Edit time:     361 min
  *
  */
 
@@ -273,6 +273,13 @@ void hcp_uninit(hcp o)
   /* Link destruction will refer to node -> have to be taken out
    * before nodes. */
   vlist_flush_all(&o->links);
+
+  /* All except own node should be taken out first. */
+  vlist_update(&o->nodes);
+  o->own_node->in_nodes.version = -1;
+  vlist_flush(&o->nodes);
+
+  /* Finally, we can kill own node too. */
   vlist_flush_all(&o->nodes);
 }
 
