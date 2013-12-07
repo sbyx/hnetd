@@ -434,7 +434,8 @@ static void platform_update(void *data, size_t len)
 		if (!c && !empty)
 			c = iface_create(ifname, NULL);
 
-		update_delegated(c, tb);
+		if (c)
+			update_delegated(c, tb);
 
 		// Likewise, if all prefixes are gone, delete the interface
 		if (c && empty)
