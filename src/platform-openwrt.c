@@ -466,7 +466,7 @@ static const struct blobmsg_policy dump_attrs[DUMP_ATTR_MAX] = {
 static void handle_dump(__unused struct ubus_request *req,
 		__unused int type, struct blob_attr *msg)
 {
-	struct blob_attr *tb[DUMP_ATTR_INTERFACE];
+	struct blob_attr *tb[DUMP_ATTR_MAX];
 	blobmsg_parse(dump_attrs, DUMP_ATTR_MAX, tb, blob_data(msg), blob_len(msg));
 
 	if (!tb[DUMP_ATTR_INTERFACE])
