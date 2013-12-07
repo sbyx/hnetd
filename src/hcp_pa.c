@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Fri Dec  6 22:16:55 2013 mstenber
- * Edit time:     164 min
+ * Last modified: Sat Dec  7 12:10:15 2013 mstenber
+ * Edit time:     171 min
  *
  */
 
@@ -168,7 +168,7 @@ static void _update_a_tlv(hcp_glue g, hcp_node n,
   (void)pa_update_eap(g->pa, &p,
                       (struct pa_rid *)&n->node_identifier_hash,
                       l ? l->ifname : NULL,
-                      add);
+                      !add);
   return;
 }
 
@@ -248,6 +248,7 @@ static void _tlv_cb(hcp_subscriber s,
                     hcp_node n, struct tlv_attr *tlv, bool add)
 {
   hcp_glue g = container_of(s, hcp_glue_s, subscriber);
+  hcp o = g->hcp;
 
   L_NOTICE("_tlv_cb %s %s %s",
            add ? "add" : "remove",
@@ -256,7 +257,10 @@ static void _tlv_cb(hcp_subscriber s,
 
   /* Ignore our own TLV changes (otherwise bad things might happen) */
   if (hcp_node_is_self(n))
-    return;
+    {
+      return;
+    }
+  
 
   switch (tlv_id(tlv))
     {
@@ -265,6 +269,13 @@ static void _tlv_cb(hcp_subscriber s,
       break;
     case HCP_T_ASSIGNED_PREFIX:
       _update_a_tlv(g, n, tlv, add);
+      break;
+    case HCP_T_NODE_DATA_NEIGHBOR:
+      /* Someone else may be our neighbor; set tlvs_dirty to force
+       * republish attempt to recalculate next hops to assigned
+       * prefixes. */
+      o->tlvs_dirty = true;
+      hcp_schedule(o);
       break;
     default:
       return;
