@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Fri Dec  6 21:23:32 2013 mstenber
- * Edit time:     19 min
+ * Last modified: Sat Dec  7 11:41:29 2013 mstenber
+ * Edit time:     20 min
  *
  */
 
@@ -378,9 +378,12 @@ void net_sim_advance(net_sim s, hnetd_time_t t)
 do {                                                    \
   int iter = 0;                                         \
                                                         \
-  while((criteria) && iter < maxiter)                   \
+  sput_fail_unless((criteria), "criteria at start");    \
+  while(iter < maxiter)                                 \
     {                                                   \
       net_sim_run(s);                                   \
+      if (!(criteria))                                  \
+        break;                                          \
       net_sim_advance(s, net_sim_next(s));              \
       iter++;                                           \
     }                                                   \
