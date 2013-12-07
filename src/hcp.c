@@ -7,7 +7,7 @@
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
  * Last_neighast modified: Thu Dec  5 10:34:22 2013 mstenber
- * Edit time:     361 min
+ * Edit time:     368 min
  *
  */
 
@@ -376,6 +376,8 @@ bool hcp_set_link_enabled(hcp o, const char *ifname, bool enabled)
 {
   hcp_link old = hcp_find_link_by_name(o, ifname, false);
 
+  L_DEBUG("hcp_set_link_enabled %s %s",
+          ifname, enabled ? "enabled" : "disabled");
   if (!enabled)
     {
       if (!old)

@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Wed Dec  4 11:30:10 2013 mstenber
+ * Last modified: Sun Dec  8 06:04:50 2013 mstenber
  * Edit time:     199 min
  *
  */
@@ -153,6 +153,8 @@ bool hcp_io_set_ifname_enabled(hcp o,
   struct ipv6_mreq val;
 
   val.ipv6mr_multiaddr = o->multicast_address;
+  L_DEBUG("hcp_io_set_ifname_enabled %s %s",
+          ifname, enabled ? "enabled" : "disabled");
   if (!(val.ipv6mr_interface = if_nametoindex(ifname)))
     {
       L_DEBUG("unable to enable on %s - if_nametoindex: %s",

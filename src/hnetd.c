@@ -29,12 +29,38 @@
 #include "ipc.h"
 #include "platform.h"
 
+typedef struct {
+	struct iface_user iu;
+	hcp hcp;
+} hcp_iface_user_s, *hcp_iface_user;
+
+
+void hcp_iface_intiface_callback(struct iface_user *u,
+				 const char *ifname, bool enabled)
+{
+	hcp_iface_user hiu = container_of(u, hcp_iface_user_s, iu);
+
+	hcp_set_link_enabled(hiu->hcp, ifname, enabled);
+}
+
+void hcp_iface_glue(hcp_iface_user hiu, hcp h)
+{
+	/* Initialize hiu appropriately */
+	memset(hiu, 0, sizeof(*hiu));
+	hiu->iu.cb_intiface = hcp_iface_intiface_callback;
+	hiu->hcp = h;
+
+	/* We don't care about other callbacks for now. */
+	iface_register_user(&hiu->iu);
+}
+
 int main(__unused int argc, char* const argv[])
 {
 	hcp h;
 	struct pa_conf pa_conf;
 	pa_t pa;
 	int c;
+	hcp_iface_user_s hiu;
 
 	if (strstr(argv[0], "hnet-call"))
 		return ipc_client(argv[1]);
@@ -92,6 +118,9 @@ int main(__unused int argc, char* const argv[])
 
 	/* Init ipc */
 	iface_init(pa);
+
+	/* Glue together HCP and iface */
+	hcp_iface_glue(&hiu, h);
 
 	/* Fire up the prefix assignment code. */
 	pa_start(pa);
