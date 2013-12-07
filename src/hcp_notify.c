@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 10:04:30 2013 mstenber
- * Last modified: Thu Dec  5 09:09:41 2013 mstenber
- * Edit time:     35 min
+ * Last modified: Sat Dec  7 11:04:22 2013 mstenber
+ * Edit time:     38 min
  *
  */
 
@@ -81,6 +81,10 @@ void hcp_notify_subscribers_tlvs_changed(hcp_node n,
   void *new_end = (void *)a_new + (a_new ? tlv_pad_len(a_new) : 0);
   int r;
 
+  /* There are two distinct steps here: First we remove missing, and
+   * then we add new ones. Otherwise, there may be confusion if we get
+   * first new + then remove, and the underlying TLV has same
+   * key.. :-p */
   list_for_each_entry(s, &n->hcp->subscribers, lh)
     {
       struct tlv_attr *op = a_old ? tlv_data(a_old) : NULL;
@@ -105,9 +109,8 @@ void hcp_notify_subscribers_tlvs_changed(hcp_node n,
             {
               op = tlv_next(op);
               np = tlv_next(np);
-              continue;
             }
-          if (r < 0)
+          else if (r < 0)
             {
               /* op < np => op deleted */
               s->tlv_change_callback(s, n, op, false);
@@ -116,7 +119,7 @@ void hcp_notify_subscribers_tlvs_changed(hcp_node n,
           else
             {
               /* op > np => np added */
-              s->tlv_change_callback(s, n, np, true);
+              /* in part 2 */
               np = tlv_next(np);
             }
         }
@@ -126,6 +129,45 @@ void hcp_notify_subscribers_tlvs_changed(hcp_node n,
           ENSURE_VALID(op, old_end);
           s->tlv_change_callback(s, n, op, false);
           op = tlv_next(op);
+        }
+    }
+  list_for_each_entry(s, &n->hcp->subscribers, lh)
+    {
+      struct tlv_attr *op = a_old ? tlv_data(a_old) : NULL;
+      struct tlv_attr *np = a_new ? tlv_data(a_new) : NULL;
+
+      /* If subscriber isn't interested, just skip. */
+      if (!s->tlv_change_callback)
+        continue;
+
+      /* Keep two pointers, one for old, one for new. */
+
+      /* While there's data in both, and it looks valid, we drain each
+       * 0-1 at the time. */
+      while (op && np)
+        {
+          ENSURE_VALID(op, old_end);
+          ENSURE_VALID(np, new_end);
+          /* Ok, op and np both point at valid structs. */
+          r = tlv_attr_cmp(op, np);
+          /* If they're equal, we can skip both, no sense giving notification */
+          if (!r)
+            {
+              op = tlv_next(op);
+              np = tlv_next(np);
+            }
+          else if (r < 0)
+            {
+              /* op < np => op deleted */
+              /* we did this in part 1 */
+              op = tlv_next(op);
+            }
+          else
+            {
+              /* op > np => np added */
+              s->tlv_change_callback(s, n, np, true);
+              np = tlv_next(np);
+            }
         }
       /* Anything left in np was added. */
       while (np)

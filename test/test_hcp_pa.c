@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:15:44 2013 mstenber
- * Last modified: Fri Dec  6 22:34:18 2013 mstenber
- * Edit time:     89 min
+ * Last modified: Sat Dec  7 11:00:07 2013 mstenber
+ * Edit time:     92 min
  *
  */
 
@@ -219,7 +219,7 @@ void hcp_pa_two(void)
   net_sim_set_connected(l2, l1, true);
   SIM_WHILE(&s, 100, !net_sim_is_converged(&s));
 
-  L_DEBUG("!! converged, feeding in ldp");
+  L_DEBUG("converged, feeding in ldp");
 
   sput_fail_unless(n1->nodes.avl.count == 2, "n1 nodes == 2");
   sput_fail_unless(n2->nodes.avl.count == 2, "n2 nodes == 2");
@@ -294,12 +294,13 @@ void hcp_pa_two(void)
   /* Insert some dummy TLV at node 1 which should cause fresh edp
    * reception; timestamps should not change, though. */
 
-  /* XXX - determine why this doesn't seem to propagate correctly */
+  L_DEBUG("inserting fake TLV (empty)");
+
   struct tlv_attr tmp;
   tlv_init(&tmp, 67, TLV_SIZE);
   hcp_add_tlv(&node1->n, &tmp);
   SIM_WHILE(&s, 1000,
-            node2->updated_edp != 6);
+            node2->updated_edp != 9);
 
   /* First element */
   ed = list_entry(edps.next, edp_s, rp.lh);
