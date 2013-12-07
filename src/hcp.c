@@ -7,7 +7,7 @@
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
  * Last_neighast modified: Thu Dec  5 10:34:22 2013 mstenber
- * Edit time:     364 min
+ * Edit time:     367 min
  *
  */
 
@@ -265,9 +265,15 @@ hcp hcp_create(void)
 void hcp_uninit(hcp o)
 {
   o->io_init_done = false; /* cannot schedule anything anymore after this. */
-  vlist_flush_all(&o->nodes);
+
+  /* TLVs should be freed first; they're local phenomenom, but may be
+   * reflected on links/nodes. */
   vlist_flush_all(&o->tlvs);
+
+  /* Link destruction will refer to node -> have to be taken out
+   * before nodes. */
   vlist_flush_all(&o->links);
+  vlist_flush_all(&o->nodes);
 }
 
 void hcp_destroy(hcp o)
