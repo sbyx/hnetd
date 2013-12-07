@@ -1,6 +1,5 @@
 /* Loglevel redefinition */
 #define PA_L_LEVEL 7
-#define PA_L_PX "pa - "
 
 #ifdef PA_L_LEVEL
 #ifdef L_LEVEL
@@ -9,7 +8,7 @@
 #define L_LEVEL PA_L_LEVEL
 #endif
 
-#define L_PREFIX PA_L_PX
+#define L_PREFIX "pa - "
 
 #include "pa.h"
 

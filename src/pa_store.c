@@ -5,13 +5,15 @@
 
 /* Loglevel redefinition */
 #define PAS_L_LEVEL 7
-#define PAS_L_PX "pa-store - "
+#define PAS_L_PX
 #ifdef PAS_L_LEVEL
 #ifdef L_LEVEL
-	#undef L_LEVEL
+#undef L_LEVEL
 #endif
-	#define L_LEVEL PAS_L_LEVEL
+#define L_LEVEL PAS_L_LEVEL
 #endif
+
+#define L_PREFIX "pa-store - "
 
 #include "pa_store.h"
 
@@ -133,7 +135,7 @@ static int pas_ifname_read(char *ifname, FILE *f)
 
 static int pas_prefix_write(struct prefix *p, FILE *f)
 {
-	L_DEBUG(PAS_L_PX"Writing prefix %s", PREFIX_TOSTRING(p, 1));
+	L_DEBUG("Writing prefix %s", PREFIX_REPR(p));
 	if(fwrite(&p->prefix, sizeof(struct in6_addr), 1, f) != 1 ||
 				fwrite(&p->plen, 1, 1, f) != 1)
 				return -1;
@@ -142,11 +144,11 @@ static int pas_prefix_write(struct prefix *p, FILE *f)
 
 static int pas_prefix_read(struct prefix *p, FILE *f)
 {
-	L_DEBUG(PAS_L_PX"Trying to read prefix");
+	L_DEBUG("Trying to read prefix");
 	if(fread(&p->prefix, sizeof(struct in6_addr), 1, f) != 1 ||
 			fread(&p->plen, 1, 1, f) != 1)
 			return -1;
-	L_DEBUG(PAS_L_PX"Read prefix %s", PREFIX_TOSTRING(p, 1));
+	L_DEBUG("Read prefix %s", PREFIX_REPR(p));
 	return 0;
 }
 
@@ -260,7 +262,7 @@ static int pas_ap_save(struct pas_ap *ap, FILE *f)
  * Entries are stored from the oldest to the newest. */
 static int pas_load(struct pa_store *store)
 {
-	L_DEBUG(PAS_L_PX"Loading from file %s", store->db_file);
+	L_DEBUG("Loading from file %s", store->db_file);
 
 	FILE *f;
 	uint8_t type;
@@ -287,7 +289,7 @@ static int pas_load(struct pa_store *store)
 				err = pas_ula_load(store, f);
 				break;
 			default:
-				L_DEBUG(PAS_L_PX"Invalid type");
+				L_DEBUG("Invalid type");
 				return -2;
 		}
 	}
@@ -300,7 +302,7 @@ static int pas_load(struct pa_store *store)
  * returns -1 if the file cannot be written. */
 static int pas_save(struct pa_store *store)
 {
-	L_DEBUG(PAS_L_PX"Saving into file %s", store->db_file);
+	L_DEBUG("Saving into file %s", store->db_file);
 
 	FILE *f;
 	struct pas_ap *ap;
@@ -409,5 +411,3 @@ const struct prefix *pa_store_ula_get(struct pa_store *store)
 
 	return &store->ula;
 }
-
-
