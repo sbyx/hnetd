@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:15:44 2013 mstenber
- * Last modified: Sat Dec  7 11:00:07 2013 mstenber
- * Edit time:     92 min
+ * Last modified: Sat Dec  7 18:26:34 2013 mstenber
+ * Edit time:     104 min
  *
  */
 
@@ -307,7 +307,7 @@ void hcp_pa_two(void)
   sput_fail_unless(prefix_cmp(&ed->rp.p, &p1) == 0, "p1 same");
   sput_fail_unless(ed->preferred == p1_preferred + 1, "p1 preferred ok");
   sput_fail_unless(ed->valid, "p1 valid ok");
-  sput_fail_unless(ed->updated = s.now, "updated now");
+  sput_fail_unless(ed->updated == s.now, "updated now");
 
 
   /* Second element */
@@ -316,7 +316,7 @@ void hcp_pa_two(void)
   sput_fail_unless(prefix_cmp(&ed->rp.p, &p2) == 0, "p2 same");
   sput_fail_unless(ed->preferred, "p2 preferred ok");
   sput_fail_unless(ed->valid == p2_valid + 1, "p2 valid ok");
-  sput_fail_unless(ed->updated = s.now, "updated now");
+  sput_fail_unless(ed->updated == s.now, "updated now");
 
   /* Third element */
   sput_fail_unless(ed->rp.lh.next != &edps, "edps has >= 3");
@@ -324,17 +324,58 @@ void hcp_pa_two(void)
   sput_fail_unless(prefix_cmp(&ed->rp.p, &p3) == 0, "p3 same");
   sput_fail_unless(ed->preferred == p3_preferred + 1, "p3 preferred ok");
   sput_fail_unless(ed->valid == p3_valid + 1, "p3 valid ok");
-  sput_fail_unless(ed->updated = s.now, "updated now");
+  sput_fail_unless(ed->updated == s.now, "updated now");
 
+  /* The end */
+  sput_fail_unless(ed->rp.lh.next == &edps, "edps had 3");
 
-  /* XXX Then fake prefix assignment */
+  /* Make sure delete works too */
+  node1->pa.cbs.updated_ldp(&p2, NULL,
+                            NULL, 0, 0,
+                            NULL, 0, node1->g);
+
+  /* should get 2 updates + 1 delete */
+  SIM_WHILE(&s, 1000,
+            node2->updated_edp != 9 + 5);
+
+  /* Make sure p2 is gone */
+  ed = list_entry(edps.next, edp_s, rp.lh);
+  sput_fail_unless(prefix_cmp(&ed->rp.p, &p1) == 0, "p1 same");
+  sput_fail_unless(ed->rp.lh.next != &edps, "edps has >= 2");
+  ed = list_entry(ed->rp.lh.next, edp_s, rp.lh);
+  sput_fail_unless(prefix_cmp(&ed->rp.p, &p3) == 0, "p3 same");
+
+  /* The end */
+  sput_fail_unless(ed->rp.lh.next == &edps, "edps had 2");
+
+  /* Then fake prefix assignment */
   p1.plen = 64;
   p2.plen = 64;
-  node1->pa.cbs.updated_lap(&p1, "eth0", false, node1->g);
-  node1->pa.cbs.updated_lap(&p2, NULL, false, node1->g);
+  node1->pa.cbs.updated_lap(&p1, NULL, false, node1->g);
+  node1->pa.cbs.updated_lap(&p2, "eth0", false, node1->g);
   SIM_WHILE(&s, 1000,
             node2->updated_eap != 2);
 
+  /* First element */
+  ea = list_entry(eaps.next, eap_s, rp.lh);
+  sput_fail_unless(prefix_cmp(&ea->rp.p, &p1) == 0, "p1 same");
+  sput_fail_unless(ea->updated == s.now, "updated now");
+
+
+  /* Second element */
+  sput_fail_unless(ea->rp.lh.next != &eaps, "eaps has >= 2");
+  ea = list_entry(ea->rp.lh.next, eap_s, rp.lh);
+  sput_fail_unless(prefix_cmp(&ea->rp.p, &p2) == 0, "p2 same");
+  sput_fail_unless(ea->updated == s.now, "updated now");
+
+  /* Third element */
+  sput_fail_unless(ea->rp.lh.next != &eaps, "eaps has >= 3");
+  ea = list_entry(ea->rp.lh.next, eap_s, rp.lh);
+  sput_fail_unless(prefix_cmp(&ea->rp.p, &p3) == 0, "p3 same");
+  sput_fail_unless(ea->updated == s.now, "updated now");
+
+  /* The end */
+  sput_fail_unless(ea->rp.lh.next == &eaps, "eaps had 3");
   net_sim_uninit(&s);
 }
 
