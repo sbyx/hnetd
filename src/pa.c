@@ -500,9 +500,8 @@ static void pa_eap_destroy(struct pa *pa, struct pa_eap *eap)
 {
 	pa_eap_iface_assign(pa, eap, NULL);
 	avl_delete(&pa->eaps, &eap->avl_node);
-	free(eap);
-
 	L_INFO("Destroying "PA_EAP_L, PA_EAP_LA(eap));
+	free(eap);
 
 	/* Destoyed eap, we rerun algo */
 	pa_schedule(pa, PA_TODO_ALL);
@@ -549,7 +548,7 @@ static struct pa_lap *pa_lap_create(struct pa *pa, const struct prefix *prefix,
 {
 	struct pa_lap *lap;
 
-	if(!(lap = malloc(sizeof(struct pa_lap))))
+	if(!(lap = calloc(1, sizeof(struct pa_lap))))
 		return NULL;
 
 	lap->assigned = false;
@@ -690,9 +689,9 @@ static void pa_lap_destroy(struct pa *pa, struct pa_lap *lap)
 	list_remove(&lap->if_le);
 
 	avl_delete(&pa->laps, &lap->avl_node);
+	L_INFO("Destroying "PA_LAP_L, PA_LAP_LA(lap));
 	free(lap);
 
-	L_INFO("Destroying "PA_LAP_L, PA_LAP_LA(lap));
 	pa_schedule(pa, PA_TODO_ALL);
 }
 
@@ -950,7 +949,7 @@ static struct pa_dp *pa_dp_create(struct pa *pa,
 		const struct pa_rid *rid)
 {
 	struct pa_dp *dp;
-	if(!(dp = malloc(sizeof(struct pa_dp))))
+	if(!(dp = calloc(1, sizeof(struct pa_dp))))
 		return NULL;
 
 	memcpy(&dp->prefix, prefix, sizeof(struct prefix));
