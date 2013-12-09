@@ -620,7 +620,7 @@ static void pa_lap_telliface(struct pa *pa, struct pa_lap *lap)
 						(lap->assigned)?lap->dp->preferred_until:0,
 						lap->dp->dhcpv6_data,
 						lap->dp->dhcpv6_len,
-						pa->fcb.priv);
+						pa->ifcb.priv);
 }
 
 static void pa_lap_setflood(struct pa *pa, struct pa_lap *lap,
