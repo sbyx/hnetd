@@ -709,7 +709,7 @@ void pa_test_collisions(void) {
 		sput_fail_unless(px->preferred_until == dp_preferred_until, "Correct preferred lifetime");
 		sput_fail_unless(px->valid_until == dp_valid_until, "Correct valid lifetime");
 		sput_fail_if(prefix_cmp(&px->prefix, not_excluded_tier), "Correct lap prefix");
-		sput_fail_if(px->priv == &iface.ifcb, "Correct private field");
+		sput_fail_unless(px->priv == &iface.ifcb, "Correct private field");
 		sput_fail_unless(px->dhcpv6_len == TEST_DHCPV6_LEN, "Correct dhcpv6 len value");
 		if(px->dhcpv6_len == TEST_DHCPV6_LEN) {
 			sput_fail_if(memcmp(px->dhcpv6_data, TEST_DHCPV6_DATA, TEST_DHCPV6_LEN), "Correct dhcpv6 data value");
@@ -729,7 +729,7 @@ void pa_test_collisions(void) {
 		sput_fail_unless(px->preferred_until == 0, "Correct preferred lifetime");
 		sput_fail_unless(px->valid_until == 0, "Correct valid lifetime");
 		sput_fail_if(prefix_cmp(&px->prefix, not_excluded_tier), "Correct lap prefix");
-		sput_fail_if(px->priv == &iface.ifcb, "Correct private field");
+		sput_fail_unless(px->priv == &iface.ifcb, "Correct private field");
 		free(px);
 	}
 
@@ -903,7 +903,7 @@ void pa_test_minimal(void)
 		sput_fail_unless(px_update->preferred_until == preferred_until, "Correct preferred lifetime");
 		sput_fail_unless(px_update->valid_until == valid_until, "Correct valid lifetime");
 		sput_fail_if(prefix_cmp(&px_update->prefix, &chosen_prefix), "Correct lap prefix");
-		sput_fail_if(px_update->priv == &iface.ifcb, "Correct private field");
+		sput_fail_unless(px_update->priv == &iface.ifcb, "Correct private field");
 		sput_fail_unless(px_update->dhcpv6_len == TEST_DHCPV6_LEN, "Correct dhcpv6 len value");
 		if(px_update->dhcpv6_len == TEST_DHCPV6_LEN) {
 			sput_fail_if(memcmp(px_update->dhcpv6_data, TEST_DHCPV6_DATA, TEST_DHCPV6_LEN), "Correct dhcpv6 data value");
