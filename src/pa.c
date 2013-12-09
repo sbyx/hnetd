@@ -1044,7 +1044,6 @@ static void pa_dp_update(struct pa *pa, struct pa_dp *dp,
 
 		//TODO: Tell iface about laps changes (timings, dhcpv6data)
 	}
-	pa_dp_times_set(pa, dp,valid_until, preferred_until);
 }
 
 static void pa_dp_cleanmaybe(struct pa *pa, struct pa_dp *dp,
