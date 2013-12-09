@@ -238,7 +238,7 @@ static void platform_commit(struct uloop_timeout *t)
 	}
 
 	// TODO: test return code
-	ubus_invoke(ubus, ubus_network_interface, "proto_update", b.head, NULL, NULL, 1000);
+	ubus_invoke(ubus, ubus_network_interface, "notify_proto", b.head, NULL, NULL, 1000);
 }
 
 
