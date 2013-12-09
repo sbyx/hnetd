@@ -144,7 +144,8 @@ static void update_prefix(struct vlist_tree *t, struct vlist_node *node_new, str
 	struct iface_user *u;
 	list_for_each_entry(u, &users, head)
 		if (u->cb_prefix)
-			u->cb_prefix(u, c->ifname, &a->prefix, &a->excluded,
+			u->cb_prefix(u, c->ifname, &a->prefix,
+					(a->excluded.plen) ? &a->excluded : NULL,
 					a->valid_until, a->preferred_until,
 					a->dhcpv6_data, a->dhcpv6_len);
 
