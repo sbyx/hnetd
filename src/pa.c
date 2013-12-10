@@ -1185,7 +1185,7 @@ void pa_do(struct pa *pa)
 			/* Check if the dp doesn't contain another smaller dp */
 			found = false;
 			list_for_each_entry(s_dp, &pa->dps, le) {
-				if(s_dp != dp &&
+				if(dp->prefix.plen > s_dp->prefix.plen &&
 						prefix_contains(&dp->prefix, &s_dp->prefix)) {
 					found = true;
 					break;
