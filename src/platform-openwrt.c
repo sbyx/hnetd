@@ -148,7 +148,9 @@ static void platform_commit(struct uloop_timeout *t)
 	hnetd_time_t now = hnetd_time();
 	k = blobmsg_open_array(&b, "ip6addr");
 	vlist_for_each_element(&c->assigned, a, node) {
-		if (IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix))
+		hnetd_time_t preferred = a->preferred_until - now;
+		hnetd_time_t valid = a->valid_until - now;
+		if (IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix) || valid < 0)
 			continue;
 
 		l = blobmsg_open_table(&b, NULL);
@@ -161,17 +163,14 @@ static void platform_commit(struct uloop_timeout *t)
 		snprintf(buf, 4, "%u", a->prefix.plen);
 		blobmsg_add_string_buffer(&b);
 
-		hnetd_time_t preferred = a->preferred_until - now;
-		hnetd_time_t valid = a->valid_until - now;
+
 
 		if (preferred < 0)
 			preferred = 0;
 		else if (preferred > UINT32_MAX)
 			preferred = UINT32_MAX;
 
-		if (valid < 0)
-			continue;
-		else if (valid > UINT32_MAX)
+		if (valid > UINT32_MAX)
 			valid = UINT32_MAX;
 
 		blobmsg_add_u32(&b, "preferred", preferred);
@@ -238,8 +237,9 @@ static void platform_commit(struct uloop_timeout *t)
 		blobmsg_close_array(&b, k);
 	}
 
-	// TODO: test return code
-	ubus_invoke(ubus, ubus_network_interface, "notify_proto", b.head, NULL, NULL, 1000);
+	__unused int ret;
+	ret = ubus_invoke(ubus, ubus_network_interface, "notify_proto", b.head, NULL, NULL, 1000);
+	L_DEBUG("Invoked ubus call notify_proto: %s", ubus_strerror(ret));
 }
 
 
