@@ -27,6 +27,10 @@ struct pa_store_conf {
 	size_t max_px_per_if;
 };
 
+/* Returns 1 if result matches and should be returned
+ * by iterator. 0 if the iterator should look at next entry. */
+typedef int (*pa_store_matcher)(const struct prefix *p, const char *ifname,  void *priv);
+
 struct pa_store;
 
 /* Creates a storage structure for pa
@@ -59,6 +63,9 @@ int pa_store_prefix_add(struct pa_store *store,
  */
 const struct prefix *pa_store_prefix_get(struct pa_store *store,
 		const char *ifname, const struct prefix *delegated);
+
+const struct prefix *pa_store_prefix_find(struct pa_store *store,
+		const char *ifname, pa_store_matcher matcher, void *priv);
 
 /* Sets the saved ula value.
  * @arg store An initialized pa_store struct.

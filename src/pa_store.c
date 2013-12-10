@@ -431,6 +431,8 @@ int pa_store_prefix_add(struct pa_store *store,
 const struct prefix *pa_store_prefix_get(struct pa_store *store,
 		const char *ifname, const struct prefix *delegated)
 {
+	//TODO: Use prefix_find for that function
+
 	struct pas_iface *iface;
 	struct pas_ap *ap;
 
@@ -440,13 +442,36 @@ const struct prefix *pa_store_prefix_get(struct pa_store *store,
 			return NULL;
 
 		list_for_each_entry(ap, &iface->aps, if_le) {
-			if((!delegated || prefix_contains(delegated, &ap->prefix)) &&
-					(iface == ap->iface))
+			if((!delegated || prefix_contains(delegated, &ap->prefix)))
 				return &ap->prefix;
 		}
 	} else {
 		list_for_each_entry(ap, &store->aps, st_le) {
 			if((!delegated || prefix_contains(delegated, &ap->prefix)))
+				return &ap->prefix;
+		}
+	}
+
+	return NULL;
+}
+
+const struct prefix *pa_store_prefix_find(struct pa_store *store,
+		const char *ifname, pa_store_matcher matcher, void *priv)
+{
+	struct pas_iface *iface;
+	struct pas_ap *ap;
+	if(ifname) {
+		iface = pas_iface_get(store, ifname);
+		if(!iface)
+			return NULL;
+
+		list_for_each_entry(ap, &iface->aps, if_le) {
+			if((!matcher || matcher(&ap->prefix, ifname, priv)))
+				return &ap->prefix;
+		}
+	} else {
+		list_for_each_entry(ap, &store->aps, st_le) {
+			if((!matcher || matcher(&ap->prefix, ifname, priv)))
 				return &ap->prefix;
 		}
 	}

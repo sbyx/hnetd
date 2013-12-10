@@ -10,7 +10,7 @@ add_definitions(-D_GNU_SOURCE -Wall -Wextra)
 # TODO: split platform logic
 set(HCP_NIO src/hcp.c src/hcp_notify.c src/hcp_pa.c src/hcp_proto.c src/hcp_timeout.c src/prefix_utils.c src/tlv.c )
 set(HCP ${HCP_NIO} src/hcp_io.c)
-add_executable(hnetd ${HCP} src/hnetd.c src/iface.c src/ipc.c src/platform-openwrt.c src/pa.c)
+add_executable(hnetd ${HCP} src/hnetd.c src/iface.c src/ipc.c src/platform-openwrt.c src/pa.c src/pa_store.c)
 target_link_libraries(hnetd ubox ubus blobmsg_json)
 
 # Unit test stuff
@@ -32,7 +32,7 @@ target_link_libraries(test_tlv ubox ubus blobmsg_json)
 add_test(tlv test_tlv)
 add_dependencies(check test_tlv)
 
-add_executable(test_hcp ${HCP} src/pa.c src/prefix_utils.c src/tlv.c test/test_hcp.c)
+add_executable(test_hcp ${HCP} src/pa.c src/pa_store.c src/prefix_utils.c src/tlv.c test/test_hcp.c)
 target_link_libraries(test_hcp ubox ubus blobmsg_json)
 add_test(hcp test_hcp)
 add_dependencies(check test_hcp)
@@ -56,7 +56,7 @@ add_executable(test_prefix_utils src/prefix_utils.c test/test_prefix_utils.c)
 add_test(prefix_utils test_prefix_utils)
 add_dependencies(check test_prefix_utils)
 
-add_executable(test_pa test/test_pa.c)
+add_executable(test_pa test/test_pa.c src/pa_store.c)
 target_link_libraries(test_pa ubox)
 add_test(pa test_pa)
 add_dependencies(check test_pa)

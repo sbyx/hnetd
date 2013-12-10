@@ -21,6 +21,7 @@ typedef struct pa *pa_t;
 
 #include "hnetd.h"
 #include "iface.h"
+#include "pa_store.h"
 #include "prefix_utils.h"
 
 /* Length of router ids */
@@ -131,6 +132,10 @@ struct pa_conf {
 	void (*iface_registration)(struct iface_user *user);
 	void (*iface_unregistration)(struct iface_user *user);
 
+	/* Pointer to an initialized pa permanent storage structure.
+	 * May be left to NULL so that no permanent storage is used.
+	 * Default is NULL */
+	struct pa_store *storage;
 };
 
 

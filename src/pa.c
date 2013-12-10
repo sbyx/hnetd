@@ -187,6 +187,8 @@ struct pa {
 static void pa_eap_iface_assign(struct pa *pa, struct pa_eap *eap, struct pa_iface *iface);
 static void pa_lap_destroy(struct pa *pa, struct pa_lap *lap);
 static int pa_dp_iface_assign(struct pa *pa, struct pa_dp *dp, struct pa_iface *iface);
+static void pa_storage_pushprefix(struct pa *pa, struct pa_iface *iface,
+		const struct prefix *prefix);
 
 /**************************************************************/
 /*********************** Utilities ****************************/
@@ -209,6 +211,7 @@ static int pa_ridcmp_debug(struct pa_rid *r1, struct pa_rid *r2) {
 	return i;
 }
 */
+
 /**************************************************************/
 /************************ pa general **************************/
 /**************************************************************/
@@ -238,6 +241,8 @@ void pa_conf_default(struct pa_conf *conf)
 
 	conf->iface_registration = PA_CONF_DFLT_IFACE_REGISTER;
 	conf->iface_unregistration = PA_CONF_DFLT_IFACE_UNREGISTER;
+
+	conf->storage = NULL;
 }
 
 void pa_flood_subscribe(pa_t pa, const struct pa_flood_callbacks *cb)
@@ -655,6 +660,9 @@ static void pa_lap_setassign(struct pa *pa, struct pa_lap *lap,
 	lap->assigned = enable;
 
 	pa_lap_telliface(pa, lap);
+
+	if(lap->assigned) /* Saving in stable storage */
+		pa_storage_pushprefix(pa, lap->iface, &lap->prefix);
 }
 
 static void pa_lap_setdp(struct pa *pa, struct pa_lap *lap,
@@ -1059,7 +1067,7 @@ static void pa_dp_cleanmaybe(struct pa *pa, struct pa_dp *dp,
 
 /* Check whether a foreign assignment exists on a link different than iface
  * with a higher or equal router id. */
-static bool pa_prefix_checkcollision(struct pa *pa, struct prefix *prefix,
+static bool pa_prefix_checkcollision(struct pa *pa, const struct prefix *prefix,
 		struct pa_iface *exclude_iface, struct pa_rid *rid,
 		bool check_foreign, bool check_local)
 {
@@ -1087,12 +1095,6 @@ static bool pa_prefix_checkcollision(struct pa *pa, struct prefix *prefix,
 	return false;
 }
 
-static int pa_get_newprefix_storage(struct pa *pa, struct pa_iface *iface,
-		struct pa_dp *dp, struct prefix *new_prefix) {
-	//TODO
-	return -1;
-}
-
 static int pa_get_newprefix_random(struct pa *pa, struct pa_iface *iface,
 		struct pa_dp *dp, struct prefix *new_prefix) {
 
@@ -1114,6 +1116,51 @@ static int pa_get_newprefix_random(struct pa *pa, struct pa_iface *iface,
 				!pa_prefix_checkcollision(pa, new_prefix, NULL, NULL, true, true))
 			return 0;
 		L_DEBUG(" Random prefix %s can't be used", PREFIX_REPR(new_prefix));
+	}
+
+	return -1;
+}
+
+static void pa_storage_pushprefix(struct pa *pa, struct pa_iface *iface,
+		const struct prefix *prefix)
+{
+	if(pa->conf.storage)
+		pa_store_prefix_add(pa->conf.storage, iface->ifname, prefix);
+}
+
+struct pa_storage_match_priv {
+	struct pa *pa;
+	struct pa_dp *dp;
+};
+
+static int pa_store_match(const struct prefix *p, const char *ifname,  void *priv)
+{
+	//TODO: This was coded fastly. Check.
+	struct pa_storage_match_priv *pr = (struct pa_storage_match_priv *)priv;
+
+	if(prefix_contains(&pr->dp->prefix, p) &&
+			!pa_prefix_checkcollision(pr->pa, p, NULL, NULL, true, true))
+		return 1;
+
+	return 0;
+}
+
+static int pa_storage_getprefix(struct pa *pa, struct pa_iface *iface,
+		struct pa_dp *dp, struct prefix *new_prefix) {
+	//TODO: This was coded fastly. Check.
+
+	const struct prefix *p;
+	struct pa_storage_match_priv priv;
+
+	if(!pa->conf.storage)
+		return -1;
+
+	priv.pa = pa;
+	priv.dp = dp;
+
+	if((p = pa_store_prefix_find(pa->conf.storage, iface->ifname, pa_store_match, &priv))) {
+		memcpy(new_prefix, p, sizeof(struct prefix));
+		return 0;
 	}
 
 	return -1;
@@ -1296,7 +1343,7 @@ void pa_do(struct pa *pa)
 
 				if(!prefix && link_highest_rid && !wait_for_neigh) {
 					/* Let's choose a prefix for our own assignment */
-					if(!pa_get_newprefix_storage(pa, iface, dp, &new_prefix)) {
+					if(!pa_storage_getprefix(pa, iface, dp, &new_prefix)) {
 						/* Got one from stable storage */
 						L_DEBUG("Got prefix from storage %s", PREFIX_REPR(&new_prefix));
 						prefix = &new_prefix;
