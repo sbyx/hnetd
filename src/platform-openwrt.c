@@ -62,6 +62,7 @@ void platform_iface_new(struct iface *c, const char *handle)
 
 	size_t handlenamelen = strlen(handle) + 1;
 	struct platform_iface *iface = calloc(1, sizeof(*iface) + handlenamelen);
+	memcpy(iface->handle, handle, handlenamelen);
 	iface->iface = c;
 	iface->update.cb = platform_commit;
 
