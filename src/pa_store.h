@@ -12,13 +12,29 @@
 
 #include "prefix_utils.h"
 
+#define PA_STORE_DFLT_MAX_PX      100
+#define PA_STORE_DFLT_MAX_PX_P_IF 10
+
+struct pa_store_conf {
+	/* Maximum number of prefixes.
+	 * 0 means unlimited.
+	 * Default is PA_STORE_DFLT_MAX_PX. */
+	size_t max_px;
+
+	/* Maximum number of prefixes per interface.
+	 * 0 means unlimited.
+	 * Default is PA_STORE_DFLT_MAX_PX_P_IF. */
+	size_t max_px_per_if;
+};
+
 struct pa_store;
 
 /* Creates a storage structure for pa
  * @arg db_file_path The path to the file that must be used as db
+ * @arg conf Configuration paramaters for the storage. NULL means default.
  * @return A pointer to an initialized pa_store struct,
  *         NULL otherwise. */
-struct pa_store *pa_store_create(const char *db_file_path);
+struct pa_store *pa_store_create(const struct pa_store_conf *conf, const char *db_file_path);
 
 /* Destroys a pa_store struct.
  * @arg store An initialized pa_store struct */
@@ -57,5 +73,10 @@ int pa_store_ula_set(struct pa_store *store,
  * @return The stored ula prefix, or NULL if not set.
  */
 const struct prefix *pa_store_ula_get(struct pa_store *store);
+
+/* Deletes all entries in memory and in db file
+ * @arg store An initialized pa_store struct.
+ * @return 0 on success, -1 on error */
+int pa_store_empty(struct pa_store *store);
 
 #endif

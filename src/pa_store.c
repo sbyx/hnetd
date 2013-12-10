@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
 
 #include "hnetd.h"
 #include "prefix_utils.h"
@@ -36,17 +37,22 @@
 struct pa_store {
 	char *db_file;
 	struct list_head ifaces;
+
+	size_t ap_count;
 	struct list_head aps;
 
 	bool ula_valid;
 	struct prefix ula;
+
+	struct pa_store_conf conf;
 };
 
-/* An iface is linked in the storage structure
- * and contains a aps linked list */
 struct pas_iface {
 	char ifname[IFNAMSIZ];
+
+	size_t ap_count;
 	struct list_head aps;
+
 	struct list_head le;
 };
 
@@ -54,15 +60,54 @@ struct pas_iface {
  * storage structure. */
 struct pas_ap {
 	struct prefix prefix;
-	struct list_head if_le;
 	struct list_head st_le;
+	struct list_head if_le;
 	struct pas_iface *iface;
 };
 
-static inline void pas_iface_delete_raw(struct pas_iface *iface)
+static void pas_ap_delete(struct pa_store *store, struct pas_ap *ap);
+
+static void pas_iface_delete(struct pas_iface *iface)
 {
+	if(iface->ap_count) {
+		L_ERR("Can't delete iface '%s' with %ld ap assigned", iface->ifname, iface->ap_count);
+		return;
+	}
+
 	list_del(&iface->le);
 	free(iface);
+}
+
+static inline void pas_iface_decr_ap_count(struct pas_iface *iface)
+{
+	if(!(--(iface->ap_count)))
+		pas_iface_delete(iface);
+}
+
+static inline void pas_iface_incr_ap_count(struct pa_store *store,
+		struct pas_iface *iface)
+{
+	if(store->conf.max_px_per_if && (iface->ap_count == store->conf.max_px_per_if)) {
+		++(iface->ap_count);
+		pas_ap_delete(store, list_last_entry(&iface->aps, struct pas_ap, if_le));
+	} else {
+		++(iface->ap_count);
+	}
+}
+
+static inline void pas_store_decr_ap_count(struct pa_store *store)
+{
+	store->ap_count--;
+}
+
+static inline void pas_store_incr_ap_count(struct pa_store *store)
+{
+	if(store->conf.max_px && (store->ap_count == store->conf.max_px)) {
+		++(store->ap_count);
+		pas_ap_delete(store, list_last_entry(&store->aps, struct pas_ap, st_le));
+	} else {
+		++(store->ap_count);
+	}
 }
 
 static struct pas_ap *pas_ap_get(const struct pa_store *store, const struct prefix *prefix)
@@ -83,30 +128,37 @@ static struct pas_ap *pas_ap_add(struct pa_store *store,
 			return NULL;
 
 	memcpy(&ap->prefix, prefix, sizeof(struct prefix));
+
 	ap->iface = iface;
 	list_add(&ap->if_le, &iface->aps);
+	pas_iface_incr_ap_count(store, ap->iface);
+
 	list_add(&ap->st_le, &store->aps);
+	pas_store_incr_ap_count(store);
 
 	return ap;
 }
 
-static void pas_ap_delete(struct pas_ap *ap, bool iface_autoclean)
+static void pas_ap_delete(struct pa_store *store, struct pas_ap *ap)
 {
-	list_del(&ap->if_le);
+	L_DEBUG("Deleting ap %s%%%s", PREFIX_REPR(&ap->prefix), ap->iface->ifname);
 	list_del(&ap->st_le);
-	if(iface_autoclean && list_empty(&ap->iface->aps)) {
-		pas_iface_delete_raw(ap->iface);
-	}
+	list_del(&ap->if_le);
+	pas_store_decr_ap_count(store);
+	pas_iface_decr_ap_count(ap->iface);
 	free(ap);
 }
 
-/* Promoted an ap while note changing the iface */
 static void pas_ap_promote(struct pa_store *store, struct pas_ap *ap, struct pas_iface *new_iface) {
-	list_del(&ap->if_le);
-	list_del(&ap->st_le);
-	ap->iface = new_iface;
-	list_add(&ap->if_le, &new_iface->aps);
-	list_add(&ap->st_le, &store->aps);
+	list_move(&ap->st_le, &store->aps);
+	if(new_iface && new_iface != ap->iface) {
+		list_move(&ap->if_le, &new_iface->aps);
+		pas_iface_decr_ap_count(ap->iface);
+		ap->iface = new_iface;
+		pas_iface_incr_ap_count(store, ap->iface);
+	} else {
+		list_move(&ap->if_le, &ap->iface->aps);
+	}
 }
 
 static int pas_ifname_write(char *ifname, FILE *f)
@@ -172,13 +224,14 @@ static struct pas_iface *pas_iface_add(struct pa_store *store, const char *ifnam
 		return NULL;
 
 	strcpy(iface->ifname, ifname);
-	INIT_LIST_HEAD(&iface->aps);
+	iface->ap_count = 0;
 	list_add(&iface->le, &store->ifaces);
+	INIT_LIST_HEAD(&iface->aps);
 
 	return iface;
 }
 
-static struct pas_ap *pas_ap_add_by_ifname(struct pa_store *store,
+int pas_ap_add_by_ifname(struct pa_store *store,
 		const char *ifname, const struct prefix *prefix)
 {
 	struct pas_ap *ap;
@@ -188,35 +241,28 @@ static struct pas_ap *pas_ap_add_by_ifname(struct pa_store *store,
 		iface = pas_iface_add(store, ifname);
 
 	if(!iface)
-		return NULL;
+		return -1;
 
 	if((ap = pas_ap_get(store, prefix))) {
+		L_DEBUG("Promoting prefix %s on iface %s", PREFIX_REPR(prefix), ifname);
 		pas_ap_promote(store, ap, iface);
 	} else {
+		L_DEBUG("Adding prefix %s on iface %s", PREFIX_REPR(prefix), ifname);
 		ap = pas_ap_add(store, iface, prefix);
 	}
 
-	return ap;
-}
-
-static void pas_iface_delete(struct pas_iface *iface)
-{
-	struct pas_ap *ap, *sap;
-
-	list_for_each_entry_safe(ap, sap, &iface->aps, if_le) {
-		pas_ap_delete(ap, false);
-	}
-
-	pas_iface_delete_raw(iface);
+	return (ap)?0:-1;
 }
 
 /* Removes all entries from the storage */
 static void pas_empty(struct pa_store *store)
 {
-	struct pas_iface *i, *si;
-	list_for_each_entry_safe(i, si, &store->ifaces, le) {
-		pas_iface_delete(i);
-	}
+	struct pas_ap *ap, *sap;
+
+	list_for_each_entry_safe(ap, sap, &store->aps, st_le)
+		pas_ap_delete(store, ap);
+
+	/* Iface destruction is automatic when ap_count go to 0 */
 	store->ula_valid = 0;
 }
 
@@ -241,10 +287,10 @@ static int pas_ula_save(struct pa_store *store, FILE *f)
 static int pas_ap_load(struct pa_store *store, FILE *f)
 {
 	struct prefix p;
-	char ifname[IFNAMSIZ];
+	char ifname[IFNAMSIZ] = {0}; //Init for valgrind tests
 	if(pas_prefix_read(&p, f) ||
 			pas_ifname_read(ifname, f) ||
-			!pas_ap_add_by_ifname(store, ifname, &p))
+			pas_ap_add_by_ifname(store, ifname, &p))
 		return -1;
 
 	return 0;
@@ -262,15 +308,18 @@ static int pas_ap_save(struct pas_ap *ap, FILE *f)
  * Entries are stored from the oldest to the newest. */
 static int pas_load(struct pa_store *store)
 {
-	L_DEBUG("Loading from file %s", store->db_file);
-
 	FILE *f;
 	uint8_t type;
 	int err = 0;
 
-	/* Test authorizations */
+	/* Test file exists */
+	if(access(store->db_file, F_OK)) {
+		L_INFO("File %s doesn't exist", store->db_file);
+		return 0;
+	}
 
 	if(!(f = fopen(store->db_file, "r"))) {
+		L_WARN("Could not read file %s", store->db_file);
 		return -1;
 	}
 
@@ -307,10 +356,12 @@ static int pas_save(struct pa_store *store)
 	FILE *f;
 	struct pas_ap *ap;
 	char type;
-	if(!(f = fopen(store->db_file, "w")))
+	if(!(f = fopen(store->db_file, "w"))) {
+		L_WARN("Could not write to file %s", store->db_file);
 		return -1;
-	type = PAS_TYPE_ULA;
+	}
 
+	type = PAS_TYPE_ULA;
 	if(store->ula_valid &&
 			((fwrite(&type, 1, 1, f) != 1) || pas_ula_save(store, f) ))
 		goto err;
@@ -327,7 +378,7 @@ err:
 	return -1;
 }
 
-struct pa_store *pa_store_create(const char *db_file_path) {
+struct pa_store *pa_store_create(const struct pa_store_conf *conf, const char *db_file_path) {
 
 	if(!db_file_path)
 		goto err;
@@ -336,13 +387,17 @@ struct pa_store *pa_store_create(const char *db_file_path) {
 	if(!(store = malloc(sizeof(struct pa_store))))
 		goto err;
 
-	if(!(store->db_file = malloc(strlen(db_file_path + 1))))
+	if(!(store->db_file = malloc(strlen(db_file_path) + 1)))
 		goto namerr;
 
 	strcpy(store->db_file, db_file_path);
 	INIT_LIST_HEAD(&store->ifaces);
 	INIT_LIST_HEAD(&store->aps);
+	store->ap_count = 0;
 	store->ula_valid = false;
+
+	store->conf.max_px = (conf)?conf->max_px:PA_STORE_DFLT_MAX_PX;
+	store->conf.max_px_per_if = (conf)?conf->max_px_per_if:PA_STORE_DFLT_MAX_PX;
 
 	/* Loading given file */
 	if(pas_load(store)) {
@@ -367,7 +422,7 @@ void pa_store_destroy(struct pa_store *store) {
 int pa_store_prefix_add(struct pa_store *store,
 		const char *ifname, const struct prefix *prefix)
 {
-	if(!pas_ap_add_by_ifname(store, ifname, prefix))
+	if(pas_ap_add_by_ifname(store, ifname, prefix))
 		return -1;
 
 	return pas_save(store);
@@ -378,17 +433,20 @@ const struct prefix *pa_store_prefix_get(struct pa_store *store,
 {
 	struct pas_iface *iface;
 	struct pas_ap *ap;
+
 	if(ifname) {
 		iface = pas_iface_get(store, ifname);
 		if(!iface)
 			return NULL;
+
 		list_for_each_entry(ap, &iface->aps, if_le) {
-			if(!delegated || prefix_contains(delegated, &ap->prefix))
+			if((!delegated || prefix_contains(delegated, &ap->prefix)) &&
+					(iface == ap->iface))
 				return &ap->prefix;
 		}
 	} else {
 		list_for_each_entry(ap, &store->aps, st_le) {
-			if(!delegated || prefix_contains(delegated, &ap->prefix))
+			if((!delegated || prefix_contains(delegated, &ap->prefix)))
 				return &ap->prefix;
 		}
 	}
@@ -410,4 +468,10 @@ const struct prefix *pa_store_ula_get(struct pa_store *store)
 		return NULL;
 
 	return &store->ula;
+}
+
+int pa_store_empty(struct pa_store *store)
+{
+	pas_empty(store);
+	return pas_save(store);
 }
