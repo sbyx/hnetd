@@ -120,6 +120,7 @@ static void platform_commit(struct uloop_timeout *t)
 	blob_buf_init(&b, 0);
 	blobmsg_add_u32(&b, "action", 0);
 	blobmsg_add_u8(&b, "link-up", 1);
+	blobmsg_add_string(&b, "ifname", c->ifname);
 	blobmsg_add_string(&b, "interface", iface->handle);
 
 	void *k, *l;
