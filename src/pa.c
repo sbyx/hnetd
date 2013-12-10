@@ -439,7 +439,7 @@ static struct pa_eap *pa_eap_get(struct pa *pa,
 	first = avl_find_ge_element(&pa->eaps, prefix, iter, avl_node);
 	last = avl_find_le_element(&pa->eaps, prefix, iter, avl_node);
 
-	if(!first)
+	if(!(first && last))
 		return NULL;
 
 	avl_for_element_range(first, last, iter, avl_node) {
@@ -726,8 +726,8 @@ static void pa_lap_setassign_delayed(struct pa *pa, struct pa_lap *lap,
 		return;
 
 	if((flags & PA_DF_NOT_IF_LATER_AND_EQUAL) &&
-			(assign == lap->delayed_assign) &&
 			lap->delayed_assign_time &&
+			(assign == lap->delayed_assign) &&
 				when > lap->delayed_assign_time)
 			return;
 
@@ -748,8 +748,8 @@ static void pa_lap_setflooding_delayed(struct pa *pa, struct pa_lap *lap,
 		return;
 
 	if((flags & PA_DF_NOT_IF_LATER_AND_EQUAL) &&
-				(flood == lap->delayed_flooding) &&
 				lap->delayed_flooding_time &&
+				(flood == lap->delayed_flooding) &&
 					when > lap->delayed_flooding_time)
 				return;
 
@@ -959,6 +959,7 @@ static struct pa_dp *pa_dp_create(struct pa *pa,
 	dp->dhcpv6_data = NULL;
 	dp->dhcpv6_len = 0;
 	dp->iface = NULL;
+	dp->excluded_valid = false;
 	if(!rid) {
 		dp->local = 1;
 	} else {
