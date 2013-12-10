@@ -429,6 +429,8 @@ void pa_test_multiple_ifaces(void)
 		sput_fail_unless(((!strcmp(lap1->ifname, TEST_IFNAME_1)) || (!strcmp(lap2->ifname, TEST_IFNAME_1))) &&
 				((!strcmp(lap1->ifname, TEST_IFNAME_2)) || (!strcmp(lap2->ifname, TEST_IFNAME_2))),
 				"Both interfaces have lap");
+		free(lap1);
+		free(lap2);
 	}
 
 	l1 = smock_pull(SMOCK_LINK_UPDATE);
@@ -440,6 +442,8 @@ void pa_test_multiple_ifaces(void)
 		sput_fail_unless(((!strcmp(l1->ifname, TEST_IFNAME_1)) || (!strcmp(l2->ifname, TEST_IFNAME_1))) &&
 				((!strcmp(l1->ifname, TEST_IFNAME_2)) || (!strcmp(l2->ifname, TEST_IFNAME_2))),
 				"Own both interfaces");
+		free(l1);
+		free(l2);
 	}
 
 	smock_is_empty();
@@ -451,6 +455,7 @@ void pa_test_multiple_ifaces(void)
 	lap1 = smock_pull(SMOCK_LAP_UPDATE);
 	if(lap1) {
 		sput_fail_if(strcmp(lap1->ifname, TEST_IFNAME_1), "Removing lap attached to deleted iface");
+		free(lap1);
 	}
 
 	/* And the link is not owned anymore */
@@ -458,6 +463,7 @@ void pa_test_multiple_ifaces(void)
 	if(l1) {
 		test_pa_printf("%s", l1->ifname);
 		sput_fail_if(strcmp(l1->ifname,  TEST_IFNAME_1), "Not owning interface anymore");
+		free(l1);
 	}
 
 	/* Removing eaps */
@@ -479,6 +485,7 @@ void pa_test_multiple_ifaces(void)
 	lap1 = smock_pull(SMOCK_LAP_UPDATE);
 	if(lap1) {
 		sput_fail_if(strcmp(lap1->ifname, TEST_IFNAME_2), "Removing lap attached to deleted iface");
+		free(lap1);
 	}
 
 	/* And the link is not owned anymore */
@@ -486,6 +493,7 @@ void pa_test_multiple_ifaces(void)
 	if(l1) {
 		test_pa_printf("%s", l1->ifname);
 		sput_fail_if(strcmp(l1->ifname,  TEST_IFNAME_2), "Not owning interface anymore");
+		free(l1);
 	}
 
 	smock_is_empty();
