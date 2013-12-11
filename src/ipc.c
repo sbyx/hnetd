@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <unistd.h>
-#include <syslog.h>
 
 #include <sys/un.h>
 #include <sys/socket.h>
@@ -42,7 +41,7 @@ int ipc_init(void)
 	unlink(ipcpath);
 	ipcsock.fd = usock(USOCK_UNIX | USOCK_SERVER | USOCK_UDP, ipcpath, NULL);
 	if (ipcsock.fd < 0) {
-		syslog(LOG_ERR, "Unable to create IPC socket");
+		L_ERR("Unable to create IPC socket");
 		return 3;
 	}
 	uloop_fd_add(&ipcsock, ULOOP_EDGE_TRIGGER | ULOOP_READ);
@@ -68,7 +67,11 @@ int ipc_client(const char *buffer)
 	}
 
 	ssize_t len = blob_len(b.head);
-	return (send(sock, blob_data(b.head), len, 0) == len) ? 0 : 3;
+	if (send(sock, blob_data(b.head), len, 0) != len) {
+		fputs("Send result wrong\n", stderr);
+		return 3;
+	}
+	return 0;
 }
 
 
@@ -90,6 +93,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 		const char *ifname = blobmsg_get_string(tb[OPT_IFNAME]);
 
 		enum ipc_command cmd = blobmsg_get_u32(tb[OPT_COMMAND]);
+		L_DEBUG("Handling ipc command %d", (int)cmd);
 		if (cmd == CMD_IFUP && tb[OPT_HANDLE]) {
 			iface_create(ifname, blobmsg_get_string(tb[OPT_HANDLE]));
 		} else if (cmd == CMD_IFDOWN) {

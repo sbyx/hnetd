@@ -1,4 +1,3 @@
-#include <syslog.h>
 #include <errno.h>
 #include <assert.h>
 
@@ -39,7 +38,7 @@ struct platform_iface {
 int platform_init(void)
 {
 	if (!(ubus = ubus_connect(NULL))) {
-		syslog(LOG_ERR, "Failed to connect to ubus: %s", strerror(errno));
+		L_ERR("Failed to connect to ubus: %s", strerror(errno));
 		return -1;
 	}
 
