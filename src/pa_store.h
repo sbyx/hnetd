@@ -27,8 +27,12 @@ struct pa_store_conf {
 	size_t max_px_per_if;
 };
 
-/* Returns 1 if result matches and should be returned
- * by iterator. 0 if the iterator should look at next entry. */
+/* Function called when iterating over available prefix.
+ * Must return whether the proposed prefix should be immediately returned by
+ * the iterator.
+ * @arg p The proposed prefix
+ * @arg ifname The interface for which the prefix was last stored.
+ * @arg priv A private pointer, provided to the iterator. */
 typedef int (*pa_store_matcher)(const struct prefix *p, const char *ifname,  void *priv);
 
 struct pa_store;
@@ -62,7 +66,8 @@ int pa_store_prefix_add(struct pa_store *store,
  * @return A prefix that matches request, or NULL of not found.
  */
 const struct prefix *pa_store_prefix_get(struct pa_store *store,
-		const char *ifname, const struct prefix *delegated);
+		const char *ifname, struct prefix *delegated);
+
 
 const struct prefix *pa_store_prefix_find(struct pa_store *store,
 		const char *ifname, pa_store_matcher matcher, void *priv);

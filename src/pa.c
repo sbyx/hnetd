@@ -8,6 +8,9 @@
 #define L_LEVEL PA_L_LEVEL
 #endif
 
+#ifdef L_PREFIX
+#undef L_PREFIX
+#endif
 #define L_PREFIX "pa - "
 
 #include "pa.h"
@@ -588,7 +591,7 @@ static struct pa_lap *pa_lap_create(struct pa *pa, const struct prefix *prefix,
 	return lap;
 }
 
-static void pa_lap_delayed_update_timeout(struct pa *pa, struct pa_lap *lap,
+static void pa_lap_delayed_update_timeout(struct pa_lap *lap,
 		hnetd_time_t now)
 {
 	hnetd_time_t timeout = 0;
@@ -632,7 +635,7 @@ static void pa_lap_setflood(struct pa *pa, struct pa_lap *lap,
 {
 	if(lap->delayed_flooding_time) {
 		lap->delayed_flooding_time = 0;
-		pa_lap_delayed_update_timeout(pa, lap, hnetd_time());
+		pa_lap_delayed_update_timeout(lap, hnetd_time());
 	}
 
 	if(enable == lap->flooded)
@@ -650,7 +653,7 @@ static void pa_lap_setassign(struct pa *pa, struct pa_lap *lap,
 	if(lap->delayed_assign_time) {
 		/* Cancel the existing delayed set. */
 		lap->delayed_assign_time = 0;
-		pa_lap_delayed_update_timeout(pa, lap, hnetd_time());
+		pa_lap_delayed_update_timeout(lap, hnetd_time());
 	}
 
 	if(enable == lap->assigned)
@@ -709,7 +712,7 @@ static void pa_lap_destroy(struct pa *pa, struct pa_lap *lap)
  * Flags allow to not do something in some particular cases. */
 #define PA_DF_NOT_IF_LATER_AND_EQUAL 0x01 /* Do not update if same value and when is later */
 
-
+/*
 static void pa_lap_setdelete_delayed(struct pa *pa, struct pa_lap *lap,
 		hnetd_time_t when, hnetd_time_t now, int flags)
 {
@@ -722,10 +725,11 @@ static void pa_lap_setdelete_delayed(struct pa *pa, struct pa_lap *lap,
 			PA_LAP_LA(lap), when - now);
 
 	lap->delayed_delete_time = when;
-	pa_lap_delayed_update_timeout(pa, lap, now);
+	pa_lap_delayed_update_timeout(lap, now);
 }
+*/
 
-static void pa_lap_setassign_delayed(struct pa *pa, struct pa_lap *lap,
+static void pa_lap_setassign_delayed(struct pa_lap *lap,
 		hnetd_time_t when, hnetd_time_t now, bool assign, int flags)
 {
 	/* No change needed
@@ -744,14 +748,13 @@ static void pa_lap_setassign_delayed(struct pa *pa, struct pa_lap *lap,
 
 	lap->delayed_assign_time = when;
 	lap->delayed_assign = assign;
-	pa_lap_delayed_update_timeout(pa, lap, now);
+	pa_lap_delayed_update_timeout(lap, now);
 }
 
+/*
 static void pa_lap_setflooding_delayed(struct pa *pa, struct pa_lap *lap,
 		hnetd_time_t when, hnetd_time_t now, bool flood, int flags)
 {
-	/* No change needed
-	 * delayed value is always different than current value */
 	if(flood == lap->flooded && !lap->delayed_flooding_time)
 		return;
 
@@ -766,8 +769,9 @@ static void pa_lap_setflooding_delayed(struct pa *pa, struct pa_lap *lap,
 
 	lap->delayed_flooding_time = when;
 	lap->delayed_flooding = flood;
-	pa_lap_delayed_update_timeout(pa, lap, now);
+	pa_lap_delayed_update_timeout(lap, now);
 }
+*/
 
 static void pa_lap_delayed_cb(struct uloop_timeout *t)
 {
@@ -785,7 +789,7 @@ static void pa_lap_delayed_cb(struct uloop_timeout *t)
 	if(lap->delayed_delete_time && lap->delayed_delete_time <= now)
 			pa_lap_destroy(pa, lap);
 
-	pa_lap_delayed_update_timeout(pa, lap, now);
+	pa_lap_delayed_update_timeout(lap, now);
 }
 
 /**************************************************************/
@@ -882,8 +886,7 @@ static int pa_dp_excluded_set(struct pa *pa,
 
 /* Updates dhcpv6 data
    Returns whether there was a change */
-static int pa_dp_dhcpv6_set(struct pa *pa,
-		struct pa_dp *dp,
+static int pa_dp_dhcpv6_set(struct pa_dp *dp,
 		const void *dhcpv6_data, size_t dhcpv6_len)
 {
 	if(!dhcpv6_data)
@@ -1024,7 +1027,7 @@ static void pa_dp_destroy(struct pa *pa, struct pa_dp *dp)
 	}
 
 	pa_dp_iface_assign(pa, dp, NULL);
-	pa_dp_dhcpv6_set(pa, dp, NULL, 0);
+	pa_dp_dhcpv6_set(dp, NULL, 0);
 	pa_dp_times_set(pa, dp, 0, 0);
 
 	//Notify hcp iff local
@@ -1044,7 +1047,7 @@ static void pa_dp_update(struct pa *pa, struct pa_dp *dp,
 	if(!valid_until) {
 		pa_dp_destroy(pa, dp); /* That already tells hcp */
 	} else if(pa_dp_times_set(pa, dp, valid_until, preferred_until) |
-			pa_dp_dhcpv6_set(pa, dp, dhcpv6_data, dhcpv6_len) |
+			pa_dp_dhcpv6_set(dp, dhcpv6_data, dhcpv6_len) |
 			pa_dp_excluded_set(pa, dp, excluded) |
 			pa_dp_iface_assignbyname(pa, dp, ifname)) {
 		if(dp->local)
@@ -1095,7 +1098,8 @@ static bool pa_prefix_checkcollision(struct pa *pa, const struct prefix *prefix,
 	return false;
 }
 
-static int pa_get_newprefix_random(struct pa *pa, struct pa_iface *iface,
+static int pa_get_newprefix_random(struct pa *pa,
+		__attribute__((unused))struct pa_iface *iface,
 		struct pa_dp *dp, struct prefix *new_prefix) {
 
 	int i;
@@ -1133,9 +1137,9 @@ struct pa_storage_match_priv {
 	struct pa_dp *dp;
 };
 
-static int pa_store_match(const struct prefix *p, const char *ifname,  void *priv)
+static int pa_store_match(const struct prefix *p,
+		__attribute__((unused))const char *ifname,  void *priv)
 {
-	//TODO: This was coded fastly. Check.
 	struct pa_storage_match_priv *pr = (struct pa_storage_match_priv *)priv;
 
 	if(prefix_contains(&pr->dp->prefix, p) &&
@@ -1147,8 +1151,6 @@ static int pa_store_match(const struct prefix *p, const char *ifname,  void *pri
 
 static int pa_storage_getprefix(struct pa *pa, struct pa_iface *iface,
 		struct pa_dp *dp, struct prefix *new_prefix) {
-	//TODO: This was coded fastly. Check.
-
 	const struct prefix *p;
 	struct pa_storage_match_priv priv;
 
@@ -1388,7 +1390,7 @@ void pa_do(struct pa *pa)
 
 				if(pa->conf.commit_lap_delay) {
 					timeout = now + pa->conf.commit_lap_delay;
-					pa_lap_setassign_delayed(pa, lap, timeout, now, true,
+					pa_lap_setassign_delayed(lap, timeout, now, true,
 							PA_DF_NOT_IF_LATER_AND_EQUAL);
 				} else {
 					pa_lap_setassign(pa, lap, true);

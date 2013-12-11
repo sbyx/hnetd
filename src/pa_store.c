@@ -428,31 +428,16 @@ int pa_store_prefix_add(struct pa_store *store,
 	return pas_save(store);
 }
 
-const struct prefix *pa_store_prefix_get(struct pa_store *store,
-		const char *ifname, const struct prefix *delegated)
+static int pas_matcher_prefix(const struct prefix *prefix,
+		__attribute__((unused))const char *ifname, void *priv)
 {
-	//TODO: Use prefix_find for that function
+	return prefix_contains((struct prefix *)priv, prefix);
+}
 
-	struct pas_iface *iface;
-	struct pas_ap *ap;
-
-	if(ifname) {
-		iface = pas_iface_get(store, ifname);
-		if(!iface)
-			return NULL;
-
-		list_for_each_entry(ap, &iface->aps, if_le) {
-			if((!delegated || prefix_contains(delegated, &ap->prefix)))
-				return &ap->prefix;
-		}
-	} else {
-		list_for_each_entry(ap, &store->aps, st_le) {
-			if((!delegated || prefix_contains(delegated, &ap->prefix)))
-				return &ap->prefix;
-		}
-	}
-
-	return NULL;
+const struct prefix *pa_store_prefix_get(struct pa_store *store,
+		const char *ifname, struct prefix *delegated)
+{
+	return pa_store_prefix_find(store, ifname, pas_matcher_prefix, delegated);
 }
 
 const struct prefix *pa_store_prefix_find(struct pa_store *store,

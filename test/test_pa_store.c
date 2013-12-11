@@ -115,7 +115,7 @@ static void test_pa_store_basic_check_state1(struct pa_store *store) {
 
 static void test_pa_store_basic() {
 	struct pa_store *store;
-	const struct prefix *res;
+	//const struct prefix *res;
 
 	/* Creating a first state */
 	store = pa_store_create(NULL, TEST_PAS_FILE);
