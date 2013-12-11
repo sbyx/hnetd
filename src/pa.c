@@ -197,6 +197,7 @@ struct pa {
 /**************************************************************/
 /*********************** Prototypes ***************************/
 /**************************************************************/
+static void pa_do(struct pa *pa);
 static void pa_eap_iface_assign(struct pa *pa, struct pa_eap *eap, struct pa_iface *iface);
 static void pa_lap_destroy(struct pa *pa, struct pa_lap *lap);
 static int pa_dp_iface_assign(struct pa *pa, struct pa_dp *dp, struct pa_iface *iface);
@@ -1101,6 +1102,8 @@ static void pa_dp_cleanmaybe(struct pa *pa, struct pa_dp *dp,
 static void pa_local_run(struct pa *pa)
 {
 	/* Each time the local callback is called */
+	pa->todo_flags |= PA_TODO_ALL; //TODO: local only
+	pa_do(pa);
 }
 
 static void pa_local_timeout_cb(struct uloop_timeout *to)
@@ -1118,6 +1121,8 @@ static void pa_local_init(struct pa_local *local)
 static void pa_local_term(struct pa_local *local)
 {
 	/* TODO: Delete the dps and unschedule timeout */
+	if(local->timeout.pending)
+		uloop_timeout_cancel(&local->timeout);
 }
 
 /**************************************************************/
@@ -1225,7 +1230,7 @@ static int pa_storage_getprefix(struct pa *pa, struct pa_iface *iface,
 }
 
 /* Executes pa algorithm */
-void pa_do(struct pa *pa)
+static void pa_do(struct pa *pa)
 {
 	hnetd_time_t now, timeout;
 	struct pa_iface *iface, *s_iface;
@@ -1239,6 +1244,11 @@ void pa_do(struct pa *pa)
 	now = hnetd_time();
 
 	L_DEBUG("Running prefix assignment algorithm");
+
+	if(!pa->todo_flags) {
+		L_DEBUG("Nothing to do");
+		return;
+	}
 
 	/* This is at the beginning because any modification
 	 * to laps should make the algorithm run again */
@@ -1479,6 +1489,7 @@ void pa_do(struct pa *pa)
 static void pa_dp_do_uloop(struct uloop_timeout *t)
 {
 	struct pa *pa = container_of(t, struct pa, pa_dp_timeout);
+	pa->todo_flags |= PA_TODO_ALL; //TODO: DP only
 	pa_do(pa);
 }
 
