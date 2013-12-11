@@ -309,6 +309,9 @@ static struct prefix p1_22 = {
 		.plen = 64 };*/
 
 static struct pa_conf conf;
+static struct pa_store_conf store_conf;
+
+#define PA_STORE_FILE "/tmp/test_pa-store.db"
 
 #define TEST_IFNAME_1 "iface0"
 #define TEST_IFNAME_2 "iface1"
@@ -365,6 +368,205 @@ void pa_test_destroy(void)
 	mask_random = 1;
 	pa_destroy(pa);
 	smock_is_empty();
+}
+
+void pa_test_storage(void)
+{
+	test_schedule_events = 0;
+	mask_random = 1;
+
+	/* This test is intended to see if pa.c
+	 * correctly reads information from persistent storage.
+	 */
+
+	smock_is_empty();
+
+	/* Add a fake stored prefix */
+	sput_fail_if(pa_store_prefix_add(conf.storage, TEST_IFNAME_1,  &p1_21),
+			"Adding p1_21 to storage");
+
+	/* Add a random prefix */
+	test_pa_random_push_prefix(&p1_22);
+
+	/* Now let's run the pa */
+	struct lap_update_call *lap1, *lap2;
+	struct link_update_call *l1, *l2;
+	struct pa_iface *pa_iface;
+	struct pa_lap *pa_lap;
+	struct px_update_call *px;
+	struct ldp_update_call *ldp;
+
+	now_time += 10000;
+	hnetd_time_t dp_valid_until = now_time + 100000;
+	hnetd_time_t dp_preferred_until = now_time + 50000;
+	pa_update_edp(pa, &p1, &rid_higher, NULL, dp_valid_until, dp_preferred_until,
+				NULL, 0);
+
+	iface.user->cb_intiface(iface.user, TEST_IFNAME_1, true);
+	iface.user->cb_intiface(iface.user, TEST_IFNAME_2, true);
+
+	/* Run pa */
+	now_time += PA_SCHEDULE_RUNNEXT_MS;
+	test_pa_timeout_fire(&pa->pa_short_timeout);
+
+	lap1 = smock_pull(SMOCK_LAP_UPDATE);
+	lap2 = smock_pull(SMOCK_LAP_UPDATE);
+	if(lap1 && lap2) {
+		if(prefix_cmp(&lap1->prefix, &p1_21)) {
+			struct lap_update_call *s; /* switch */
+			s = lap1;
+			lap1 = lap2;
+			lap2 = s;
+		}
+		sput_fail_if(prefix_cmp(&lap1->prefix, &p1_21), "First lap prefix is correct");
+		sput_fail_unless(lap1->to_delete == 0, "New lap");
+		sput_fail_if(strcmp(lap1->ifname, TEST_IFNAME_1), "Correct iface");
+		sput_fail_if(prefix_cmp(&lap2->prefix, &p1_22), "Second lap is correct");
+		sput_fail_unless(lap2->to_delete == 0, "New lap");
+		sput_fail_if(strcmp(lap2->ifname, TEST_IFNAME_2), "Correct iface");
+		free(lap1);
+		free(lap2);
+	}
+
+	l1 = smock_pull(SMOCK_LINK_UPDATE);
+	l2 = smock_pull(SMOCK_LINK_UPDATE);
+	if(l1 && l2) {
+		sput_fail_unless(l1->owner, "Owner on the link");
+		sput_fail_unless(l2->owner, "Owner on the link");
+		free(l1);
+		free(l2);
+	}
+
+	smock_is_empty();
+
+	/* Assign prefixes (so that they are pushed to storage) */
+	now_time += conf.commit_lap_delay;
+	pa_iface = pa_iface_goc(pa, TEST_IFNAME_1);
+	sput_fail_if(list_empty(&pa_iface->laps), "Existing lap");
+	pa_lap = list_first_entry(&pa_iface->laps, struct pa_lap, if_le);
+	sput_fail_unless(pa_lap, "Get the only current lap");
+	if(pa_lap) {
+		test_pa_timeout_fire(&pa_lap->delayed.timeout);
+	}
+
+	px = smock_pull(SMOCK_PREFIX_UPDATE);
+	if(px) {
+		sput_fail_if(strcmp(px->ifname, TEST_IFNAME_1), "Correct link ifname");
+		sput_fail_unless(px->preferred_until == dp_preferred_until, "Correct preferred lifetime");
+		sput_fail_unless(px->valid_until == dp_valid_until, "Correct valid lifetime");
+		sput_fail_if(prefix_cmp(&px->prefix, &p1_21), "Correct prefix");
+		free(px);
+	}
+
+
+	pa_iface = pa_iface_goc(pa, TEST_IFNAME_2);
+	sput_fail_if(list_empty(&pa_iface->laps), "Existing lap");
+	pa_lap = list_first_entry(&pa_iface->laps, struct pa_lap, if_le);
+	sput_fail_unless(pa_lap, "Get the only current lap");
+	if(pa_lap) {
+		test_pa_timeout_fire(&pa_lap->delayed.timeout);
+	}
+
+	px = smock_pull(SMOCK_PREFIX_UPDATE);
+	if(px) {
+		sput_fail_if(strcmp(px->ifname, TEST_IFNAME_2), "Correct link ifname");
+		sput_fail_unless(px->preferred_until == dp_preferred_until, "Correct preferred lifetime");
+		sput_fail_unless(px->valid_until == dp_valid_until, "Correct valid lifetime");
+		sput_fail_if(prefix_cmp(&px->prefix, &p1_22), "Correct prefix");
+		free(px);
+	}
+
+	/* Timeout edp */
+	now_time = dp_valid_until;
+	test_pa_timeout_fire(&pa->pa_dp_timeout); /* dp timeout */
+
+	lap1 = smock_pull(SMOCK_LAP_UPDATE);
+	lap2 = smock_pull(SMOCK_LAP_UPDATE);
+	if(lap1 && lap2) {
+		free(lap1);
+		free(lap2);
+	}
+
+	l1 = smock_pull(SMOCK_LINK_UPDATE);
+	l2 = smock_pull(SMOCK_LINK_UPDATE);
+	if(l1 && l2) {
+		sput_fail_if(l1->owner, "Not owner on the link");
+		sput_fail_if(l2->owner, "Not owner on the link");
+		free(l1);
+		free(l2);
+	}
+
+	/* Both assignments are destroyed */
+	px = smock_pull(SMOCK_PREFIX_UPDATE);
+	if(px)
+		free(px);
+
+	px = smock_pull(SMOCK_PREFIX_UPDATE);
+	if(px)
+		free(px);
+
+	smock_is_empty();
+
+	/* Add the same prefix, but locally this time */
+	dp_valid_until = now_time + 100000;
+	dp_preferred_until = now_time + 50000;
+	iface.user->cb_prefix(iface.user, TEST_IFNAME_1, &p1, NULL,
+				dp_valid_until, dp_preferred_until, NULL, 0);
+	iface.user->cb_intiface(iface.user, TEST_IFNAME_1, false);
+
+	now_time += PA_SCHEDULE_RUNNEXT_MS;
+	test_pa_timeout_fire(&pa->pa_short_timeout);
+
+	l1 = smock_pull(SMOCK_LINK_UPDATE);
+	if(l1) {
+		sput_fail_unless(l1->owner, "Owner on the link");
+		free(l1);
+	}
+
+	lap1 = smock_pull(SMOCK_LAP_UPDATE);
+	if(lap1) {
+		sput_fail_if(prefix_cmp(&lap1->prefix, &p1_22), "Second lap is correct");
+		sput_fail_unless(lap1->to_delete == 0, "New lap");
+		sput_fail_if(strcmp(lap1->ifname, TEST_IFNAME_2), "Correct iface");
+		free(lap1);
+	}
+
+	ldp = smock_pull(SMOCK_LDP_UPDATE);
+	if(ldp) {
+		sput_fail_unless(ldp->preferred_until == dp_preferred_until, "Correct preferred lifetime");
+		sput_fail_unless(ldp->valid_until == dp_valid_until, "Correct valid lifetime");
+		sput_fail_if(prefix_cmp(&ldp->prefix, &p1), "Correct prefix value");
+		sput_fail_if(strcmp(ldp->dp_ifname, TEST_IFNAME_1), "Correct dp_ifname value");
+		free(ldp);
+	}
+
+	/* Update the ldp */
+	iface.user->cb_prefix(iface.user, TEST_IFNAME_1, &p1, NULL,
+					0, 0, NULL, 0);
+	iface.user->cb_intiface(iface.user, TEST_IFNAME_2, false);
+
+	l1 = smock_pull(SMOCK_LINK_UPDATE);
+	if(l1) {
+		sput_fail_if(l1->owner, "Not owner on the link");
+		free(l1);
+	}
+
+	lap1 = smock_pull(SMOCK_LAP_UPDATE);
+	if(lap1) {
+		sput_fail_unless(lap1->to_delete == 1, "Delete lap");
+		free(lap1);
+	}
+
+	ldp = smock_pull(SMOCK_LDP_UPDATE);
+	if(ldp) {
+		sput_fail_unless(ldp->valid_until == 0, "Prefix must be deleted");
+		free(ldp);
+	}
+
+	now_time += PA_SCHEDULE_RUNNEXT_MS;
+	test_pa_timeout_fire(&pa->pa_short_timeout);
+
+	pa_test_pa_empty();
 }
 
 /* This test explores simple situations with multiple interfaces
@@ -1001,7 +1203,6 @@ void pa_test_init(void)
 
 	now_time = 0;
 
-	pa_conf_default(&conf);
 	conf.commit_lap_delay = TEST_COMMIT_LAP_DELAY;
 	pa = pa_create(&conf);
 	sput_fail_unless(pa, "Initialize pa");
@@ -1028,7 +1229,7 @@ void pa_test_init(void)
 	}
 
 	/* Let's trigger the pa */
-	now_time = PA_SCHEDULE_RUNNEXT_MS + 1;
+	now_time = PA_SCHEDULE_RUNNEXT_MS;
 	pa_do_uloop(to);
 
 	/* No dp or iface => No new schedule */
@@ -1048,9 +1249,6 @@ void pa_test_misc(void)
 
 int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 {
-	sput_start_testing();
-	sput_enter_suite("Prefix assignment algorithm (pa.c)"); /* optional */
-
 	int urandom_fd;
 	if ((urandom_fd = open("/dev/urandom", O_CLOEXEC | O_RDONLY)) >= 0) {
 		unsigned int seed;
@@ -1061,12 +1259,37 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 
 	openlog("hnetd_test_pa", LOG_PERROR | LOG_PID, LOG_DAEMON);
 
+
+	sput_start_testing();
+
+	sput_enter_suite("Prefix assignment algorithm (pa.c)"); /* optional */
+
 	sput_run_test(pa_test_misc);
+
+	pa_conf_default(&conf);
 	sput_run_test(pa_test_init);
 	sput_run_test(pa_test_minimal);
 	sput_run_test(pa_test_collisions);
 	sput_run_test(pa_test_multiple_ifaces);
 	sput_run_test(pa_test_destroy);
+
+	sput_leave_suite(); /* optional */
+
+	sput_enter_suite("pa + storage"); /* optional */
+
+	pa_conf_default(&conf);
+	store_conf.max_px = 100;
+	store_conf.max_px_per_if = 10;
+	conf.storage = pa_store_create(&store_conf, PA_STORE_FILE);
+	pa_store_empty(conf.storage);
+	sput_fail_unless(conf.storage, "Pa store successfully created");
+
+	if(conf.storage) {
+		sput_run_test(pa_test_init);
+		sput_run_test(pa_test_storage);
+		sput_run_test(pa_test_destroy);
+		pa_store_destroy(conf.storage);
+	}
 
 	sput_leave_suite(); /* optional */
 	sput_finish_testing();
