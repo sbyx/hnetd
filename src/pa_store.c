@@ -431,6 +431,9 @@ int pa_store_prefix_add(struct pa_store *store,
 static int pas_matcher_prefix(const struct prefix *prefix,
 		__attribute__((unused))const char *ifname, void *priv)
 {
+	if(!priv)
+		return 1;
+
 	return prefix_contains((struct prefix *)priv, prefix);
 }
 
