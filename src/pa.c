@@ -51,9 +51,6 @@
 #define PA_CONF_DFLT_NO_V4_IF_V6         0
 #define PA_CONF_DFLT_USE_RDM_ULA         1
 
-#define PA_CONF_DFLT_IFACE_REGISTER      iface_register_user
-#define PA_CONF_DFLT_IFACE_UNREGISTER    iface_unregister_user
-
 /* 10/8 */
 static struct prefix PA_CONF_DFLT_V4 = {
 	.prefix = { .s6_addr = {
@@ -247,9 +244,6 @@ void pa_conf_default(struct pa_conf *conf)
 	conf->use_ipv4 = PA_CONF_DFLT_USE_V4;
 	conf->no_ipv4_if_glb_ipv6 = PA_CONF_DFLT_NO_V4_IF_V6;
 	memcpy(&conf->v4_prefix, &PA_CONF_DFLT_V4, sizeof(conf->v4_prefix));
-
-	conf->iface_registration = PA_CONF_DFLT_IFACE_REGISTER;
-	conf->iface_unregistration = PA_CONF_DFLT_IFACE_UNREGISTER;
 
 	conf->storage = NULL;
 }
@@ -1556,10 +1550,6 @@ int pa_set_conf(pa_t pa, const struct pa_conf *conf)
 			!prefix_is_ipv6_ula(&conf->ula_prefix))
 		return -1;
 
-	if(!conf->iface_registration ||
-			!conf->iface_unregistration)
-		return -1;
-
 	memcpy(&pa->conf, conf, sizeof(struct pa_conf));
 	return 0;
 }
@@ -1610,8 +1600,7 @@ int pa_start(pa_t pa)
 	pa_schedule(pa, 0);
 
 	/* Register to iface */
-	if(pa->conf.iface_registration)
-		pa->conf.iface_registration(&pa->ifu);
+	iface_register_user(&pa->ifu);
 
 	L_NOTICE("Pa structure started");
 	return 0;
@@ -1625,8 +1614,7 @@ void pa_destroy(pa_t pa)
 	struct pa_eap *seap;
 
 	/* Unregister everywhere */
-	if(pa->conf.iface_unregistration)
-			pa->conf.iface_unregistration(&pa->ifu);
+	iface_unregister_user(&pa->ifu);
 
 	/* Destroy all interfaces
 	 * This will also delete all laps */

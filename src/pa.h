@@ -126,12 +126,6 @@ struct pa_conf {
 	 * default = ::ffff:10.0.0.0/104 */
 	struct prefix v4_prefix;
 
-	/* The iface registration functions.
-	 * Defaults are iface_register_user and
-	 * iface_unregister_user from iface.h. */
-	void (*iface_registration)(struct iface_user *user);
-	void (*iface_unregistration)(struct iface_user *user);
-
 	/* Pointer to an initialized pa permanent storage structure.
 	 * May be left to NULL so that no permanent storage is used.
 	 * Default is NULL */
