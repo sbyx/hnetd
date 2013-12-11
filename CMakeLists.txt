@@ -3,9 +3,13 @@ project(hnetd C)
 
 set(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -std=c99")
-#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -std=c99 -DL_LEVEL=7") # debug build
 
 add_definitions(-D_GNU_SOURCE -Wall -Wextra)
+
+if(${L_LEVEL})
+	add_definitions(-DL_LEVEL=${L_LEVEL})
+endif(${L_LEVEL})
+
 
 # TODO: split platform logic
 set(HCP_NIO src/hcp.c src/hcp_notify.c src/hcp_pa.c src/hcp_proto.c src/hcp_timeout.c src/prefix_utils.c src/tlv.c )
