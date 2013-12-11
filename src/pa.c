@@ -147,6 +147,11 @@ struct pa_dp {
 	struct list_head if_le;       /* When iface is not null, this is linked in iface dps */
 };
 
+/* Management of ULA addresses and IPv4 */
+struct pa_local {
+	struct uloop_timeout timeout;
+};
+
 struct pa {
 	struct pa_conf conf;
 
@@ -173,6 +178,8 @@ struct pa {
 /* Ways of optimizing the pa algorithm */
 #define PA_TODO_ALL    0xffff
 	uint32_t todo_flags;
+
+	struct pa_local local;
 };
 
 #define PA_EAP_L				 "eap '%s'@"PA_RID_L
@@ -282,9 +289,6 @@ static void pa_uloop_set(struct uloop_timeout *timeout,
 		delay = 0;
 
 	delay = when - now;
-
-	//if(delay)
-	//	++delay; /* To avoid free loops caused by imprecision */
 
 	if(delay > INTMAX_MAX)
 		delay = INTMAX_MAX;
@@ -558,6 +562,11 @@ static void pa_lap_delayed_init(struct pa_lap_delayed *d) {
 	d->delete_time = 0;
 }
 
+static void pa_lap_delayed_term(struct pa_lap_delayed *d) {
+	if(d->timeout.pending)
+		uloop_timeout_cancel(&d->timeout);
+}
+
 static void pa_lap_delayed_update(struct pa_lap_delayed *d,
 		hnetd_time_t now)
 {
@@ -703,9 +712,8 @@ static void pa_lap_destroy(struct pa *pa, struct pa_lap *lap)
 	/* Unflood if flooded */
 	pa_lap_setflood(pa, lap, false);
 
-	/* Cancel timer if set */
-	if(lap->delayed.timeout.pending)
-		uloop_timeout_cancel(&lap->delayed.timeout);
+	/* Terminate delayed operations */
+	pa_lap_delayed_term(&lap->delayed);
 
 	list_remove(&lap->dp_le);
 	list_remove(&lap->if_le);
@@ -1084,6 +1092,32 @@ static void pa_dp_cleanmaybe(struct pa *pa, struct pa_dp *dp,
 {
 	if(now >= dp->valid_until)
 		pa_dp_destroy(pa, dp);
+}
+
+/**************************************************************/
+/***************** Local prefixes mngmt ***********************/
+/**************************************************************/
+
+static void pa_local_run(struct pa *pa)
+{
+	/* Each time the local callback is called */
+}
+
+static void pa_local_timeout_cb(struct uloop_timeout *to)
+{
+	struct pa_local *l = container_of(to, struct pa_local, timeout);
+	struct pa *pa = container_of(l, struct pa, local);
+	pa_local_run(pa);
+}
+
+static void pa_local_init(struct pa_local *local)
+{
+	local->timeout = (struct uloop_timeout) { .cb = pa_local_timeout_cb };
+}
+
+static void pa_local_term(struct pa_local *local)
+{
+	/* TODO: Delete the dps and unschedule timeout */
 }
 
 /**************************************************************/
@@ -1584,6 +1618,8 @@ pa_t pa_create(const struct pa_conf *conf)
 		return NULL;
 	}
 
+	pa_local_init(&pa->local);
+
 	L_NOTICE("New pa structure created");
 	/* Don't schedule PA here because no iface or dp yet... */
 
@@ -1613,6 +1649,9 @@ void pa_destroy(pa_t pa)
 	struct pa_eap *eap;
 	struct pa_eap *seap;
 
+	/* Uninit local assignments */
+	pa_local_term(&pa->local);
+
 	/* Unregister everywhere */
 	iface_unregister_user(&pa->ifu);
 
@@ -1633,6 +1672,12 @@ void pa_destroy(pa_t pa)
 	avl_for_each_element_safe(&pa->eaps, eap, avl_node, seap) {
 		pa_eap_destroy(pa, eap);
 	}
+
+	if(pa->pa_short_timeout.pending)
+		uloop_timeout_cancel(&pa->pa_short_timeout);
+
+	if(pa->pa_dp_timeout.pending)
+		uloop_timeout_cancel(&pa->pa_dp_timeout);
 
 	L_NOTICE("Pa structure destroyed");
 	free(pa);
