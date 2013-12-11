@@ -77,6 +77,21 @@ struct pa_iface {
 	struct list_head dps;  /* dps on that iface */
 };
 
+/* Delayed actions */
+struct pa_lap_delayed {
+	/* When to trigger action or 0
+	 * if not delayed action */
+	hnetd_time_t delete_time;
+	hnetd_time_t flooding_time;
+	hnetd_time_t assign_time;
+
+	/* The value to set */
+	bool flooding_value;
+	bool assign_value;
+
+	struct uloop_timeout timeout;
+};
+
 /* Locally assigned prefix */
 struct pa_lap {
 	struct avl_node avl_node; /* Put in pa's lap tree */
@@ -101,16 +116,7 @@ struct pa_lap {
 	 * of that assignment (only one per link) */
 	bool own;
 
-	/* Delayed actions */
-	hnetd_time_t delayed_delete_time; /* When to delete or zero */
-
-	bool delayed_flooding; /* Value to set to flood */
-	hnetd_time_t delayed_flooding_time; /* When or zero */
-
-	bool delayed_assign; /* Value to set to assign*/
-	hnetd_time_t delayed_assign_time; /* When or zero */
-
-	struct uloop_timeout delayed_timeout;
+	struct pa_lap_delayed delayed;
 };
 
 /* Externally assigned prefix */
@@ -546,10 +552,42 @@ static void pa_eap_update(struct pa *pa, struct pa_eap *eap,
 }
 
 /**************************************************************/
-/********************* lap management *************************/
+/******************* lap delayed mangmt ***********************/
 /**************************************************************/
 
 static void pa_lap_delayed_cb(struct uloop_timeout *t);
+
+static void pa_lap_delayed_init(struct pa_lap_delayed *d) {
+	d->timeout = (struct uloop_timeout) {.cb = pa_lap_delayed_cb};
+	d->assign_time = 0;
+	d->flooding_time = 0;
+	d->delete_time = 0;
+}
+
+static void pa_lap_delayed_update(struct pa_lap_delayed *d,
+		hnetd_time_t now)
+{
+	hnetd_time_t timeout = 0;
+	if(d->assign_time &&
+			(!timeout || d->assign_time < timeout))
+		timeout = d->assign_time;
+
+	if(d->delete_time &&
+				(!timeout || d->delete_time < timeout))
+			timeout = d->delete_time;
+
+	if(d->flooding_time &&
+					(!timeout || d->flooding_time < timeout))
+				timeout = d->flooding_time;
+
+	pa_uloop_set(&d->timeout, now, timeout);
+}
+
+/**************************************************************/
+/********************* lap management *************************/
+/**************************************************************/
+
+
 
 static struct pa_lap *pa_lap_create(struct pa *pa, const struct prefix *prefix,
 		struct pa_iface *iface, struct pa_dp* dp)
@@ -580,34 +618,13 @@ static struct pa_lap *pa_lap_create(struct pa *pa, const struct prefix *prefix,
 	list_add(&lap->if_le, &iface->laps);
 
 	/* Setting delayed operations */
-	lap->delayed_timeout = (struct uloop_timeout) {.cb = pa_lap_delayed_cb};
-	lap->delayed_assign_time = 0;
-	lap->delayed_flooding_time = 0;
-	lap->delayed_delete_time = 0;
+	pa_lap_delayed_init(&lap->delayed);
+
 	L_INFO("Creating "PA_LAP_L, PA_LAP_LA(lap));
 
 	pa_schedule(pa, PA_TODO_ALL);
 
 	return lap;
-}
-
-static void pa_lap_delayed_update_timeout(struct pa_lap *lap,
-		hnetd_time_t now)
-{
-	hnetd_time_t timeout = 0;
-	if(lap->delayed_assign_time &&
-			(!timeout || lap->delayed_assign_time < timeout))
-		timeout = lap->delayed_assign_time;
-
-	if(lap->delayed_delete_time &&
-				(!timeout || lap->delayed_delete_time < timeout))
-			timeout = lap->delayed_delete_time;
-
-	if(lap->delayed_flooding_time &&
-					(!timeout || lap->delayed_flooding_time < timeout))
-				timeout = lap->delayed_flooding_time;
-
-	pa_uloop_set(&lap->delayed_timeout, now, timeout);
 }
 
 static void pa_lap_tellhcp(struct pa *pa, struct pa_lap *lap)
@@ -633,9 +650,9 @@ static void pa_lap_telliface(struct pa *pa, struct pa_lap *lap)
 static void pa_lap_setflood(struct pa *pa, struct pa_lap *lap,
 		bool enable)
 {
-	if(lap->delayed_flooding_time) {
-		lap->delayed_flooding_time = 0;
-		pa_lap_delayed_update_timeout(lap, hnetd_time());
+	if(lap->delayed.flooding_time) {
+		lap->delayed.flooding_time = 0;
+		pa_lap_delayed_update(&lap->delayed, hnetd_time());
 	}
 
 	if(enable == lap->flooded)
@@ -650,10 +667,10 @@ static void pa_lap_setflood(struct pa *pa, struct pa_lap *lap,
 static void pa_lap_setassign(struct pa *pa, struct pa_lap *lap,
 		bool enable)
 {
-	if(lap->delayed_assign_time) {
+	if(lap->delayed.assign_time) {
 		/* Cancel the existing delayed set. */
-		lap->delayed_assign_time = 0;
-		pa_lap_delayed_update_timeout(lap, hnetd_time());
+		lap->delayed.assign_time = 0;
+		pa_lap_delayed_update(&lap->delayed, hnetd_time());
 	}
 
 	if(enable == lap->assigned)
@@ -693,8 +710,8 @@ static void pa_lap_destroy(struct pa *pa, struct pa_lap *lap)
 	pa_lap_setflood(pa, lap, false);
 
 	/* Cancel timer if set */
-	if(lap->delayed_timeout.pending)
-		uloop_timeout_cancel(&lap->delayed_timeout);
+	if(lap->delayed.timeout.pending)
+		uloop_timeout_cancel(&lap->delayed.timeout);
 
 	list_remove(&lap->dp_le);
 	list_remove(&lap->if_le);
@@ -717,15 +734,15 @@ static void pa_lap_setdelete_delayed(struct pa *pa, struct pa_lap *lap,
 		hnetd_time_t when, hnetd_time_t now, int flags)
 {
 	if((flags & PA_DF_NOT_IF_LATER_AND_EQUAL) &&
-			lap->delayed_delete_time &&
-			when > lap->delayed_delete_time)
+			lap->delayed.delete_time &&
+			when > lap->delayed.delete_time)
 		return;
 
 	L_DEBUG("Delayed delete of "PA_LAP_L" in %ld ms",
 			PA_LAP_LA(lap), when - now);
 
-	lap->delayed_delete_time = when;
-	pa_lap_delayed_update_timeout(lap, now);
+	lap->delayed.delete_time = when;
+	pa_lap_delayed_update(&lap->delayed, now);
 }
 */
 
@@ -734,62 +751,63 @@ static void pa_lap_setassign_delayed(struct pa_lap *lap,
 {
 	/* No change needed
 	 * delayed value is always different than current value */
-	if(assign == lap->assigned && !lap->delayed_assign_time)
+	if(assign == lap->assigned && !lap->delayed.assign_time)
 		return;
 
 	if((flags & PA_DF_NOT_IF_LATER_AND_EQUAL) &&
-			lap->delayed_assign_time &&
-			(assign == lap->delayed_assign) &&
-				when > lap->delayed_assign_time)
+			lap->delayed.assign_time &&
+			(assign == lap->delayed.assign_value) &&
+				when > lap->delayed.assign_time)
 			return;
 
 	L_DEBUG("Delayed assignment of "PA_LAP_L" in %ld ms to (%d)",
 			PA_LAP_LA(lap), when - now, assign);
 
-	lap->delayed_assign_time = when;
-	lap->delayed_assign = assign;
-	pa_lap_delayed_update_timeout(lap, now);
+	lap->delayed.assign_time = when;
+	lap->delayed.assign_value = assign;
+	pa_lap_delayed_update(&lap->delayed, now);
 }
 
 /*
 static void pa_lap_setflooding_delayed(struct pa *pa, struct pa_lap *lap,
 		hnetd_time_t when, hnetd_time_t now, bool flood, int flags)
 {
-	if(flood == lap->flooded && !lap->delayed_flooding_time)
+	if(flood == lap->flooded && !lap->delayed.flooding_time)
 		return;
 
 	if((flags & PA_DF_NOT_IF_LATER_AND_EQUAL) &&
-				lap->delayed_flooding_time &&
-				(flood == lap->delayed_flooding) &&
-					when > lap->delayed_flooding_time)
+				lap->delayed.flooding_time &&
+				(flood == lap->delayed.flooding_value) &&
+					when > lap->delayed.flooding_time)
 				return;
 
 	L_DEBUG("Delayed flooding of "PA_LAP_L" in %ld ms to (%d)",
 				PA_LAP_LA(lap), when - now, flood);
 
-	lap->delayed_flooding_time = when;
-	lap->delayed_flooding = flood;
-	pa_lap_delayed_update_timeout(lap, now);
+	lap->delayed.flooding_time = when;
+	lap->delayed.flooding_value = flood;
+	pa_lap_delayed_update(&lap->delayed, now);
 }
 */
 
 static void pa_lap_delayed_cb(struct uloop_timeout *t)
 {
-	struct pa_lap *lap = container_of(t, struct pa_lap, delayed_timeout);
+	struct pa_lap_delayed *d = container_of(t, struct pa_lap_delayed, timeout);
+	struct pa_lap *lap = container_of(d, struct pa_lap, delayed);
 	struct pa *pa =  lap->pa;
 
 	hnetd_time_t now = hnetd_time();
 
-	if(lap->delayed_assign_time && lap->delayed_assign_time <= now)
-		pa_lap_setassign(pa, lap, lap->delayed_assign);
+	if(lap->delayed.assign_time && lap->delayed.assign_time <= now)
+		pa_lap_setassign(pa, lap, lap->delayed.assign_value);
 
-	if(lap->delayed_flooding_time && lap->delayed_flooding_time <= now)
-			pa_lap_setflood(pa, lap, lap->delayed_flooding);
+	if(lap->delayed.flooding_time && lap->delayed.flooding_time <= now)
+			pa_lap_setflood(pa, lap, lap->delayed.flooding_value);
 
-	if(lap->delayed_delete_time && lap->delayed_delete_time <= now)
+	if(lap->delayed.delete_time && lap->delayed.delete_time <= now)
 			pa_lap_destroy(pa, lap);
 
-	pa_lap_delayed_update_timeout(lap, now);
+	pa_lap_delayed_update(&lap->delayed, now);
 }
 
 /**************************************************************/

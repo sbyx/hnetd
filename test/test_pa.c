@@ -707,7 +707,7 @@ void pa_test_collisions(void) {
 	pa_lap = list_first_entry(&pa_iface->laps, struct pa_lap, if_le);
 	sput_fail_unless(pa_lap, "Get the only current lap");
 	if(pa_lap) {
-		test_pa_timeout_fire(&pa_lap->delayed_timeout);
+		test_pa_timeout_fire(&pa_lap->delayed.timeout);
 	}
 
 	/* Get interface assignment */
