@@ -1062,16 +1062,26 @@ static void pa_dp_update(struct pa *pa, struct pa_dp *dp,
 		hnetd_time_t valid_until, hnetd_time_t preferred_until,
 		const void *dhcpv6_data, size_t dhcpv6_len)
 {
+	int b1 = 0, b2 = 0;
+	struct pa_lap *lap;
+
 	if(!valid_until) {
 		pa_dp_destroy(pa, dp); /* That already tells hcp */
-	} else if(pa_dp_times_set(pa, dp, valid_until, preferred_until) |
-			pa_dp_dhcpv6_set(dp, dhcpv6_data, dhcpv6_len) |
+	} else if((b1 |= pa_dp_times_set(pa, dp, valid_until, preferred_until)) |
+			(b2 |= pa_dp_dhcpv6_set(dp, dhcpv6_data, dhcpv6_len)) |
 			pa_dp_excluded_set(pa, dp, excluded) |
 			pa_dp_iface_assignbyname(pa, dp, ifname)) {
 		if(dp->local)
 			pa_dp_tell_hcp(pa, dp);
 
-		//TODO: Tell iface about laps changes (timings, dhcpv6data)
+		/* Iface needs dp info for each lap.
+		 * When a lap is modified we tell iface (iff assigned) */
+		if(b1 || b2) {
+			list_for_each_entry(lap, &dp->laps, dp_le) {
+				if(lap->assigned)
+					pa_lap_telliface(pa, lap);
+			}
+		}
 	}
 }
 
