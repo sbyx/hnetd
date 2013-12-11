@@ -1315,17 +1315,15 @@ void pa_do(struct pa *pa)
 
 			/* See if someone overrides our assignment */
 			if(lap && eap && PA_RIDCMP(&eap->rid, &pa->rid) > 0) {
-
-				if(prefix_cmp(&lap->prefix, &eap->prefix) ||
-						lap->own) {
-					/* We have a lap but a guy with higher priority
-					 * disagrees with us. We need to override ours.
-					 * OR
-					 *  We agree on the prefix, but we shouldn't own it.
-					 *  Let's destroy it.
-					 *  TODO: Find softer solution */
+				if(prefix_cmp(&lap->prefix, &eap->prefix)) {
+					/* Guy with higher id floods a different prefix */
 					pa_lap_destroy(pa, lap);
 					lap = NULL;
+				} else if(lap->own) {
+					/* We agree on the prefix, but the other guy has higher
+					 * prefix. So stop owning it.
+					 * Note: Important the pa_lap_set_flooding is called later on */
+					lap->own = false;
 				}
 			}
 
@@ -1413,8 +1411,7 @@ void pa_do(struct pa *pa)
 
 				lap->invalid = false;
 				pa_lap_setdp(pa, lap, dp);
-				if(lap->own) /*No delayed flooding */
-					pa_lap_setflood(pa, lap, true);
+				pa_lap_setflood(pa, lap, lap->own); /* No delayed flooding for now */
 
 				if(pa->conf.commit_lap_delay) {
 					timeout = now + pa->conf.commit_lap_delay;
