@@ -63,6 +63,9 @@ struct iface {
 	bool internal;
 	bool v4leased;
 
+	// LL-address
+	struct in6_addr eui64_addr;
+
 	// Prefix storage
 	struct vlist_tree assigned;
 	struct vlist_tree delegated;

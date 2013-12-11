@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <net/if.h>
 #include <assert.h>
+#include <ifaddrs.h>
 
 #include "iface.h"
 #include "platform.h"
@@ -36,6 +37,8 @@ static void iface_update_prefix(const struct prefix *p, const char *ifname,
 	} else { // Create / update action
 		struct iface_addr *a = calloc(1, sizeof(*a) + dhcpv6_len);
 		a->prefix = *p;
+		if (!IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix))
+			memcpy(&a->prefix.prefix.s6_addr[8], &c->eui64_addr.s6_addr[8], 8);
 		a->valid_until = valid_until;
 		a->preferred_until = preferred_until;
 		a->dhcpv6_len = dhcpv6_len;
@@ -220,6 +223,24 @@ struct iface* iface_create(const char *ifname, const char *handle)
 		size_t namelen = strlen(ifname) + 1;
 		c = calloc(1, sizeof(*c) + namelen);
 		memcpy(c->ifname, ifname, namelen);
+
+		// Get EUI-64 address
+		struct ifaddrs *ifaddr, *ifa;
+		if (!getifaddrs(&ifaddr)) {
+			for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
+				struct sockaddr_in6 *sa = (struct sockaddr_in6*)ifa->ifa_addr;
+				if (ifa->ifa_name && !strcmp(ifa->ifa_name, ifname) &&
+						sa && sa->sin6_family == AF_INET6 &&
+						IN6_IS_ADDR_LINKLOCAL(&sa->sin6_addr))
+					c->eui64_addr = sa->sin6_addr;
+			}
+			freeifaddrs(ifaddr);
+		}
+
+		// Fallback to random EUI-64 address
+		if (IN6_IS_ADDR_UNSPECIFIED(&c->eui64_addr))
+			for (size_t i = 8; i < 16; ++i)
+				c->eui64_addr.s6_addr[i] = random();
 
 		vlist_init(&c->assigned, compare_addrs, update_addr);
 		vlist_init(&c->delegated, compare_addrs, update_prefix);
