@@ -98,6 +98,13 @@ struct pa_conf {
 	 * default = 20 * HNETD_TIME_PER_SECOND */
 	uint32_t commit_lap_delay;
 
+	/* Delay between realizing a local prefix (v4 or v6) should
+	 * be creating, and the actual on link advertisement.
+	 * That allows a router do be sure it has the higher id, and
+	 * wait for a possible globaly routable prefix.
+	 * default = 5 * HNETD_TIME_PER_SECOND */
+	uint32_t create_ula_delay;
+
 	/* Enables ULA use
 	 * default = 1 */
 	char use_ula;
@@ -125,6 +132,20 @@ struct pa_conf {
 	/* When needed, use that v4 prefix
 	 * default = ::ffff:10.0.0.0/104 */
 	struct prefix v4_prefix;
+
+	/* Valid lifetime for local prefixes (ula + ipv4)
+	 * default = 600 * HNETD_TIME_PER_SECOND */
+	uint32_t local_valid_lifetime;
+
+	/* Preferred lifetime for local prefixes
+	 * default = 300 * HNETD_TIME_PER_SECOND */
+	uint32_t local_preferred_lifetime;
+
+	/* A local prefix lifetime is update when
+	 * prefix.valid - local_update_delay <= now
+	 * This should be more than valid_lifetime - preferred_lifetime.
+	 * default = 330 * HNETD_TIME_PER_SECOND */
+	uint32_t local_update_delay;
 
 	/* Pointer to an initialized pa permanent storage structure.
 	 * May be left to NULL so that no permanent storage is used.

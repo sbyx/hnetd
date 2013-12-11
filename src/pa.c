@@ -43,7 +43,11 @@
 
 #define PA_RIDCMP(r1, r2) memcmp((r1)->id, (r2)->id, PA_RIDLEN)
 
-#define PA_CONF_DFLT_COMMIT_LAP_DELAY  20 * HNETD_TIME_PER_SECOND
+#define PA_CONF_DFLT_COMMIT_LAP_DELAY  20  * HNETD_TIME_PER_SECOND
+#define PA_CONF_DFLT_CREATE_ULA_DELAY  10  * HNETD_TIME_PER_SECOND
+#define PA_CONF_DFLT_LOCAL_VALID       600 * HNETD_TIME_PER_SECOND
+#define PA_CONF_DFLT_LOCAL_PREFERRED   300 * HNETD_TIME_PER_SECOND
+#define PA_CONF_DFLT_LOCAL_UPDATE      330 * HNETD_TIME_PER_SECOND
 
 #define PA_CONF_DFLT_USE_ULA             1
 #define PA_CONF_DFLT_NO_ULA_IF_V6        1
@@ -57,6 +61,12 @@ static struct prefix PA_CONF_DFLT_V4 = {
 			0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00,
 			0x00,0x00, 0xff,0xff,  0x0a }},
 	.plen = 104 };
+
+/* Used as ULA while automatic generation is not implemented */
+static struct prefix PA_CONF_DFLT_ULA = {
+	.prefix = { .s6_addr = {
+			0xfd,0x00, 0xf0,0x0d,  0x00,0x01}},
+	.plen = 48 };
 
 /* PA's interface structure.
  * We don't only care about internal because hcp could
@@ -149,6 +159,12 @@ struct pa_dp {
 
 /* Management of ULA addresses and IPv4 */
 struct pa_local {
+	hnetd_time_t ula_create_start;
+	hnetd_time_t ipv4_create_start;
+
+	struct pa_dp *ula;
+	struct pa_dp *ipv4;
+
 	struct uloop_timeout timeout;
 };
 
@@ -254,6 +270,11 @@ void pa_conf_default(struct pa_conf *conf)
 	memcpy(&conf->v4_prefix, &PA_CONF_DFLT_V4, sizeof(conf->v4_prefix));
 
 	conf->storage = NULL;
+	conf->create_ula_delay = PA_CONF_DFLT_CREATE_ULA_DELAY;
+
+	conf->local_valid_lifetime = PA_CONF_DFLT_LOCAL_VALID;
+	conf->local_preferred_lifetime = PA_CONF_DFLT_LOCAL_PREFERRED;
+	conf->local_update_delay = PA_CONF_DFLT_LOCAL_UPDATE;
 }
 
 void pa_flood_subscribe(pa_t pa, const struct pa_flood_callbacks *cb)
@@ -295,6 +316,24 @@ static void pa_uloop_set(struct uloop_timeout *timeout,
 		delay = INTMAX_MAX;
 
 	uloop_timeout_set(timeout, (int) delay);
+}
+
+static bool pa_has_global_highest_rid(struct pa *pa)
+{
+	struct pa_eap *eap;
+	struct pa_dp *dp;
+
+	avl_for_each_element(&pa->eaps, eap, avl_node) {
+		if(PA_RIDCMP(&eap->rid, &pa->rid))
+			return false;
+	}
+
+	list_for_each_entry(dp, &pa->dps, le) {
+		if(!dp->local && PA_RIDCMP(&dp->rid, &pa->rid) > 0)
+					return false;
+	}
+
+	return true;
 }
 
 /**************************************************************/
@@ -1099,23 +1138,119 @@ static void pa_dp_cleanmaybe(struct pa *pa, struct pa_dp *dp,
 /***************** Local prefixes mngmt ***********************/
 /**************************************************************/
 
-static void pa_local_run(struct pa *pa)
+static struct pa_dp *pa_dp_get_globalv6(struct pa *pa)
 {
-	/* Each time the local callback is called */
-	pa->todo_flags |= PA_TODO_ALL; //TODO: local only
-	pa_do(pa);
+	struct pa_dp *dp;
+	list_for_each_entry(dp, &pa->dps, le) {
+		if(!prefix_is_ipv4(&dp->prefix) && !prefix_is_ipv6_ula(&dp->prefix))
+			return dp;
+	}
+	return NULL;
+}
+
+static struct pa_dp *pa_dp_get_edp_ula(struct pa *pa)
+{
+	struct pa_dp *dp;
+	list_for_each_entry(dp, &pa->dps, le) {
+		if(prefix_is_ipv6_ula(&dp->prefix) && !dp->local)
+			return dp;
+	}
+	return NULL;
+}
+
+static void pa_local_ula_create(struct pa *pa)
+{
+	struct prefix *p = NULL;
+
+	if(pa->conf.use_random_ula) {
+		p = &PA_CONF_DFLT_ULA;
+		L_WARN("Random ULA not implemented... Using %s instead", PREFIX_REPR(p));
+	} else {
+		p = &pa->conf.ula_prefix;
+	}
+
+	pa->local.ula = pa_dp_create(pa, p, NULL);
+}
+
+static void pa_local_ula_destroy(struct pa *pa)
+{
+	pa_dp_update(pa, pa->local.ula, NULL, NULL, 0, 0, NULL, 0);
+	pa->local.ula = NULL;
+}
+
+static void pa_local_do_ula(struct pa *pa, hnetd_time_t now)
+{
+	if(!pa->conf.use_ula && !pa->local.ula)
+			return;
+
+	struct pa_dp *globalv6 = pa_dp_get_globalv6(pa);
+	bool higher = pa_has_global_highest_rid(pa);
+	struct pa_dp *edp_ula = pa_dp_get_edp_ula(pa);
+
+	bool conf_allows = !(globalv6 && pa->conf.no_ula_if_glb_ipv6);
+
+	/* See if we must destroy one */
+	if(pa->local.ula && !conf_allows)
+		pa_local_ula_destroy(pa);
+
+	bool can_create_new = !pa->local.ula && higher &&
+			conf_allows && !edp_ula;
+
+	/* See if we should create one at some point */
+	if(!pa->local.ula_create_start && can_create_new) {
+		/* See whether we are higher id */
+		pa->local.ula_create_start = now;
+	} else if(!can_create_new) {
+		pa->local.ula_create_start = 0;
+	}
+
+	/* See if we must really create one NOW */
+	if(pa->local.ula_create_start && can_create_new &&
+			pa->local.ula_create_start + pa->conf.create_ula_delay <= now)
+		pa_local_ula_create(pa);
+
+	/* See if we must update lifetime for it */
+	if(pa->local.ula &&
+			pa->local.ula->preferred_until <= now + pa->conf.local_update_delay)
+		pa_dp_update(pa, pa->local.ula, NULL, NULL,
+						now + pa->conf.local_valid_lifetime,
+						now + pa->conf.local_preferred_lifetime,
+						NULL, 0);
+}
+
+static void pa_local_do_ipv4(struct pa *pa, hnetd_time_t now)
+{
+	if(!pa->conf.use_ipv4 && !pa->local.ipv4)
+		return;
+
+	L_WARN("IPv4 generation not implemented yet");
+}
+
+static void pa_local_do(struct pa *pa, hnetd_time_t now)
+{
+	return; /* Not ready yet, but I need to commit so here it is :p (TODO: remove)*/
+
+	pa_local_do_ula(pa, now);
+	pa_local_do_ipv4(pa, now);
+
+	/* TODO: Schedule next event */
 }
 
 static void pa_local_timeout_cb(struct uloop_timeout *to)
 {
 	struct pa_local *l = container_of(to, struct pa_local, timeout);
 	struct pa *pa = container_of(l, struct pa, local);
-	pa_local_run(pa);
+	pa->todo_flags |= PA_TODO_ALL;
+	pa_do(pa);
 }
 
 static void pa_local_init(struct pa_local *local)
 {
 	local->timeout = (struct uloop_timeout) { .cb = pa_local_timeout_cb };
+	local->ipv4_create_start = 0;
+	local->ula_create_start = 0;
+	local->ipv4 = NULL;
+	local->ula = NULL;
 }
 
 static void pa_local_term(struct pa_local *local)
@@ -1278,8 +1413,8 @@ static void pa_do(struct pa *pa)
 		pa_uloop_set(&pa->pa_dp_timeout, now, timeout);
 	}
 
-
-	/* TODO: Decide whether to generate ULAs or IPv4 */
+	/* IPv6 ULA and IPv4 local prefixes */
+	pa_local_do(pa, now);
 
 	/* Mark all laps as invalid */
 	avl_for_each_element(&pa->laps, lap, avl_node) {
