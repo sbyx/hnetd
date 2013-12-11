@@ -123,6 +123,8 @@ static void platform_commit(struct uloop_timeout *t)
 	blobmsg_add_string(&b, "ifname", c->ifname);
 	blobmsg_add_string(&b, "interface", iface->handle);
 
+	L_DEBUG("platform: *** begin interface update %s (%s)", iface->handle, c->ifname);
+
 	void *k, *l;
 	struct iface_addr *a;
 
@@ -136,6 +138,8 @@ static void platform_commit(struct uloop_timeout *t)
 		char *buf = blobmsg_alloc_string_buffer(&b, "ipaddr", INET_ADDRSTRLEN);
 		inet_ntop(AF_INET, &a->prefix.prefix.s6_addr[12], buf, INET_ADDRSTRLEN);
 		blobmsg_add_string_buffer(&b);
+
+		L_DEBUG("	%s/%u", buf, a->prefix.plen);
 
 		buf = blobmsg_alloc_string_buffer(&b, "mask", 4);
 		snprintf(buf, 4, "%u", a->prefix.plen);
@@ -153,18 +157,6 @@ static void platform_commit(struct uloop_timeout *t)
 		if (IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix) || valid < 0)
 			continue;
 
-		l = blobmsg_open_table(&b, NULL);
-
-		char *buf = blobmsg_alloc_string_buffer(&b, "ipaddr", INET6_ADDRSTRLEN);
-		inet_ntop(AF_INET6, &a->prefix.prefix, buf, INET6_ADDRSTRLEN);
-		blobmsg_add_string_buffer(&b);
-
-		buf = blobmsg_alloc_string_buffer(&b, "mask", 4);
-		snprintf(buf, 4, "%u", a->prefix.plen);
-		blobmsg_add_string_buffer(&b);
-
-
-
 		if (preferred < 0)
 			preferred = 0;
 		else if (preferred > UINT32_MAX)
@@ -172,6 +164,19 @@ static void platform_commit(struct uloop_timeout *t)
 
 		if (valid > UINT32_MAX)
 			valid = UINT32_MAX;
+
+		l = blobmsg_open_table(&b, NULL);
+
+		char *buf = blobmsg_alloc_string_buffer(&b, "ipaddr", INET6_ADDRSTRLEN);
+		inet_ntop(AF_INET6, &a->prefix.prefix, buf, INET6_ADDRSTRLEN);
+		blobmsg_add_string_buffer(&b);
+
+		L_DEBUG("	%s/%u (%lld/%lld)", buf, a->prefix.plen,
+				(long long)preferred, (long long)valid);
+
+		buf = blobmsg_alloc_string_buffer(&b, "mask", 4);
+		snprintf(buf, 4, "%u", a->prefix.plen);
+		blobmsg_add_string_buffer(&b);
 
 		blobmsg_add_u32(&b, "preferred", preferred);
 		blobmsg_add_u32(&b, "valid", valid);
@@ -203,6 +208,8 @@ static void platform_commit(struct uloop_timeout *t)
 	const char *zone = (c->internal) ? "lan" : "wan";
 	blobmsg_add_string(&b, "zone", zone);
 
+	L_DEBUG("	RA/DHCP/DHCPv6: %s, Zone: %s", service, zone);
+
 	blobmsg_close_table(&b, k);
 
 
@@ -232,14 +239,17 @@ static void platform_commit(struct uloop_timeout *t)
 			char *buf = blobmsg_alloc_string_buffer(&b, NULL, INET6_ADDRSTRLEN);
 			inet_ntop(AF_INET6, &dns[i], buf, INET6_ADDRSTRLEN);
 			blobmsg_add_string_buffer(&b);
+			L_DEBUG("	DNS: %s", buf);
 		}
 
 		blobmsg_close_array(&b, k);
 	}
 
+	L_DEBUG("platform: *** end interface update %s (%s)", iface->handle, c->ifname);
+
 	__unused int ret;
 	ret = ubus_invoke(ubus, ubus_network_interface, "notify_proto", b.head, NULL, NULL, 1000);
-	L_DEBUG("Invoked ubus call notify_proto: %s", ubus_strerror(ret));
+	L_INFO("platform: notify_proto for %s (%s): %s", iface->handle, c->ifname, ubus_strerror(ret));
 }
 
 
@@ -394,6 +404,8 @@ static void platform_update(void *data, size_t len)
 
 	const char *ifname = blobmsg_get_string(a);
 	struct iface *c = iface_get(ifname);
+
+	L_INFO("platform: interface update for %s detected", ifname);
 
 	if (c && c->platform) {
 		// This is a known managed interface

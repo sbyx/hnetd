@@ -128,6 +128,12 @@ static void update_addr(struct vlist_tree *t, struct vlist_node *node_new, struc
 	struct iface *c = container_of(t, struct iface, assigned);
 	platform_set_address(c, (node_new) ? a_new : a_old, !!node_new);
 
+	__unused char buf[PREFIX_MAXBUFFLEN];
+	L_INFO("iface: %s assigned prefix %s to %s",
+			(node_new) ? (node_old) ? "updated" : "added" : "removed",
+			prefix_ntop(buf, sizeof(buf), (node_new) ? &a_new->prefix : &a_old->prefix, false),
+			c->ifname);
+
 	if (node_old)
 		free(a_old);
 }
@@ -151,6 +157,11 @@ static void update_prefix(struct vlist_tree *t, struct vlist_node *node_new, str
 					(a->excluded.plen) ? &a->excluded : NULL,
 					a->valid_until, a->preferred_until,
 					a->dhcpv6_data, a->dhcpv6_len);
+
+	__unused char buf[PREFIX_MAXBUFFLEN];
+	L_INFO("iface: %s delegated prefix %s to %s",
+			(node_new) ? (node_old) ? "updated" : "added" : "removed",
+			prefix_ntop(buf, sizeof(buf), &a->prefix, false), c->ifname);
 
 	if (node_old)
 		free(a_old);
@@ -208,6 +219,8 @@ static void iface_discover_border(struct iface *c)
 	bool internal = avl_is_empty(&c->delegated.avl) &&
 			!c->v4leased && !c->dhcpv6_len_in;
 	if (c->internal != internal) {
+		L_INFO("iface: %s border discovery detected state %s",
+				c->ifname, (internal) ? "internal" : "external");
 		c->internal = internal;
 		iface_notify_data_state(c, internal);
 		iface_notify_internal_state(c, internal);
