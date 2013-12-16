@@ -308,6 +308,10 @@ static struct prefix p1_22 = {
 				0x20, 0x01, 0x20, 0x01, 0xff, 0xff, 0xff, 0x23}},
 		.plen = 64 };*/
 
+static struct prefix ula_prefix =
+		{ .prefix = { .s6_addr = { 0xfd,0x00, 0xde,0xad,  0x00,0x01}},
+			.plen = 48 };
+
 static struct pa_conf conf;
 static struct pa_store_conf store_conf;
 
@@ -368,6 +372,94 @@ void pa_test_destroy(void)
 	mask_random = 1;
 	pa_destroy(pa);
 	smock_is_empty();
+}
+
+void pa_test_ula_static(void)
+{
+	struct uloop_timeout *ula_to;
+	struct lap_update_call *lap;
+	struct ldp_update_call *ldp;
+	struct link_update_call *link;
+	hnetd_time_t valid_until, preferred_until;
+	int ms;
+
+	test_schedule_events = 0;
+	mask_random = 0;
+
+	smock_is_empty();
+
+	now_time += 10000;
+
+	iface.user->cb_intiface(iface.user, TEST_IFNAME_1, true);
+
+	/* Because added iface */
+
+	test_schedule_events = 1; /* Want to get the ula timeout scheduling */
+	now_time += PA_SCHEDULE_RUNNEXT_MS;
+	test_pa_timeout_fire(&pa->pa_short_timeout);
+	test_schedule_events = 0;
+
+	ula_to = smock_pull(SMOCK_SET_TIMEOUT);
+	ms = smock_pull_int(SMOCK_SET_TIMEOUT_MS);
+	if(ula_to) {
+		sput_fail_unless(ula_to == &pa->local.timeout, "ula timeout structure");
+		sput_fail_unless(ms == (int) conf.create_ula_delay, "ula timeout value");
+	}
+
+	now_time += conf.create_ula_delay;
+	valid_until = now_time + conf.local_valid_lifetime;
+	preferred_until = now_time + conf.local_preferred_lifetime;
+	test_pa_timeout_fire(ula_to);
+
+	/* Should create a prefix here */
+	ldp = smock_pull(SMOCK_LDP_UPDATE);
+	if(ldp) {
+		sput_fail_if(prefix_cmp(&ula_prefix, &ldp->prefix), "Correct ula prefix value");
+		sput_fail_unless(ldp->valid_until == valid_until, "Correct valid lifetime");
+		sput_fail_unless(ldp->preferred_until == preferred_until, "Correct preferred lifetime");
+		free(ldp);
+	}
+
+	lap = smock_pull(SMOCK_LAP_UPDATE);
+	if(lap) {
+		sput_fail_unless(prefix_contains(&ula_prefix, &lap->prefix), "Correct generated lap");
+		free(lap);
+	}
+
+	link = smock_pull(SMOCK_LINK_UPDATE);
+	if(link) {
+		sput_fail_if(strcmp(link->ifname, TEST_IFNAME_1), "Correct interface");
+		sput_fail_unless(link->owner, "We are owner");
+		free(link);
+	}
+
+	/* Empty */
+	smock_is_empty();
+
+	/* Destroy the iface */
+	iface.user->cb_intiface(iface.user, TEST_IFNAME_1, false);
+
+	now_time += PA_SCHEDULE_RUNNEXT_MS;
+	test_pa_timeout_fire(&pa->pa_short_timeout);
+
+	ldp = smock_pull(SMOCK_LDP_UPDATE);
+	if(ldp) {
+		free(ldp);
+	}
+
+	lap = smock_pull(SMOCK_LAP_UPDATE);
+	if(lap) {
+		free(lap);
+	}
+
+	link = smock_pull(SMOCK_LINK_UPDATE);
+	if(link) {
+		sput_fail_if(strcmp(link->ifname, TEST_IFNAME_1), "Correct interface");
+		sput_fail_unless(!link->owner, "We are not owner");
+		free(link);
+	}
+
+	pa_test_pa_empty();
 }
 
 void pa_test_storage(void)
@@ -1262,11 +1354,14 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 
 	sput_start_testing();
 
+	/********************************************************************** PA general test */
 	sput_enter_suite("Prefix assignment algorithm (pa.c)"); /* optional */
 
 	sput_run_test(pa_test_misc);
 
 	pa_conf_default(&conf);
+	conf.use_ula = 0;
+	conf.use_ipv4 = 0;
 	sput_run_test(pa_test_init);
 	sput_run_test(pa_test_minimal);
 	sput_run_test(pa_test_collisions);
@@ -1275,9 +1370,12 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 
 	sput_leave_suite(); /* optional */
 
+	/********************************************************************** PA storage test */
 	sput_enter_suite("pa + storage"); /* optional */
 
 	pa_conf_default(&conf);
+	conf.use_ula = 0;
+	conf.use_ipv4 = 0;
 	store_conf.max_px = 100;
 	store_conf.max_px_per_if = 10;
 	conf.storage = pa_store_create(&store_conf, PA_STORE_FILE);
@@ -1292,6 +1390,18 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 	}
 
 	sput_leave_suite(); /* optional */
+
+
+	/********************************************************************** PA ula test */
+	sput_enter_suite("pa + ula"); /* optional */
+	pa_conf_default(&conf);
+	conf.use_ula = 1;
+	conf.use_random_ula = 0;
+	memcpy(&conf.ula_prefix, &ula_prefix, sizeof(struct prefix));
+	sput_run_test(pa_test_init);
+	sput_run_test(pa_test_ula_static);
+	sput_run_test(pa_test_destroy);
+
 	sput_finish_testing();
 	return sput_get_return_value();
 }
