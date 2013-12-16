@@ -802,8 +802,8 @@ static void pa_lap_setassign_delayed(struct pa_lap *lap,
 				when > lap->delayed.assign_time)
 			return;
 
-	L_DEBUG("Delayed assignment of "PA_LAP_L" in %ld ms to (%d)",
-			PA_LAP_LA(lap), when - now, assign);
+	L_DEBUG("Delayed assignment of "PA_LAP_L" in %lld ms to (%d)",
+			PA_LAP_LA(lap), (long long)(when - now), assign);
 
 	lap->delayed.assign_time = when;
 	lap->delayed.assign_value = assign;
@@ -993,8 +993,8 @@ static int pa_dp_times_set(struct pa *pa, struct pa_dp *dp,
 	dp->valid_until = valid_until;
 	dp->preferred_until = preferred_until;
 
-	L_DEBUG("Updating dp "PA_DP_L" with times (%ld, %ld)",
-			PA_DP_LA(dp), valid_until, preferred_until);
+	L_DEBUG("Updating dp "PA_DP_L" with times (%lld, %lld)",
+			PA_DP_LA(dp), (long long)valid_until, (long long)preferred_until);
 
 	pa_schedule(pa, PA_TODO_ALL);
 
