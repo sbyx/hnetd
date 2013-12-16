@@ -250,6 +250,9 @@ static void platform_commit(struct uloop_timeout *t)
 	__unused int ret;
 	ret = ubus_invoke(ubus, ubus_network_interface, "notify_proto", b.head, NULL, NULL, 1000);
 	L_INFO("platform: notify_proto for %s (%s): %s", iface->handle, c->ifname, ubus_strerror(ret));
+
+	if (ret == UBUS_STATUS_NOT_FOUND)
+		platform_set_internal(c, false);
 }
 
 
