@@ -485,7 +485,7 @@ handle_message(hcp_link l,
       o->network_hash_dirty = true;
       n->origination_time = hcp_time(o) - be32_to_cpu(ns->ms_since_origination);
       L_DEBUG("received origination time:%lld (-%d)",
-              n->origination_time,
+              (long long)n->origination_time,
               (int)be32_to_cpu(ns->ms_since_origination));
       hcp_node_set_tlvs(n, tb.head);
       hcp_schedule(o);

@@ -214,7 +214,7 @@ static void _update_d_tlv(hcp_glue g, hcp_node n,
 
       start = tlv_data(tlv) + flen;
       left = tlv_len(tlv) - flen;
-      L_DEBUG("considering what is at offset %d->%d: %s",
+      L_DEBUG("considering what is at offset %lu->%u: %s",
               sizeof(hcp_t_delegated_prefix_header_s) + plen,
               flen,
               HEX_REPR(start, left));

@@ -218,7 +218,7 @@ static void raw_bird14(net_sim s)
 
   SIM_WHILE(s, 1000, !net_sim_is_converged(s) || iter < 900);
   L_NOTICE("unicasts sent:%d after convergence, last %lld ms after convergence",
-           s->sent_unicast - sent_unicast, s->last_unicast_sent - convergence_time);
+           s->sent_unicast - sent_unicast, (long long)(s->last_unicast_sent - convergence_time));
 #if 0
   /* As we do reachability checking, this isn't valid.. unfortunately. */
   sput_fail_unless((s->sent_unicast - sent_unicast) < 50,

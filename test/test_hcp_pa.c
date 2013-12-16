@@ -103,7 +103,7 @@ int pa_update_eap(pa_t pa, const struct prefix *prefix,
            HEX_REPR(rid, HCP_HASH_LEN),
            PREFIX_REPR(prefix),
            ifname ? ifname : "?",
-           node->s->now);
+           (long long)node->s->now);
   sput_fail_unless(prefix, "prefix set");
   sput_fail_unless(rid, "rid set");
   node->updated_eap++;
@@ -136,9 +136,9 @@ int pa_update_edp(pa_t pa, const struct prefix *prefix,
   L_NOTICE("pa_update_edp %s / %s v%lld p%lld (+ %d dhcpv6) at %lld",
            HEX_REPR(rid, HCP_HASH_LEN),
            PREFIX_REPR(prefix),
-           valid_until, preferred_until,
+           (long long)valid_until, (long long)preferred_until,
            (int)dhcpv6_len,
-           node->s->now);
+           (long long)node->s->now);
   sput_fail_unless(prefix, "prefix set");
   sput_fail_unless(rid, "rid set");
   sput_fail_unless(!excluded, "excluded not set");

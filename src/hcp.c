@@ -482,7 +482,7 @@ void hcp_self_flush(hcp_node n)
   o->network_hash_dirty = true;
   hcp_schedule(o);
   L_DEBUG("hcp_self_flush: %p -> update_number = %d @ %lld",
-          n, n->update_number, n->origination_time);
+          n, n->update_number, (long long)n->origination_time);
 }
 
 struct tlv_attr *hcp_node_get_tlvs(hcp_node n)
