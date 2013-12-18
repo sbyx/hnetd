@@ -334,13 +334,8 @@ static void update_delegated(struct iface *c, struct blob_attr *tb[IFACE_ATTR_MA
 			if ((a = tb[PREFIX_ATTR_VALID]))
 				valid = now + (blobmsg_get_u32(a) * HNETD_TIME_PER_SECOND);
 
-			if ((a = tb[PREFIX_ATTR_EXCLUDED])) {
-				char *addr, *prefix, *saveptr;
-				if ((addr = strtok_r(blobmsg_get_string(a), "/", &saveptr)) &&
-						(prefix = strtok_r(NULL, "", &saveptr)) &&
-						inet_pton(AF_INET6, addr, &ex.prefix) == 1)
-					ex.plen = atoi(prefix);
-			}
+			if ((a = tb[PREFIX_ATTR_EXCLUDED]))
+				prefix_pton(blobmsg_get_string(a), &ex);
 
 			void *data = NULL;
 			size_t len = 0;
