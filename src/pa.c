@@ -49,7 +49,7 @@
 #define PA_CONF_DFLT_LOCAL_PREFERRED   300 * HNETD_TIME_PER_SECOND
 #define PA_CONF_DFLT_LOCAL_UPDATE      330 * HNETD_TIME_PER_SECOND
 
-#define PA_CONF_DFLT_USE_ULA             1
+#define PA_CONF_DFLT_USE_ULA             0 //1 TODO: OVERRIDE BECAUSE NOT FULLY TESTED YET
 #define PA_CONF_DFLT_NO_ULA_IF_V6        1
 #define PA_CONF_DFLT_USE_V4              1
 #define PA_CONF_DFLT_NO_V4_IF_V6         0
@@ -162,9 +162,13 @@ struct pa_local {
 	hnetd_time_t ula_create_start;
 	hnetd_time_t ipv4_create_start;
 
+	hnetd_time_t ula_timeout;
+	hnetd_time_t ipv4_timeout;
+
 	struct pa_dp *ula;
 	struct pa_dp *ipv4;
 
+	hnetd_time_t current_timeout;
 	struct uloop_timeout timeout;
 };
 
@@ -1138,6 +1142,16 @@ static void pa_dp_cleanmaybe(struct pa *pa, struct pa_dp *dp,
 /***************** Local prefixes mngmt ***********************/
 /**************************************************************/
 
+static struct pa_iface *pa_iface_get_internal(struct pa *pa)
+{
+	struct pa_iface *iface;
+	list_for_each_entry(iface, &pa->ifaces, le) {
+		if(iface->internal)
+			return iface;
+	}
+	return NULL;
+}
+
 static struct pa_dp *pa_dp_get_globalv6(struct pa *pa)
 {
 	struct pa_dp *dp;
@@ -1148,14 +1162,16 @@ static struct pa_dp *pa_dp_get_globalv6(struct pa *pa)
 	return NULL;
 }
 
-static struct pa_dp *pa_dp_get_edp_ula(struct pa *pa)
+static struct pa_dp *pa_dp_get_edp_highest_ula(struct pa *pa)
 {
-	struct pa_dp *dp;
+	struct pa_dp *dp, *best_dp = NULL;
+
 	list_for_each_entry(dp, &pa->dps, le) {
-		if(prefix_is_ipv6_ula(&dp->prefix) && !dp->local)
-			return dp;
+		if(prefix_is_ipv6_ula(&dp->prefix) && !dp->local &&
+				(!best_dp || PA_RIDCMP(&dp->rid, &best_dp->rid) > 0))
+			best_dp = dp;
 	}
-	return NULL;
+	return best_dp;
 }
 
 static void pa_local_ula_create(struct pa *pa)
@@ -1165,57 +1181,71 @@ static void pa_local_ula_create(struct pa *pa)
 	if(pa->conf.use_random_ula) {
 		p = &PA_CONF_DFLT_ULA;
 		L_WARN("Random ULA not implemented... Using %s instead", PREFIX_REPR(p));
+		//todo: Implement ULA generation
 	} else {
 		p = &pa->conf.ula_prefix;
 	}
 
 	pa->local.ula = pa_dp_create(pa, p, NULL);
+	L_INFO("Creating ULA "PA_DP_L, PA_DP_LA(pa->local.ula));
 }
 
 static void pa_local_ula_destroy(struct pa *pa)
 {
+	L_INFO("Destroying ULA "PA_DP_L, PA_DP_LA(pa->local.ula));
 	pa_dp_update(pa, pa->local.ula, NULL, NULL, 0, 0, NULL, 0);
 	pa->local.ula = NULL;
 }
 
 static void pa_local_do_ula(struct pa *pa, hnetd_time_t now)
 {
-	if(!pa->conf.use_ula && !pa->local.ula)
-			return;
-
 	struct pa_dp *globalv6 = pa_dp_get_globalv6(pa);
-	bool higher = pa_has_global_highest_rid(pa);
-	struct pa_dp *edp_ula = pa_dp_get_edp_ula(pa);
+	struct pa_iface *if_internal = pa_iface_get_internal(pa);
 
-	bool conf_allows = !(globalv6 && pa->conf.no_ula_if_glb_ipv6);
-
-	/* See if we must destroy one */
-	if(pa->local.ula && !conf_allows)
-		pa_local_ula_destroy(pa);
-
-	bool can_create_new = !pa->local.ula && higher &&
-			conf_allows && !edp_ula;
-
-	/* See if we should create one at some point */
-	if(!pa->local.ula_create_start && can_create_new) {
-		/* See whether we are higher id */
-		pa->local.ula_create_start = now;
-	} else if(!can_create_new) {
+	/* Should have no ula because of conf or situation */
+	if(!pa->conf.use_ula || (globalv6 && pa->conf.no_ula_if_glb_ipv6) || !if_internal) {
+		if(pa->local.ula)
+			pa_local_ula_destroy(pa);
 		pa->local.ula_create_start = 0;
+		pa->local.ula_timeout = 0;
+		return;
 	}
 
-	/* See if we must really create one NOW */
-	if(pa->local.ula_create_start && can_create_new &&
-			pa->local.ula_create_start + pa->conf.create_ula_delay <= now)
-		pa_local_ula_create(pa);
+	bool higher = pa_has_global_highest_rid(pa);
+	struct pa_dp *edp_ula = pa_dp_get_edp_highest_ula(pa);
 
-	/* See if we must update lifetime for it */
-	if(pa->local.ula &&
-			pa->local.ula->preferred_until <= now + pa->conf.local_update_delay)
-		pa_dp_update(pa, pa->local.ula, NULL, NULL,
+	if(pa->local.ula) { /* We have a ula */
+		if(edp_ula && (PA_RIDCMP(&edp_ula->rid, &pa->rid) > 0)) {
+			//Have to destroy it
+			pa_local_ula_destroy(pa);
+			pa->local.ula_create_start = 0;
+			pa->local.ula_timeout = 0;
+		} else if (pa->local.ula->valid_until <= now + pa->conf.local_update_delay) {
+			//Refresh ula
+			pa_dp_update(pa, pa->local.ula, NULL, NULL,
+									now + pa->conf.local_valid_lifetime,
+									now + pa->conf.local_preferred_lifetime,
+									NULL, 0);
+			pa->local.ula_timeout = now + pa->local.ula->valid_until - pa->conf.local_update_delay;
+		}
+	} else if(higher && !edp_ula) { /* Should create one */
+		if(!pa->local.ula_create_start) {
+			//Start creating one
+			L_DEBUG("Should create ULA in %d ms", pa->conf.create_ula_delay);
+			pa->local.ula_create_start = now;
+			pa->local.ula_timeout = now + pa->conf.create_ula_delay;
+		} else if (now >= pa->local.ula_create_start + pa->conf.create_ula_delay) {
+			//Create one now
+			pa_local_ula_create(pa);
+			pa_dp_update(pa, pa->local.ula, NULL, NULL,
 						now + pa->conf.local_valid_lifetime,
 						now + pa->conf.local_preferred_lifetime,
 						NULL, 0);
+			pa->local.ula_timeout = now + pa->local.ula->valid_until - pa->conf.local_update_delay;
+		}
+	} else {
+		pa->local.ula_timeout = 0;
+	}
 }
 
 static void pa_local_do_ipv4(struct pa *pa, hnetd_time_t now)
@@ -1228,19 +1258,29 @@ static void pa_local_do_ipv4(struct pa *pa, hnetd_time_t now)
 
 static void pa_local_do(struct pa *pa, hnetd_time_t now)
 {
-	return; /* Not ready yet, but I need to commit so here it is :p (TODO: remove)*/
-
 	pa_local_do_ula(pa, now);
 	pa_local_do_ipv4(pa, now);
 
-	/* TODO: Schedule next event */
+	hnetd_time_t next = 0;
+
+	if(pa->local.ula_timeout && (!next || next > pa->local.ula_timeout))
+		next = pa->local.ula_timeout;
+
+	if(pa->local.ipv4_timeout && (!next || next > pa->local.ipv4_timeout))
+			next = pa->local.ipv4_timeout;
+
+	if(next != pa->local.current_timeout) {
+		L_DEBUG("Scheduling local timeout");
+		pa->local.current_timeout = next;
+		pa_uloop_set(&pa->local.timeout, now, next);
+	}
 }
 
 static void pa_local_timeout_cb(struct uloop_timeout *to)
 {
-	struct pa_local *l = container_of(to, struct pa_local, timeout);
-	struct pa *pa = container_of(l, struct pa, local);
+	struct pa *pa = container_of(to, struct pa, local.timeout);
 	pa->todo_flags |= PA_TODO_ALL;
+	pa->local.current_timeout = 0;
 	pa_do(pa);
 }
 
@@ -1249,15 +1289,21 @@ static void pa_local_init(struct pa_local *local)
 	local->timeout = (struct uloop_timeout) { .cb = pa_local_timeout_cb };
 	local->ipv4_create_start = 0;
 	local->ula_create_start = 0;
+	local->ula_timeout = 0;
+	local->ipv4_timeout = 0;
 	local->ipv4 = NULL;
 	local->ula = NULL;
+	local->current_timeout = 0;
 }
 
-static void pa_local_term(struct pa_local *local)
+static void pa_local_term(struct pa *pa)
 {
+	if(pa->local.ula)
+		pa_local_ula_destroy(pa);
+
 	/* TODO: Delete the dps and unschedule timeout */
-	if(local->timeout.pending)
-		uloop_timeout_cancel(&local->timeout);
+	if(pa->local.timeout.pending)
+		uloop_timeout_cancel(&pa->local.timeout);
 }
 
 /**************************************************************/
@@ -1796,7 +1842,7 @@ void pa_destroy(pa_t pa)
 	struct pa_eap *seap;
 
 	/* Uninit local assignments */
-	pa_local_term(&pa->local);
+	pa_local_term(pa);
 
 	/* Unregister everywhere */
 	iface_unregister_user(&pa->ifu);
