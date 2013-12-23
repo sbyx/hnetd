@@ -1,0 +1,67 @@
+#!/bin/sh
+[ -z "$1" ] && echo "Error: should be run by udhcpc" && exit 1
+
+set_classless_routes() {
+	local max=128
+	shift 1
+
+	while [ -n "$1" -a -n "$2" -a $max -gt 0 ]; do
+		ip -4 route add "$1" via "$2" dev "$interface"
+		max=$(($max-1))
+		shift 2
+	done
+}
+
+update_resolv() {
+	local dns="$1"
+
+	(
+		flock -n 9
+		grep -v "#udhcpc:$interface:" /etc/resolv.conf > /tmp/resolv.conf.tmp
+		for c in $dns; do
+			echo "nameserver $c #udhcpc:$interface:" >> /tmp/resolv.conf.tmp
+		done
+		mv /tmp/resolv.conf.tmp /etc/resolv.conf
+	) 9>/tmp/resolv.conf.lock
+	rm -f /tmp/resolv.conf.lock /tmp/resolv.conf.tmp
+}
+
+
+setup_interface () {
+	ip -4 route flush dev "$interface"
+	ip -4 address flush dev "$interface"
+
+	ifconfig "$interface" "$ip" netmask "${subnet:-255.255.255.0}"
+
+	for i in $router; do
+		ip -4 route add default via "$i" dev "$interface"
+	done
+
+	# CIDR STATIC ROUTES (rfc3442)
+	[ -n "$staticroutes" ] && set_classless_routes $staticroutes
+	[ -n "$msstaticroutes" ] && set_classless_routes $msstaticroutes
+
+	update_resolv "$dns"
+	until hnet-call "{\"command\": \"set_v4lease\", \"ifname\": \"$interface\"}" ; do sleep 1 ; done
+}
+
+deconfig_interface() {
+	ip -4 route flush dev "$interface"
+	ip -4 address flush dev "$interface"
+	until hnet-call "{\"command\": \"unset_v4lease\", \"ifname\": \"$interface\"}" ; do sleep 1 ; done
+	update_resolv "$interface" ""
+}
+
+case "$1" in
+	deconfig)
+		deconfig_interface
+	;;
+	renew|bound)
+		setup_interface
+	;;
+esac
+
+# user rules
+[ -f /etc/udhcpc.user ] && . /etc/udhcpc.user
+
+exit 0
