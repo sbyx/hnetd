@@ -1,0 +1,57 @@
+#!/bin/sh
+
+case "$1" in
+dhcpv4client)
+	exec udhcpc -f -t 0 -i "$2" -H "$(hostname)" -x "0x7d:000076fe020100" -s /usr/share/hnetd/dhcp.script
+	;;
+	
+dhcpv6client)
+	exec odhcp6c -P0 -F -s /usr/share/hnetd/dhcpv6.script "$2"
+	;;
+	
+setfilter|unsetfilter)
+	[ "$1" = "setfilter" ] && act="-A" || act="-D"
+	for cmd in iptables ip6tables; do
+		$cmd $act FORWARD -i "$2" -p tcp -m conntrack --ctstate NEW,INVALID -j REJECT --reject-with tcp-reset
+		$cmd $act FORWARD -i "$2" -m conntrack --ctstate NEW,INVALID -j REJECT --reject-with icmp-port-unreachable
+		$cmd $act INPUT -i "$2" -p tcp -m conntrack --ctstate NEW,INVALID -j REJECT --reject-with tcp-reset
+		$cmd $act INPUT -i "$2" -m conntrack --ctstate NEW,INVALID -j REJECT --reject-with icmp-port-unreachable
+	done
+	;;
+
+newaddr|deladdr)
+	[ "$1" = "newaddr" ] && act="replace" || act="del"
+	[ -n "$4" -a -n "$5" ] && args="preferred_lft $4 valid_lft $5" || args=""
+	ip address $act "$3" dev "$2" $args
+	;;
+
+startdhcp)
+	uci batch <<-EOF
+	set dhcp.$2=dhcp
+	set dhcp.$2.dhcpv6=server
+	set dhcp.$2.dhcpv4=server
+	set dhcp.$2.ra=server
+	commit dhcp
+EOF
+	killall -SIGHUP odhcpd
+	;;
+	
+stopdhcp)
+	uci batch <<-EOF
+	delete dhcp.$2
+	commit dhcp
+EOF
+	killall -SIGHUP odhcpd
+	;;
+
+setdhcpv6)
+	[ -z "$DNS" ] && exit 0
+	uci batch <<-EOF
+	set dhcp.$2=dhcp
+	set dhcp.$2.dns=$DNS
+	commit dhcp
+EOF
+	killall -SIGHUP odhcpd
+	;;
+
+esac

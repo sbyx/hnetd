@@ -85,22 +85,25 @@ void platform_set_internal(struct iface *c, bool internal)
 void platform_set_address(struct iface *c, struct iface_addr *a, bool enable)
 {
 	hnetd_time_t now = hnetd_time();
-	hnetd_time_t valid = (a->valid_until - now) / HNETD_TIME_PER_SECOND;
-	if (valid <= 0)
-		enable = false;
-	else if (valid > UINT32_MAX)
-		valid = UINT32_MAX;
-
-	hnetd_time_t preferred = (a->preferred_until - now) / HNETD_TIME_PER_SECOND;
-	if (preferred < 0)
-		preferred = 0;
-	else if (preferred > UINT32_MAX)
-		preferred = UINT32_MAX;
-
 	char abuf[PREFIX_MAXBUFFLEN], pbuf[10], vbuf[10], cbuf[10] = "";
 	prefix_ntop(abuf, sizeof(abuf), &a->prefix, false);
-	snprintf(pbuf, sizeof(pbuf), "%u", (unsigned)preferred);
-	snprintf(vbuf, sizeof(vbuf), "%u", (unsigned)valid);
+
+	if (!IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix)) {
+		hnetd_time_t valid = (a->valid_until - now) / HNETD_TIME_PER_SECOND;
+		if (valid <= 0)
+			enable = false;
+		else if (valid > UINT32_MAX)
+			valid = UINT32_MAX;
+
+		hnetd_time_t preferred = (a->preferred_until - now) / HNETD_TIME_PER_SECOND;
+		if (preferred < 0)
+			preferred = 0;
+		else if (preferred > UINT32_MAX)
+			preferred = UINT32_MAX;
+
+		snprintf(pbuf, sizeof(pbuf), "%u", (unsigned)preferred);
+		snprintf(vbuf, sizeof(vbuf), "%u", (unsigned)valid);
+	}
 
 	uint8_t *oend = &a->dhcpv6_data[a->dhcpv6_len], *odata;
 	uint16_t olen, otype;
