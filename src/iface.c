@@ -126,7 +126,19 @@ static void update_addr(struct vlist_tree *t, struct vlist_node *node_new, struc
 	struct iface_addr *a_old = container_of(node_old, struct iface_addr, node);
 
 	struct iface *c = container_of(t, struct iface, assigned);
-	platform_set_address(c, (node_new) ? a_new : a_old, !!node_new);
+
+	bool enable = !!node_new;
+	if (!enable && !IN6_IS_ADDR_V4MAPPED(&a_old->prefix.prefix)) {
+		// Don't actually remove addresses, but deprecate them so the change is announced
+		enable = true;
+		a_old->preferred_until = 0;
+
+		hnetd_time_t bound = hnetd_time() + (7200 * HNETD_TIME_PER_SECOND);
+		if (a_old->valid_until > bound)
+			a_old->valid_until = bound;
+	}
+
+	platform_set_address(c, (node_new) ? a_new : a_old, enable);
 
 	__unused char buf[PREFIX_MAXBUFFLEN];
 	L_INFO("iface: %s assigned prefix %s to %s",
