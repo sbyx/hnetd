@@ -77,18 +77,34 @@ int ipc_client(const char *buffer)
 		return 1;
 	}
 
-	int sock = usock(USOCK_UNIX | USOCK_UDP, ipcpath, NULL);
-	if (sock < 0) {
-		fputs("Failed to open socket\n", stderr);
-		return 2;
-	}
+	for (ssize_t len = blob_len(b.head); true; sleep(1)) {
+		int sock = usock(USOCK_UNIX | USOCK_UDP, ipcpath, NULL);
+		if (sock < 0)
+			perror("Failed to open socket");
 
-	ssize_t len = blob_len(b.head);
-	if (send(sock, blob_data(b.head), len, 0) != len) {
-		fputs("Send result wrong\n", stderr);
-		return 3;
+		if (send(sock, blob_data(b.head), len, 0) == len)
+			break;
+
+		perror("Failed to talk to hnetd");
+		close(sock);
 	}
 	return 0;
+}
+
+
+// Multicall handler for hnet-ifup/hnet-ifdown
+int ipc_ifupdown(const char *action, const char *ifname, const char *external)
+{
+	struct blob_buf b = {NULL, NULL, 0, NULL};
+	blob_buf_init(&b, 0);
+
+	blobmsg_add_string(&b, "command", strstr(action, "ifup") ? "ifup" : "ifdown");
+	blobmsg_add_string(&b, "ifname", ifname);
+
+	if (!external || strcmp(external, "external"))
+		blobmsg_add_string(&b, "handle", ifname);
+
+	return ipc_client(blobmsg_format_json(b.head, false));
 }
 
 
@@ -112,8 +128,9 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 
 		const char *cmd = blobmsg_get_string(tb[OPT_COMMAND]);
 		L_DEBUG("Handling ipc command %s", cmd);
-		if (!strcmp(cmd, "ifup") && tb[OPT_HANDLE]) {
-			iface_create(ifname, blobmsg_get_string(tb[OPT_HANDLE]));
+		if (!strcmp(cmd, "ifup")) {
+			iface_create(ifname, tb[OPT_HANDLE] == NULL ? NULL :
+					blobmsg_get_string(tb[OPT_HANDLE]));
 		} else if (!strcmp(cmd, "ifdown")) {
 			iface_remove(c);
 		} else if (!strcmp(cmd, "set_v4lease")) {

@@ -28,6 +28,8 @@ update_resolv() {
 
 
 setup_interface () {
+	hnet-call "{\"command\": \"ifup\", \"ifname\": \"$interface\"}"
+
 	ip -4 route flush dev "$interface"
 	ip -4 address flush dev "$interface"
 
@@ -42,13 +44,13 @@ setup_interface () {
 	[ -n "$msstaticroutes" ] && set_classless_routes $msstaticroutes
 
 	update_resolv "$dns"
-	until hnet-call "{\"command\": \"set_v4lease\", \"ifname\": \"$interface\"}" ; do sleep 1 ; done
+	hnet-call "{\"command\": \"set_v4lease\", \"ifname\": \"$interface\"}"
 }
 
 deconfig_interface() {
 	ip -4 route flush dev "$interface"
 	ip -4 address flush dev "$interface"
-	until hnet-call "{\"command\": \"unset_v4lease\", \"ifname\": \"$interface\"}" ; do sleep 1 ; done
+	hnet-call "{\"command\": \"unset_v4lease\", \"ifname\": \"$interface\"}"
 	update_resolv "$interface" ""
 }
 

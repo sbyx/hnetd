@@ -38,7 +38,7 @@ setup_interface () {
 	done
 
 	update_resolv "$device" "$dns"
-	until hnet-call "{\"command\": \"set_dhcpv6_data\", \"ifname\": \"$device\", \"dns\": [$dnspart]}" ; do sleep 1 ; done
+	hnet-call "{\"command\": \"set_dhcpv6_data\", \"ifname\": \"$device\", \"dns\": [$dnspart]}"
 
 	local prefixpart=""
 	for entry in $PREFIXES; do
@@ -73,7 +73,7 @@ setup_interface () {
 			prefixpart="$prefixpart, $prefix"
 		fi
 	done
-	until hnet-call "{\"command\": \"set_prefixes\", \"ifname\": \"$device\", \"prefix\": [$prefixpart]}" ; do sleep 1 ; done
+	hnet-call "{\"command\": \"set_prefixes\", \"ifname\": \"$device\", \"prefix\": [$prefixpart]}"
 
 	ip -6 route flush dev "$device"
 	ip -6 address flush dev "$device"
@@ -120,8 +120,8 @@ teardown_interface() {
 	local device="$1"
 	ip -6 route flush dev "$device"
 	ip -6 address flush dev "$device"
-	until hnet-call "{\"command\": \"set_dhcpv6_data\", \"ifname\": \"$device\"}" ; do sleep 1 ; done
-	until hnet-call "{\"command\": \"set_prefixes\", \"ifname\": \"$device\", \"prefix\": []}" ; do sleep 1 ; done
+	hnet-call "{\"command\": \"set_dhcpv6_data\", \"ifname\": \"$device\"}"
+	hnet-call "{\"command\": \"set_prefixes\", \"ifname\": \"$device\", \"prefix\": []}"
 	update_resolv "$device" ""
 }
 
@@ -133,7 +133,11 @@ case "$2" in
 	informed|updated|rebound|ra-updated)
 		setup_interface "$1"
 	;;
-	started|stopped|unbound)
+	stopped|unbound)
+		teardown_interface "$1"
+	;;
+	started)
+		hnet-call "{\"command\": \"ifup\", \"ifname\": \"$1\"}"
 		teardown_interface "$1"
 	;;
 esac

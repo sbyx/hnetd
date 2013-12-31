@@ -29,7 +29,7 @@ proto_hnet_setup() {
     # acquisition). It HAS to be done _after_ initial update, though,
     # or hnetd may be unable to commit something before this init
     # finishes (.. sigh ..)
-    until hnet-call "{\"command\": \"ifup\", \"ifname\": \"$device\", \"handle\": \"$interface\"}" ; do sleep 1 ; done
+    hnet-call "{\"command\": \"ifup\", \"ifname\": \"$device\", \"handle\": \"$interface\"}"
 
     # add sub-protocols for DHCPv4 + DHCPv6
     json_init
@@ -79,7 +79,7 @@ proto_hnet_teardown() {
 
     #proto_kill_command "$interface"
     # Prod hnetd
-    until hnet-call "{\"command\": \"ifdown\", \"ifname\": \"$device\", \"handle\": \"$interface\"}" ; do sleep 1 ; done
+    hnet-call "{\"command\": \"ifdown\", \"ifname\": \"$device\", \"handle\": \"$interface\"}"
 }
 
 add_protocol hnet
