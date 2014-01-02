@@ -65,6 +65,7 @@ static void handle_event(__unused struct ubus_context *ctx, __unused struct ubus
 	if (strcmp(blobmsg_get_string(tb[OBJ_ATTR_PATH]), "network.interface"))
 		return;
 
+	ubus_network_interface = blobmsg_get_u32(tb[OBJ_ATTR_ID]);
 	subscribe_netifd();
 }
 static struct ubus_event_handler event_handler = { .cb = handle_event };
