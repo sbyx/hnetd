@@ -35,6 +35,41 @@ struct platform_iface {
 };
 
 
+/* ubus subscribe / handle control code */
+static void subscribe_netifd(void)
+{
+	ubus_subscribe(ubus, &netifd, ubus_network_interface);
+	ubus_invoke(ubus, ubus_network_interface, "dump", NULL, handle_dump, NULL, 0);
+}
+
+enum {
+	OBJ_ATTR_ID,
+	OBJ_ATTR_PATH,
+	OBJ_ATTR_MAX
+};
+
+static const struct blobmsg_policy obj_attrs[OBJ_ATTR_MAX] = {
+	[OBJ_ATTR_ID] = { .name = "id", .type = BLOBMSG_TYPE_INT32 },
+	[OBJ_ATTR_PATH] = { .name = "path", .type = BLOBMSG_TYPE_STRING },
+};
+
+static void handle_event(__unused struct ubus_context *ctx, __unused struct ubus_event_handler *ev,
+                __unused const char *type, struct blob_attr *msg)
+{
+	struct blob_attr *tb[OBJ_ATTR_MAX];
+	blobmsg_parse(obj_attrs, OBJ_ATTR_MAX, tb, blob_data(msg), blob_len(msg));
+
+	if (!tb[OBJ_ATTR_ID] || !tb[OBJ_ATTR_PATH])
+		return;
+
+	if (strcmp(blobmsg_get_string(tb[OBJ_ATTR_PATH]), "network.interface"))
+		return;
+
+	subscribe_netifd();
+}
+static struct ubus_event_handler event_handler = { .cb = handle_event };
+
+
 int platform_init(void)
 {
 	if (!(ubus = ubus_connect(NULL))) {
@@ -45,11 +80,10 @@ int platform_init(void)
 	netifd.cb = handle_update;
 	ubus_register_subscriber(ubus, &netifd);
 
-	ubus_lookup_id(ubus, "network.interface", &ubus_network_interface);
 	ubus_add_uloop(ubus);
-
-	ubus_subscribe(ubus, &netifd, ubus_network_interface);
-	ubus_invoke(ubus, ubus_network_interface, "dump", NULL, handle_dump, NULL, 0);
+	ubus_register_event_handler(ubus, &event_handler, "ubus.object.add");
+	if (!ubus_lookup_id(ubus, "network.interface", &ubus_network_interface))
+		subscribe_netifd();
 
 	return 0;
 }
