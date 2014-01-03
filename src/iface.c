@@ -115,8 +115,8 @@ void iface_set_dhcpv6_send(const char *ifname, const void *dhcpv6_data, size_t d
 // Compare if two addresses are identical
 static int compare_addrs(const void *a, const void *b, void *ptr __attribute__((unused)))
 {
-	const struct iface_addr *a1 = a, *a2 = b;
-	return prefix_cmp(&a1->prefix, &a2->prefix);
+	const struct prefix *a1 = a, *a2 = b;
+	return prefix_cmp(a1, a2);
 }
 
 // Update address if necessary (node_new: addr that will be present, node_old: addr that was present)
