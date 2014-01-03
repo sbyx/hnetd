@@ -381,7 +381,7 @@ void pa_test_destroy(void)
 void pa_test_ula_static(void)
 {
 	struct uloop_timeout *ula_to;
-	struct lap_update_call *lap;
+	struct lap_update_call *lap, *lap1, *lap2;
 	struct ldp_update_call *ldp;
 	struct link_update_call *link;
 	hnetd_time_t valid_until, preferred_until;
@@ -445,19 +445,103 @@ void pa_test_ula_static(void)
 	/* Empty */
 	smock_is_empty();
 
-	/* Destroy the iface */
-	iface.user->cb_intiface(iface.user, TEST_IFNAME_1, false);
+	now_time += 10000;
+
+	/* Adding some other guy with lower id */
+	hnetd_time_t dp_valid_until = now_time + 100000;
+	hnetd_time_t dp_preferred_until = now_time + 50000;
+	pa_update_edp(pa, &ula_prefix_2, &rid_lower, NULL, dp_valid_until, dp_preferred_until,
+					NULL, 0);
 
 	now_time += PA_SCHEDULE_RUNNEXT_MS;
 	test_pa_timeout_fire(&pa->pa_short_timeout);
 
+	/* A prefix is assigned for that ula as well (may be modified if we decide to ignore) */
+	lap = smock_pull(SMOCK_LAP_UPDATE);
+	if(lap) {
+		sput_fail_unless(prefix_contains(&ula_prefix_2, &lap->prefix), "Correct generated lap");
+		sput_fail_if(strcmp(lap->ifname, TEST_IFNAME_1), "Correct interface");
+		sput_fail_if(lap->to_delete, "Lap created");
+		free(lap);
+	}
+
+	/* Empty */
+	smock_is_empty();
+
+	/* Remove the edp */
+	now_time += 10000;
+	pa_update_edp(pa, &ula_prefix_2, &rid_lower, NULL, 0,
+						dp_preferred_until /* Left to non-0 for test */,
+						NULL, 0);
+
+	now_time += PA_SCHEDULE_RUNNEXT_MS;
+	test_pa_timeout_fire(&pa->pa_short_timeout);
+
+	/* The prefix is removed */
+	lap = smock_pull(SMOCK_LAP_UPDATE);
+	if(lap) {
+		sput_fail_unless(prefix_contains(&ula_prefix_2, &lap->prefix), "Correct generated lap");
+		sput_fail_if(strcmp(lap->ifname, TEST_IFNAME_1), "Correct interface");
+		sput_fail_unless(lap->to_delete, "Lap destroyed");
+		free(lap);
+	}
+
+	/* Empty */
+	smock_is_empty();
+
+	/* Now let's add an ula edp with higher priority */
+	dp_valid_until = now_time + 100000;
+	dp_preferred_until = now_time + 50000;
+	pa_update_edp(pa, &ula_prefix_2, &rid_higher, NULL, dp_valid_until, dp_preferred_until,
+						NULL, 0);
+
+	now_time += PA_SCHEDULE_RUNNEXT_MS;
+	test_pa_timeout_fire(&pa->pa_short_timeout);
+
+	/* The ula ldp must be destroyed */
 	ldp = smock_pull(SMOCK_LDP_UPDATE);
 	if(ldp) {
+		sput_fail_if(prefix_cmp(&ula_prefix, &ldp->prefix), "Correct ula prefix value");
+		sput_fail_unless(ldp->valid_until == 0, "Prefix is to be deleted");
+		sput_fail_unless(ldp->preferred_until == 0, "Prefix is to be deleted");
+		sput_fail_unless(ldp->dp_ifname == NULL, "Correct iface");
 		free(ldp);
 	}
 
+	lap1 = smock_pull(SMOCK_LAP_UPDATE);
+	lap2 = smock_pull(SMOCK_LAP_UPDATE);
+	if(lap1 && lap1->to_delete) {
+		lap = lap1;
+		lap1 = lap2;
+		lap2 = lap;
+	}
+
+	if(lap1 && lap2) {
+		sput_fail_unless(prefix_contains(&ula_prefix_2, &lap1->prefix), "Correct generated lap");
+		sput_fail_unless(prefix_contains(&ula_prefix, &lap2->prefix), "Correct generated lap");
+		sput_fail_unless(!lap1->to_delete, "First lap is created");
+		sput_fail_unless(!lap1->to_delete, "Second lap is destroyed");
+		free(lap1);
+		free(lap2);
+	}
+
+	/* Empty */
+	smock_is_empty();
+
+	/* Remove the edp */
+	now_time += 10000;
+	pa_update_edp(pa, &ula_prefix_2, &rid_higher, NULL, 0, 0,
+			NULL, 0);
+
+	now_time += PA_SCHEDULE_RUNNEXT_MS;
+	test_pa_timeout_fire(&pa->pa_short_timeout);
+
+	/* The prefix is removed */
 	lap = smock_pull(SMOCK_LAP_UPDATE);
 	if(lap) {
+		sput_fail_unless(prefix_contains(&ula_prefix_2, &lap->prefix), "Correct generated lap");
+		sput_fail_if(strcmp(lap->ifname, TEST_IFNAME_1), "Correct interface");
+		sput_fail_unless(lap->to_delete, "Lap destroyed");
 		free(lap);
 	}
 
@@ -467,6 +551,15 @@ void pa_test_ula_static(void)
 		sput_fail_unless(!link->owner, "We are not owner");
 		free(link);
 	}
+
+	/* Empty */
+	smock_is_empty();
+
+	/* Destroy the iface */
+	iface.user->cb_intiface(iface.user, TEST_IFNAME_1, false);
+
+	now_time += PA_SCHEDULE_RUNNEXT_MS;
+	test_pa_timeout_fire(&pa->pa_short_timeout);
 
 	pa_test_pa_empty();
 }

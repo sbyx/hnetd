@@ -49,7 +49,7 @@
 #define PA_CONF_DFLT_LOCAL_PREFERRED   300 * HNETD_TIME_PER_SECOND
 #define PA_CONF_DFLT_LOCAL_UPDATE      330 * HNETD_TIME_PER_SECOND
 
-#define PA_CONF_DFLT_USE_ULA             0 //1 TODO: OVERRIDE BECAUSE NOT FULLY TESTED YET
+#define PA_CONF_DFLT_USE_ULA             1
 #define PA_CONF_DFLT_NO_ULA_IF_V6        1
 #define PA_CONF_DFLT_USE_V4              1
 #define PA_CONF_DFLT_NO_V4_IF_V6         0
@@ -1500,6 +1500,9 @@ static void pa_do(struct pa *pa)
 					break;
 				}
 			}
+
+			/* TODO: Maybe we need to prevent ULA/IPv4 prefixes that do not
+			 have priority (Depends if we trust other hosts).*/
 
 			/* Only use smaller dps
 			 * Laps that are not in smaller dps will
