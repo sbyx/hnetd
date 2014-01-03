@@ -83,7 +83,7 @@ struct pa_iface {
 
 	bool internal;         /* Whether the iface is internal */
 	bool do_dhcp;          /* Whether we should do dhcp on that
-	                          iface. Which means we are owner of that link. */
+				  iface. Which means we are owner of that link. */
 
 	struct list_head laps; /* laps on that iface */
 	struct list_head eaps; /* eaps on that iface */
@@ -1758,6 +1758,8 @@ static void pa_ifu_intiface(struct iface_user *u,
 	if(!iface)
 		return;
 
+	L_DEBUG("pa_ifu_intiface %s=%s", ifname, enabled ? "enabled" : "disabled");
+
 	pa_iface_set_internal(pa, iface, enabled);
 }
 
@@ -1773,6 +1775,10 @@ static void pa_ifu_pd(struct iface_user *u, const char *ifname,
 
 	if(!dp)
 		return;
+
+	L_DEBUG("pa_ifu_pd @%s %s %lld/%lld", ifname,
+			PREFIX_REPR(prefix),
+			(long long)valid_until, (long long)preferred_until);
 
 	pa_dp_update(pa, dp, ifname, excluded,
 		valid_until, preferred_until,
@@ -1887,4 +1893,3 @@ void pa_destroy(pa_t pa)
 	L_NOTICE("Pa structure destroyed");
 	free(pa);
 }
-

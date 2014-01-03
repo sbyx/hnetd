@@ -157,7 +157,12 @@ char *prefix_ntop(char *dst, size_t dst_len,
 		to_use = prefix;
 	}
 
-	const char *res = inet_ntop(AF_INET6, &to_use->prefix, dst, dst_len);
+	const char *res;
+
+	if (!IN6_IS_ADDR_V4MAPPED(&to_use->prefix))
+		res = inet_ntop(AF_INET6, &to_use->prefix, dst, dst_len);
+	else
+		res = inet_ntop(AF_INET, &to_use->prefix.s6_addr[12], dst, dst_len);
 
 	if(!res)
 		return NULL;
@@ -172,3 +177,26 @@ char *prefix_ntop(char *dst, size_t dst_len,
 	return dst;
 }
 
+int prefix_pton(const char *addr, struct prefix *p)
+{
+	char buf[INET6_ADDRSTRLEN];
+	size_t addrlen = strchr(addr, '/') - addr;
+	if (addrlen >= sizeof(buf) - 1)
+		return 0;
+
+	memcpy(buf, addr, addrlen);
+	buf[addrlen] = 0;
+
+	memset(p, 0, sizeof(*p));
+	if (inet_pton(AF_INET6, buf, &p->prefix) != 1) {
+		if (inet_pton(AF_INET, buf, &p->prefix.s6_addr[12]) == 1) {
+			p->prefix.s6_addr[10] = 0xff;
+			p->prefix.s6_addr[11] = 0xff;
+		} else {
+			return 0;
+		}
+	}
+
+	p->plen = atoi(&addr[addrlen + 1]);
+	return p->plen <= 128 && (!IN6_IS_ADDR_V4MAPPED(&p->prefix) || p->plen <= 32);
+}

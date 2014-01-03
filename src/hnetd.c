@@ -64,6 +64,8 @@ int main(__unused int argc, char* const argv[])
 
 	if (strstr(argv[0], "hnet-call"))
 		return ipc_client(argv[1]);
+	else if ((strstr(argv[0], "hnet-ifup") || strstr(argv[0], "hnet-ifdown")) && argc >= 2)
+		return ipc_ifupdown(argv[0], argv[1], argv[2]);
 
 	openlog("hnetd", LOG_PERROR | LOG_PID, LOG_DAEMON);
 	uloop_init();

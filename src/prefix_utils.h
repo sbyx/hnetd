@@ -72,6 +72,9 @@ char *prefix_ntop(char *dst, size_t dst_len,
 		const struct prefix *prefix,
 		bool canonical);
 
+/* Parse the prefix into a buffer */
+int prefix_pton(const char *addr, struct prefix *p);
+
 /* This is provided as an option, to have prefix_ntop with
  * heap-allocated destination buffer (if we run out of heap, we have
  * lot bigger problems too so little need to worry here). */

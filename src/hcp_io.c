@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Sun Dec  8 06:04:50 2013 mstenber
- * Edit time:     199 min
+ * Last modified: Thu Jan  2 09:59:46 2014 mstenber
+ * Edit time:     202 min
  *
  */
 
@@ -223,7 +223,10 @@ ssize_t hcp_io_recvfrom(hcp o, void *buf, size_t len,
   else
     {
       *ifname = 0;
-      L_DEBUG("unable to receive - recvmsg:%s", strerror(errno));
+      if (l < 0 && errno != EWOULDBLOCK)
+        {
+          L_DEBUG("unable to receive - recvmsg:%s", strerror(errno));
+        }
     }
   return l;
 }
