@@ -312,6 +312,10 @@ static struct prefix ula_prefix =
 		{ .prefix = { .s6_addr = { 0xfd,0x00, 0xde,0xad,  0x00,0x01}},
 			.plen = 48 };
 
+static struct prefix ula_prefix_2 =
+		{ .prefix = { .s6_addr = { 0xfd,0x00, 0xde,0xad,  0x00,0x02}},
+			.plen = 48 };
+
 static struct pa_conf conf;
 static struct pa_store_conf store_conf;
 
@@ -417,12 +421,17 @@ void pa_test_ula_static(void)
 		sput_fail_if(prefix_cmp(&ula_prefix, &ldp->prefix), "Correct ula prefix value");
 		sput_fail_unless(ldp->valid_until == valid_until, "Correct valid lifetime");
 		sput_fail_unless(ldp->preferred_until == preferred_until, "Correct preferred lifetime");
+		sput_fail_unless(ldp->dhcpv6_data == conf.ula_dhcp_data, "Correct dhcp data");
+		sput_fail_unless(ldp->dhcpv6_len == conf.ula_dhcp_data_len, "Correct dhcp data len");
+		sput_fail_unless(ldp->dp_ifname == NULL, "Correct iface");
 		free(ldp);
 	}
 
 	lap = smock_pull(SMOCK_LAP_UPDATE);
 	if(lap) {
 		sput_fail_unless(prefix_contains(&ula_prefix, &lap->prefix), "Correct generated lap");
+		sput_fail_if(strcmp(lap->ifname, TEST_IFNAME_1), "Correct interface");
+		sput_fail_if(lap->to_delete, "Lap created");
 		free(lap);
 	}
 

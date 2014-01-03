@@ -55,6 +55,12 @@
 #define PA_CONF_DFLT_NO_V4_IF_V6         0
 #define PA_CONF_DFLT_USE_RDM_ULA         1
 
+#define PA_CONF_DFLT_ULA_DHCP_DATA       NULL
+#define PA_CONF_DFLT_ULA_DHCP_DLEN       0
+
+#define PA_CONF_DFLT_V4_DHCP_DATA        NULL
+#define PA_CONF_DFLT_V4_DHCP_DLEN        0
+
 /* 10/8 */
 static struct prefix PA_CONF_DFLT_V4 = {
 	.prefix = { .s6_addr = {
@@ -279,6 +285,12 @@ void pa_conf_default(struct pa_conf *conf)
 	conf->local_valid_lifetime = PA_CONF_DFLT_LOCAL_VALID;
 	conf->local_preferred_lifetime = PA_CONF_DFLT_LOCAL_PREFERRED;
 	conf->local_update_delay = PA_CONF_DFLT_LOCAL_UPDATE;
+
+	conf->ula_dhcp_data_len = PA_CONF_DFLT_ULA_DHCP_DLEN;
+	conf->ula_dhcp_data = PA_CONF_DFLT_ULA_DHCP_DATA;
+
+	conf->ipv4_dhcp_data_len = PA_CONF_DFLT_V4_DHCP_DLEN;
+	conf->ipv4_dhcp_data = PA_CONF_DFLT_V4_DHCP_DATA;
 }
 
 void pa_flood_subscribe(pa_t pa, const struct pa_flood_callbacks *cb)
@@ -1225,8 +1237,8 @@ static void pa_local_do_ula(struct pa *pa, hnetd_time_t now)
 			pa_dp_update(pa, pa->local.ula, NULL, NULL,
 									now + pa->conf.local_valid_lifetime,
 									now + pa->conf.local_preferred_lifetime,
-									NULL, 0);
-			pa->local.ula_timeout = now + pa->local.ula->valid_until - pa->conf.local_update_delay;
+									pa->conf.ula_dhcp_data, pa->conf.ula_dhcp_data_len);
+			pa->local.ula_timeout = pa->local.ula->valid_until - pa->conf.local_update_delay;
 		}
 	} else if(higher && !edp_ula) { /* Should create one */
 		if(!pa->local.ula_create_start) {
@@ -1240,8 +1252,8 @@ static void pa_local_do_ula(struct pa *pa, hnetd_time_t now)
 			pa_dp_update(pa, pa->local.ula, NULL, NULL,
 						now + pa->conf.local_valid_lifetime,
 						now + pa->conf.local_preferred_lifetime,
-						NULL, 0);
-			pa->local.ula_timeout = now + pa->local.ula->valid_until - pa->conf.local_update_delay;
+						pa->local.ula->dhcpv6_data, pa->local.ula->dhcpv6_len);
+			pa->local.ula_timeout = pa->local.ula->valid_until - pa->conf.local_update_delay;
 		}
 	} else {
 		pa->local.ula_timeout = 0;
@@ -1301,9 +1313,10 @@ static void pa_local_term(struct pa *pa)
 	if(pa->local.ula)
 		pa_local_ula_destroy(pa);
 
-	/* TODO: Delete the dps and unschedule timeout */
 	if(pa->local.timeout.pending)
 		uloop_timeout_cancel(&pa->local.timeout);
+
+	pa->local.current_timeout = 0;
 }
 
 /**************************************************************/

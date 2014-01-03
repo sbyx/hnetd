@@ -151,6 +151,16 @@ struct pa_conf {
 	 * May be left to NULL so that no permanent storage is used.
 	 * Default is NULL */
 	struct pa_store *storage;
+
+	/* dhcp data used for ula prefixes
+	 * default = 0/NULL */
+	size_t ula_dhcp_data_len;
+	void *ula_dhcp_data;
+
+	/* ipv4 data used for ula prefixes
+	 * default = 0/NULL */
+	size_t ipv4_dhcp_data_len;
+	void *ipv4_dhcp_data;
 };
 
 
