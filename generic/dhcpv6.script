@@ -72,6 +72,9 @@ setup_interface () {
 		else
 			prefixpart="$prefixpart, $prefix"
 		fi
+
+		# TODO: delete this somehow when the prefix disappears
+		ip -6 route add unreachable "$addr"
 	done
 	hnet-call "{\"command\": \"set_prefixes\", \"ifname\": \"$device\", \"prefix\": [$prefixpart]}"
 

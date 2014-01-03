@@ -27,12 +27,53 @@ static int handle_update(__unused struct ubus_context *ctx,
 static void handle_dump(__unused struct ubus_request *req,
 		__unused int type, struct blob_attr *msg);
 
+static struct ubus_request req_dump = { .data_cb = handle_dump, .list = LIST_HEAD_INIT(req_dump.list) };
+
 static void platform_commit(struct uloop_timeout *t);
 struct platform_iface {
 	struct iface *iface;
 	struct uloop_timeout update;
 	char handle[];
 };
+
+
+/* ubus subscribe / handle control code */
+static void sync_netifd(void)
+{
+	ubus_subscribe(ubus, &netifd, ubus_network_interface);
+
+	ubus_abort_request(ubus, &req_dump);
+	if (!ubus_invoke_async(ubus, ubus_network_interface, "dump", NULL, &req_dump))
+		ubus_complete_request_async(ubus, &req_dump);
+}
+
+enum {
+	OBJ_ATTR_ID,
+	OBJ_ATTR_PATH,
+	OBJ_ATTR_MAX
+};
+
+static const struct blobmsg_policy obj_attrs[OBJ_ATTR_MAX] = {
+	[OBJ_ATTR_ID] = { .name = "id", .type = BLOBMSG_TYPE_INT32 },
+	[OBJ_ATTR_PATH] = { .name = "path", .type = BLOBMSG_TYPE_STRING },
+};
+
+static void handle_event(__unused struct ubus_context *ctx, __unused struct ubus_event_handler *ev,
+                __unused const char *type, struct blob_attr *msg)
+{
+	struct blob_attr *tb[OBJ_ATTR_MAX];
+	blobmsg_parse(obj_attrs, OBJ_ATTR_MAX, tb, blob_data(msg), blob_len(msg));
+
+	if (!tb[OBJ_ATTR_ID] || !tb[OBJ_ATTR_PATH])
+		return;
+
+	if (strcmp(blobmsg_get_string(tb[OBJ_ATTR_PATH]), "network.interface"))
+		return;
+
+	ubus_network_interface = blobmsg_get_u32(tb[OBJ_ATTR_ID]);
+	sync_netifd();
+}
+static struct ubus_event_handler event_handler = { .cb = handle_event };
 
 
 int platform_init(void)
@@ -45,11 +86,10 @@ int platform_init(void)
 	netifd.cb = handle_update;
 	ubus_register_subscriber(ubus, &netifd);
 
-	ubus_lookup_id(ubus, "network.interface", &ubus_network_interface);
 	ubus_add_uloop(ubus);
-
-	ubus_subscribe(ubus, &netifd, ubus_network_interface);
-	ubus_invoke(ubus, ubus_network_interface, "dump", NULL, handle_dump, NULL, 0);
+	ubus_register_event_handler(ubus, &event_handler, "ubus.object.add");
+	if (!ubus_lookup_id(ubus, "network.interface", &ubus_network_interface))
+		sync_netifd();
 
 	return 0;
 }
@@ -68,7 +108,7 @@ void platform_iface_new(struct iface *c, const char *handle)
 	c->platform = iface;
 
 	// Have to rerun dump here as to sync up on nested interfaces
-	ubus_invoke(ubus, ubus_network_interface, "dump", NULL, handle_dump, NULL, 0);
+	sync_netifd();
 }
 
 // Destructor for openwrt-specific interface part
