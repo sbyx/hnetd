@@ -282,6 +282,13 @@ struct iface* iface_create(const char *ifname, const char *handle)
 }
 
 
+void iface_flush(void)
+{
+	while (!list_empty(&interfaces))
+		iface_remove(list_first_entry(&interfaces, struct iface, head));
+}
+
+
 void iface_set_v4leased(struct iface *c, bool v4leased)
 {
 	if (c->v4leased != v4leased) {

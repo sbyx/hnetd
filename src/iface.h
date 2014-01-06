@@ -116,4 +116,7 @@ void iface_set_v4leased(struct iface *c, bool v4leased);
 // Set DHCPv6 data received
 void iface_set_dhcpv6_received(struct iface *c, const void *dhcpv6_data, size_t dhcpv6_len);
 
+// Flush all interfaces
+void iface_flush(void);
+
 #endif

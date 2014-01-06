@@ -71,6 +71,7 @@ static void handle_event(__unused struct ubus_context *ctx, __unused struct ubus
 		return;
 
 	ubus_network_interface = blobmsg_get_u32(tb[OBJ_ATTR_ID]);
+	iface_flush();
 	sync_netifd();
 }
 static struct ubus_event_handler event_handler = { .cb = handle_event };
@@ -318,23 +319,27 @@ static const struct blobmsg_policy prefix_attrs[PREFIX_ATTR_MAX] = {
 
 
 enum {
+	IFACE_ATTR_HANDLE,
 	IFACE_ATTR_IFNAME,
 	IFACE_ATTR_PROTO,
 	IFACE_ATTR_PREFIX,
 	IFACE_ATTR_V4ADDR,
 	IFACE_ATTR_DELEGATION,
 	IFACE_ATTR_DNS,
+	IFACE_ATTR_UP,
 	IFACE_ATTR_MAX,
 };
 
 
 static const struct blobmsg_policy iface_attrs[IFACE_ATTR_MAX] = {
+	[IFACE_ATTR_HANDLE] = { .name = "interface", .type = BLOBMSG_TYPE_STRING },
 	[IFACE_ATTR_IFNAME] = { .name = "l3_device", .type = BLOBMSG_TYPE_STRING },
 	[IFACE_ATTR_PROTO] = { .name = "proto", .type = BLOBMSG_TYPE_STRING },
 	[IFACE_ATTR_PREFIX] = { .name = "ipv6-prefix", .type = BLOBMSG_TYPE_ARRAY },
 	[IFACE_ATTR_V4ADDR] = { .name = "ipv4-address", .type = BLOBMSG_TYPE_ARRAY },
 	[IFACE_ATTR_DELEGATION] = { .name = "delegation", .type = BLOBMSG_TYPE_BOOL },
 	[IFACE_ATTR_DNS] = { .name = "dns-server", .type = BLOBMSG_TYPE_ARRAY },
+	[IFACE_ATTR_UP] = { .name = "up", .type = BLOBMSG_TYPE_BOOL },
 };
 
 
@@ -442,18 +447,17 @@ static void platform_update(void *data, size_t len)
 	const char *ifname = blobmsg_get_string(a);
 	struct iface *c = iface_get(ifname);
 
+	const char *proto = "";
+	if ((a = tb[IFACE_ATTR_PROTO]))
+		proto = blobmsg_get_string(a);
+
+	if (!c && !strcmp(proto, "hnet") && (a = tb[IFACE_ATTR_HANDLE]))
+		c = iface_create(ifname, blobmsg_get_string(a));
+
 	L_INFO("platform: interface update for %s detected", ifname);
 
 	if (c && c->platform) {
 		// This is a known managed interface
-
-		const char *proto = NULL;
-		if ((a = tb[IFACE_ATTR_PROTO]))
-			proto = blobmsg_get_string(a);
-
-		if (!proto)
-			return;
-
 		if (!strcmp(proto, "dhcpv6")) {
 			// Our nested DHCPv6 client interface
 			update_delegated(c, tb);
@@ -470,6 +474,9 @@ static void platform_update(void *data, size_t len)
 			}
 
 			iface_set_v4leased(c, v4leased);
+		} else if (!strcmp(proto, "hnet")) {
+			if ((a = tb[IFACE_ATTR_UP]) && !blobmsg_get_bool(a))
+				iface_remove(c);
 		}
 	} else {
 		// We have only unmanaged interfaces at this point
