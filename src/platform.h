@@ -16,6 +16,9 @@ void platform_set_internal(struct iface *c, bool internal);
 // Set / unset an address
 void platform_set_address(struct iface *c, struct iface_addr *addr, bool enable);
 
+// Set / unset a route
+void platform_set_route(struct iface *c, struct iface_route *route, bool enable);
+
 // Set owner status
 void platform_set_owner(struct iface *c, bool enable);
 

@@ -3,6 +3,7 @@
 #include <net/if.h>
 #include <assert.h>
 #include <ifaddrs.h>
+#include <arpa/inet.h>
 
 #include "iface.h"
 #include "platform.h"
@@ -111,6 +112,75 @@ void iface_set_dhcpv6_send(const char *ifname, const void *dhcpv6_data, size_t d
 	}
 }
 
+// Begin route update cycle
+void iface_update_routes(void)
+{
+	struct iface *c;
+	list_for_each_entry(c, &interfaces, head)
+		vlist_update(&c->routes);
+}
+
+// Add new routes
+void iface_add_route(const char *ifname, const struct prefix *from, const struct prefix *to, const struct in6_addr *via)
+{
+	struct iface *c = iface_get(ifname);
+	if (c) {
+		struct iface_route *r = calloc(1, sizeof(*r));
+		r->from = *from;
+		r->to = *to;
+		r->via = *via;
+		vlist_add(&c->routes, &r->node, r);
+	}
+}
+
+// Flush and commit routes to synthesize events
+void iface_commit_routes(void)
+{
+	struct iface *c;
+	list_for_each_entry(c, &interfaces, head)
+		vlist_flush(&c->routes);
+}
+
+
+// Compare if two addresses are identical
+static int compare_routes(const void *a, const void *b, void *ptr __attribute__((unused)))
+{
+	const struct iface_route *r1 = a, *r2 = b;
+	int c = prefix_cmp(&r1->from, &r2->from);
+
+	if (!c)
+		c = prefix_cmp(&r1->to, &r2->to);
+
+	if (!c)
+		c = memcmp(&r1->via, &r2->via, sizeof(r1->via));
+
+	return c;
+}
+
+
+// Update route if necessary (node_new: route that will be present, node_old: route that was present)
+static void update_route(struct vlist_tree *t, struct vlist_node *node_new, struct vlist_node *node_old)
+{
+	struct iface_route *r_new = container_of(node_new, struct iface_route, node);
+	struct iface_route *r_old = container_of(node_old, struct iface_route, node);
+	struct iface_route *r = (node_new) ? r_new : r_old;
+	struct iface *c = container_of(t, struct iface, routes);
+
+	if (!node_new || !node_old)
+		platform_set_route(c, r, !!node_new);
+
+	__unused char buf[PREFIX_MAXBUFFLEN];
+	__unused char buf2[INET6_ADDRSTRLEN];
+	L_INFO("iface: %s route %s via %s%%%s",
+			(node_new) ? (node_old) ? "updated" : "added" : "removed",
+			prefix_ntop(buf, sizeof(buf), &r->to, false),
+			inet_ntop(AF_INET6, &r->via, buf2, sizeof(buf2)),
+			c->ifname);
+
+	if (node_old)
+		free(r_old);
+}
+
 
 // Compare if two addresses are identical
 static int compare_addrs(const void *a, const void *b, void *ptr __attribute__((unused)))
@@ -205,6 +275,7 @@ void iface_remove(struct iface *c)
 	list_del(&c->head);
 	vlist_flush_all(&c->assigned);
 	vlist_flush_all(&c->delegated);
+	vlist_flush_all(&c->routes);
 
 	if (c->platform)
 		platform_iface_free(c);
@@ -269,6 +340,7 @@ struct iface* iface_create(const char *ifname, const char *handle)
 
 		vlist_init(&c->assigned, compare_addrs, update_addr);
 		vlist_init(&c->delegated, compare_addrs, update_prefix);
+		vlist_init(&c->routes, compare_routes, update_route);
 
 		list_add(&c->head, &interfaces);
 	}

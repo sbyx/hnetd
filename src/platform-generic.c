@@ -122,6 +122,22 @@ void platform_set_address(struct iface *c, struct iface_addr *a, bool enable)
 }
 
 
+void platform_set_route(struct iface *c, struct iface_route *route, bool enable)
+{
+	char from[PREFIX_MAXBUFFLEN];
+	char to[PREFIX_MAXBUFFLEN];
+	char via[INET6_ADDRSTRLEN];
+
+	prefix_ntop(from, sizeof(from), &route->from, true);
+	prefix_ntop(to, sizeof(to), &route->to, true);
+	inet_ntop(AF_INET6, &route->via, via, sizeof(via));
+
+	char *argv[] = {backend, (enable) ? "newroute" : "delroute",
+			c->ifname, to, via, from, NULL};
+	platform_call(argv);
+}
+
+
 void platform_set_owner(struct iface *c, bool enable)
 {
 	char *argv[] = {backend, (enable) ? "startdhcp" : "stopdhcp", c->ifname, NULL};
