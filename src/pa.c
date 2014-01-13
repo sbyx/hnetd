@@ -54,6 +54,7 @@
 #define PA_CONF_DFLT_USE_V4              1
 #define PA_CONF_DFLT_NO_V4_IF_V6         0
 #define PA_CONF_DFLT_USE_RDM_ULA         1
+#define PA_CONF_DFLT_ULA_RDM_PLEN        48
 
 #define PA_CONF_DFLT_ULA_DHCP_DATA       NULL
 #define PA_CONF_DFLT_ULA_DHCP_DLEN       0
@@ -67,12 +68,6 @@ static struct prefix PA_CONF_DFLT_V4 = {
 			0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00,
 			0x00,0x00, 0xff,0xff,  0x0a }},
 	.plen = 104 };
-
-/* Used as ULA while automatic generation is not implemented */
-static struct prefix PA_CONF_DFLT_ULA = {
-	.prefix = { .s6_addr = {
-			0xfd,0x00, 0xf0,0x0d,  0x00,0x01}},
-	.plen = 48 };
 
 /* PA's interface structure.
  * We don't only care about internal because hcp could
@@ -277,6 +272,7 @@ void pa_conf_default(struct pa_conf *conf)
 	conf->use_ula = PA_CONF_DFLT_USE_ULA;
 	conf->no_ula_if_glb_ipv6 = PA_CONF_DFLT_NO_ULA_IF_V6;
 	conf->use_random_ula = PA_CONF_DFLT_USE_RDM_ULA;
+	conf->random_ula_plen = PA_CONF_DFLT_ULA_RDM_PLEN;
 
 	conf->use_ipv4 = PA_CONF_DFLT_USE_V4;
 	conf->no_ipv4_if_glb_ipv6 = PA_CONF_DFLT_NO_V4_IF_V6;
@@ -1208,12 +1204,21 @@ static struct pa_dp *pa_local_ula_get_highest_edp(struct pa *pa)
 
 static void pa_local_ula_create(struct pa *pa, struct pa_local_elem *elem)
 {
-	struct prefix *p = NULL;
+	const struct prefix *p = NULL;
 
 	if(pa->conf.use_random_ula) {
-		p = &PA_CONF_DFLT_ULA;
-		L_WARN("Random ULA not implemented... Using %s instead", PREFIX_REPR(p));
-		//todo: Implement ULA generation
+		if(pa->conf.storage) {
+			p = pa_store_ula_get(pa->conf.storage);
+		}
+		if(!p) {
+			/* Generate a new one */
+			struct prefix pr, p0;
+			p0.plen = 0;
+			prefix_random(&p0, &pr, pa->conf.random_ula_plen);
+			p = &pr;
+			if(pa->conf.storage) /* Saving the chosen ula */
+				pa_store_ula_set(pa->conf.storage, p);
+		}
 	} else {
 		p = &pa->conf.ula_prefix;
 	}

@@ -113,9 +113,13 @@ struct pa_conf {
 	 * default = 1 */
 	char no_ula_if_glb_ipv6;
 
-	/* Selects a ula randomly according to rfc4193
+	/* Generates a random ula, and store it in stable storage.
 	 * default = 1 */
 	char use_random_ula;
+
+	/* Sets the prefix length of randomly generated ula prefixes.
+	 * default = 48 */
+	char random_ula_plen;
 
 	/* If not random, use that ULA prefix (must be ULA)
 	 * default = undef */
