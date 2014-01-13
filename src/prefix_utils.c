@@ -97,6 +97,45 @@ void bmemcpy(void *dst, const void *src,
 		bbytecpy(dst + tobyte, src + tobyte, 0, tobitrem);
 }
 
+void bmemcpy_shift(void *dst, size_t dst_start,
+		const void *src, size_t src_start,
+		size_t nbits)
+{
+	dst += dst_start >> 3;
+	dst_start &= 0x7;
+	src += src_start >> 3;
+	src_start &= 0x7;
+
+	if(dst_start == src_start) {
+		bmemcpy(dst, src, dst_start, nbits);
+	} else {
+		while(nbits) {
+			uint8_t interm = *((uint8_t *)src);
+			uint8_t n;
+			int8_t shift = src_start - dst_start;
+			if(shift > 0) {
+				interm <<= shift;
+				n = 8 - src_start;
+				if(n > nbits)
+					n = nbits;
+				bbytecpy(dst, &interm, dst_start, n);
+				dst_start += n;
+				src_start = 0;
+				src++;
+			} else {
+				interm >>= -shift;
+				n = 8 - dst_start;
+				if(n > nbits)
+					n = nbits;
+				bbytecpy(dst, &interm, dst_start, n);
+				dst_start = 0;
+				dst++;
+				src_start += n;
+			}
+			nbits -= n;
+		}
+	}
+}
 
 bool prefix_contains(const struct prefix *p1,
 					const struct prefix *p2)

@@ -44,6 +44,9 @@ static const char *px_s = "20:100::/12";
 
 void bmemcpy(void *dst, const void *src,
 		size_t frombit, size_t nbits);
+void bmemcpy_shift(void *dst, size_t dst_start,
+		const void *src, size_t src_start,
+		size_t nbits);
 
 void bmemcpy_t(void)
 {
@@ -69,6 +72,36 @@ void bmemcpy_t(void)
 	bmemcpy(&dst, &u1, 7, 19);
 	sput_fail_if(memcmp(dst, u5, 4), "7 to 26 bits copy");
 
+}
+
+void bmemcpy_shift_t(void)
+{
+	uint8_t u1[] = {0xff, 0xff, 0xff, 0xff};
+	uint8_t u2[] = {0x00, 0x00, 0x00, 0x00};
+	uint8_t u3[] = {0x03, 0xff, 0xfc, 0x00};
+	uint8_t u4[] = {0x00, 0x18, 0x00, 0x00};
+	uint8_t u5[] = {0x00, 0x00, 0xff, 0xe0};
+	uint8_t u6[] = {0x01, 0x80, 0x00, 0x00};
+
+	bmemcpy_shift(u2, 6, u1, 6, 16);
+	sput_fail_if(memcmp(u2, u3, 4), "Copy 16 bits without shift");
+	memset(u2, 0, 4);
+
+	bmemcpy_shift(u2, 6, u1, 5, 16);
+	sput_fail_if(memcmp(u2, u3, 4), "Copy 16 bits with shift");
+	memset(u2, 0, 4);
+
+	bmemcpy_shift(u2, 11, u1, 7, 2);
+	sput_fail_if(memcmp(u2, u4, 4), "Copy 2 bits");
+	memset(u2, 0, 4);
+
+	bmemcpy_shift(u2, 16, u1, 5, 11);
+	sput_fail_if(memcmp(u2, u5, 4), "Copy 11 bits");
+	memset(u2, 0, 4);
+
+	bmemcpy_shift(u2, 7, u1, 11, 2);
+	sput_fail_if(memcmp(u2, u6, 4), "Copy 2 bits");
+	memset(u2, 0, 4);
 }
 
 void prefix_print_nocan_t(void)
@@ -191,6 +224,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
   sput_start_testing();
   sput_enter_suite("prefix_utils"); /* optional */
   sput_run_test(bmemcpy_t);
+  sput_run_test(bmemcpy_shift_t);
   sput_run_test(prefix_print_nocan_t);
   sput_run_test(prefix_equal_t);
   sput_run_test(prefix_canonical_t);
