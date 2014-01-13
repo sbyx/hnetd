@@ -407,10 +407,10 @@ void pa_test_ula_static(void)
 	ms = smock_pull_int(SMOCK_SET_TIMEOUT_MS);
 	if(ula_to) {
 		sput_fail_unless(ula_to == &pa->local.timeout, "ula timeout structure");
-		sput_fail_unless(ms == (int) conf.create_ula_delay, "ula timeout value");
+		sput_fail_unless(ms == (int) conf.create_local_delay, "ula timeout value");
 	}
 
-	now_time += conf.create_ula_delay;
+	now_time += conf.create_local_delay;
 	valid_until = now_time + conf.local_valid_lifetime;
 	preferred_until = now_time + conf.local_preferred_lifetime;
 	test_pa_timeout_fire(ula_to);
@@ -1499,6 +1499,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 	pa_conf_default(&conf);
 	conf.use_ula = 1;
 	conf.use_random_ula = 0;
+	conf.use_ipv4 = 0;
 	memcpy(&conf.ula_prefix, &ula_prefix, sizeof(struct prefix));
 	sput_run_test(pa_test_init);
 	sput_run_test(pa_test_ula_static);

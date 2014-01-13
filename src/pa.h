@@ -103,7 +103,7 @@ struct pa_conf {
 	 * That allows a router do be sure it has the higher id, and
 	 * wait for a possible globaly routable prefix.
 	 * default = 5 * HNETD_TIME_PER_SECOND */
-	uint32_t create_ula_delay;
+	uint32_t create_local_delay;
 
 	/* Enables ULA use
 	 * default = 1 */
