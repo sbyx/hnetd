@@ -137,6 +137,12 @@ void platform_set_address(struct iface *c,
 	platform_set_internal(c, false);
 }
 
+void platform_set_route(struct iface *c,
+		__unused struct iface_route *route, __unused bool enable)
+{
+	platform_set_internal(c, false);
+}
+
 
 void platform_set_owner(struct iface *c,
 		__unused bool enable)
@@ -167,6 +173,7 @@ static void platform_commit(struct uloop_timeout *t)
 
 	void *k, *l;
 	struct iface_addr *a;
+	struct iface_route *r;
 
 	k = blobmsg_open_array(&b, "ipaddr");
 	vlist_for_each_element(&c->assigned, a, node) {
@@ -233,6 +240,32 @@ static void platform_commit(struct uloop_timeout *t)
 			}
 #endif
 		}
+
+		blobmsg_close_table(&b, l);
+	}
+	blobmsg_close_array(&b, k);
+
+	k = blobmsg_open_array(&b, "routes");
+	vlist_for_each_element(&c->routes, r, node) {
+		l = blobmsg_open_table(&b, NULL);
+
+		char *buf = blobmsg_alloc_string_buffer(&b, "target", INET6_ADDRSTRLEN);
+		inet_ntop(AF_INET6, &r->to.prefix, buf, INET6_ADDRSTRLEN);
+		blobmsg_add_string_buffer(&b);
+
+		char *buf2 = blobmsg_alloc_string_buffer(&b, "netmask", 4);
+		snprintf(buf2, 4, "%u", r->to.plen);
+		blobmsg_add_string_buffer(&b);
+
+		char *buf3 = blobmsg_alloc_string_buffer(&b, "gateway", INET6_ADDRSTRLEN);
+		inet_ntop(AF_INET6, &r->via, buf3, INET6_ADDRSTRLEN);
+		blobmsg_add_string_buffer(&b);
+
+		char *buf4 = blobmsg_alloc_string_buffer(&b, "source", PREFIX_MAXBUFFLEN);
+		prefix_ntop(buf4, PREFIX_MAXBUFFLEN, &r->from, true);
+		blobmsg_add_string_buffer(&b);
+
+		L_DEBUG("	from %s to %s/%s via %s", buf4, buf, buf2, buf3);
 
 		blobmsg_close_table(&b, l);
 	}

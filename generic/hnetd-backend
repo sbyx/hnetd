@@ -25,6 +25,11 @@ newaddr|deladdr)
 	ip address $act "$3" dev "$2" $args
 	;;
 
+newroute|delroute)
+	[ "$1" = "newroute" ] && act="replace" || act="del"
+	ip -6 route "$act" "$3" from "$5" via "$4" dev "$2"
+	;;
+
 startdhcp)
 	uci batch <<-EOF
 	set dhcp.$2=dhcp

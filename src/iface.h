@@ -40,6 +40,16 @@ void iface_unregister_user(struct iface_user *user);
 void iface_set_dhcpv6_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len);
 
 
+// Begin route update cycle
+void iface_update_routes(void);
+
+// Add new routes
+void iface_add_route(const char *ifname, const struct prefix *from, const struct prefix *to, const struct in6_addr *via);
+
+// Flush and commit routes to synthesize events
+void iface_commit_routes(void);
+
+
 // Internal API to platform
 
 struct iface_addr {
@@ -50,6 +60,13 @@ struct iface_addr {
 	struct prefix prefix;
 	size_t dhcpv6_len;
 	uint8_t dhcpv6_data[];
+};
+
+struct iface_route {
+	struct vlist_node node;
+	struct prefix from;
+	struct prefix to;
+	struct in6_addr via;
 };
 
 struct iface {
@@ -69,6 +86,7 @@ struct iface {
 	// Prefix storage
 	struct vlist_tree assigned;
 	struct vlist_tree delegated;
+	struct vlist_tree routes;
 
 	// Other data
 	void *dhcpv6_data_in;

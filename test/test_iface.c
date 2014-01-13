@@ -12,6 +12,7 @@ void pa_iface_subscribe(__unused pa_t pa, __unused const struct pa_iface_callbac
 void platform_set_owner(__unused struct iface *c, __unused bool enable) {}
 int platform_init(void) { return 0; }
 void platform_set_address(__unused struct iface *c, __unused struct iface_addr *addr, __unused bool enable) {}
+void platform_set_route(__unused struct iface *c, __unused struct iface_route *addr, __unused bool enable) {}
 void platform_iface_free(__unused struct iface *c) {}
 void platform_set_internal(__unused struct iface *c, __unused bool internal) {}
 void platform_iface_new(__unused struct iface *c, __unused const char *handle) { c->platform = (void*)1; }
