@@ -798,8 +798,8 @@ void pa_test_multiple_ifaces(void)
 
 	test_pa_random_push_prefix(to_use_1); /* First taken prefix */
 	test_pa_random_push_prefix(to_use_1); /* Will need to be rejected because allocated on the other interface */
-	test_pa_random_push_prefix(to_use_2); /* Will be rejected because used by somebody else */
-	test_pa_random_push_prefix(to_use_3); /* Will be accepted as second local */
+	/* to_use_2 Will be rejected because used by somebody else */
+	/* To use 3 will be used */
 
 	/* Running prefix assignment algorithm */
 	now_time += PA_SCHEDULE_RUNNEXT_MS;
@@ -913,9 +913,9 @@ void pa_test_collisions(void) {
 
 	struct prefix *prefix = &p1;
 	struct prefix *excluded = &p1_1;
-	struct prefix *not_excluded = &p1_20;
-	struct prefix *not_excluded_bis = &p1_21;
-	struct prefix *not_excluded_tier = &p1_22;
+	struct prefix *first_not_excluded = &p1_20;
+	struct prefix *second_not_excluded = &p1_21;
+	struct prefix *third_not_excluded = &p1_22;
 	struct ldp_update_call *ldp;
 	struct lap_update_call *lap;
 	struct link_update_call *link;
@@ -966,15 +966,14 @@ void pa_test_collisions(void) {
 	 */
 
 	test_pa_random_push_prefix(excluded);
-	test_pa_random_push_prefix(not_excluded);
 	now_time += PA_SCHEDULE_RUNNEXT_MS;
 	test_pa_timeout_fire(&pa->pa_short_timeout);
 
-	/* New lap must have been generated with not_excluded value */
+	/* New lap must have been generated with first_not_excluded value */
 	lap = smock_pull(SMOCK_LAP_UPDATE);
 	if(lap) {
 		sput_fail_if(strcmp(lap->ifname, TEST_IFNAME_1), "Correct lap ifname");
-		sput_fail_if(prefix_cmp(not_excluded, &lap->prefix), "Correct lap prefix");
+		sput_fail_if(prefix_cmp(first_not_excluded, &lap->prefix), "Correct lap prefix");
 		sput_fail_unless(lap->priv == &hcp.floodcb, "Correct hcp private field");
 		sput_fail_unless(lap->to_delete == 0, "New lap");
 		free(lap);
@@ -995,7 +994,7 @@ void pa_test_collisions(void) {
 	 * because the router has lower id.
 	 */
 	now_time += 500;
-	pa_update_eap(pa, not_excluded, &rid_lower,
+	pa_update_eap(pa, first_not_excluded, &rid_lower,
 					NULL, 0);
 
 	now_time += PA_SCHEDULE_RUNNEXT_MS;
@@ -1004,7 +1003,7 @@ void pa_test_collisions(void) {
 
 	now_time += 500;
 	/* The other router stops using that prefix and uses another one */
-	pa_update_eap(pa, not_excluded, &rid_lower,
+	pa_update_eap(pa, first_not_excluded, &rid_lower,
 						NULL, 1);
 	now_time += PA_SCHEDULE_RUNNEXT_MS;
 	test_pa_timeout_fire(&pa->pa_short_timeout);
@@ -1012,32 +1011,30 @@ void pa_test_collisions(void) {
 
 	/* Do the same with a router with higher router id */
 	now_time += 500;
-	pa_update_eap(pa, not_excluded, &rid_higher,
+	pa_update_eap(pa, first_not_excluded, &rid_higher,
 							NULL, 0);
 
 	test_pa_random_push_prefix(excluded); /* Should be rejected due to exclusion */
-	test_pa_random_push_prefix(not_excluded); /* Should be rejected due to collision */
-	test_pa_random_push_prefix(not_excluded_bis); /* Should be accepted and assigned */
 	now_time += PA_SCHEDULE_RUNNEXT_MS;
 	test_pa_timeout_fire(&pa->pa_short_timeout);
 
 	/* One lap deleted, one created. Still link owner */
 	lap = smock_pull(SMOCK_LAP_UPDATE);
 	if(lap) {
-		sput_fail_if(prefix_cmp(not_excluded, &lap->prefix), "Correct lap prefix");
+		sput_fail_if(prefix_cmp(first_not_excluded, &lap->prefix), "Correct lap prefix");
 		sput_fail_unless(lap->to_delete == 1, "Lap must be deleted");
 		free(lap);
 	}
 
 	lap = smock_pull(SMOCK_LAP_UPDATE);
 	if(lap) {
-		sput_fail_if(prefix_cmp(not_excluded_bis, &lap->prefix), "Correct lap prefix");
+		sput_fail_if(prefix_cmp(second_not_excluded, &lap->prefix), "Correct lap prefix");
 		sput_fail_unless(lap->to_delete == 0, "This is a new lap");
 		free(lap);
 	}
 
 	/* Removing that lap */
-	pa_update_eap(pa, not_excluded, &rid_higher,
+	pa_update_eap(pa, first_not_excluded, &rid_higher,
 								NULL, 1);
 	now_time += PA_SCHEDULE_RUNNEXT_MS;
 	test_pa_timeout_fire(&pa->pa_short_timeout);
@@ -1047,28 +1044,28 @@ void pa_test_collisions(void) {
 	 * The guy with lower id comes to our link and annouces a
 	 * different prefix. */
 	now_time += 500;
-	pa_update_eap(pa, not_excluded_tier, &rid_lower,
+	pa_update_eap(pa, third_not_excluded, &rid_lower,
 							TEST_IFNAME_1, 0);
 	now_time += PA_SCHEDULE_RUNNEXT_MS;
 	test_pa_timeout_fire(&pa->pa_short_timeout);
 	smock_is_empty(); /* Nothing is changed */
 
 	/* The guy removes its assignement */
-	pa_update_eap(pa, not_excluded_tier, &rid_lower,
+	pa_update_eap(pa, third_not_excluded, &rid_lower,
 								TEST_IFNAME_1, 1);
 	now_time += PA_SCHEDULE_RUNNEXT_MS;
 	test_pa_timeout_fire(&pa->pa_short_timeout);
 	smock_is_empty(); /* Nothing is changed */
 
 	/* Now some guy with higher id comes using the same prefix than us */
-	pa_update_eap(pa, not_excluded_bis, &rid_higher,
+	pa_update_eap(pa, second_not_excluded, &rid_higher,
 									TEST_IFNAME_1, 0);
 	now_time += PA_SCHEDULE_RUNNEXT_MS;
 	test_pa_timeout_fire(&pa->pa_short_timeout);
 	/* Should remove prefix from hcp and not be owner for the link */
 	lap = smock_pull(SMOCK_LAP_UPDATE);
 	if(lap) {
-		sput_fail_if(prefix_cmp(not_excluded_bis, &lap->prefix), "Correct lap prefix");
+		sput_fail_if(prefix_cmp(second_not_excluded, &lap->prefix), "Correct lap prefix");
 		sput_fail_unless(lap->to_delete == 1, "This is a new lap");
 		free(lap);
 	}
@@ -1084,9 +1081,9 @@ void pa_test_collisions(void) {
 
 	/* Now the neighbor with higher id will use a different prefix.
 	 * We should change and use this one. */
-	pa_update_eap(pa, not_excluded_bis, &rid_higher,
+	pa_update_eap(pa, second_not_excluded, &rid_higher,
 							TEST_IFNAME_1, 1); /* removing previous one */
-	pa_update_eap(pa, not_excluded_tier, &rid_higher,
+	pa_update_eap(pa, third_not_excluded, &rid_higher,
 							TEST_IFNAME_1, 0); /* adding a new one */
 
 	now_time += PA_SCHEDULE_RUNNEXT_MS;
@@ -1112,7 +1109,7 @@ void pa_test_collisions(void) {
 		sput_fail_if(strcmp(px->ifname, TEST_IFNAME_1), "Correct link ifname");
 		sput_fail_unless(px->preferred_until == dp_preferred_until, "Correct preferred lifetime");
 		sput_fail_unless(px->valid_until == dp_valid_until, "Correct valid lifetime");
-		sput_fail_if(prefix_cmp(&px->prefix, not_excluded_tier), "Correct lap prefix");
+		sput_fail_if(prefix_cmp(&px->prefix, third_not_excluded), "Correct lap prefix");
 		sput_fail_unless(px->priv == &iface.ifcb, "Correct private field");
 		sput_fail_unless(px->dhcpv6_len == TEST_DHCPV6_LEN, "Correct dhcpv6 len value");
 		if(px->dhcpv6_len == TEST_DHCPV6_LEN) {
@@ -1132,7 +1129,7 @@ void pa_test_collisions(void) {
 		sput_fail_if(strcmp(px->ifname, TEST_IFNAME_1), "Correct link ifname");
 		sput_fail_unless(px->preferred_until == 0, "Correct preferred lifetime");
 		sput_fail_unless(px->valid_until == 0, "Correct valid lifetime");
-		sput_fail_if(prefix_cmp(&px->prefix, not_excluded_tier), "Correct lap prefix");
+		sput_fail_if(prefix_cmp(&px->prefix, third_not_excluded), "Correct lap prefix");
 		sput_fail_unless(px->priv == &iface.ifcb, "Correct private field");
 		free(px);
 	}
@@ -1149,7 +1146,7 @@ void pa_test_collisions(void) {
 	smock_is_empty();
 
 	/* Destroy the remaining eap */
-	pa_update_eap(pa, not_excluded_tier, &rid_higher,
+	pa_update_eap(pa, third_not_excluded, &rid_higher,
 								TEST_IFNAME_1, 1);
 
 	/* This will create a schedule, but nothing happens then */

@@ -48,6 +48,47 @@ void bmemcpy_shift(void *dst, size_t dst_start,
 		const void *src, size_t src_start,
 		size_t nbits);
 
+void prefix_last_t(void)
+{
+	struct prefix px;
+	sput_fail_unless(prefix_last(&px, &p10, 18) == -1, "Forbidden arg");
+
+	sput_fail_unless(prefix_last(&px, &p10, 16) == 0, "Ret is 0");
+	sput_fail_if(prefix_cmp(&px, &p10), "Unmodified");
+
+	sput_fail_unless(prefix_last(&px, &p10, 12) == 0, "Ret is 0");
+	sput_fail_if(prefix_cmp(&px, &p1f), "px == p1f");
+
+	sput_fail_unless(prefix_last(&px, &p11, 12) == 0, "Ret is 0");
+	sput_fail_if(prefix_cmp(&px, &p1f), "px == p1f");
+}
+
+void prefix_increment_t(void)
+{
+	struct prefix px;
+
+	sput_fail_unless(prefix_increment(&px, &p1, 8) == 0, "Ret is 0");
+	sput_fail_if(prefix_cmp(&px, &p2), "px == p2");
+
+	sput_fail_unless(prefix_increment(&px, &p10, 8) == 0, "Ret is 0");
+	sput_fail_if(prefix_cmp(&px, &p11), "px == p11");
+
+	sput_fail_unless(prefix_increment(&px, &p10, 16) == 1, "Single possibility");
+	sput_fail_if(prefix_cmp(&px, &p10), "px == p10");
+
+	sput_fail_unless(prefix_increment(&px, &p1f, 12) == 1, "Looping");
+	sput_fail_if(prefix_cmp(&px, &p10), "px == p10");
+
+	sput_fail_unless(prefix_increment(&px, &p1f, 120) == -1, "Forbidden");
+
+	px.plen = 120;
+	sput_fail_unless(prefix_increment(&px, &px, 4) == -1, "Forbidden");
+	px.plen = 42;
+	sput_fail_unless(prefix_increment(&px, &px, 10) == 0, "32 bits authorized");
+	px.plen = 43;
+	sput_fail_unless(prefix_increment(&px, &px, 10) == -1, "33 bits forbidden");
+}
+
 void bmemcpy_t(void)
 {
 	uint8_t u1[] = {0xff, 0xff, 0xff, 0xff};
@@ -231,6 +272,8 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
   sput_run_test(prefix_print_can_t);
   sput_run_test(prefix_contains_t);
   sput_run_test(prefix_cmp_t);
+  sput_run_test(prefix_increment_t);
+  sput_run_test(prefix_last_t);
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();
