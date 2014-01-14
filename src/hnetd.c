@@ -26,6 +26,7 @@
 #include <libubox/uloop.h>
 
 #include "hcp_pa.h"
+#include "hcp_sd.h"
 #include "ipc.h"
 #include "platform.h"
 
@@ -106,15 +107,37 @@ int main(__unused int argc, char* const argv[])
 		return 17;
 	}
 
-	/* XXX - add real command line parsing at some point. For the
-	 * time being, I've added just this utility to get hcp up and
-	 * running ;) -MSt. */
-	while ((c = getopt(argc, argv, "i:")) != -1) {
+	const char *dnsmasq_script = NULL;
+	const char *dnsmasq_bonus_file = NULL;
+	const char *ohp_script = NULL;
+	const char *router_name = NULL;
+
+	while ((c = getopt(argc, argv, "d:b:o:n:")) != -1) {
 		switch (c) {
-		case 'i':
-			/* internal interface */
-			(void)hcp_set_link_enabled(h, optarg, true);
+		case 'd':
+			dnsmasq_script = optarg;
 			break;
+		case 'b':
+			dnsmasq_bonus_file = optarg;
+			break;
+		case 'o':
+			ohp_script = optarg;
+			break;
+		case 'n':
+			router_name = optarg;
+			break;
+		}
+	}
+
+	/* At some point should think of subset of these options is
+	 * meaningful; if not, should combine them to single option,
+	 * perhaps? */
+	if (dnsmasq_script && ohp_script && dnsmasq_bonus_file) {
+		if (!hcp_sd_create(h,
+						   dnsmasq_script, dnsmasq_bonus_file,
+						   ohp_script, router_name)) {
+			L_ERR("unable to initialize rd, exiting");
+			return 71;
 		}
 	}
 

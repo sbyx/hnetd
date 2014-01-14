@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Fri Dec  6 21:07:06 2013 mstenber
- * Edit time:     26 min
+ * Last modified: Tue Jan 14 20:30:01 2014 mstenber
+ * Edit time:     33 min
  *
  */
 
@@ -61,6 +61,10 @@ enum {
 
   HCP_T_DHCPV6_OPTIONS = 45, /* contains just raw DHCPv6 options */
 
+  HCP_T_DNS_DELEGATED_ZONE = 50, /* the 'beef' */
+  HCP_T_DNS_ROUTER_NAME = 51, /* router name (moderately optional) */
+  HCP_T_DNS_DOMAIN_NAME = 52, /* non-default domain (very optional) */
+
   HCP_T_SIGNATURE = 0xFFFF /* not implemented */
 };
 
@@ -106,6 +110,7 @@ typedef struct __packed {
   uint32_t ms_preferred_at_origination;
   uint8_t prefix_length_bits;
   /* Prefix data, padded so that ends at 4 byte boundary (0s). */
+  uint8_t prefix_data[];
 } hcp_t_delegated_prefix_header_s, *hcp_t_delegated_prefix_header;
 
 /* HCP_T_ASSIGNED_PREFIX */
@@ -113,6 +118,7 @@ typedef struct __packed {
   uint32_t link_id;
   uint8_t prefix_length_bits;
   /* Prefix data, padded so that ends at 4 byte boundary (0s). */
+  uint8_t prefix_data[];
 } hcp_t_assigned_prefix_header_s, *hcp_t_assigned_prefix_header;
 
 /**************************************************************** Addressing */

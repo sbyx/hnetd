@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Thu Dec  5 09:04:52 2013 mstenber
- * Edit time:     86 min
+ * Last modified: Tue Jan 14 20:50:38 2014 mstenber
+ * Edit time:     97 min
  *
  */
 
@@ -165,5 +165,6 @@ struct tlv_attr *hcp_node_get_tlvs(hcp_node n);
 #define hcp_node_for_each_tlv(n, a, i) \
   tlv_for_each_attr(a, hcp_node_get_tlvs(n), i)
 
+/*********************************************** Service discovery submodule */
 
 #endif /* HCP_H */

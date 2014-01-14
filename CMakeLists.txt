@@ -21,7 +21,7 @@ endif(${BACKEND} MATCHES "openwrt")
 
 
 # TODO: split platform logic
-set(HCP_NIO src/hcp.c src/hcp_notify.c src/hcp_pa.c src/hcp_proto.c src/hcp_timeout.c src/prefix_utils.c src/tlv.c)
+set(HCP_NIO src/hcp.c src/hcp_notify.c src/hcp_pa.c src/hcp_proto.c src/hcp_sd.c src/hcp_timeout.c src/prefix_utils.c src/tlv.c)
 set(HCP ${HCP_NIO} src/hcp_io.c)
 add_executable(hnetd ${HCP} src/hnetd.c src/iface.c src/ipc.c src/pa.c src/pa_store.c ${BACKEND_SOURCE})
 target_link_libraries(hnetd ubox blobmsg_json ${BACKEND_LINK})
