@@ -1794,6 +1794,9 @@ int pa_update_edp(pa_t pa, const struct prefix *prefix,
 	if(!(dp = pa_dp_goc(pa, prefix, rid)))
 		return -1;
 
+	if(valid_until < 0)
+		valid_until = 0;
+
 	pa_dp_update(pa, dp, NULL, excluded,
 			valid_until, preferred_until,
 			dhcpv6_data, dhcpv6_len);
@@ -1837,6 +1840,9 @@ static void pa_ifu_pd(struct iface_user *u, const char *ifname,
 	L_DEBUG("pa_ifu_pd @%s %s %lld/%lld", ifname,
 			PREFIX_REPR(prefix),
 			(long long)valid_until, (long long)preferred_until);
+
+	if(valid_until < 0)
+		valid_until = 0;
 
 	pa_dp_update(pa, dp, ifname, excluded,
 		valid_until, preferred_until,
