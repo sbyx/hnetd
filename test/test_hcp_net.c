@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Fri Dec  6 19:08:54 2013 mstenber
- * Edit time:     319 min
+ * Last modified: Wed Jan 15 15:32:53 2014 mstenber
+ * Edit time:     322 min
  *
  */
 
@@ -188,7 +188,7 @@ static void raw_bird14(net_sim s)
 
   handle_connections(s, &nodeconnections[0], num_connections);
 
-  SIM_WHILE(s, 1000, !net_sim_is_converged(s));
+  SIM_WHILE(s, 10000, !net_sim_is_converged(s));
 
   sput_fail_unless(net_sim_find_hcp(s, "b10")->nodes.avl.count == 11,
                    "b10 enough nodes");
@@ -196,9 +196,9 @@ static void raw_bird14(net_sim s)
   sput_fail_unless(s->now - s->start < 10 * HNETD_TIME_PER_SECOND,
                    "should converge in 10 seconds");
 
-  sput_fail_unless(s->sent_multicast < 500, "with 'few' multicast");
+  sput_fail_unless(s->sent_multicast < 1000, "with 'few' multicast");
 
-  sput_fail_unless(s->sent_unicast < 1000, "with 'few' unicast");
+  sput_fail_unless(s->sent_unicast < 2000, "with 'few' unicast");
 
   net_sim_remove_node_by_name(s, nodenames[0]);
 
@@ -271,7 +271,7 @@ static void raw_hcp_tube(unsigned int num_nodes)
       net_sim_set_connected(l1, l2, true);
       net_sim_set_connected(l2, l1, true);
     }
-  SIM_WHILE(&s, 10000, !net_sim_is_converged(&s));
+  SIM_WHILE(&s, 100000, !net_sim_is_converged(&s));
 
   sput_fail_unless(net_sim_find_hcp(&s, "node0")->nodes.avl.count == num_nodes,
                    "enough nodes");
