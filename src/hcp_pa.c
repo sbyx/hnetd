@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Sat Dec  7 12:10:15 2013 mstenber
- * Edit time:     171 min
+ * Last modified: Wed Jan 15 17:46:22 2014 mstenber
+ * Edit time:     176 min
  *
  */
 
@@ -42,6 +42,7 @@
 
 #include "hcp_pa.h"
 #include "hcp_i.h"
+#include "prefix_utils.h"
 
 typedef struct {
   struct vlist_node in_dps;
@@ -161,7 +162,7 @@ static void _update_a_tlv(hcp_glue g, hcp_node n,
   ah = tlv_data(tlv);
   p.plen = ah->prefix_length_bits;
   plen = ROUND_BITS_TO_BYTES(p.plen);
-  if (tlv_len(tlv) < (sizeof(*ah) + plen) || plen > sizeof(p.prefix))
+  if (tlv_len(tlv) < (sizeof(*ah) + plen) || plen > (int)sizeof(p.prefix))
     return;
   memcpy(&p, tlv_data(tlv) + sizeof(*ah), plen);
   l = _find_local_link(n, ah->link_id);
@@ -188,7 +189,7 @@ static void _update_d_tlv(hcp_glue g, hcp_node n,
   dh = tlv_data(tlv);
   p.plen = dh->prefix_length_bits;
   plen = ROUND_BITS_TO_BYTES(p.plen);
-  if (tlv_len(tlv) < (sizeof(*dh) + plen) || plen > sizeof(p.prefix))
+  if (tlv_len(tlv) < (sizeof(*dh) + plen) || plen > (int)sizeof(p.prefix))
     return;
   memcpy(&p, tlv_data(tlv) + sizeof(*dh), plen);
   if (!add)
@@ -366,34 +367,10 @@ static void _node_cb(hcp_subscriber s, hcp_node n, bool add)
 static void _updated_lap(const struct prefix *prefix, const char *ifname,
                          int to_delete, void *priv)
 {
-  struct prefix p;
   hcp_glue g = priv;
   hcp o = g->hcp;
-  int mlen = TLV_SIZE + sizeof(hcp_t_assigned_prefix_header_s) + 16 + 3;
-  unsigned char buf[mlen];
-  struct tlv_attr *a = (struct tlv_attr *) buf;
-  int plen = ROUND_BITS_TO_BYTES(prefix->plen);
-  int flen = TLV_SIZE + sizeof(hcp_t_delegated_prefix_header_s) + plen;
-  hcp_t_assigned_prefix_header ah;
-  hcp_link l;
 
-  memset(buf, 0, mlen);
-  p = *prefix;
-  prefix_canonical(&p, &p);
-  /* XXX - what if links renumber? let's hope they don't */
-  tlv_init(a, HCP_T_ASSIGNED_PREFIX, flen);
-  ah = tlv_data(a);
-  l = hcp_find_link_by_name(o, ifname, false);
-  if (l)
-    ah->link_id = cpu_to_be32(l->iid);
-  ah->prefix_length_bits = p.plen;
-  ah++;
-  memcpy(ah, &p, plen);
-
-  if (to_delete)
-    hcp_remove_tlv(o, (struct tlv_attr *)buf);
-  else
-    hcp_add_tlv(o, (struct tlv_attr *)buf);
+  return hcp_tlv_update_ap(o, prefix, ifname, !to_delete);
 }
 
 static void _updated_ldp(const struct prefix *prefix,

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Jan 15 13:37:24 2014 mstenber
- * Edit time:     113 min
+ * Last modified: Wed Jan 15 18:08:47 2014 mstenber
+ * Edit time:     114 min
  *
  */
 
@@ -273,6 +273,13 @@ bool hcp_io_get_ipv6(struct in6_addr *addr, char *prefer_ifname);
 
 /* Multicast rejoin utility. (in hcp.c) */
 bool hcp_link_join(hcp_link l);
+
+/* TLV handling */
+#include "prefix_utils.h"
+void hcp_tlv_update_ap(hcp o,
+                       const struct prefix *prefix,
+                       const char *ifname,
+                       bool add);
 
 /* Inlined utilities. */
 static inline hnetd_time_t hcp_time(hcp o)

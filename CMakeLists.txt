@@ -21,7 +21,8 @@ endif(${BACKEND} MATCHES "openwrt")
 
 
 # TODO: split platform logic
-set(HCP_NIO src/hcp.c src/hcp_notify.c src/hcp_pa.c src/hcp_proto.c src/hcp_sd.c src/hcp_timeout.c src/prefix_utils.c src/tlv.c)
+set(HCP_NIO_BASE src/hcp.c src/hcp_notify.c src/hcp_proto.c src/hcp_timeout.c src/prefix_utils.c src/tlv.c)
+set(HCP_NIO ${HCP_NIO_BASE} src/hcp_pa.c src/hcp_sd.c)
 set(HCP ${HCP_NIO} src/hcp_io.c)
 add_executable(hnetd ${HCP} src/hcp_bfs.c src/hnetd.c src/iface.c src/ipc.c src/pa.c src/pa_store.c ${BACKEND_SOURCE})
 target_link_libraries(hnetd ubox blobmsg_json ${BACKEND_LINK})
@@ -60,7 +61,12 @@ target_link_libraries(test_hcp_pa ubox ubus blobmsg_json)
 add_test(hcp_pa test_hcp_pa)
 add_dependencies(check test_hcp_pa)
 
-add_executable(test_hcp_nio src/tlv.c test/test_hcp_nio.c)
+add_executable(test_hcp_sd ${HCP_NIO_BASE} test/test_hcp_sd.c)
+target_link_libraries(test_hcp_sd ubox ubus blobmsg_json)
+add_test(hcp_sd test_hcp_sd)
+add_dependencies(check test_hcp_sd)
+
+add_executable(test_hcp_nio src/tlv.c test/test_hcp_nio.c src/prefix_utils.c)
 target_link_libraries(test_hcp_nio ubox ubus blobmsg_json)
 add_test(hcp_nio test_hcp_nio)
 add_dependencies(check test_hcp_nio)

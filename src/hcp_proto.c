@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Fri Dec  6 21:30:04 2013 mstenber
- * Edit time:     198 min
+ * Last modified: Wed Jan 15 20:57:58 2014 mstenber
+ * Edit time:     202 min
  *
  */
 
@@ -528,4 +528,38 @@ void hcp_poll(hcp o)
         continue;
       handle_message(l, &src, buf, read, false);
     }
+}
+
+/* Utilities for formatting TLVs. */
+void hcp_tlv_update_ap(hcp o,
+                       const struct prefix *prefix,
+                       const char *ifname,
+                       bool add)
+{
+  struct prefix p;
+  int mlen = TLV_SIZE + sizeof(hcp_t_assigned_prefix_header_s) + 16 + 3;
+  unsigned char buf[mlen];
+  struct tlv_attr *a = (struct tlv_attr *) buf;
+  int plen = ROUND_BITS_TO_BYTES(prefix->plen);
+  int flen = TLV_SIZE + sizeof(hcp_t_delegated_prefix_header_s) + plen;
+  hcp_t_assigned_prefix_header ah;
+  hcp_link l;
+
+  memset(buf, 0, mlen);
+  p = *prefix;
+  prefix_canonical(&p, &p);
+  /* XXX - what if links renumber? let's hope they don't */
+  tlv_init(a, HCP_T_ASSIGNED_PREFIX, flen);
+  ah = tlv_data(a);
+  l = hcp_find_link_by_name(o, ifname, false);
+  if (l)
+    ah->link_id = cpu_to_be32(l->iid);
+  ah->prefix_length_bits = p.plen;
+  ah++;
+  memcpy(ah, &p, plen);
+
+  if (add)
+    hcp_add_tlv(o, (struct tlv_attr *)buf);
+  else
+    hcp_remove_tlv(o, (struct tlv_attr *)buf);
 }
