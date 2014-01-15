@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Wed Jan 15 15:39:19 2014 mstenber
- * Edit time:     28 min
+ * Last modified: Wed Jan 15 17:28:54 2014 mstenber
+ * Edit time:     29 min
  *
  */
 
@@ -66,7 +66,9 @@ typedef struct {
   char *name;
   hcp_s n;
   struct pa pa;
+#ifndef DISABLE_HCP_PA
   hcp_glue g;
+#endif /* !DISABLE_HCP_PA */
   hcp_sd sd;
   hnetd_time_t want_timeout_at;
   hnetd_time_t next_message_at;
@@ -177,9 +179,11 @@ hcp net_sim_find_hcp(net_sim s, const char *name)
   if (!r)
     return NULL;
   list_add(&n->h, &s->nodes);
+#ifndef DISABLE_HCP_PA
   /* Glue it to pa */
   if (!(n->g = hcp_pa_glue_create(&n->n, &n->pa)))
     return NULL;
+#endif /* !DISABLE_HCP_PA */
   /* Add SD support */
   if (!s->disable_sd)
     if (!(n->sd = hcp_sd_create(&n->n,
@@ -298,8 +302,10 @@ void net_sim_remove_node(net_sim s, net_node node)
   if (!s->disable_sd)
     hcp_sd_destroy(node->sd);
 
+#ifndef DISABLE_HCP_PA
   /* Kill glue (has to be done _after_ hcp_uninit). */
   hcp_pa_glue_destroy(node->g);
+#endif /* !DISABLE_HCP_PA */
 
   free(node);
 }
