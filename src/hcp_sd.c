@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Wed Jan 15 15:11:25 2014 mstenber
- * Edit time:     170 min
+ * Last modified: Wed Jan 15 15:23:00 2014 mstenber
+ * Edit time:     173 min
  *
  */
 
@@ -27,6 +27,8 @@
 
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #include "hcp_sd.h"
 #include "hcp_i.h"
@@ -111,14 +113,15 @@ static void _republish_ddzs(hcp_sd sd)
 
           na = (struct tlv_attr *)buf;
           dh = tlv_data(na);
+          memset(dh, 0, sizeof(*dh));
           memcpy(dh->address, &our_addr, 16);
           r = escaped2ll(tbuf, dh->ll, DNS_MAX_ESCAPED_LEN);
           if (r < 0)
             continue;
           int flen = TLV_SIZE + sizeof(*dh) + r;
-          memset(dh, 0, sizeof(*dh));
           dh->flags = HCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE;
           tlv_init(na, HCP_T_DNS_DELEGATED_ZONE, flen);
+          tlv_fill_pad(na);
           hcp_add_tlv(sd->h, na);
 
           /* XXX - create reverse DDZ entry too (no BROWSE flag, .ip6.arpa). */
@@ -262,6 +265,7 @@ _set_router_name(hcp_sd sd, bool add)
 
   tlv_init(a, HCP_T_DNS_ROUTER_NAME, TLV_SIZE + rlen);
   memcpy(tlv_data(a), sd->router_name, rlen);
+  tlv_fill_pad(a);
   if (add)
     {
       if (!hcp_add_tlv(sd->h, a))
