@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Wed Jan 15 14:21:51 2014 mstenber
- * Edit time:     26 min
+ * Last modified: Wed Jan 15 15:39:19 2014 mstenber
+ * Edit time:     28 min
  *
  */
 
@@ -81,6 +81,7 @@ typedef struct net_sim_t {
   struct list_head messages;
 
   bool assume_bidirectional_reachability;
+  bool disable_sd;
 
   hnetd_time_t now, start;
 
@@ -180,12 +181,13 @@ hcp net_sim_find_hcp(net_sim s, const char *name)
   if (!(n->g = hcp_pa_glue_create(&n->n, &n->pa)))
     return NULL;
   /* Add SD support */
-  if (!(n->sd = hcp_sd_create(&n->n, 
-                              "/bin/yes",
-                              "/tmp/dnsmasq.conf",
-                              "/bin/no",
-                              NULL)))
-    return NULL;
+  if (!s->disable_sd)
+    if (!(n->sd = hcp_sd_create(&n->n,
+                                "/bin/yes",
+                                "/tmp/dnsmasq.conf",
+                                "/bin/no",
+                                NULL)))
+      return NULL;
   return &n->n;
 }
 
@@ -293,7 +295,8 @@ void net_sim_remove_node(net_sim s, net_node node)
   hcp_uninit(&node->n);
 
   /* Get rid of sd data structure */
-  hcp_sd_destroy(node->sd);
+  if (!s->disable_sd)
+    hcp_sd_destroy(node->sd);
 
   /* Kill glue (has to be done _after_ hcp_uninit). */
   hcp_pa_glue_destroy(node->g);
