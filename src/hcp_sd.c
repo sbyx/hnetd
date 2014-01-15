@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Wed Jan 15 14:55:26 2014 mstenber
+ * Last modified: Wed Jan 15 15:11:25 2014 mstenber
  * Edit time:     170 min
  *
  */
@@ -118,7 +118,7 @@ static void _republish_ddzs(hcp_sd sd)
           int flen = TLV_SIZE + sizeof(*dh) + r;
           memset(dh, 0, sizeof(*dh));
           dh->flags = HCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE;
-          tlv_init(a, HCP_T_DNS_DELEGATED_ZONE, flen);
+          tlv_init(na, HCP_T_DNS_DELEGATED_ZONE, flen);
           hcp_add_tlv(sd->h, na);
 
           /* XXX - create reverse DDZ entry too (no BROWSE flag, .ip6.arpa). */
