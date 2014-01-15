@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Tue Jan 14 20:50:38 2014 mstenber
- * Edit time:     97 min
+ * Last modified: Wed Jan 15 11:18:38 2014 mstenber
+ * Edit time:     101 min
  *
  */
 
@@ -29,6 +29,15 @@ typedef struct hcp_node_struct hcp_node_s, *hcp_node;
 
 typedef struct hcp_subscriber_struct hcp_subscriber_s, *hcp_subscriber;
 
+/*
+ * Flow of HCP state change notifications (outbound case):
+ *
+ * - (if local TLV change), local_tlv_change_callback is called
+ * .. at some point, when TLV changes are to be published to the network ..
+ * - republish_callback is called
+ * - tlv_change_callback is called
+ */
+
 struct hcp_subscriber_struct {
   /**
    * Place within list of subscribers (owned by hcp while subscription
@@ -38,9 +47,24 @@ struct hcp_subscriber_struct {
   struct list_head lh;
 
   /**
+   * Local TLV change notification.
+   *
+   * This is called whenever one local set of TLVs (to be published at
+   * some point) changes.
+   *
+   * @param cbs The subscriber structure.
+   * @param tlv The TLV that is being added or removed (there is no 'update').
+   * @param add Flag which indicates whether the operation was add or remove.
+   */
+  void (*local_tlv_change_callback)(hcp_subscriber s,
+                                    struct tlv_attr *tlv, bool add);
+
+  /**
    * About to republish local TLVs notification.
    *
    * This is when TLVs with relative timestamps should be refreshed.
+   * It is called _before_ TLV change notifications for _local_ TLVs
+   * are provided.
    */
   void (*republish_callback)(hcp_subscriber r);
 

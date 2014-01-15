@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Fri Dec  6 22:13:01 2013 mstenber
- * Edit time:     112 min
+ * Last modified: Wed Jan 15 11:15:40 2014 mstenber
+ * Edit time:     113 min
  *
  */
 
@@ -206,6 +206,7 @@ hcp_node hcp_find_node_by_hash(hcp o, const hcp_hash h, bool create);
 
 /* Private utility - shouldn't be used by clients. */
 bool hcp_node_set_tlvs(hcp_node n, struct tlv_attr *a);
+int hcp_node_cmp(hcp_node n1, hcp_node n2);
 
 void hcp_schedule(hcp o);
 
@@ -234,6 +235,9 @@ void hcp_notify_subscribers_tlvs_changed(hcp_node n,
                                          struct tlv_attr *a_new);
 void hcp_notify_subscribers_node_changed(hcp_node n, bool add);
 void hcp_notify_subscribers_about_to_republish_tlvs(hcp_node n);
+void hcp_notify_subscribers_local_tlv_changed(hcp o,
+                                              struct tlv_attr *a,
+                                              bool add);
 
 /* Low-level interface module stuff. */
 

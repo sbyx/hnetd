@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Thu Dec  5 09:35:11 2013 mstenber
- * Edit time:     156 min
+ * Last modified: Wed Jan 15 12:03:17 2014 mstenber
+ * Edit time:     160 min
  *
  */
 
@@ -167,6 +167,18 @@ static void dummy_tlv_cb(hcp_subscriber s,
   smock_pull_int_is("tlv_callback", exp_v);
 }
 
+static void dummy_local_tlv_cb(hcp_subscriber s,
+                               struct tlv_attr *tlv, bool add)
+{
+  sput_fail_unless(s, "subscriber provided");
+  sput_fail_unless(s->local_tlv_change_callback == dummy_local_tlv_cb,
+                   "tlv cb set");
+  sput_fail_unless(tlv, "tlv set");
+  L_NOTICE("local tlv callback %s %s", TLV_REPR(tlv), add ? "add" : "remove");
+  int exp_v = (add ? 1 : -1) * tlv_id(tlv);
+  smock_pull_int_is("local_tlv_callback", exp_v);
+}
+
 static void dummy_node_cb(hcp_subscriber s, hcp_node n, bool add)
 {
   L_NOTICE("node callback %s %s",
@@ -193,6 +205,11 @@ static hcp_subscriber_s dummy_subscriber_2 = {
 
 static hcp_subscriber_s dummy_subscriber_3 = {
   .republish_callback = dummy_republish_cb
+};
+
+
+static hcp_subscriber_s dummy_subscriber_4 = {
+  .local_tlv_change_callback = dummy_local_tlv_cb
 };
 
 
@@ -333,6 +350,7 @@ static void hcp_ok(void)
   hcp_subscribe(o, &dummy_subscriber_1);
   hcp_subscribe(o, &dummy_subscriber_2);
   hcp_subscribe(o, &dummy_subscriber_3);
+  hcp_subscribe(o, &dummy_subscriber_4);
 
   smock_is_empty();
   one_join(true);
@@ -423,12 +441,14 @@ static void hcp_ok(void)
 #define TLV_ID_D 124
   tlv_init(&ta, TLV_ID_A, 4);
   smock_push_int("schedule", 0);
+  smock_push_int("local_tlv_callback", TLV_ID_A);
   hcp_add_tlv(o, &ta);
   smock_is_empty();
 
   L_NOTICE("add tlv b");
   tlv_init(&ta, TLV_ID_B, 4);
   /* should NOT cause extra schedule! */
+  smock_push_int("local_tlv_callback", TLV_ID_B);
   hcp_add_tlv(o, &ta);
   smock_is_empty();
 
@@ -456,7 +476,9 @@ static void hcp_ok(void)
   /* So, let's add one more TLV. Make sure we get notification about it. */
   L_NOTICE("add tlv c");
   tlv_init(&ta, TLV_ID_C, 4);
+  smock_push_int("local_tlv_callback", TLV_ID_C);
   hcp_add_tlv(o, &ta);
+  smock_is_empty();
   smock_push_int("tlv_callback", TLV_ID_C);
   smock_push_bool("republish_callback", true);
   hcp_run(o);
@@ -464,7 +486,9 @@ static void hcp_ok(void)
 
   /* Remove it. */
   L_NOTICE("remove tlv c");
+  smock_push_int("local_tlv_callback", -TLV_ID_C);
   hcp_remove_tlv(o, &ta);
+  smock_is_empty();
   smock_push_int("tlv_callback", -TLV_ID_C);
   smock_push_bool("republish_callback", true);
   hcp_run(o);
@@ -473,7 +497,9 @@ static void hcp_ok(void)
   /* Add TLV D in the middle. */
   L_NOTICE("add tlv d");
   tlv_init(&ta, TLV_ID_D, 4);
+  smock_push_int("local_tlv_callback", TLV_ID_D);
   hcp_add_tlv(o, &ta);
+  smock_is_empty();
   smock_push_int("tlv_callback", TLV_ID_D);
   smock_push_bool("republish_callback", true);
   hcp_run(o);
@@ -481,6 +507,9 @@ static void hcp_ok(void)
 
   /* Unsubscribing should result in callbacks too. */
   L_NOTICE("unsubscribe");
+  smock_push_int("local_tlv_callback", -TLV_ID_A);
+  smock_push_int("local_tlv_callback", -TLV_ID_D);
+  smock_push_int("local_tlv_callback", -TLV_ID_B);
   smock_push_int("tlv_callback", -TLV_ID_A);
   smock_push_int("tlv_callback", -TLV_ID_D);
   smock_push_int("tlv_callback", -TLV_ID_B);
@@ -488,6 +517,7 @@ static void hcp_ok(void)
   hcp_unsubscribe(o, &dummy_subscriber_1);
   hcp_unsubscribe(o, &dummy_subscriber_2);
   hcp_unsubscribe(o, &dummy_subscriber_3);
+  hcp_unsubscribe(o, &dummy_subscriber_4);
   smock_is_empty();
 
   /* Re-enable checks */

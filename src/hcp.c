@@ -7,7 +7,7 @@
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
  * Last_neighast modified: Thu Dec  5 10:34:22 2013 mstenber
- * Edit time:     368 min
+ * Edit time:     378 min
  *
  */
 
@@ -16,13 +16,18 @@
 #include <net/ethernet.h>
 #include <arpa/inet.h>
 
+int hcp_node_cmp(hcp_node n1, hcp_node n2)
+{
+  return memcmp(&n1->node_identifier_hash, &n2->node_identifier_hash,
+                HCP_HASH_LEN);
+}
+
 static int
 compare_nodes(const void *a, const void *b, void *ptr __unused)
 {
   hcp_node n1 = (hcp_node) a, n2 = (hcp_node) b;
 
-  return memcmp(&n1->node_identifier_hash, &n2->node_identifier_hash,
-                HCP_HASH_LEN);
+  return hcp_node_cmp(n1, n2);
 }
 
 void hcp_schedule(hcp o)
@@ -106,7 +111,13 @@ static void update_tlv(struct vlist_tree *t,
   __unused hcp_tlv t_new = container_of(node_new, hcp_tlv_s, in_tlvs);
 
   if (t_old)
-    free(t_old);
+    {
+      hcp_notify_subscribers_local_tlv_changed(o, &t_old->tlv, false);
+      free(t_old);
+    }
+  if (t_new)
+    hcp_notify_subscribers_local_tlv_changed(o, &t_new->tlv, true);
+
   o->tlvs_dirty = true;
   hcp_schedule(o);
 }

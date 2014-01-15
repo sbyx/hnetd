@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 10:04:30 2013 mstenber
- * Last modified: Sat Dec  7 11:04:22 2013 mstenber
- * Edit time:     38 min
+ * Last modified: Wed Jan 15 11:21:11 2014 mstenber
+ * Edit time:     41 min
  *
  */
 
@@ -24,10 +24,16 @@
 void hcp_subscribe(hcp o, hcp_subscriber s)
 {
   hcp_node n;
+  hcp_tlv t;
   struct tlv_attr *a;
   int i;
 
   list_add(&s->lh, &o->subscribers);
+  if (s->local_tlv_change_callback)
+    {
+      vlist_for_each_element(&o->tlvs, t, in_tlvs)
+        s->local_tlv_change_callback(s, &t->tlv, true);
+    }
   hcp_for_each_node(o, n)
     {
       NODE_CHANGE_CALLBACK(s, n, true);
@@ -44,7 +50,13 @@ void hcp_unsubscribe(hcp o, hcp_subscriber s)
   hcp_node n;
   struct tlv_attr *a;
   int i;
+  hcp_tlv t;
 
+  if (s->local_tlv_change_callback)
+    {
+      vlist_for_each_element(&o->tlvs, t, in_tlvs)
+        s->local_tlv_change_callback(s, &t->tlv, false);
+    }
   hcp_for_each_node(o, n)
     {
       if (s->tlv_change_callback)
@@ -177,6 +189,17 @@ void hcp_notify_subscribers_tlvs_changed(hcp_node n,
           np = tlv_next(np);
         }
     }
+}
+
+void hcp_notify_subscribers_local_tlv_changed(hcp o,
+                                              struct tlv_attr *a,
+                                              bool add)
+{
+  hcp_subscriber s;
+
+  list_for_each_entry(s, &o->subscribers, lh)
+    if (s->local_tlv_change_callback)
+      s->local_tlv_change_callback(s, a, add);
 }
 
 void hcp_notify_subscribers_node_changed(hcp_node n, bool add)
