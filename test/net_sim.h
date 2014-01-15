@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Sat Dec  7 11:58:44 2013 mstenber
- * Edit time:     21 min
+ * Last modified: Wed Jan 15 14:21:51 2014 mstenber
+ * Edit time:     26 min
  *
  */
 
@@ -16,6 +16,7 @@
 
 #include "hcp_i.h"
 #include "hcp_pa.h"
+#include "hcp_sd.h"
 #include "pa.h"
 #include "sput.h"
 
@@ -66,6 +67,7 @@ typedef struct {
   hcp_s n;
   struct pa pa;
   hcp_glue g;
+  hcp_sd sd;
   hnetd_time_t want_timeout_at;
   hnetd_time_t next_message_at;
   int updated_eap;
@@ -177,6 +179,13 @@ hcp net_sim_find_hcp(net_sim s, const char *name)
   /* Glue it to pa */
   if (!(n->g = hcp_pa_glue_create(&n->n, &n->pa)))
     return NULL;
+  /* Add SD support */
+  if (!(n->sd = hcp_sd_create(&n->n, 
+                              "/bin/yes",
+                              "/tmp/dnsmasq.conf",
+                              "/bin/no",
+                              NULL)))
+    return NULL;
   return &n->n;
 }
 
@@ -282,6 +291,9 @@ void net_sim_remove_node(net_sim s, net_node node)
   list_del(&node->h);
   free(node->name);
   hcp_uninit(&node->n);
+
+  /* Get rid of sd data structure */
+  hcp_sd_destroy(node->sd);
 
   /* Kill glue (has to be done _after_ hcp_uninit). */
   hcp_pa_glue_destroy(node->g);
@@ -410,6 +422,13 @@ bool hcp_io_set_ifname_enabled(hcp o, const char *ifname, bool enabled)
 int hcp_io_get_hwaddrs(unsigned char *buf, int buf_left)
 {
   return 0;
+}
+
+bool hcp_io_get_ipv6(struct in6_addr *addr, char *prefer_ifname)
+{
+  memset(addr, 0, sizeof(*addr));
+  ((uint8_t *)addr)[0] = prefer_ifname ? 1 : 0;
+  return true;
 }
 
 void hcp_io_schedule(hcp o, int msecs)

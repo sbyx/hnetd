@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Tue Jan 14 20:30:01 2014 mstenber
- * Edit time:     33 min
+ * Last modified: Wed Jan 15 12:44:03 2014 mstenber
+ * Edit time:     36 min
  *
  */
 
@@ -120,6 +120,17 @@ typedef struct __packed {
   /* Prefix data, padded so that ends at 4 byte boundary (0s). */
   uint8_t prefix_data[];
 } hcp_t_assigned_prefix_header_s, *hcp_t_assigned_prefix_header;
+
+/* HCP_T_DNS_DELEGATED_ZONE */
+typedef struct __packed {
+  uint8_t address[16];
+  uint8_t flags;
+  /* Label list in DNS encoding (no compression). */
+  uint8_t ll[];
+} hcp_t_dns_delegated_zone_s, *hcp_t_dns_delegated_zone;
+
+#define HCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE 1
+#define HCP_T_DNS_DELEGATED_ZONE_FLAG_SEARCH 2
 
 /**************************************************************** Addressing */
 
