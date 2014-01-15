@@ -26,6 +26,7 @@
 #include <libubox/uloop.h>
 
 #include "hcp_pa.h"
+#include "hcp_bfs.h"
 #include "ipc.h"
 #include "platform.h"
 
@@ -105,6 +106,8 @@ int main(__unused int argc, char* const argv[])
 		L_ERR("Unable to connect hcp and pa");
 		return 17;
 	}
+
+	hcp_bfs_create(h);
 
 	/* XXX - add real command line parsing at some point. For the
 	 * time being, I've added just this utility to get hcp up and

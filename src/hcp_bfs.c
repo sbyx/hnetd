@@ -1,5 +1,33 @@
+#include "hcp_bfs.h"
 #include "hcp_i.h"
 #include "iface.h"
+
+static void hcp_bfs_run(struct uloop_timeout *t);
+static void hcp_bfs_callback(hcp_subscriber s, __unused hcp_node n,
+		__unused struct tlv_attr *tlv, __unused bool add);
+
+struct hcp_bfs_struct {
+	hcp_subscriber_s subscr;
+	hcp hcp;
+	struct uloop_timeout t;
+};
+
+hcp_bfs hcp_bfs_create(hcp hcp)
+{
+	hcp_bfs bfs = calloc(1, sizeof(*bfs));
+	bfs->subscr.tlv_change_callback = hcp_bfs_callback;
+	bfs->hcp = hcp;
+	bfs->t.cb = hcp_bfs_run;
+	hcp_subscribe(hcp, &bfs->subscr);
+	return bfs;
+}
+
+void hcp_bfs_destroy(hcp_bfs bfs)
+{
+	uloop_timeout_cancel(&bfs->t);
+	hcp_unsubscribe(bfs->hcp, &bfs->subscr);
+	free(bfs);
+}
 
 static bool hcp_bfs_neighbors_are_mutual(hcp_node node, const hcp_t_node_data_neighbor neigh)
 {
@@ -20,8 +48,16 @@ static bool hcp_bfs_neighbors_are_mutual(hcp_node node, const hcp_t_node_data_ne
 	return false;
 }
 
-void hcp_bfs_run(hcp hcp)
+static void hcp_bfs_callback(hcp_subscriber s, __unused hcp_node n,
+		__unused struct tlv_attr *tlv, __unused bool add)
 {
+	hcp_bfs bfs = container_of(s, hcp_bfs_s, subscr);
+	uloop_timeout_set(&bfs->t, 0);
+}
+
+static void hcp_bfs_run(struct uloop_timeout *t)
+{
+	hcp hcp = container_of(t, hcp_bfs_s, t)->hcp;
 	struct list_head queue = LIST_HEAD_INIT(queue), queue_ap = LIST_HEAD_INIT(queue_ap);
 	hcp_node c, n;
 	vlist_for_each_element(&hcp->nodes, c, in_nodes) {
