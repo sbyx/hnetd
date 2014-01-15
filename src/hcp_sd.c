@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Wed Jan 15 15:23:00 2014 mstenber
- * Edit time:     173 min
+ * Last modified: Wed Jan 15 22:31:47 2014 mstenber
+ * Edit time:     183 min
  *
  */
 
@@ -239,6 +239,8 @@ bool hcp_sd_reconfigure_ohp(hcp_sd sd)
   hcp_node_for_each_tlv_i(sd->h->own_node, a, i)
     if (tlv_id(a) == HCP_T_ASSIGNED_PREFIX)
       {
+        char lbuf[IFNAMSIZ];
+
         ah = tlv_data(a);
         /* If we already dumped this link, no need to do it
          * again. (Data structure is sorted by link id -> we will get
@@ -246,9 +248,18 @@ bool hcp_sd_reconfigure_ohp(hcp_sd sd)
         if (dumped_link_id == ah->link_id)
           continue;
         dumped_link_id = ah->link_id;
+        uint32_t link_id = be32_to_cpu(dumped_link_id);
+
         /* XXX - what sort of naming scheme should we use for links? */
-        sprintf(link_name, "i%d", be32_to_cpu(dumped_link_id));
-        sprintf(tbuf, "%s.%s.%s", link_name, sd->router_name, sd->domain);
+        sprintf(link_name, "i%d", link_id);
+        if (!if_indextoname(link_id, lbuf))
+          {
+            L_ERR("unable to find index name for %u", link_id);
+            continue;
+          }
+        sprintf(tbuf, "%s=%s.%s.%s",
+                lbuf, link_name, sd->router_name, sd->domain);
+        PUSH_ARG(tbuf);
       }
   args[narg] = NULL;
   _fork_execv(args);
@@ -318,7 +329,7 @@ _change_router_name(hcp_sd sd)
   /* Try to look for new one. */
   while (1)
     {
-      sprintf(sd->router_name, "%s-%d",
+      sprintf(sd->router_name, "%s%d",
               sd->router_name_base, ++sd->router_name_iteration);
       if (!_find_router_name(sd))
         {

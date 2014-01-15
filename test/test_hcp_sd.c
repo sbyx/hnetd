@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Wed Jan 15 21:16:46 2014 mstenber
- * Edit time:     22 min
+ * Last modified: Wed Jan 15 22:33:22 2014 mstenber
+ * Edit time:     30 min
  *
  */
 #define L_LEVEL 7
@@ -24,12 +24,18 @@
 
 /* Stub out the code that calls things */
 #define execv(cmd, argv) do {                   \
-int i = 0;                                      \
-while (argv[i]) i++;                            \
-L_DEBUG("execv:%s (%d arguments)", cmd, i);     \
+int i;                                          \
+L_DEBUG("execv: '%s'", cmd);                    \
 smock_pull_string_is("execv_cmd", cmd);         \
-smock_pull_int_is("execv_argc", i);             \
+for (i = 1 ; argv[i] ; i++)                     \
+  {                                             \
+    L_DEBUG(" arg#%d: '%s'", i, argv[i]);       \
+    smock_pull_string_is("execv_arg", argv[i]); \
+  }                                             \
 } while(0)
+
+#define if_indextoname(n,buf)   \
+  ({ sprintf(buf,"i#%d", n); buf;})
 
 #define vfork() 0
 #define waitpid(pid, x, y)
@@ -48,7 +54,7 @@ void test_hcp_sd(void)
 {
   net_sim_s s;
   hcp n1, n2;
-  hcp_link l1, l2, l21;
+  hcp_link l1, l2, l21 __unused;
   net_node node1, node2;
   struct prefix p;
   bool rv;
@@ -68,22 +74,29 @@ void test_hcp_sd(void)
   sput_fail_unless(prefix_pton("2001:feed:beef::/64", &p), "prefix_pton");
   hcp_tlv_update_ap(n2, &p, "eth2", true);
   SIM_WHILE(&s, 100, !net_sim_is_converged(&s));
-  net_sim_uninit(&s);
   sput_fail_unless(strcmp(node1->sd->router_name, node2->sd->router_name),
                    "router names different");
   smock_is_empty();
+
   rv = hcp_sd_write_dnsmasq_conf(node1->sd, "/tmp/n1.conf");
   sput_fail_unless(rv, "write 1 works");
   smock_is_empty();
 
+  rv = hcp_sd_write_dnsmasq_conf(node2->sd, "/tmp/n2.conf");
+  sput_fail_unless(rv, "write 2 works");
+  smock_is_empty();
+
   smock_push("execv_cmd", "/bin/yes");
-  smock_push_int("execv_argc", 0);
   rv = hcp_sd_restart_dnsmasq(node1->sd);
   sput_fail_unless(rv, "restart dnsmasq works");
   smock_is_empty();
+  smock_push("execv_cmd", "/bin/no");
+  smock_push("execv_arg", "i#1=i1.r.home.");
   rv = hcp_sd_reconfigure_ohp(node1->sd);
   sput_fail_unless(rv, "reconfigure ohp works");
   smock_is_empty();
+
+  net_sim_uninit(&s);
 }
 
 int main(__unused int argc, __unused char **argv)
