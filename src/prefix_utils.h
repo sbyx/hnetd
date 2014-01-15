@@ -55,6 +55,19 @@ int prefix_cmp(const struct prefix *p1,
 int prefix_random(const struct prefix *p, struct prefix *dst,
 		uint8_t plen);
 
+/* Increments the prefix by one. The protected_len first bits are never modified.
+ * Instead, the increment loops back to the first prefix (all other bits are zero).
+ * (p->plen - protected_len) must be <= 32 and  p->plen < protected_len.
+ * Returns -1 if this requirement is not respected.
+ * Returns 1 if the returned address is the smallest address (All zeroes except the protected bits).
+ * Returns 0 otherwise.
+ * Can be used with dst == p */
+int prefix_increment(struct prefix *dst, const struct prefix *p, uint8_t protected_len);
+
+/* Gets the highest prefix that can be returned by increment.
+ * Returns -1 if p->plen < protected_len. Returns 0 otherwise.
+ * Can be used with dst == p. */
+int prefix_last(struct prefix *dst, const struct prefix *p, uint8_t protected_len);
 
 /* Sets prefix's last bits to zero.
  * May be useful when printing the prefix.

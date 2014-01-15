@@ -158,12 +158,26 @@ struct hcp_neighbor_struct {
   int ping_count;
 };
 
+
+struct hcp_bfs_head {
+	/* List head for implementing BFS */
+	struct list_head head;
+
+	/* Next-hop in path (also used to mark visited nodes) */
+	const struct in6_addr *next_hop;
+	const char *ifname;
+};
+
+
 struct hcp_node_struct {
   /* hcp->nodes entry */
   struct vlist_node in_nodes;
 
   /* backpointer to hcp */
   hcp hcp;
+
+  /* iterator to do bfs-traversal */
+  struct hcp_bfs_head bfs;
 
   /* These map 1:1 to node data TLV's start */
   hcp_hash_s node_identifier_hash;

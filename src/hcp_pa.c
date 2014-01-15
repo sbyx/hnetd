@@ -161,7 +161,7 @@ static void _update_a_tlv(hcp_glue g, hcp_node n,
   ah = tlv_data(tlv);
   p.plen = ah->prefix_length_bits;
   plen = ROUND_BITS_TO_BYTES(p.plen);
-  if (tlv_len(tlv) < (sizeof(*ah) + plen))
+  if (tlv_len(tlv) < (sizeof(*ah) + plen) || plen > sizeof(p.prefix))
     return;
   memcpy(&p, tlv_data(tlv) + sizeof(*ah), plen);
   l = _find_local_link(n, ah->link_id);
@@ -188,7 +188,7 @@ static void _update_d_tlv(hcp_glue g, hcp_node n,
   dh = tlv_data(tlv);
   p.plen = dh->prefix_length_bits;
   plen = ROUND_BITS_TO_BYTES(p.plen);
-  if (tlv_len(tlv) < (sizeof(*dh) + plen))
+  if (tlv_len(tlv) < (sizeof(*dh) + plen) || plen > sizeof(p.prefix))
     return;
   memcpy(&p, tlv_data(tlv) + sizeof(*dh), plen);
   if (!add)

@@ -27,6 +27,7 @@
 
 #include "hcp_pa.h"
 #include "hcp_sd.h"
+#include "hcp_bfs.h"
 #include "ipc.h"
 #include "platform.h"
 
@@ -106,6 +107,8 @@ int main(__unused int argc, char* const argv[])
 		L_ERR("Unable to connect hcp and pa");
 		return 17;
 	}
+
+	hcp_bfs_create(h);
 
 	const char *dnsmasq_script = NULL;
 	const char *dnsmasq_bonus_file = NULL;

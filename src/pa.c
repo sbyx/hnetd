@@ -39,7 +39,7 @@
 /* #of ms waiting when we want immediate pa run */
 #define PA_SCHEDULE_RUNNEXT_MS  10
 
-#define PA_MAX_RANDOM_ROUNDS	20
+#define PA_PREFIX_SEARCH_MAX_ROUNDS 128
 
 #define PA_RIDCMP(r1, r2) memcmp((r1)->id, (r2)->id, PA_RIDLEN)
 
@@ -1381,10 +1381,12 @@ static int pa_get_newprefix_random(struct pa *pa,
 		__attribute__((unused))struct pa_iface *iface,
 		struct pa_dp *dp, struct prefix *new_prefix) {
 
-	int i;
+	int res;
+	bool looped;
+	uint32_t rounds, i;
 	uint8_t plen;
 
-	if(dp->prefix.plen < 64) {
+	if(dp->prefix.plen <= 64) {
 		plen = 64;
 	} else if (dp->prefix.plen == 104) { //IPv4
 		plen = 120;
@@ -1393,12 +1395,41 @@ static int pa_get_newprefix_random(struct pa *pa,
 		return -1;
 	}
 
-	for(i=0; i<PA_MAX_RANDOM_ROUNDS; i++) {
-		prefix_random(&dp->prefix, new_prefix, plen);
-		if( !(dp->excluded_valid && prefix_contains(&dp->excluded, new_prefix)) &&
-				!pa_prefix_checkcollision(pa, new_prefix, NULL, NULL, true, true))
+	/* Excluded contains the whole prefix */
+	if(dp->excluded_valid && prefix_contains(&dp->excluded, &dp->prefix)) {
+		L_WARN("Excluded prefix %s contains the "PA_DP_L, PREFIX_REPR(&dp->excluded), PA_DP_LA(dp));
+		return -1;
+	}
+
+	/* The router first choose a random prefix. Then it iterates over all
+	 * the next prefixes, with a limit of PA_PREFIX_SEARCH_MAX_ROUNDS iterations.
+	 * When the chosen prefix is in excluded, it jumps to the end of the exclusion domain. */
+	if(plen - dp->prefix.plen >= 32 || (1 << (plen - dp->prefix.plen)) >= PA_PREFIX_SEARCH_MAX_ROUNDS) {
+		rounds = PA_PREFIX_SEARCH_MAX_ROUNDS;
+	} else {
+		rounds = (1 << (plen - dp->prefix.plen));
+	}
+
+	looped = false;
+	prefix_random(&dp->prefix, new_prefix, plen);
+	for(i=0; i<rounds; i++) {
+		if(dp->excluded_valid && prefix_contains(&dp->excluded, new_prefix)) {
+			L_DEBUG("Skipping excluded prefixes");
+			prefix_last(new_prefix, new_prefix, dp->excluded.plen);
+		} else if (!pa_prefix_checkcollision(pa, new_prefix, NULL, NULL, true, true)) {
 			return 0;
-		L_DEBUG(" Random prefix %s can't be used", PREFIX_REPR(new_prefix));
+		}
+
+		L_DEBUG("Prefix %s can't be used", PREFIX_REPR(new_prefix));
+
+		if((res = prefix_increment(new_prefix, new_prefix, dp->prefix.plen)) == -1)
+			return -1;
+
+		if(res) {
+			if(looped)
+				return -1;
+			looped = true;
+		}
 	}
 
 	return -1;
@@ -1763,6 +1794,9 @@ int pa_update_edp(pa_t pa, const struct prefix *prefix,
 	if(!(dp = pa_dp_goc(pa, prefix, rid)))
 		return -1;
 
+	if(valid_until < 0)
+		valid_until = 0;
+
 	pa_dp_update(pa, dp, NULL, excluded,
 			valid_until, preferred_until,
 			dhcpv6_data, dhcpv6_len);
@@ -1806,6 +1840,9 @@ static void pa_ifu_pd(struct iface_user *u, const char *ifname,
 	L_DEBUG("pa_ifu_pd @%s %s %lld/%lld", ifname,
 			PREFIX_REPR(prefix),
 			(long long)valid_until, (long long)preferred_until);
+
+	if(valid_until < 0)
+		valid_until = 0;
 
 	pa_dp_update(pa, dp, ifname, excluded,
 		valid_until, preferred_until,

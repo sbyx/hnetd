@@ -182,6 +182,38 @@ int prefix_random(const struct prefix *p, struct prefix *dst,
 	return 0;
 }
 
+int prefix_increment(struct prefix *dst, const struct prefix *p, uint8_t protected_len)
+{
+	if(p->plen < protected_len || p->plen - protected_len > 32)
+		return -1;
+
+	uint8_t blen = p->plen - protected_len;
+	uint32_t step = (blen)?(1 << (32 - blen)):0;
+	uint32_t current = 0;
+	bmemcpy_shift(&current, 0, &p->prefix, protected_len, blen);
+	current = ntohl(current);
+	current += step;
+	current = htonl(current);
+	memcpy(dst, p, sizeof(struct prefix));
+	bmemcpy_shift(&dst->prefix, protected_len, &current, 0, blen);
+
+	return (current)?0:1;
+}
+
+int prefix_last(struct prefix *dst, const struct prefix *p, uint8_t protected_len)
+{
+	struct prefix mask, res;
+	if(p->plen < protected_len)
+		return -1;
+
+	memset(&mask, 0xff, sizeof(struct prefix));
+	memcpy(&res, p, sizeof(struct prefix));
+	bmemcpy(&res.prefix, &mask.prefix, protected_len, p->plen - protected_len);
+	memcpy(dst, &res, sizeof(struct prefix));
+
+	return 0;
+}
+
 char *prefix_ntop(char *dst, size_t dst_len,
 		const struct prefix *prefix,
 		bool canonical)

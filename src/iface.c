@@ -121,14 +121,46 @@ void iface_update_routes(void)
 }
 
 // Add new routes
-void iface_add_route(const char *ifname, const struct prefix *from, const struct prefix *to, const struct in6_addr *via)
+void iface_add_default_route(const char *ifname, const struct prefix *from, const struct in6_addr *via)
 {
 	struct iface *c = iface_get(ifname);
 	if (c) {
 		struct iface_route *r = calloc(1, sizeof(*r));
 		r->from = *from;
+		r->via = *via;
+		vlist_add(&c->routes, &r->node, r);
+
+		r = calloc(1, sizeof(*r));
+		r->from.plen = 128;
+		r->via = *via;
+		vlist_add(&c->routes, &r->node, r);
+	}
+}
+
+// Add new routes
+void iface_add_internal_route(const char *ifname, const struct prefix *to, const struct in6_addr *via)
+{
+	struct iface *c = iface_get(ifname);
+	if (c) {
+		struct iface_route *r = calloc(1, sizeof(*r)), *k;
 		r->to = *to;
 		r->via = *via;
+
+		// Infer source restrictions from default routes already added
+		vlist_for_each_element(&c->routes, k, node)
+			if (k->to.plen == 0 && k->node.version == c->routes.version &&
+					prefix_contains(&k->from, &r->to))
+				r->from = k->from;
+
+		if (r->from.plen > 0)
+			vlist_add(&c->routes, &r->node, r);
+		else
+			free(r);
+
+		r = calloc(1, sizeof(*r));
+		r->to = *to;
+		r->via = *via;
+		r->from.plen = 128;
 		vlist_add(&c->routes, &r->node, r);
 	}
 }

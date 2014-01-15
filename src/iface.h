@@ -44,7 +44,8 @@ void iface_set_dhcpv6_send(const char *ifname, const void *dhcpv6_data, size_t d
 void iface_update_routes(void);
 
 // Add new routes
-void iface_add_route(const char *ifname, const struct prefix *from, const struct prefix *to, const struct in6_addr *via);
+void iface_add_default_route(const char *ifname, const struct prefix *from, const struct in6_addr *via);
+void iface_add_internal_route(const char *ifname, const struct prefix *to, const struct in6_addr *via);
 
 // Flush and commit routes to synthesize events
 void iface_commit_routes(void);
