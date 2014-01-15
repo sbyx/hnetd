@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Jan 15 11:15:40 2014 mstenber
+ * Last modified: Wed Jan 15 13:37:24 2014 mstenber
  * Edit time:     113 min
  *
  */
@@ -255,6 +255,7 @@ ssize_t hcp_io_recvfrom(hcp o, void *buf, size_t len,
 ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
                       const char *ifname,
                       const struct in6_addr *dst);
+bool hcp_io_get_ipv6(struct in6_addr *addr, char *prefer_ifname);
 
 /* Multicast rejoin utility. (in hcp.c) */
 bool hcp_link_join(hcp_link l);
