@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Wed Jan 15 22:33:22 2014 mstenber
- * Edit time:     30 min
+ * Last modified: Thu Jan 16 10:56:35 2014 mstenber
+ * Edit time:     23 min
  *
  */
 #define L_LEVEL 7
@@ -87,10 +87,14 @@ void test_hcp_sd(void)
   smock_is_empty();
 
   smock_push("execv_cmd", "/bin/yes");
+  smock_push("execv_arg", "restart");
   rv = hcp_sd_restart_dnsmasq(node1->sd);
   sput_fail_unless(rv, "restart dnsmasq works");
   smock_is_empty();
   smock_push("execv_cmd", "/bin/no");
+  smock_push("execv_arg", "start");
+  smock_push("execv_arg", "-a");
+  smock_push("execv_arg", "127.0.0.2");
   smock_push("execv_arg", "i#1=i1.r.home.");
   rv = hcp_sd_reconfigure_ohp(node1->sd);
   sput_fail_unless(rv, "reconfigure ohp works");

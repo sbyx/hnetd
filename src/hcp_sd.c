@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Wed Jan 15 22:31:47 2014 mstenber
- * Edit time:     183 min
+ * Last modified: Thu Jan 16 10:55:58 2014 mstenber
+ * Edit time:     179 min
  *
  */
 
@@ -189,7 +189,7 @@ bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
 
 bool hcp_sd_restart_dnsmasq(hcp_sd sd)
 {
-  char *args[] = { (char *)sd->dnsmasq_script, NULL};
+  char *args[] = { (char *)sd->dnsmasq_script, "restart", NULL};
 
   _fork_execv(args);
   return true;
@@ -226,6 +226,7 @@ bool hcp_sd_reconfigure_ohp(hcp_sd sd)
 
   struct tlv_attr *a;
   int i;
+  bool first = true;
 
   if (!sd->ohp_script)
     {
@@ -259,8 +260,19 @@ bool hcp_sd_reconfigure_ohp(hcp_sd sd)
           }
         sprintf(tbuf, "%s=%s.%s.%s",
                 lbuf, link_name, sd->router_name, sd->domain);
+        if (first)
+          {
+            PUSH_ARG("start");
+            PUSH_ARG("-a");
+            PUSH_ARG(LOCAL_OHP_ADDRESS);
+            first = false;
+          }
         PUSH_ARG(tbuf);
       }
+  if (first)
+    {
+      PUSH_ARG("stop");
+    }
   args[narg] = NULL;
   _fork_execv(args);
   return true;
