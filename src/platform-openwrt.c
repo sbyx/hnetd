@@ -27,7 +27,7 @@ static int handle_update(__unused struct ubus_context *ctx,
 static void handle_dump(__unused struct ubus_request *req,
 		__unused int type, struct blob_attr *msg);
 
-static struct ubus_request req_dump = { .data_cb = handle_dump, .list = LIST_HEAD_INIT(req_dump.list) };
+static struct ubus_request req_dump = { .list = LIST_HEAD_INIT(req_dump.list) };
 
 static void platform_commit(struct uloop_timeout *t);
 struct platform_iface {
@@ -43,8 +43,10 @@ static void sync_netifd(void)
 	ubus_subscribe(ubus, &netifd, ubus_network_interface);
 
 	ubus_abort_request(ubus, &req_dump);
-	if (!ubus_invoke_async(ubus, ubus_network_interface, "dump", NULL, &req_dump))
+	if (!ubus_invoke_async(ubus, ubus_network_interface, "dump", NULL, &req_dump)) {
+		req_dump.data_cb = handle_dump;
 		ubus_complete_request_async(ubus, &req_dump);
+	}
 }
 
 enum {
