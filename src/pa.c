@@ -80,8 +80,8 @@ struct pa_iface {
 	char ifname[IFNAMSIZ]; /* Interface name */
 
 	bool internal;         /* Whether the iface is internal */
-	bool do_dhcp;          /* Whether we should do dhcp on that
-				  iface. Which means we are owner of that link. */
+	bool do_dhcp;          /* Whether we should do dhcp on this interface */
+	bool designated;       /* Whether we are designated router. */
 
 	struct list_head laps; /* laps on that iface */
 	struct list_head eaps; /* eaps on that iface */
@@ -377,6 +377,7 @@ static struct pa_iface *pa_iface_goc(struct pa *pa, const char *ifname)
 	list_init_head(&iface->dps);
 	iface->internal = 0;
 	iface->do_dhcp = 0;
+	iface->designated = 0;
 	list_add(&iface->le, &pa->ifaces);
 
 	L_INFO("Creating new "PA_IF_L, PA_IF_LA(iface));
@@ -437,7 +438,7 @@ static void pa_iface_cleanmaybe(struct pa *pa,
 	}
 }
 
-static void pa_iface_set_dodhcp(struct pa *pa,
+static void pa_iface_set_do_dhcp(struct pa *pa,
 		struct pa_iface *iface, bool do_dhcp)
 {
 	if(iface->do_dhcp == do_dhcp)
@@ -465,8 +466,10 @@ static void pa_iface_set_internal(struct pa *pa,
 	L_INFO("Changing "PA_IF_L" internal flag to (%d)", PA_IF_LA(iface), internal);
 	iface->internal = internal;
 
-	if(!iface->internal)
-		pa_iface_set_dodhcp(pa, iface, false);
+	if(!iface->internal) {
+		iface->designated = false;
+		pa_iface_set_do_dhcp(pa, iface, false);
+	}
 
 	pa_schedule(pa, PA_TODO_ALL);
 
@@ -1648,14 +1651,14 @@ static void pa_do(struct pa *pa)
 						/* If we do dhcp and we have highest link id
 						 * we claim ownership of all prefixes so that
 						 * it converges to a single owner per link. */
-						own = (link_highest_rid && iface->do_dhcp);
+						own = (link_highest_rid && iface->designated);
 #endif
 					} else {
 						/* We detected a collision, but just silently ignore it */
 #if PA_ALGO == PA_ALGO_ARKKO
 						wait_for_neigh = true;
 #elif PA_ALGO == PA_ALGO_PFISTER
-						wait_for_neigh = !iface->do_dhcp;
+						wait_for_neigh = !iface->designated;
 #endif
 					}
 				}
@@ -1722,18 +1725,34 @@ static void pa_do(struct pa *pa)
 
 	/* Do interface ownership check */
 	list_for_each_entry(iface, &pa->ifaces, le) {
-		own = false;
-		/* By now (arkko's), we are owner as soon as we have a owned
-		 * prefix
-		 * TODO: Do dhcp only if we own a prefix AND nobody else has higher ID
-		 * TODO: Do dhcp only if a owned prefix is actualy assigned ? (or iface can take care of that) */
-		list_for_each_entry(lap, &iface->laps, if_le) {
-			if(lap->own) {
-				own = true;
-				break;
+		if(!iface->internal)
+				continue;
+
+		/* An interface is designated iff there are no eap,
+		 * or if it is advertising at least noe lap and all eaps
+		 * have lower rids. */
+		if(list_is_empty(&iface->eaps)) {
+			iface->designated = true;
+		} else {
+			iface->designated = false;
+			/* TODO: Do dhcp only if a owned prefix is actualy assigned ? (or iface can take care of that) */
+			list_for_each_entry(lap, &iface->laps, if_le) {
+				if(lap->own) {
+					iface->designated = true;
+					break;
+				}
+			}
+
+			if(iface->designated) {
+				list_for_each_entry(eap, &iface->eaps, if_le) {
+					if(PA_RIDCMP(&eap->rid, &pa->rid) > 0 ) {
+						iface->designated = false;
+						break;
+					}
+				}
 			}
 		}
-		pa_iface_set_dodhcp(pa, iface, own);
+		pa_iface_set_do_dhcp(pa, iface, iface->designated && !list_is_empty(&iface->laps));
 	}
 }
 
