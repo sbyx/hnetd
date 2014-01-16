@@ -111,19 +111,20 @@ int main(__unused int argc, char* const argv[])
 		return 17;
 	}
 
-	hcp_bfs_create(h);
-
 	const char *dnsmasq_script = NULL;
 	const char *dnsmasq_bonus_file = NULL;
 	const char *ohp_script = NULL;
 	const char *router_name = NULL;
 
-	while ((c = getopt(argc, argv, "d:b:o:n:")) != -1) {
+	while ((c = getopt(argc, argv, "bd:f:o:n:")) != -1) {
 		switch (c) {
+		case 'b':
+		  hcp_bfs_create(h);
+		  break;
 		case 'd':
 			dnsmasq_script = optarg;
 			break;
-		case 'b':
+		case 'f':
 			dnsmasq_bonus_file = optarg;
 			break;
 		case 'o':
