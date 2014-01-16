@@ -93,17 +93,11 @@ struct pa_iface_callbacks {
 };
 
 struct pa_conf {
-	/* Delay between flooding announce and interface level
-	 * address assignment (in hnetd_time_t unit).
-	 * default = 20 * HNETD_TIME_PER_SECOND */
-	uint32_t commit_lap_delay;
 
-	/* Delay between realizing a local prefix (v4 or v6) should
-	 * be creating, and the actual on link advertisement.
-	 * That allows a router do be sure it has the higher id, and
-	 * wait for a possible globaly routable prefix.
-	 * default = 5 * HNETD_TIME_PER_SECOND */
-	uint32_t create_local_delay;
+	/* Time it gets for an update to be propagated through the network.
+	 * It should be set depending on used flooding protocol.
+	 * default = 15 * HNETD_TIME_PER_SECOND */
+	hnetd_time_t flooding_delay;
 
 	/* Enables ULA use
 	 * default = 1 */

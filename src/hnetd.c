@@ -31,6 +31,8 @@
 #include "ipc.h"
 #include "platform.h"
 
+#define FLOODING_DELAY 2 * HNETD_TIME_PER_SECOND
+
 typedef struct {
 	struct iface_user iu;
 	hcp hcp;
@@ -91,6 +93,7 @@ int main(__unused int argc, char* const argv[])
 	}
 
 	pa_conf_default(&pa_conf);
+	pa_conf.flooding_delay = FLOODING_DELAY;
 	pa = pa_create(&pa_conf);
 	if (!pa) {
 		L_ERR("Unable to initialize PA");

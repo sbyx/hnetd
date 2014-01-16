@@ -407,10 +407,10 @@ void pa_test_ula_static(void)
 	ms = smock_pull_int(SMOCK_SET_TIMEOUT_MS);
 	if(ula_to) {
 		sput_fail_unless(ula_to == &pa->local.timeout, "ula timeout structure");
-		sput_fail_unless(ms == (int) conf.create_local_delay, "ula timeout value");
+		sput_fail_unless(ms == (int) PA_LOCAL_DELAY(conf.flooding_delay), "ula timeout value");
 	}
 
-	now_time += conf.create_local_delay;
+	now_time += PA_LOCAL_DELAY(conf.flooding_delay);
 	valid_until = now_time + conf.local_valid_lifetime;
 	preferred_until = now_time + conf.local_preferred_lifetime;
 	test_pa_timeout_fire(ula_to);
@@ -634,7 +634,7 @@ void pa_test_storage(void)
 	smock_is_empty();
 
 	/* Assign prefixes (so that they are pushed to storage) */
-	now_time += conf.commit_lap_delay;
+	now_time += PA_ASSIGN_DELAY(conf.flooding_delay);
 	pa_iface = pa_iface_goc(pa, TEST_IFNAME_1);
 	sput_fail_if(list_empty(&pa_iface->laps), "Existing lap");
 	pa_lap = list_first_entry(&pa_iface->laps, struct pa_lap, if_le);
@@ -1277,7 +1277,7 @@ void pa_test_minimal(void)
 	lap_to = smock_pull(SMOCK_SET_TIMEOUT);
 	ms = smock_pull_int(SMOCK_SET_TIMEOUT_MS);
 	if(lap_to) {
-		sput_fail_unless(ms == (int) conf.commit_lap_delay, "Delayed assignment delay");
+		sput_fail_unless(ms == (int) PA_ASSIGN_DELAY(conf.flooding_delay), "Delayed assignment delay");
 		sput_fail_unless(lap_to->cb == pa_lap_delayed_cb, "Correct timeout callback");
 	}
 
@@ -1295,7 +1295,7 @@ void pa_test_minimal(void)
 
 	/* Test delayed assignment */
 
-	now_time += conf.commit_lap_delay; /* Moving to when the prefix must be assigned */
+	now_time += PA_ASSIGN_DELAY(conf.flooding_delay); /* Moving to when the prefix must be assigned */
 	test_pa_timeout_fire(lap_to);
 
 	px_update = smock_pull(SMOCK_PREFIX_UPDATE);
@@ -1394,7 +1394,7 @@ void pa_test_init(void)
 
 	now_time = 0;
 
-	conf.commit_lap_delay = TEST_COMMIT_LAP_DELAY;
+	conf.flooding_delay = 5 * HNETD_TIME_PER_SECOND;
 	pa = pa_create(&conf);
 	sput_fail_unless(pa, "Initialize pa");
 	res = pa_start(pa);
