@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Thu Jan 16 10:55:58 2014 mstenber
- * Edit time:     179 min
+ * Last modified: Thu Jan 16 13:45:58 2014 mstenber
+ * Edit time:     204 min
  *
  */
 
@@ -38,15 +38,28 @@
 #define OHP_ARGS_MAX_LEN 512
 #define OHP_ARGS_MAX_COUNT 64
 
+/* How long a timeout we schedule for the actual reconfiguration. This
+ * effectively sets an upper bound on how frequently the dnsmasq/ohp
+ * scripts are called too. */
+#define RECONFIGURE_TIMEOUT 100
+
+#define TIMEOUT_FLAG_DNSMASQ 1
+#define TIMEOUT_FLAG_OHP 2
+#define TIMEOUT_FLAG_ALL 3
+
 struct hcp_sd_struct
 {
-  hcp h;
+  hcp hcp;
 
   /* HCP notification subscriber structure */
   hcp_subscriber_s subscriber;
 
-  /* Should republish ddz's */
+  /* Should republish ddz's (during the next self-publish callback) */
   bool should_republish_ddz;
+
+  /* Mask of what we need to reconfigure (in a timeout). */
+  int should_timeout;
+  struct uloop_timeout timeout;
 
   /* What we were given as router name base (or just 'r' by default). */
   char router_name_base[DNS_MAX_ESCAPED_L_LEN];
@@ -72,6 +85,17 @@ static void _fork_execv(char *argv[])
   waitpid(pid, NULL, 0);
 }
 
+static void _should_timeout(hcp_sd sd, int v)
+{
+  L_DEBUG("hcp_sd/should_timeout:%d", v);
+  if ((sd->should_timeout & v) == v)
+    return;
+  sd->should_timeout |= v;
+  /* Schedule the timeout (note: we won't configure anything until the
+   * churn slows down. This is intentional.) */
+  uloop_timeout_set(&sd->timeout, RECONFIGURE_TIMEOUT);
+}
+
 static void _republish_ddzs(hcp_sd sd)
 {
   struct tlv_attr *a;
@@ -82,10 +106,10 @@ static void _republish_ddzs(hcp_sd sd)
   if (!sd->should_republish_ddz)
     return;
   sd->should_republish_ddz = false;
-  hcp_node_for_each_tlv_i(sd->h->own_node, a, i)
+  hcp_node_for_each_tlv_i(sd->hcp->own_node, a, i)
     if (tlv_id(a) == HCP_T_DNS_DELEGATED_ZONE)
-      (void)hcp_remove_tlv(sd->h, a);
-  vlist_for_each_element(&sd->h->tlvs, t, in_tlvs)
+      (void)hcp_remove_tlv(sd->hcp, a);
+  vlist_for_each_element(&sd->hcp->tlvs, t, in_tlvs)
     {
       a = &t->tlv;
       if (tlv_id(a) == HCP_T_ASSIGNED_PREFIX)
@@ -122,11 +146,14 @@ static void _republish_ddzs(hcp_sd sd)
           dh->flags = HCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE;
           tlv_init(na, HCP_T_DNS_DELEGATED_ZONE, flen);
           tlv_fill_pad(na);
-          hcp_add_tlv(sd->h, na);
+          hcp_add_tlv(sd->hcp, na);
 
           /* XXX - create reverse DDZ entry too (no BROWSE flag, .ip6.arpa). */
         }
     }
+  /* If DDZ data changed that we publish, we should probably
+   * reconfigure dnsmasq+ohp at some point too. */
+  _should_timeout(sd, TIMEOUT_FLAG_ALL);
 }
 
 bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
@@ -144,7 +171,7 @@ bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
    * <subdomain>'s ~NS (remote, real IP)
    * <subdomain>'s ~NS (local, LOCAL_OHP_ADDRESS)
    */
-  hcp_for_each_node(sd->h, n)
+  hcp_for_each_node(sd->hcp, n)
     {
       hcp_node_for_each_tlv_i(n, a, i)
         if (tlv_id(a) == HCP_T_DNS_DELEGATED_ZONE)
@@ -237,7 +264,7 @@ bool hcp_sd_reconfigure_ohp(hcp_sd sd)
 
   /* We're responsible only for those interfaces that we have assigned
    * prefix for. */
-  hcp_node_for_each_tlv_i(sd->h->own_node, a, i)
+  hcp_node_for_each_tlv_i(sd->hcp->own_node, a, i)
     if (tlv_id(a) == HCP_T_ASSIGNED_PREFIX)
       {
         char lbuf[IFNAMSIZ];
@@ -291,13 +318,13 @@ _set_router_name(hcp_sd sd, bool add)
   tlv_fill_pad(a);
   if (add)
     {
-      if (!hcp_add_tlv(sd->h, a))
+      if (!hcp_add_tlv(sd->hcp, a))
         L_ERR("failed to add router name TLV");
       sd->should_republish_ddz = true;
     }
   else
     {
-      if (!hcp_remove_tlv(sd->h, a))
+      if (!hcp_remove_tlv(sd->hcp, a))
         L_ERR("failed to remove router name TLV");
     }
 }
@@ -321,7 +348,7 @@ _find_router_name(hcp_sd sd)
   struct tlv_attr *a;
   int i;
 
-  hcp_for_each_node(sd->h, n)
+  hcp_for_each_node(sd->hcp, n)
     {
       hcp_node_for_each_tlv_i(n, a, i)
         {
@@ -360,6 +387,7 @@ static void _local_tlv_cb(hcp_subscriber s,
    * information is no longer valid and should be republished at some point. */
   if (tlv_id(tlv) == HCP_T_ASSIGNED_PREFIX)
     sd->should_republish_ddz = true;
+  /* This will implicitly also trigger dnsmasq+ohp reconf. */
 }
 
 static void _republish_cb(hcp_subscriber s)
@@ -373,17 +401,47 @@ static void _tlv_cb(hcp_subscriber s,
                     hcp_node n, struct tlv_attr *tlv, bool add)
 {
   hcp_sd sd = container_of(s, hcp_sd_s, subscriber);
-  hcp o = sd->h;
+  hcp o = sd->hcp;
 
   /* Handle router name collision detection; we're interested only in
    * nodes with higher router id overriding our choice. */
-  if (add
-      && _tlv_router_name_matches(sd, tlv)
-      && hcp_node_cmp(n, o->own_node) > 0)
+  if (tlv_id(tlv) == HCP_T_DNS_ROUTER_NAME)
     {
-      _change_router_name(sd);
+      if (add
+          && _tlv_router_name_matches(sd, tlv)
+          && hcp_node_cmp(n, o->own_node) > 0)
+        _change_router_name(sd);
+      /* Router name itself should not trigger reconfiguration unless
+       * local; however, remote DDZ changes should. */
+    }
+
+  /* Local updates will cause TIMEOUT_FLAG_ALL at some
+   * point from ddz update; remote ones should only reconfigure
+   * dnsmasq at most. */
+  if (!hcp_node_is_self(n)
+      && (tlv_id(tlv) == HCP_T_ASSIGNED_PREFIX
+          || tlv_id(tlv) == HCP_T_DNS_DELEGATED_ZONE))
+    _should_timeout(sd, TIMEOUT_FLAG_DNSMASQ);
+}
+
+static void _timeout_cb(struct uloop_timeout *t)
+{
+  hcp_sd sd = container_of(t, hcp_sd_s, timeout);
+  int v = sd->should_timeout;
+
+  L_DEBUG("hcp_sd/timeout:%d", v);
+  sd->should_timeout = 0;
+  if (v & TIMEOUT_FLAG_DNSMASQ)
+    {
+      if (hcp_sd_write_dnsmasq_conf(sd, sd->dnsmasq_bonus_file))
+        hcp_sd_restart_dnsmasq(sd);
+    }
+  if (v & TIMEOUT_FLAG_OHP)
+    {
+      hcp_sd_reconfigure_ohp(sd);
     }
 }
+
 
 hcp_sd hcp_sd_create(hcp h,
                      const char *dnsmasq_script,
@@ -393,7 +451,8 @@ hcp_sd hcp_sd_create(hcp h,
 {
   hcp_sd sd = calloc(1, sizeof(*sd));
 
-  sd->h = h;
+  sd->hcp = h;
+  sd->timeout.cb = _timeout_cb;
   if (!sd
       || !(sd->dnsmasq_script = strdup(dnsmasq_script))
       || !(sd->dnsmasq_bonus_file = strdup(dnsmasq_bonus_file))
@@ -416,7 +475,8 @@ hcp_sd hcp_sd_create(hcp h,
 
 void hcp_sd_destroy(hcp_sd sd)
 {
-  hcp_unsubscribe(sd->h, &sd->subscriber);
+  uloop_timeout_cancel(&sd->timeout);
+  hcp_unsubscribe(sd->hcp, &sd->subscriber);
   free(sd->dnsmasq_script);
   free(sd->dnsmasq_bonus_file);
   free(sd->ohp_script);
