@@ -43,8 +43,11 @@
 
 #define PA_RIDCMP(r1, r2) memcmp((r1)->id, (r2)->id, PA_RIDLEN)
 
-#define PA_CONF_DFLT_COMMIT_LAP_DELAY  20  * HNETD_TIME_PER_SECOND
-#define PA_CONF_DFLT_create_local_delay  10  * HNETD_TIME_PER_SECOND
+#define PA_CONF_DFLT_FLOODING_DELAY    15  * HNETD_TIME_PER_SECOND
+
+#define PA_ASSIGN_DELAY(flooding_delay) (2 * (flooding_delay))
+#define PA_LOCAL_DELAY(flooding_delay)  (2 * (flooding_delay))
+
 #define PA_CONF_DFLT_LOCAL_VALID       600 * HNETD_TIME_PER_SECOND
 #define PA_CONF_DFLT_LOCAL_PREFERRED   300 * HNETD_TIME_PER_SECOND
 #define PA_CONF_DFLT_LOCAL_UPDATE      330 * HNETD_TIME_PER_SECOND
@@ -266,8 +269,7 @@ static void pa_schedule(struct pa *pa, uint32_t todo_flags)
 
 void pa_conf_default(struct pa_conf *conf)
 {
-	conf->commit_lap_delay =
-			PA_CONF_DFLT_COMMIT_LAP_DELAY;
+	conf->flooding_delay = PA_CONF_DFLT_FLOODING_DELAY;
 
 	conf->use_ula = PA_CONF_DFLT_USE_ULA;
 	conf->no_ula_if_glb_ipv6 = PA_CONF_DFLT_NO_ULA_IF_V6;
@@ -279,7 +281,6 @@ void pa_conf_default(struct pa_conf *conf)
 	memcpy(&conf->v4_prefix, &PA_CONF_DFLT_V4, sizeof(conf->v4_prefix));
 
 	conf->storage = NULL;
-	conf->create_local_delay = PA_CONF_DFLT_create_local_delay;
 
 	conf->local_valid_lifetime = PA_CONF_DFLT_LOCAL_VALID;
 	conf->local_preferred_lifetime = PA_CONF_DFLT_LOCAL_PREFERRED;
@@ -1262,8 +1263,8 @@ static void pa_local_algo(struct pa *pa, hnetd_time_t now, struct pa_local_elem 
 	} else if (highest && !edp) {
 		if(!elem->create_start) {
 			elem->create_start = now;
-			elem->timeout = now + pa->conf.create_local_delay;
-		} else if (now >= elem->create_start + pa->conf.create_local_delay) {
+			elem->timeout = now + PA_LOCAL_DELAY(pa->conf.flooding_delay);
+		} else if (now >= elem->create_start + PA_LOCAL_DELAY(pa->conf.flooding_delay)) {
 			elem->create(pa, elem);
 			elem->create_start = 0;
 			elem->timeout = pa_local_elem_update(pa, elem, now);
@@ -1703,13 +1704,9 @@ static void pa_do(struct pa *pa)
 				pa_lap_setdp(pa, lap, dp);
 				pa_lap_setflood(pa, lap, lap->own); /* No delayed flooding for now */
 
-				if(pa->conf.commit_lap_delay) {
-					timeout = now + pa->conf.commit_lap_delay;
-					pa_lap_setassign_delayed(lap, timeout, now, true,
+				timeout = now + PA_ASSIGN_DELAY(pa->conf.flooding_delay);
+				pa_lap_setassign_delayed(lap, timeout, now, true,
 							PA_DF_NOT_IF_LATER_AND_EQUAL);
-				} else {
-					pa_lap_setassign(pa, lap, true);
-				}
 
 			}
 
@@ -1727,7 +1724,9 @@ static void pa_do(struct pa *pa)
 	list_for_each_entry(iface, &pa->ifaces, le) {
 		own = false;
 		/* By now (arkko's), we are owner as soon as we have a owned
-		 * prefix */
+		 * prefix
+		 * TODO: Do dhcp only if we own a prefix AND nobody else has higher ID
+		 * TODO: Do dhcp only if a owned prefix is actualy assigned ? (or iface can take care of that) */
 		list_for_each_entry(lap, &iface->laps, if_le) {
 			if(lap->own) {
 				own = true;
