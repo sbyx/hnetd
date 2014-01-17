@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Thu Jan 16 10:56:35 2014 mstenber
- * Edit time:     23 min
+ * Last modified: Fri Jan 17 10:54:28 2014 mstenber
+ * Edit time:     31 min
  *
  */
 #define L_LEVEL 7
@@ -70,9 +70,12 @@ void test_hcp_sd(void)
   net_sim_set_connected(l1, l2, true);
   net_sim_set_connected(l2, l1, true);
   sput_fail_unless(prefix_pton("2001:dead:beef::/64", &p), "prefix_pton");
-  hcp_tlv_update_ap(n1, &p, "eth0", true);
+  hcp_tlv_ap_update(n1, &p, "eth0", true);
+  sput_fail_unless(prefix_pton("1.2.3.4/24", &p), "prefix_pton");
+  sput_fail_unless(prefix_is_ipv4(&p), "IPv4 prefix parsing failed");
+  hcp_tlv_ap_update(n1, &p, "eth0", true);
   sput_fail_unless(prefix_pton("2001:feed:beef::/64", &p), "prefix_pton");
-  hcp_tlv_update_ap(n2, &p, "eth2", true);
+  hcp_tlv_ap_update(n2, &p, "eth2", true);
   SIM_WHILE(&s, 100, !net_sim_is_converged(&s));
   sput_fail_unless(strcmp(node1->sd->router_name, node2->sd->router_name),
                    "router names different");

@@ -140,8 +140,7 @@ static void hcp_bfs_run(struct uloop_timeout *t)
 		struct tlv_attr *a, *tlvs = hcp_node_get_tlvs(c);
 		unsigned rem;
 		tlv_for_each_attr(a, tlvs, rem) {
-			if (tlv_id(a) == HCP_T_ASSIGNED_PREFIX && tlv_len(a) >=
-					sizeof(hcp_t_assigned_prefix_header_s)) {
+			if (tlv_id(a) == HCP_T_ASSIGNED_PREFIX && hcp_tlv_ap_valid(a)) {
 				hcp_t_assigned_prefix_header ap = tlv_data(a);
 
 				struct prefix to = { .plen = ap->prefix_length_bits };

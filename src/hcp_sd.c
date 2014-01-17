@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Thu Jan 16 13:45:58 2014 mstenber
- * Edit time:     204 min
+ * Last modified: Fri Jan 17 11:07:56 2014 mstenber
+ * Edit time:     231 min
  *
  */
 
@@ -96,6 +96,48 @@ static void _should_timeout(hcp_sd sd, int v)
   uloop_timeout_set(&sd->timeout, RECONFIGURE_TIMEOUT);
 }
 
+static int _push_reverse_ll(struct prefix *p, uint8_t *buf, int buf_len)
+{
+  uint8_t *obuf = buf;
+  int i;
+
+  if (prefix_is_ipv4(p))
+    {
+      /* XXX - not sure what plen should be for IPv4 :p */
+      /* We care only about last 4 bytes, and only full ones at that
+       * (hopefully that will never be a problem). */
+      for (i = p->plen / 8 - 1 ; i >= 12 ; i--)
+        {
+          unsigned char c = p->prefix.s6_addr[i];
+          char tbuf[4];
+          sprintf(tbuf, "%d", c);
+
+          DNS_PUSH_LABEL_STRING(buf, buf_len, tbuf);
+        }
+      DNS_PUSH_LABEL_STRING(buf, buf_len, "in-addr");
+    }
+  else
+    {
+      for (i = p->plen / 4 ; i >= 0 ; i--)
+        {
+          unsigned char c = p->prefix.s6_addr[i / 2];
+          char tbuf[2];
+
+          if (i % 2)
+            c = c & 0xF;
+          else
+            c = c >> 4;
+          sprintf(tbuf, "%x", c);
+
+          DNS_PUSH_LABEL_STRING(buf, buf_len, tbuf);
+        }
+      DNS_PUSH_LABEL_STRING(buf, buf_len, "ip6");
+    }
+  DNS_PUSH_LABEL_STRING(buf, buf_len, "arpa");
+  DNS_PUSH_LABEL(buf, buf_len, NULL, 0);
+  return buf - obuf;
+}
+
 static void _republish_ddzs(hcp_sd sd)
 {
   struct tlv_attr *a;
@@ -114,19 +156,23 @@ static void _republish_ddzs(hcp_sd sd)
       a = &t->tlv;
       if (tlv_id(a) == HCP_T_ASSIGNED_PREFIX)
         {
+          /* Forward DDZ handling */
           hcp_t_dns_delegated_zone dh;
           unsigned char buf[sizeof(struct tlv_attr) +
                             sizeof(*dh) +
                             DNS_MAX_ESCAPED_LEN];
           struct tlv_attr *na;
-          int r;
+          int r, flen;
           char tbuf[DNS_MAX_ESCAPED_LEN];
           char link_name[10];
           struct in6_addr our_addr;
           char ifname_buf[IFNAMSIZ];
 
-          /* Should publish DDZ entry. */
+          if (!hcp_tlv_ap_valid(a))
+            continue;
+
           ah = tlv_data(a);
+          /* Should publish DDZ entry. */
           uint32_t link_id = be32_to_cpu(ah->link_id);
 
           sprintf(link_name, "i%d", link_id);
@@ -142,13 +188,25 @@ static void _republish_ddzs(hcp_sd sd)
           r = escaped2ll(tbuf, dh->ll, DNS_MAX_ESCAPED_LEN);
           if (r < 0)
             continue;
-          int flen = TLV_SIZE + sizeof(*dh) + r;
+          flen = TLV_SIZE + sizeof(*dh) + r;
           dh->flags = HCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE;
           tlv_init(na, HCP_T_DNS_DELEGATED_ZONE, flen);
           tlv_fill_pad(na);
           hcp_add_tlv(sd->hcp, na);
 
-          /* XXX - create reverse DDZ entry too (no BROWSE flag, .ip6.arpa). */
+          /* Reverse DDZ handling */
+          /* (no BROWSE flag, .ip6.arpa. or .in-addr.arpa.). */
+          struct prefix p;
+          p.plen = ah->prefix_length_bits;
+          memcpy(&p.prefix, ah->prefix_data, ROUND_BITS_TO_BYTES(p.plen));
+          r = _push_reverse_ll(&p, dh->ll, DNS_MAX_ESCAPED_LEN);
+          if (r < 0)
+            continue;
+          flen = TLV_SIZE + sizeof(*dh) + r;
+          dh->flags = 0;
+          tlv_init(na, HCP_T_DNS_DELEGATED_ZONE, flen);
+          tlv_fill_pad(na);
+          hcp_add_tlv(sd->hcp, na);
         }
     }
   /* If DDZ data changed that we publish, we should probably
@@ -196,6 +254,10 @@ bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
             if (hcp_node_is_self(n))
               {
                 server = LOCAL_OHP_ADDRESS;
+                /* Ignore ones without flags - we just assume they're
+                 * reverse .arpa. ones for now. */
+                if (!dh->flags)
+                  continue;
               }
             else
               {

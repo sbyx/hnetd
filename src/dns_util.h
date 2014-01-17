@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan  8 11:41:22 2014 mstenber
- * Last modified: Tue Jan 14 21:33:25 2014 mstenber
- * Edit time:     61 min
+ * Last modified: Fri Jan 17 10:41:28 2014 mstenber
+ * Edit time:     64 min
  *
  */
 
@@ -56,7 +56,7 @@
  * etc, which seem to vary by implementation).
  */
 
-#define PUSH_LABEL(ll, ll_left, l, l_len)               \
+#define DNS_PUSH_LABEL(ll, ll_left, l, l_len)           \
 do {                                                    \
   ll_left -= l_len + 1;                                 \
   if (ll_left < 0)                                      \
@@ -70,8 +70,10 @@ do {                                                    \
     memcpy(ll, l, l_len);                               \
     ll += l_len;                                        \
   }                                                     \
-  c = 0;                                                \
  } while(0)
+
+#define DNS_PUSH_LABEL_STRING(ll, ll_left, l) \
+  DNS_PUSH_LABEL(ll, ll_left, l, (int)strlen(l))
 
 /*
  * Convert escaped string to a label list, potentially appending final
@@ -102,7 +104,8 @@ int escaped2ll(const char *escaped, uint8_t *ll, int ll_left)
         {
         case '.':
           last_size = l - label;
-          PUSH_LABEL(ll, ll_left, label, last_size);
+          DNS_PUSH_LABEL(ll, ll_left, label, last_size);
+          c = 0;
           l = label;
           break;
         case '\\':
@@ -144,15 +147,13 @@ int escaped2ll(const char *escaped, uint8_t *ll, int ll_left)
     {
       /* There's pending stuff there. */
       last_size = l - label;
-      PUSH_LABEL(ll, ll_left, label, last_size);
+      DNS_PUSH_LABEL(ll, ll_left, label, last_size);
     }
   /* Terminate always with null label (if it didn't _just_ happen). */
   if (last_size != 0)
-    PUSH_LABEL(ll, ll_left, label, 0);
+    DNS_PUSH_LABEL(ll, ll_left, label, 0);
   return ll - oll;
 }
-
-#undef PUSH_LABEL
 
 #define PUSH_CHAR(c)                                    \
 do {                                                    \

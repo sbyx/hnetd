@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Jan 15 20:57:58 2014 mstenber
- * Edit time:     202 min
+ * Last modified: Fri Jan 17 10:39:31 2014 mstenber
+ * Edit time:     207 min
  *
  */
 
@@ -531,7 +531,7 @@ void hcp_poll(hcp o)
 }
 
 /* Utilities for formatting TLVs. */
-void hcp_tlv_update_ap(hcp o,
+void hcp_tlv_ap_update(hcp o,
                        const struct prefix *prefix,
                        const char *ifname,
                        bool add)

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Wed Jan 15 17:46:22 2014 mstenber
- * Edit time:     176 min
+ * Last modified: Fri Jan 17 10:31:26 2014 mstenber
+ * Edit time:     178 min
  *
  */
 
@@ -156,14 +156,12 @@ static void _update_a_tlv(hcp_glue g, hcp_node n,
   struct prefix p;
   hcp_link l;
 
-  if (tlv_len(tlv) < sizeof(*ah))
+  if (!hcp_tlv_ap_valid(tlv))
     return;
   memset(&p, 0, sizeof(p));
   ah = tlv_data(tlv);
   p.plen = ah->prefix_length_bits;
   plen = ROUND_BITS_TO_BYTES(p.plen);
-  if (tlv_len(tlv) < (sizeof(*ah) + plen) || plen > (int)sizeof(p.prefix))
-    return;
   memcpy(&p, tlv_data(tlv) + sizeof(*ah), plen);
   l = _find_local_link(n, ah->link_id);
   (void)pa_update_eap(g->pa, &p,
@@ -183,14 +181,12 @@ static void _update_d_tlv(hcp_glue g, hcp_node n,
   int plen;
   struct prefix p;
 
-  if (tlv_len(tlv) < sizeof(*dh))
+  if (!hcp_tlv_dp_valid(tlv))
     return;
   memset(&p, 0, sizeof(p));
   dh = tlv_data(tlv);
   p.plen = dh->prefix_length_bits;
   plen = ROUND_BITS_TO_BYTES(p.plen);
-  if (tlv_len(tlv) < (sizeof(*dh) + plen) || plen > (int)sizeof(p.prefix))
-    return;
   memcpy(&p, tlv_data(tlv) + sizeof(*dh), plen);
   if (!add)
     {
@@ -261,7 +257,6 @@ static void _tlv_cb(hcp_subscriber s,
     {
       return;
     }
-  
 
   switch (tlv_id(tlv))
     {
@@ -370,7 +365,7 @@ static void _updated_lap(const struct prefix *prefix, const char *ifname,
   hcp_glue g = priv;
   hcp o = g->hcp;
 
-  return hcp_tlv_update_ap(o, prefix, ifname, !to_delete);
+  return hcp_tlv_ap_update(o, prefix, ifname, !to_delete);
 }
 
 static void _updated_ldp(const struct prefix *prefix,

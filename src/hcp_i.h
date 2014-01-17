@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Jan 15 18:08:47 2014 mstenber
- * Edit time:     114 min
+ * Last modified: Fri Jan 17 10:36:00 2014 mstenber
+ * Edit time:     116 min
  *
  */
 
@@ -276,10 +276,11 @@ bool hcp_link_join(hcp_link l);
 
 /* TLV handling */
 #include "prefix_utils.h"
-void hcp_tlv_update_ap(hcp o,
+void hcp_tlv_ap_update(hcp o,
                        const struct prefix *prefix,
                        const char *ifname,
                        bool add);
+
 
 /* Inlined utilities. */
 static inline hnetd_time_t hcp_time(hcp o)
@@ -298,5 +299,31 @@ static inline hnetd_time_t hcp_time(hcp o)
 
 #define ROUND_BITS_TO_BYTES(b) (((b) + 7) / 8)
 #define ROUND_BYTES_TO_4BYTES(b) ((((b) + 3) / 4) * 4)
+
+static inline bool hcp_tlv_ap_valid(const struct tlv_attr *a)
+{
+  hcp_t_assigned_prefix_header ah;
+
+  if (tlv_len(a) < sizeof(*ah))
+    return false;
+  ah = tlv_data(a);
+  if (tlv_len(a) < (sizeof(*ah) + ROUND_BITS_TO_BYTES(ah->prefix_length_bits))
+      || ah->prefix_length_bits > 128)
+    return false;
+  return true;
+}
+
+static inline bool hcp_tlv_dp_valid(const struct tlv_attr *a)
+{
+  hcp_t_delegated_prefix_header dh;
+
+  if (tlv_len(a) < sizeof(*dh))
+    return false;
+  dh = tlv_data(a);
+  if (tlv_len(a) < (sizeof(*dh) + ROUND_BITS_TO_BYTES(dh->prefix_length_bits))
+      || dh->prefix_length_bits > 128)
+    return false;
+  return true;
+}
 
 #endif /* HCP_I_H */
