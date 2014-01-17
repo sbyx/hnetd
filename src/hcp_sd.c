@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Fri Jan 17 14:39:50 2014 mstenber
- * Edit time:     282 min
+ * Last modified: Fri Jan 17 14:53:40 2014 mstenber
+ * Edit time:     283 min
  *
  */
 
@@ -311,7 +311,7 @@ bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
                     continue;
                   }
               }
-            fprintf(f, "server=/%s/%s\n", server, buf);
+            fprintf(f, "server=/%s/%s\n", buf, server);
           }
     }
   fclose(f);
