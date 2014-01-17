@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Fri Jan 17 12:16:45 2014 mstenber
- * Edit time:     232 min
+ * Last modified: Fri Jan 17 13:13:39 2014 mstenber
+ * Edit time:     237 min
  *
  */
 
@@ -223,6 +223,11 @@ bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
   int i;
   FILE *f = fopen(filename, "w");
 
+  if (!f)
+    {
+      L_ERR("unable to open %s for writing dnsmasq conf", filename);
+      return false;
+    }
   /* Basic idea: Traverse through the hcp node+tlv graph _once_,
    * producing appropriate configuration file.
    *
