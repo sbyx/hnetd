@@ -421,8 +421,8 @@ void pa_test_ula_static(void)
 		sput_fail_if(prefix_cmp(&ula_prefix, &ldp->prefix), "Correct ula prefix value");
 		sput_fail_unless(ldp->valid_until == valid_until, "Correct valid lifetime");
 		sput_fail_unless(ldp->preferred_until == preferred_until, "Correct preferred lifetime");
-		sput_fail_unless(ldp->dhcpv6_data == conf.ula_dhcp_data, "Correct dhcp data");
-		sput_fail_unless(ldp->dhcpv6_len == conf.ula_dhcp_data_len, "Correct dhcp data len");
+		sput_fail_unless(ldp->dhcpv6_data == NULL, "Correct dhcp data");
+		sput_fail_unless(ldp->dhcpv6_len == 0, "Correct dhcp data len");
 		sput_fail_unless(ldp->dp_ifname == NULL, "Correct iface");
 		free(ldp);
 	}
