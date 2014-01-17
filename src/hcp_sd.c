@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Fri Jan 17 13:13:39 2014 mstenber
- * Edit time:     237 min
+ * Last modified: Fri Jan 17 13:55:09 2014 mstenber
+ * Edit time:     256 min
  *
  */
 
@@ -29,6 +29,7 @@
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <libubox/md5.h>
 
 #include "hcp_sd.h"
 #include "hcp_i.h"
@@ -71,6 +72,10 @@ struct hcp_sd_struct
   char *dnsmasq_script;
   char *dnsmasq_bonus_file;
   char *ohp_script;
+
+  /* State hashes used to keep track of what has been committed. */
+  hcp_hash_s dnsmasq_state;
+  hcp_hash_s ohp_state;
 };
 
 
@@ -79,11 +84,11 @@ static void _fork_execv(char *argv[])
 {
   pid_t pid = vfork();
 
-  L_DEBUG("hcp_sd calling %s", argv[0]);
   if (pid == 0) {
     execv(argv[0], argv);
     _exit(128);
   }
+  L_DEBUG("hcp_sd calling %s", argv[0]);
   waitpid(pid, NULL, 0);
 }
 
@@ -96,6 +101,20 @@ static void _should_timeout(hcp_sd sd, int v)
   /* Schedule the timeout (note: we won't configure anything until the
    * churn slows down. This is intentional.) */
   uloop_timeout_set(&sd->timeout, RECONFIGURE_TIMEOUT);
+}
+
+/* Convenience wrapper around MD5 hashing */
+static bool _sh_changed(md5_ctx_t *ctx, hcp_hash reference)
+{
+  hcp_hash_s h;
+
+  md5_end(&h, ctx);
+  if (memcmp(&h, reference, sizeof(h)))
+    {
+      *reference = h;
+      return true;
+    }
+  return false;
 }
 
 static int _push_reverse_ll(struct prefix *p, uint8_t *buf, int buf_len)
@@ -222,7 +241,9 @@ bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
   struct tlv_attr *a;
   int i;
   FILE *f = fopen(filename, "w");
+  md5_ctx_t ctx;
 
+  md5_begin(&ctx);
   if (!f)
     {
       L_ERR("unable to open %s for writing dnsmasq conf", filename);
@@ -236,6 +257,7 @@ bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
    * <subdomain>'s ~NS (remote, real IP)
    * <subdomain>'s ~NS (local, LOCAL_OHP_ADDRESS)
    */
+  md5_hash(sd->domain, strlen(sd->domain), &ctx);
   hcp_for_each_node(sd->hcp, n)
     {
       hcp_node_for_each_tlv_i(n, a, i)
@@ -255,9 +277,13 @@ bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
                            buf, sizeof(buf)) < 0)
               continue;
 
+            md5_hash(a, tlv_raw_len(a), &ctx);
+
             if (dh->flags & HCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE)
-              fprintf(f, "ptr-record=b._dns-sd._udp.%s,%s\n",
-                      sd->domain, buf);
+              {
+                fprintf(f, "ptr-record=b._dns-sd._udp.%s,%s\n",
+                        sd->domain, buf);
+              }
             if (hcp_node_is_self(n))
               {
                 server = LOCAL_OHP_ADDRESS;
@@ -280,7 +306,7 @@ bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
           }
     }
   fclose(f);
-  return true;
+  return _sh_changed(&ctx, &sd->dnsmasq_state);
 }
 
 bool hcp_sd_restart_dnsmasq(hcp_sd sd)
@@ -323,12 +349,14 @@ bool hcp_sd_reconfigure_ohp(hcp_sd sd)
   struct tlv_attr *a;
   int i;
   bool first = true;
+  md5_ctx_t ctx;
 
   if (!sd->ohp_script)
     {
       L_ERR("no ohp_script set yet hcp_sd_reconfigure_ohp called");
       return false;
     }
+  md5_begin(&ctx);
   PUSH_ARG(sd->ohp_script);
 
   /* We're responsible only for those interfaces that we have assigned
@@ -356,6 +384,7 @@ bool hcp_sd_reconfigure_ohp(hcp_sd sd)
           }
         sprintf(tbuf, "%s=%s.%s.%s",
                 lbuf, link_name, sd->router_name, sd->domain);
+        md5_hash(tbuf, strlen(tbuf), &ctx);
         if (first)
           {
             PUSH_ARG("start");
@@ -370,7 +399,8 @@ bool hcp_sd_reconfigure_ohp(hcp_sd sd)
       PUSH_ARG("stop");
     }
   args[narg] = NULL;
-  _fork_execv(args);
+  if (_sh_changed(&ctx, &sd->ohp_state))
+    _fork_execv(args);
   return true;
 }
 

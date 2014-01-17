@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Fri Jan 17 10:54:28 2014 mstenber
- * Edit time:     31 min
+ * Last modified: Fri Jan 17 13:55:56 2014 mstenber
+ * Edit time:     33 min
  *
  */
 #define L_LEVEL 7
@@ -85,6 +85,10 @@ void test_hcp_sd(void)
   sput_fail_unless(rv, "write 1 works");
   smock_is_empty();
 
+  rv = hcp_sd_write_dnsmasq_conf(node1->sd, "/tmp/n1.conf");
+  sput_fail_unless(!rv, "write 1 'fails'");
+  smock_is_empty();
+
   rv = hcp_sd_write_dnsmasq_conf(node2->sd, "/tmp/n2.conf");
   sput_fail_unless(rv, "write 2 works");
   smock_is_empty();
@@ -94,11 +98,17 @@ void test_hcp_sd(void)
   rv = hcp_sd_restart_dnsmasq(node1->sd);
   sput_fail_unless(rv, "restart dnsmasq works");
   smock_is_empty();
+
   smock_push("execv_cmd", "/bin/no");
   smock_push("execv_arg", "start");
   smock_push("execv_arg", "-a");
   smock_push("execv_arg", "127.0.0.2");
   smock_push("execv_arg", "i#1=i1.r.home.");
+  rv = hcp_sd_reconfigure_ohp(node1->sd);
+  sput_fail_unless(rv, "reconfigure ohp works");
+  smock_is_empty();
+
+  /* Make sure second run is NOP */
   rv = hcp_sd_reconfigure_ohp(node1->sd);
   sput_fail_unless(rv, "reconfigure ohp works");
   smock_is_empty();
