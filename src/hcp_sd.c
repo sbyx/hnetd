@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Fri Jan 17 14:53:40 2014 mstenber
- * Edit time:     283 min
+ * Last modified: Fri Jan 17 14:58:37 2014 mstenber
+ * Edit time:     284 min
  *
  */
 
@@ -138,7 +138,7 @@ static int _push_reverse_ll(struct prefix *p, uint8_t *buf, int buf_len)
     }
   else
     {
-      for (i = p->plen / 4 ; i >= 0 ; i--)
+      for (i = p->plen / 4 - 1 ; i >= 0 ; i--)
         {
           unsigned char c = p->prefix.s6_addr[i / 2];
           char tbuf[2];
