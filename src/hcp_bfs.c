@@ -114,16 +114,12 @@ static void hcp_bfs_run(struct uloop_timeout *t)
 					continue;
 
 				list_add_tail(&n->bfs.head, &queue);
-			} else if (tlv_id(a) == HCP_T_DELEGATED_PREFIX && tlv_len(a) >=
-					sizeof(hcp_t_delegated_prefix_header_s) && c != hcp->own_node) {
+			} else if (tlv_id(a) == HCP_T_DELEGATED_PREFIX && hcp_tlv_dp_valid(a) && c != hcp->own_node) {
 				hcp_t_delegated_prefix_header dp = tlv_data(a);
 
 				struct prefix from = { .plen = dp->prefix_length_bits };
 				size_t plen = ROUND_BITS_TO_BYTES(from.plen);
-				if (tlv_len(a) < sizeof(*dp) + plen || plen > sizeof(from.prefix))
-					continue;
 				memcpy(&from.prefix, &dp[1], plen);
-
 				iface_add_default_route(n->bfs.ifname, &from, n->bfs.next_hop);
 			}
 		}
@@ -145,8 +141,6 @@ static void hcp_bfs_run(struct uloop_timeout *t)
 
 				struct prefix to = { .plen = ap->prefix_length_bits };
 				size_t plen = ROUND_BITS_TO_BYTES(to.plen);
-				if (tlv_len(a) < sizeof(*ap) + plen || plen > sizeof(to.prefix))
-					continue;
 				memcpy(&to.prefix, &ap[1], plen);
 
 				iface_add_internal_route(n->bfs.ifname, &to, n->bfs.next_hop);
