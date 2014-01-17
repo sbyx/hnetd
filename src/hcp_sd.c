@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Fri Jan 17 11:07:56 2014 mstenber
- * Edit time:     231 min
+ * Last modified: Fri Jan 17 12:16:45 2014 mstenber
+ * Edit time:     232 min
  *
  */
 
@@ -78,6 +78,8 @@ struct hcp_sd_struct
 static void _fork_execv(char *argv[])
 {
   pid_t pid = vfork();
+
+  L_DEBUG("hcp_sd calling %s", argv[0]);
   if (pid == 0) {
     execv(argv[0], argv);
     _exit(128);
