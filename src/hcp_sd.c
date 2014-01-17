@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Fri Jan 17 14:58:37 2014 mstenber
- * Edit time:     284 min
+ * Last modified: Fri Jan 17 15:13:35 2014 mstenber
+ * Edit time:     287 min
  *
  */
 
@@ -35,6 +35,7 @@
 #include "dns_util.h"
 
 #define LOCAL_OHP_ADDRESS "127.0.0.2"
+#define LOCAL_OHP_PORT 54
 #define OHP_ARGS_MAX_LEN 512
 #define OHP_ARGS_MAX_COUNT 64
 
@@ -311,7 +312,7 @@ bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
                     continue;
                   }
               }
-            fprintf(f, "server=/%s/%s\n", buf, server);
+            fprintf(f, "server=/%s/%s#%d\n", buf, server, LOCAL_OHP_PORT);
           }
     }
   fclose(f);
@@ -393,9 +394,13 @@ bool hcp_sd_reconfigure_ohp(hcp_sd sd)
         md5_hash(tbuf, strlen(tbuf), &ctx);
         if (first)
           {
+            char port[6];
             PUSH_ARG("start");
             PUSH_ARG("-a");
             PUSH_ARG(LOCAL_OHP_ADDRESS);
+            PUSH_ARG("-p");
+            sprintf(port, "%d", LOCAL_OHP_PORT);
+            PUSH_ARG(port);
             first = false;
           }
         PUSH_ARG(tbuf);
