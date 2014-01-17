@@ -48,6 +48,52 @@ void bmemcpy_shift(void *dst, size_t dst_start,
 		const void *src, size_t src_start,
 		size_t nbits);
 
+void prefix_pton_t(void)
+{
+	struct prefix p;
+	struct prefix p4_1 = {
+			.prefix = { .s6_addr = {
+					0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00,
+					0x00,0x00, 0xff,0xff,  0x0a }},
+					.plen = 104 };
+
+	struct prefix p4_2 = {
+			.prefix = { .s6_addr = {
+					0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00,
+					0x00,0x00, 0xff,0xff,  0xc0,0xa8, 0x00,0x01 }},
+					.plen = 128 };
+
+	sput_fail_unless(prefix_pton(p_allones_67_s, &p) == 1, "Parse 1");
+	sput_fail_unless(!prefix_cmp(&p, &p_allones_67), "Parse value 1");
+
+	sput_fail_unless(prefix_pton(p1_s, &p) == 1, "Parse 2");
+	sput_fail_unless(!prefix_cmp(&p, &p1), "Parse value 2");
+
+	sput_fail_unless(prefix_pton(px_s, &p) == 1, "Parse 3");
+	sput_fail_unless(!prefix_cmp(&p, &px), "Parse value 3");
+
+	sput_fail_unless(prefix_pton("10::/rrx", &p) == 0, "Parse error 1");
+	sput_fail_unless(prefix_pton("10::/129", &p) == 0, "Parse error 2");
+	sput_fail_unless(prefix_pton("10::/-1", &p) == 0, "Parse error 3");
+	sput_fail_unless(prefix_pton("ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255./10", &px) == 0, "Parse error 4");
+	sput_fail_unless(prefix_pton("10.0.0.0/64", &px) == 0, "Parse error 5");
+	sput_fail_unless(prefix_pton("blah-chombier/64", &px) == 0, "Parse error 6");
+
+	/* Parsing IPv4 */
+	sput_fail_unless(prefix_pton("10.0.0.0/8", &p) == 1, "Parse v4 1");
+	sput_fail_unless(!prefix_cmp(&p, &p4_1), "Parse v4 value 1");
+
+	sput_fail_unless(prefix_pton("192.168.0.1/32", &p) == 1, "Parse v4 2");
+	sput_fail_unless(!prefix_cmp(&p, &p4_2), "Parse v4 value 2");
+
+	/* Parsing without slash */
+	sput_fail_unless(prefix_pton("192.168.0.1", &p) == 1, "Parse v4 without /");
+	sput_fail_unless(!prefix_cmp(&p, &p4_2), "Parse v4 without /");
+
+	sput_fail_unless(prefix_pton("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", &p) == 1, "Parse v6 without /");
+	sput_fail_unless(!prefix_cmp(&p, &p_allones_128), "Parse v6 without /");
+}
+
 void prefix_last_t(void)
 {
 	struct prefix px;
@@ -274,6 +320,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
   sput_run_test(prefix_cmp_t);
   sput_run_test(prefix_increment_t);
   sput_run_test(prefix_last_t);
+  sput_run_test(prefix_pton_t);
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();

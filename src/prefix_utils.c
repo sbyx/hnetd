@@ -155,6 +155,14 @@ int prefix_cmp(const struct prefix *p1,
 	return bmemcmp(&p1->prefix, &p2->prefix, p1->plen);
 }
 
+uint8_t prefix_af_length(const struct prefix *p)
+{
+	if(prefix_is_ipv4(p)) {
+		return p->plen - 96;
+	}
+	return p->plen;
+}
+
 void prefix_canonical(struct prefix *dst, const struct prefix *src)
 {
 	struct in6_addr zero;
@@ -229,11 +237,15 @@ char *prefix_ntop(char *dst, size_t dst_len,
 	}
 
 	const char *res;
+	uint8_t plen;
 
-	if (!IN6_IS_ADDR_V4MAPPED(&to_use->prefix))
+	if (!IN6_IS_ADDR_V4MAPPED(&to_use->prefix)) {
 		res = inet_ntop(AF_INET6, &to_use->prefix, dst, dst_len);
-	else
+		plen = to_use->plen;
+	} else {
 		res = inet_ntop(AF_INET, &to_use->prefix.s6_addr[12], dst, dst_len);
+		plen = to_use->plen - 96;
+	}
 
 	if(!res)
 		return NULL;
@@ -242,7 +254,7 @@ char *prefix_ntop(char *dst, size_t dst_len,
 	size_t remaining = dst_len - written;
 	char *end = dst + written;
 
-	if(snprintf(end, remaining, "/%u", to_use->plen) >= (int) remaining)
+	if(snprintf(end, remaining, "/%u", plen) >= (int) remaining)
 		return NULL;
 
 	return dst;
@@ -251,23 +263,54 @@ char *prefix_ntop(char *dst, size_t dst_len,
 int prefix_pton(const char *addr, struct prefix *p)
 {
 	char buf[INET6_ADDRSTRLEN];
-	size_t addrlen = strchr(addr, '/') - addr;
-	if (addrlen >= sizeof(buf) - 1)
+	char *slash = strchr(addr, '/'), *c;
+	uint8_t parsed_len;
+	size_t addrlen;
+	if(slash) {
+		addrlen = strlen(slash + 1);
+		if(!addrlen || addrlen > 3)
+			return 0;
+
+		/* atoi doesn't return errors, so we check string correctness */
+		for(c = slash + 1; *c; c++) {
+			if(*c < '0' || *c > '9')
+				return 0;
+		}
+		parsed_len = atoi(slash + 1);
+		if(parsed_len > 128)
+			return 0;
+
+		addrlen = slash - addr;
+	} else {
+		addrlen = strlen(addr);
+	}
+
+	if (addrlen >= INET6_ADDRSTRLEN)
 		return 0;
 
 	memcpy(buf, addr, addrlen);
 	buf[addrlen] = 0;
 
-	memset(p, 0, sizeof(*p));
-	if (inet_pton(AF_INET6, buf, &p->prefix) != 1) {
-		if (inet_pton(AF_INET, buf, &p->prefix.s6_addr[12]) == 1) {
-			p->prefix.s6_addr[10] = 0xff;
-			p->prefix.s6_addr[11] = 0xff;
-		} else {
+	if(inet_pton(AF_INET6, buf, &p->prefix) == 1) {
+		if(slash)
+			p->plen = parsed_len;
+		else
+			p->plen = 128;
+	} else if(inet_pton(AF_INET, buf, &p->prefix.s6_addr[12]) == 1) {
+		if(parsed_len > 32)
 			return 0;
-		}
+
+		if(slash)
+			p->plen = parsed_len + 96;
+		else
+			p->plen = 128;
+
+		memset(&p->prefix, 0, 10);
+		p->prefix.s6_addr[10] = 0xff;
+		p->prefix.s6_addr[11] = 0xff;
+	} else {
+		return 0;
 	}
 
-	p->plen = atoi(&addr[addrlen + 1]);
-	return p->plen <= 128 && (!IN6_IS_ADDR_V4MAPPED(&p->prefix) || p->plen <= 32);
+	return 1;
 }

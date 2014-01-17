@@ -48,6 +48,10 @@ bool prefix_contains(const struct prefix *p1,
 int prefix_cmp(const struct prefix *p1,
 		const struct prefix *p2);
 
+/* Returns the IPv6 prefix length if p is IPv6, and the
+ * IPv4 prefix length if p is IPv4. */
+uint8_t prefix_af_length(const struct prefix *p);
+
 
 /* Choose a random prefix of length plen, inside p, and returns 0.
  * Or returns -1 if there is not enaugh space in p for a prefix of
@@ -85,7 +89,10 @@ char *prefix_ntop(char *dst, size_t dst_len,
 		const struct prefix *prefix,
 		bool canonical);
 
-/* Parse the prefix into a buffer */
+/* Parses IPv4 and IPv6 prefixes and write it into IPv6 prefix structure.
+ * If no prefix-length is provided, 128 is used.
+ * The complete address is written in p, even bits that are after the
+ * prefix length. */
 int prefix_pton(const char *addr, struct prefix *p);
 
 /* This is provided as an option, to have prefix_ntop with
