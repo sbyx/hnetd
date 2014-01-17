@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Fri Jan 17 14:34:34 2014 mstenber
- * Edit time:     278 min
+ * Last modified: Fri Jan 17 14:39:50 2014 mstenber
+ * Edit time:     282 min
  *
  */
 
@@ -185,7 +185,6 @@ static void _republish_ddzs(hcp_sd sd)
           struct tlv_attr *na;
           int r, flen;
           char tbuf[DNS_MAX_ESCAPED_LEN];
-          char link_name[10];
           struct in6_addr our_addr;
 
           if (!hcp_tlv_ap_valid(a))
@@ -199,15 +198,14 @@ static void _republish_ddzs(hcp_sd sd)
           /* Should publish DDZ entry. */
           uint32_t link_id = be32_to_cpu(ah->link_id);
 
-          sprintf(link_name, "i%d", link_id);
-          sprintf(tbuf, "%s.%s.%s", link_name, sd->router_name, sd->domain);
-
           hcp_link l = hcp_find_link_by_id(sd->hcp, link_id);
           if (!l)
             {
               L_ERR("unable to find hcp link by id #%d", link_id);
               continue;
             }
+          sprintf(tbuf, "%s.%s.%s", l->ifname, sd->router_name, sd->domain);
+
           if (!hcp_io_get_ipv6(&our_addr, l->ifname))
             {
               L_ERR("unable to get ipv6 address");
@@ -355,7 +353,6 @@ bool hcp_sd_reconfigure_ohp(hcp_sd sd)
   uint32_t dumped_link_id = 0;
   hcp_t_assigned_prefix_header ah;
   char tbuf[DNS_MAX_ESCAPED_LEN];
-  char link_name[10];
 
   struct tlv_attr *a;
   int i;
@@ -391,7 +388,6 @@ bool hcp_sd_reconfigure_ohp(hcp_sd sd)
             continue;
           }
         /* XXX - what sort of naming scheme should we use for links? */
-        sprintf(link_name, "i%d", link_id);
         sprintf(tbuf, "%s=%s.%s.%s",
                 l->ifname, l->ifname, sd->router_name, sd->domain);
         md5_hash(tbuf, strlen(tbuf), &ctx);
