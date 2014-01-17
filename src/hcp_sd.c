@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Fri Jan 17 14:11:57 2014 mstenber
- * Edit time:     266 min
+ * Last modified: Fri Jan 17 14:24:57 2014 mstenber
+ * Edit time:     271 min
  *
  */
 
@@ -168,6 +168,7 @@ static void _republish_ddzs(hcp_sd sd)
   if (!sd->should_republish_ddz)
     return;
   sd->should_republish_ddz = false;
+  L_DEBUG("_republish_ddzs");
   hcp_node_for_each_tlv_i(sd->hcp->own_node, a, i)
     if (tlv_id(a) == HCP_T_DNS_DELEGATED_ZONE)
       (void)hcp_remove_tlv(sd->hcp, a);
@@ -188,7 +189,11 @@ static void _republish_ddzs(hcp_sd sd)
           struct in6_addr our_addr;
 
           if (!hcp_tlv_ap_valid(a))
-            continue;
+            {
+              L_ERR("invalid ap _published by us_ in _republish_ddzs: %s",
+                    TLV_REPR(a));
+              continue;
+            }
 
           ah = tlv_data(a);
           /* Should publish DDZ entry. */
@@ -199,9 +204,15 @@ static void _republish_ddzs(hcp_sd sd)
 
           hcp_link l = hcp_find_link_by_id(sd->hcp, link_id);
           if (!l)
-            continue;
+            {
+              L_ERR("unable to find hcp link by id #%d", link_id);
+              continue;
+            }
           if (!hcp_io_get_ipv6(&our_addr, l->ifname))
-            continue;
+            {
+              L_ERR("unable to get ipv6 address");
+              continue;
+            }
 
           na = (struct tlv_attr *)buf;
           dh = tlv_data(na);
