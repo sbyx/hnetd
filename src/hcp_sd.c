@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Fri Jan 17 13:55:09 2014 mstenber
- * Edit time:     256 min
+ * Last modified: Fri Jan 17 14:11:57 2014 mstenber
+ * Edit time:     266 min
  *
  */
 
@@ -27,7 +27,6 @@
 
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <sys/types.h>
 #include <sys/wait.h>
 #include <libubox/md5.h>
 
@@ -187,7 +186,6 @@ static void _republish_ddzs(hcp_sd sd)
           char tbuf[DNS_MAX_ESCAPED_LEN];
           char link_name[10];
           struct in6_addr our_addr;
-          char ifname_buf[IFNAMSIZ];
 
           if (!hcp_tlv_ap_valid(a))
             continue;
@@ -199,7 +197,10 @@ static void _republish_ddzs(hcp_sd sd)
           sprintf(link_name, "i%d", link_id);
           sprintf(tbuf, "%s.%s.%s", link_name, sd->router_name, sd->domain);
 
-          if (!hcp_io_get_ipv6(&our_addr, if_indextoname(link_id, ifname_buf)))
+          hcp_link l = hcp_find_link_by_id(sd->hcp, link_id);
+          if (!l)
+            continue;
+          if (!hcp_io_get_ipv6(&our_addr, l->ifname))
             continue;
 
           na = (struct tlv_attr *)buf;
@@ -364,8 +365,6 @@ bool hcp_sd_reconfigure_ohp(hcp_sd sd)
   hcp_node_for_each_tlv_i(sd->hcp->own_node, a, i)
     if (tlv_id(a) == HCP_T_ASSIGNED_PREFIX)
       {
-        char lbuf[IFNAMSIZ];
-
         ah = tlv_data(a);
         /* If we already dumped this link, no need to do it
          * again. (Data structure is sorted by link id -> we will get
@@ -374,16 +373,17 @@ bool hcp_sd_reconfigure_ohp(hcp_sd sd)
           continue;
         dumped_link_id = ah->link_id;
         uint32_t link_id = be32_to_cpu(dumped_link_id);
+        hcp_link l = hcp_find_link_by_id(sd->hcp, link_id);
 
-        /* XXX - what sort of naming scheme should we use for links? */
-        sprintf(link_name, "i%d", link_id);
-        if (!if_indextoname(link_id, lbuf))
+        if (!l)
           {
-            L_ERR("unable to find index name for %u", link_id);
+            L_ERR("unable to find link by index %u", link_id);
             continue;
           }
+        /* XXX - what sort of naming scheme should we use for links? */
+        sprintf(link_name, "i%d", link_id);
         sprintf(tbuf, "%s=%s.%s.%s",
-                lbuf, link_name, sd->router_name, sd->domain);
+                l->ifname, l->ifname, sd->router_name, sd->domain);
         md5_hash(tbuf, strlen(tbuf), &ctx);
         if (first)
           {

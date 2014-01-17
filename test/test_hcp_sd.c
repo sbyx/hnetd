@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Fri Jan 17 13:55:56 2014 mstenber
- * Edit time:     33 min
+ * Last modified: Fri Jan 17 14:12:19 2014 mstenber
+ * Edit time:     36 min
  *
  */
 #define L_LEVEL 7
@@ -33,9 +33,6 @@ for (i = 1 ; argv[i] ; i++)                     \
     smock_pull_string_is("execv_arg", argv[i]); \
   }                                             \
 } while(0)
-
-#define if_indextoname(n,buf)   \
-  ({ sprintf(buf,"i#%d", n); buf;})
 
 #define vfork() 0
 #define waitpid(pid, x, y)
@@ -103,7 +100,7 @@ void test_hcp_sd(void)
   smock_push("execv_arg", "start");
   smock_push("execv_arg", "-a");
   smock_push("execv_arg", "127.0.0.2");
-  smock_push("execv_arg", "i#1=i1.r.home.");
+  smock_push("execv_arg", "eth0=eth0.r.home.");
   rv = hcp_sd_reconfigure_ohp(node1->sd);
   sput_fail_unless(rv, "reconfigure ohp works");
   smock_is_empty();
