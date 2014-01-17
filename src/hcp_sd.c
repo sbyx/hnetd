@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Fri Jan 17 14:24:57 2014 mstenber
- * Edit time:     271 min
+ * Last modified: Fri Jan 17 14:34:34 2014 mstenber
+ * Edit time:     278 min
  *
  */
 
@@ -45,7 +45,7 @@
 
 #define TIMEOUT_FLAG_DNSMASQ 1
 #define TIMEOUT_FLAG_OHP 2
-#define TIMEOUT_FLAG_ALL 3
+#define TIMEOUT_FLAG_DDZ 4
 
 struct hcp_sd_struct
 {
@@ -211,6 +211,8 @@ static void _republish_ddzs(hcp_sd sd)
           if (!hcp_io_get_ipv6(&our_addr, l->ifname))
             {
               L_ERR("unable to get ipv6 address");
+              sd->should_republish_ddz = true;
+              _should_timeout(sd, TIMEOUT_FLAG_DDZ);
               continue;
             }
 
@@ -242,9 +244,6 @@ static void _republish_ddzs(hcp_sd sd)
           hcp_add_tlv(sd->hcp, na);
         }
     }
-  /* If DDZ data changed that we publish, we should probably
-   * reconfigure dnsmasq+ohp at some point too. */
-  _should_timeout(sd, TIMEOUT_FLAG_ALL);
 }
 
 bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
@@ -493,11 +492,18 @@ static void _local_tlv_cb(hcp_subscriber s,
 {
   hcp_sd sd = container_of(s, hcp_sd_s, subscriber);
 
-  /* Note also assigned prefix changes here; they mean our published zone
-   * information is no longer valid and should be republished at some point. */
+  /* Note also assigned prefix changes here; they mean our published
+   * zone information is no longer valid and should be republished at
+   * some point. OHP configuration may also change at this point. */
   if (tlv_id(tlv) == HCP_T_ASSIGNED_PREFIX)
-    sd->should_republish_ddz = true;
-  /* This will implicitly also trigger dnsmasq+ohp reconf. */
+    {
+      sd->should_republish_ddz = true;
+      _should_timeout(sd, TIMEOUT_FLAG_OHP);
+    }
+
+  /* Whenever DDZ change, dnsmasq should too. */
+  if (tlv_id(tlv) == HCP_T_DNS_DELEGATED_ZONE)
+    _should_timeout(sd, TIMEOUT_FLAG_DNSMASQ);
 }
 
 static void _republish_cb(hcp_subscriber s)
@@ -525,9 +531,8 @@ static void _tlv_cb(hcp_subscriber s,
        * local; however, remote DDZ changes should. */
     }
 
-  /* Local updates will cause TIMEOUT_FLAG_ALL at some
-   * point from ddz update; remote ones should only reconfigure
-   * dnsmasq at most. */
+  /* Remote changes should only affect dnsmasq, and only if AP or DDZ
+   * changes. */
   if (!hcp_node_is_self(n)
       && (tlv_id(tlv) == HCP_T_ASSIGNED_PREFIX
           || tlv_id(tlv) == HCP_T_DNS_DELEGATED_ZONE))
@@ -549,6 +554,10 @@ static void _timeout_cb(struct uloop_timeout *t)
   if (v & TIMEOUT_FLAG_OHP)
     {
       hcp_sd_reconfigure_ohp(sd);
+    }
+  if (v & TIMEOUT_FLAG_DDZ)
+    {
+      _republish_ddzs(sd);
     }
 }
 
