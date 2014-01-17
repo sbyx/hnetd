@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Fri Jan 17 15:13:35 2014 mstenber
- * Edit time:     287 min
+ * Last modified: Fri Jan 17 16:10:07 2014 mstenber
+ * Edit time:     312 min
  *
  */
 
@@ -22,7 +22,6 @@
  * - dns-sd configuration for dnsmasq (both records and remote servers)
  *
  * - maintenance of running hybrid proxy on the desired interfaces
- *
  */
 
 #include <unistd.h>
@@ -39,14 +38,14 @@
 #define OHP_ARGS_MAX_LEN 512
 #define OHP_ARGS_MAX_COUNT 64
 
-/* How long a timeout we schedule for the actual reconfiguration. This
- * effectively sets an upper bound on how frequently the dnsmasq/ohp
- * scripts are called too. */
-#define RECONFIGURE_TIMEOUT 100
+#define UPDATE_FLAG_DNSMASQ 1
+#define UPDATE_FLAG_OHP 2
+#define UPDATE_FLAG_DDZ 4
 
-#define TIMEOUT_FLAG_DNSMASQ 1
-#define TIMEOUT_FLAG_OHP 2
-#define TIMEOUT_FLAG_DDZ 4
+/* How long a timeout we schedule for the actual update (that occurs
+ * in a timeout). This effectively sets an upper bound on how
+ * frequently the dnsmasq/ohp scripts are called. */
+#define UPDATE_TIMEOUT 100
 
 struct hcp_sd_struct
 {
@@ -55,11 +54,8 @@ struct hcp_sd_struct
   /* HCP notification subscriber structure */
   hcp_subscriber_s subscriber;
 
-  /* Should republish ddz's (during the next self-publish callback) */
-  bool should_republish_ddz;
-
-  /* Mask of what we need to reconfigure (in a timeout). */
-  int should_timeout;
+  /* Mask of what we need to update (in a timeout or at republish(ddz)). */
+  int should_update;
   struct uloop_timeout timeout;
 
   /* What we were given as router name base (or just 'r' by default). */
@@ -92,15 +88,15 @@ static void _fork_execv(char *argv[])
   waitpid(pid, NULL, 0);
 }
 
-static void _should_timeout(hcp_sd sd, int v)
+static void _should_update(hcp_sd sd, int v)
 {
-  L_DEBUG("hcp_sd/should_timeout:%d", v);
-  if ((sd->should_timeout & v) == v)
+  L_DEBUG("hcp_sd/should_update:%d", v);
+  if ((sd->should_update & v) == v)
     return;
-  sd->should_timeout |= v;
+  sd->should_update |= v;
   /* Schedule the timeout (note: we won't configure anything until the
    * churn slows down. This is intentional.) */
-  uloop_timeout_set(&sd->timeout, RECONFIGURE_TIMEOUT);
+  uloop_timeout_set(&sd->timeout, UPDATE_TIMEOUT);
 }
 
 /* Convenience wrapper around MD5 hashing */
@@ -159,17 +155,17 @@ static int _push_reverse_ll(struct prefix *p, uint8_t *buf, int buf_len)
   return buf - obuf;
 }
 
-static void _republish_ddzs(hcp_sd sd)
+static void _publish_ddzs(hcp_sd sd)
 {
   struct tlv_attr *a;
   int i;
   hcp_tlv t;
   hcp_t_assigned_prefix_header ah;
 
-  if (!sd->should_republish_ddz)
+  if (!(sd->should_update & UPDATE_FLAG_DDZ))
     return;
-  sd->should_republish_ddz = false;
-  L_DEBUG("_republish_ddzs");
+  sd->should_update &= ~UPDATE_FLAG_DDZ;
+  L_DEBUG("_publish_ddzs");
   hcp_node_for_each_tlv_i(sd->hcp->own_node, a, i)
     if (tlv_id(a) == HCP_T_DNS_DELEGATED_ZONE)
       (void)hcp_remove_tlv(sd->hcp, a);
@@ -190,8 +186,7 @@ static void _republish_ddzs(hcp_sd sd)
 
           if (!hcp_tlv_ap_valid(a))
             {
-              L_ERR("invalid ap _published by us_ in _republish_ddzs: %s",
-                    TLV_REPR(a));
+              L_ERR("invalid ap _published by us: %s", TLV_REPR(a));
               continue;
             }
 
@@ -210,9 +205,8 @@ static void _republish_ddzs(hcp_sd sd)
           if (!hcp_io_get_ipv6(&our_addr, l->ifname))
             {
               L_ERR("unable to get ipv6 address");
-              sd->should_republish_ddz = true;
-              _should_timeout(sd, TIMEOUT_FLAG_DDZ);
-              continue;
+              _should_update(sd, UPDATE_FLAG_DDZ);
+              return;
             }
 
           na = (struct tlv_attr *)buf;
@@ -430,7 +424,6 @@ _set_router_name(hcp_sd sd, bool add)
     {
       if (!hcp_add_tlv(sd->hcp, a))
         L_ERR("failed to add router name TLV");
-      sd->should_republish_ddz = true;
     }
   else
     {
@@ -498,20 +491,23 @@ static void _local_tlv_cb(hcp_subscriber s,
    * some point. OHP configuration may also change at this point. */
   if (tlv_id(tlv) == HCP_T_ASSIGNED_PREFIX)
     {
-      sd->should_republish_ddz = true;
-      _should_timeout(sd, TIMEOUT_FLAG_OHP);
+      _should_update(sd, UPDATE_FLAG_DDZ | UPDATE_FLAG_OHP);
     }
-
-  /* Whenever DDZ change, dnsmasq should too. */
+  /* Local DDZ change may also mean that OHP configuration is
+   * invalid. The OHP code is 'smart' and does not unneccessarily
+   * really prod ohp unless things really change so doing this
+   * spuriously is ok too. */
   if (tlv_id(tlv) == HCP_T_DNS_DELEGATED_ZONE)
-    _should_timeout(sd, TIMEOUT_FLAG_DNSMASQ);
+    {
+      _should_update(sd, UPDATE_FLAG_OHP);
+    }
 }
 
 static void _republish_cb(hcp_subscriber s)
 {
   hcp_sd sd = container_of(s, hcp_sd_s, subscriber);
 
-  _republish_ddzs(sd);
+  _publish_ddzs(sd);
 }
 
 static void _tlv_cb(hcp_subscriber s,
@@ -532,33 +528,28 @@ static void _tlv_cb(hcp_subscriber s,
        * local; however, remote DDZ changes should. */
     }
 
-  /* Remote changes should only affect dnsmasq, and only if AP or DDZ
-   * changes. */
-  if (!hcp_node_is_self(n)
-      && (tlv_id(tlv) == HCP_T_ASSIGNED_PREFIX
-          || tlv_id(tlv) == HCP_T_DNS_DELEGATED_ZONE))
-    _should_timeout(sd, TIMEOUT_FLAG_DNSMASQ);
+  /* Dnsmasq forwarder file reflects what's in published DDZ's. If
+   * they change, it (could) change too. */
+  if (tlv_id(tlv) == HCP_T_DNS_DELEGATED_ZONE)
+    _should_update(sd, UPDATE_FLAG_DNSMASQ);
 }
 
 static void _timeout_cb(struct uloop_timeout *t)
 {
   hcp_sd sd = container_of(t, hcp_sd_s, timeout);
-  int v = sd->should_timeout;
 
-  L_DEBUG("hcp_sd/timeout:%d", v);
-  sd->should_timeout = 0;
-  if (v & TIMEOUT_FLAG_DNSMASQ)
+  L_DEBUG("hcp_sd/timeout:%d", sd->should_update);
+  _publish_ddzs(sd);
+  if (sd->should_update & UPDATE_FLAG_DNSMASQ)
     {
+      sd->should_update &= ~UPDATE_FLAG_DNSMASQ;
       if (hcp_sd_write_dnsmasq_conf(sd, sd->dnsmasq_bonus_file))
         hcp_sd_restart_dnsmasq(sd);
     }
-  if (v & TIMEOUT_FLAG_OHP)
+  if (sd->should_update & UPDATE_FLAG_OHP)
     {
+      sd->should_update &= ~UPDATE_FLAG_OHP;
       hcp_sd_reconfigure_ohp(sd);
-    }
-  if (v & TIMEOUT_FLAG_DDZ)
-    {
-      _republish_ddzs(sd);
     }
 }
 
