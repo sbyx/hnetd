@@ -29,19 +29,18 @@ void hcp_bfs_destroy(hcp_bfs bfs)
 	free(bfs);
 }
 
-static bool hcp_bfs_neighbors_are_mutual(hcp_node node, const hcp_t_node_data_neighbor neigh)
+static bool hcp_bfs_neighbors_are_mutual(hcp_node node, hcp_hash node_identifier_hash,
+		uint32_t link_id, uint32_t neighbor_link_id)
 {
-	struct tlv_attr *a, *tlvs = hcp_node_get_tlvs(node);
+	struct tlv_attr *a, *tlvs = node->tlv_container;
 	unsigned rem;
 	tlv_for_each_attr(a, tlvs, rem) {
 		if (tlv_id(a) == HCP_T_NODE_DATA_NEIGHBOR &&
 				tlv_len(a) == sizeof(hcp_t_node_data_neighbor_s)) {
 			hcp_t_node_data_neighbor ne = tlv_data(a);
-			if (ne->link_id == neigh->neighbor_link_id &&
-					ne->neighbor_link_id == neigh->link_id &&
-					!memcmp(&neigh->neighbor_node_identifier_hash,
-							&node->node_identifier_hash,
-							sizeof(node->node_identifier_hash)))
+			if (ne->link_id == neighbor_link_id && ne->neighbor_link_id == link_id &&
+					!memcmp(&ne->neighbor_node_identifier_hash,
+							node_identifier_hash, sizeof(*node_identifier_hash)))
 				return true;
 		}
 	}
@@ -73,8 +72,9 @@ static void hcp_bfs_run(struct uloop_timeout *t)
 
 	while (!list_empty(&queue)) {
 		c = container_of(list_first_entry(&queue, struct hcp_bfs_head, head), hcp_node_s, bfs);
+		L_WARN("Router %d", c->node_identifier_hash.buf[0]);
 
-		struct tlv_attr *a, *tlvs = hcp_node_get_tlvs(c);
+		struct tlv_attr *a, *tlvs = c->tlv_container;
 		unsigned rem;
 		tlv_for_each_attr(a, tlvs, rem) {
 			if (tlv_id(a) == HCP_T_NODE_DATA_NEIGHBOR &&
@@ -84,10 +84,11 @@ static void hcp_bfs_run(struct uloop_timeout *t)
 				n = hcp_find_node_by_hash(hcp,
 					&ne->neighbor_node_identifier_hash, false);
 
-				if (n->bfs.next_hop || n == hcp->own_node)
+				if (!n || n->bfs.next_hop || n == hcp->own_node)
 					continue; // Already visited
 
-				if (!hcp_bfs_neighbors_are_mutual(n, ne))
+				if (!hcp_bfs_neighbors_are_mutual(n, &c->node_identifier_hash,
+						ne->link_id, ne->neighbor_link_id))
 					continue; // Connection not mutual
 
 				if (c == hcp->own_node) { // We are at the start, lookup neighbor
@@ -120,7 +121,9 @@ static void hcp_bfs_run(struct uloop_timeout *t)
 				struct prefix from = { .plen = dp->prefix_length_bits };
 				size_t plen = ROUND_BITS_TO_BYTES(from.plen);
 				memcpy(&from.prefix, &dp[1], plen);
-				iface_add_default_route(n->bfs.ifname, &from, n->bfs.next_hop);
+
+				if (c->bfs.next_hop && c->bfs.ifname)
+					iface_add_default_route(c->bfs.ifname, &from, c->bfs.next_hop);
 			}
 		}
 
@@ -143,7 +146,8 @@ static void hcp_bfs_run(struct uloop_timeout *t)
 				size_t plen = ROUND_BITS_TO_BYTES(to.plen);
 				memcpy(&to.prefix, &ap[1], plen);
 
-				iface_add_internal_route(n->bfs.ifname, &to, n->bfs.next_hop);
+				if (c->bfs.next_hop && c->bfs.ifname)
+					iface_add_internal_route(c->bfs.ifname, &to, c->bfs.next_hop);
 			}
 		}
 

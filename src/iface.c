@@ -147,10 +147,12 @@ void iface_add_internal_route(const char *ifname, const struct prefix *to, const
 		r->via = *via;
 
 		// Infer source restrictions from default routes already added
-		vlist_for_each_element(&c->routes, k, node)
-			if (k->to.plen == 0 && k->node.version == c->routes.version &&
-					prefix_contains(&k->from, &r->to))
-				r->from = k->from;
+		struct iface *i;
+		list_for_each_entry(i, &interfaces, head)
+			vlist_for_each_element(&i->routes, k, node)
+				if (k->to.plen == 0 && k->node.version == i->routes.version &&
+						prefix_contains(&k->from, &r->to))
+					r->from = k->from;
 
 		if (r->from.plen > 0)
 			vlist_add(&c->routes, &r->node, r);

@@ -71,6 +71,11 @@ target_link_libraries(test_hcp_nio ubox ubus blobmsg_json)
 add_test(hcp_nio test_hcp_nio)
 add_dependencies(check test_hcp_nio)
 
+add_executable(test_hcp_bfs test/test_hcp_bfs.c src/hcp.c src/hcp_notify.c src/hcp_timeout.c src/hcp_io.c src/prefix_utils.c src/tlv.c)
+target_link_libraries(test_hcp_bfs ubox ubus blobmsg_json)
+add_test(hcp_bfs test_hcp_bfs)
+add_dependencies(check test_hcp_bfs)
+
 add_executable(test_prefix_utils src/prefix_utils.c test/test_prefix_utils.c)
 add_test(prefix_utils test_prefix_utils)
 add_dependencies(check test_prefix_utils)
