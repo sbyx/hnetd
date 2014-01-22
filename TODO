@@ -1,0 +1,15 @@
+- IPv4 (oryon)
+ - address assignment
+ - prefix assignment (done?)
+ - routing(?)
+
+- IPv6
+ - routing (sbyx; need testing)
+
+- L2 up/down detection on Linux; that is, we should ignore interfaces
+  that aren't up
+ - l2 down == no SD DDZ, no PA prefixes on link
+
+- 'generic Linux' case needs to be tested thoroughly at some point
+
+- make sure router names don't conflict with DDZs
