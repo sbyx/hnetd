@@ -1871,7 +1871,7 @@ static void pa_ifu_ipv4(struct iface_user *u, bool available,
 {
 	/* Tells when IPv4 connectivity is available. */
 	struct pa *pa = container_of(u, struct pa, ifu);
-	void *new_dhcp;
+	void *new_dhcp = NULL;
 	hnetd_time_t now;
 
 	bool changed = false;
