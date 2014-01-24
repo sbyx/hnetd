@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Fri Jan 17 10:39:31 2014 mstenber
- * Edit time:     207 min
+ * Last modified: Fri Jan 24 14:06:25 2014 mstenber
+ * Edit time:     252 min
  *
  */
 
@@ -33,6 +33,7 @@ static bool _push_node_state_tlv(struct tlv_buf *tb, hcp_node n)
   s->node_identifier_hash = n->node_identifier_hash;
   s->update_number = cpu_to_be32(n->update_number);
   s->ms_since_origination = cpu_to_be32(now - n->origination_time);
+  s->node_data_hash = n->node_data_hash;
   return true;
 }
 
@@ -83,42 +84,35 @@ bool hcp_link_send_network_state(hcp_link l,
                                  size_t maximum_size)
 {
   struct tlv_buf tb;
-  hcp_node n;
   hcp o = l->hcp;
   bool r = false;
+  int nn = 0;
+  hcp_node n;
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
-
   if (!_push_link_id_tlv(&tb, l))
     goto err;
+  hcp_calculate_network_hash(o);
+  if (!_push_network_state_tlv(&tb, o))
+    goto err;
   vlist_for_each_element(&o->nodes, n, in_nodes)
-    if (!_push_node_state_tlv(&tb, n))
-      goto err;
-  tlv_fill_pad(tb.head);
-  /* -4 = not including the dummy TLV header */
-  /* rest = network state TLV size */
-  if (maximum_size
-      && (tlv_len(tb.head) + 2 * TLV_SIZE +
-          sizeof(hcp_t_link_id) +
-          HCP_HASH_LEN) > maximum_size)
+    nn++;
+  if (!maximum_size
+      || maximum_size >= (tlv_len(tb.head) + nn * sizeof(hcp_t_node_state_s)))
     {
-      /* Clear the buffer - just send the network state hash. */
-      tlv_buf_free(&tb);
-      tlv_buf_init(&tb, 0); /* not passed anywhere */
-      if (!_push_link_id_tlv(&tb, l))
-        goto err;
+      vlist_for_each_element(&o->nodes, n, in_nodes)
+        {
+          if (!_push_node_state_tlv(&tb, n))
+            goto err;
+        }
     }
-  if (_push_network_state_tlv(&tb, o))
-    {
-      int rc = hcp_io_sendto(o,
-                             tlv_data(tb.head),
-                             tlv_len(tb.head),
-                             l->ifname,
-                             dst);
-      L_DEBUG("hcp_link_send_network_state %p", l);
-      r = rc > 0;
-    }
+  if (maximum_size && tlv_len(tb.head) > maximum_size)
+    goto err;
+  int rc = hcp_io_sendto(o, tlv_data(tb.head), tlv_len(tb.head),
+                         l->ifname, dst);
+  L_DEBUG("hcp_link_send_network_state %p", l);
+  r = rc > 0;
  err:
   tlv_buf_free(&tb);
   return r;
@@ -302,6 +296,12 @@ handle_message(hcp_link l,
         {
         case HCP_T_NETWORK_HASH:
           nethash = tlv_data(a);
+          /* We don't care, if network hash state IS same. */
+          if (memcmp(nethash, &o->network_hash, HCP_HASH_LEN) == 0)
+            {
+              L_DEBUG("received network state which is consistent");
+              return;
+            }
           break;
         case HCP_T_NODE_STATE:
           nodestates++;
@@ -341,23 +341,15 @@ handle_message(hcp_link l,
       ne->last_response = hcp_time(l->hcp);
       ne->ping_count = 0;
     }
-  /* We don't care, if network hash state IS same. */
   if (nethash)
     {
-      if (memcmp(nethash, &o->network_hash, HCP_HASH_LEN) == 0)
-        {
-          L_DEBUG("received network state which is consistent");
-          return;
-        }
       /* Short form (raw network hash) */
       if (!nodestates)
         {
           if (multicast)
             (void)hcp_link_send_req_network_state(l, src);
           else
-            {
-              L_INFO("unicast short form network status received - ignoring");
-            }
+            L_INFO("unicast short form network status received - ignoring");
           return;
         }
       /* Long form (has node states). */

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Fri Jan 24 13:02:21 2014 mstenber
- * Edit time:     37 min
+ * Last modified: Fri Jan 24 13:14:04 2014 mstenber
+ * Edit time:     38 min
  *
  */
 
@@ -46,8 +46,8 @@ enum {
   HCP_T_REQ_NET_HASH = 2, /* empty */
   HCP_T_REQ_NODE_DATA = 3, /* = just normal hash */
 
-  HCP_T_NODE_STATE = 4,
-  HCP_T_NETWORK_HASH = 5, /* = just normal hash, accumulated from node states so sensible to send later */
+  HCP_T_NETWORK_HASH = 4, /* = just normal hash, accumulated from node states so sensible to send later */
+  HCP_T_NODE_STATE = 5,
 
   HCP_T_NODE_DATA = 6,
   HCP_T_NODE_DATA_KEY = 7, /* public key payload, not implemented*/
