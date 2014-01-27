@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Fri Jan 17 10:31:26 2014 mstenber
- * Edit time:     178 min
+ * Last modified: Mon Jan 27 21:08:46 2014 mstenber
+ * Edit time:     182 min
  *
  */
 
@@ -99,6 +99,8 @@ static void update_dp(struct vlist_tree *t,
     {
       if (old->dp_tlv)
         hcp_remove_tlv(g->hcp, old->dp_tlv);
+      if (old->dhcpv6_data)
+        free(old->dhcpv6_data);
       free(old);
     }
 }
