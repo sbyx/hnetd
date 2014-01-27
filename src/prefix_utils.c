@@ -277,9 +277,6 @@ int prefix_pton(const char *addr, struct prefix *p)
 				return 0;
 		}
 		parsed_len = atoi(slash + 1);
-		if(parsed_len > 128)
-			return 0;
-
 		addrlen = slash - addr;
 	} else {
 		addrlen = strlen(addr);
@@ -291,20 +288,21 @@ int prefix_pton(const char *addr, struct prefix *p)
 	memcpy(buf, addr, addrlen);
 	buf[addrlen] = 0;
 
+	if(!slash)
+		p->plen = 128;
+
 	if(inet_pton(AF_INET6, buf, &p->prefix) == 1) {
-		if(slash)
+		if(slash) {
+			if(parsed_len > 128)
+				return 0;
 			p->plen = parsed_len;
-		else
-			p->plen = 128;
+		}
 	} else if(inet_pton(AF_INET, buf, &p->prefix.s6_addr[12]) == 1) {
-		if(parsed_len > 32)
-			return 0;
-
-		if(slash)
+		if(slash) {
+			if(parsed_len > 32)
+				return 0;
 			p->plen = parsed_len + 96;
-		else
-			p->plen = 128;
-
+		}
 		memset(&p->prefix, 0, 10);
 		p->prefix.s6_addr[10] = 0xff;
 		p->prefix.s6_addr[11] = 0xff;
