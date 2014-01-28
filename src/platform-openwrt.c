@@ -249,6 +249,34 @@ static void platform_commit(struct uloop_timeout *t)
 
 	k = blobmsg_open_array(&b, "routes");
 	vlist_for_each_element(&c->routes, r, node) {
+		if (!IN6_IS_ADDR_V4MAPPED(&r->to.prefix))
+			continue;
+
+		l = blobmsg_open_table(&b, NULL);
+
+		char *buf = blobmsg_alloc_string_buffer(&b, "target", INET_ADDRSTRLEN);
+		inet_ntop(AF_INET, &r->to.prefix.s6_addr[12], buf, INET_ADDRSTRLEN);
+		blobmsg_add_string_buffer(&b);
+
+		char *buf2 = blobmsg_alloc_string_buffer(&b, "netmask", 4);
+		snprintf(buf2, 4, "%u", prefix_af_length(&r->to));
+		blobmsg_add_string_buffer(&b);
+
+		char *buf3 = blobmsg_alloc_string_buffer(&b, "gateway", INET_ADDRSTRLEN);
+		inet_ntop(AF_INET, &r->via.s6_addr[12], buf3, INET_ADDRSTRLEN);
+		blobmsg_add_string_buffer(&b);
+
+		L_DEBUG("	to %s/%s via %s", buf, buf2, buf3);
+
+		blobmsg_close_table(&b, l);
+	}
+	blobmsg_close_array(&b, k);
+
+	k = blobmsg_open_array(&b, "routes6");
+	vlist_for_each_element(&c->routes, r, node) {
+		if (IN6_IS_ADDR_V4MAPPED(&r->to.prefix))
+			continue;
+
 		l = blobmsg_open_table(&b, NULL);
 
 		char *buf = blobmsg_alloc_string_buffer(&b, "target", INET6_ADDRSTRLEN);
