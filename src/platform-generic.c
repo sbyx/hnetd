@@ -128,12 +128,20 @@ void platform_set_route(struct iface *c, struct iface_route *route, bool enable)
 	char to[PREFIX_MAXBUFFLEN];
 	char via[INET6_ADDRSTRLEN];
 
-	prefix_ntop(from, sizeof(from), &route->from, true);
 	prefix_ntop(to, sizeof(to), &route->to, true);
-	inet_ntop(AF_INET6, &route->via, via, sizeof(via));
+
+	if (!IN6_IS_ADDR_V4MAPPED(&route->to.prefix))
+		inet_ntop(AF_INET6, &route->via, via, sizeof(via));
+	else
+		inet_ntop(AF_INET, &route->via.s6_addr[12], via, sizeof(via));
+
+	if (!IN6_IS_ADDR_V4MAPPED(&route->to.prefix))
+		prefix_ntop(from, sizeof(from), &route->from, true);
+	else
+		from[0] = 0;
 
 	char *argv[] = {backend, (enable) ? "newroute" : "delroute",
-			c->ifname, to, via, from, NULL};
+			c->ifname, to, via, (from[0]) ? from : NULL, NULL};
 	platform_call(argv);
 }
 
