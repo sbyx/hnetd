@@ -188,10 +188,10 @@ static void platform_commit(struct uloop_timeout *t)
 		inet_ntop(AF_INET, &a->prefix.prefix.s6_addr[12], buf, INET_ADDRSTRLEN);
 		blobmsg_add_string_buffer(&b);
 
-		L_DEBUG("	%s/%u", buf, a->prefix.plen);
+		L_DEBUG("	%s/%u", buf, prefix_af_length(&a->prefix));
 
 		buf = blobmsg_alloc_string_buffer(&b, "mask", 4);
-		snprintf(buf, 4, "%u", a->prefix.plen);
+		snprintf(buf, 4, "%u", prefix_af_length(&a->prefix));
 		blobmsg_add_string_buffer(&b);
 
 		blobmsg_close_table(&b, l);
@@ -220,11 +220,11 @@ static void platform_commit(struct uloop_timeout *t)
 		inet_ntop(AF_INET6, &a->prefix.prefix, buf, INET6_ADDRSTRLEN);
 		blobmsg_add_string_buffer(&b);
 
-		L_DEBUG("	%s/%u (%lld/%lld)", buf, a->prefix.plen,
+		L_DEBUG("	%s/%u (%lld/%lld)", buf, prefix_af_length(&a->prefix),
 				(long long)preferred, (long long)valid);
 
 		buf = blobmsg_alloc_string_buffer(&b, "mask", 4);
-		snprintf(buf, 4, "%u", a->prefix.plen);
+		snprintf(buf, 4, "%u", prefix_af_length(&a->prefix));
 		blobmsg_add_string_buffer(&b);
 
 		blobmsg_add_u32(&b, "preferred", preferred);
@@ -256,7 +256,7 @@ static void platform_commit(struct uloop_timeout *t)
 		blobmsg_add_string_buffer(&b);
 
 		char *buf2 = blobmsg_alloc_string_buffer(&b, "netmask", 4);
-		snprintf(buf2, 4, "%u", r->to.plen);
+		snprintf(buf2, 4, "%u", prefix_af_length(&r->to));
 		blobmsg_add_string_buffer(&b);
 
 		char *buf3 = blobmsg_alloc_string_buffer(&b, "gateway", INET6_ADDRSTRLEN);
