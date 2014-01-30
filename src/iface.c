@@ -137,30 +137,33 @@ void iface_update_routes(void)
 }
 
 // Add new routes
-void iface_add_default_route(const char *ifname, const struct prefix *from, const struct in6_addr *via)
+void iface_add_default_route(const char *ifname, const struct prefix *from, const struct in6_addr *via, unsigned hopcount)
 {
 	struct iface *c = iface_get(ifname);
 	if (c) {
 		struct iface_route *r = calloc(1, sizeof(*r));
 		r->from = *from;
 		r->via = *via;
+		r->metric = hopcount + 10000;
 		vlist_add(&c->routes, &r->node, r);
 
 		r = calloc(1, sizeof(*r));
 		r->from.plen = 128;
 		r->via = *via;
+		r->metric = hopcount + 10000;
 		vlist_add(&c->routes, &r->node, r);
 	}
 }
 
 // Add new routes
-void iface_add_internal_route(const char *ifname, const struct prefix *to, const struct in6_addr *via)
+void iface_add_internal_route(const char *ifname, const struct prefix *to, const struct in6_addr *via, unsigned hopcount)
 {
 	struct iface *c = iface_get(ifname);
 	if (c) {
 		struct iface_route *r = calloc(1, sizeof(*r));
 		r->to = *to;
 		r->via = *via;
+		r->metric = hopcount + 10000;
 		vlist_add(&c->routes, &r->node, r);
 	}
 }
@@ -185,6 +188,9 @@ static int compare_routes(const void *a, const void *b, void *ptr __attribute__(
 
 	if (!c)
 		c = memcmp(&r1->via, &r2->via, sizeof(r1->via));
+
+	if (!c)
+		c = r2->metric - r1->metric;
 
 	return c;
 }

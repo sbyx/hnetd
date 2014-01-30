@@ -128,6 +128,7 @@ void platform_set_route(struct iface *c, struct iface_route *route, bool enable)
 	char from[PREFIX_MAXBUFFLEN];
 	char to[PREFIX_MAXBUFFLEN];
 	char via[INET6_ADDRSTRLEN];
+	char metric[10];
 
 	prefix_ntop(to, sizeof(to), &route->to, true);
 
@@ -141,8 +142,11 @@ void platform_set_route(struct iface *c, struct iface_route *route, bool enable)
 	else
 		from[0] = 0;
 
+	snprintf(metric, sizeof(metric), "%u", route->metric);
+
 	char *argv[] = {backend, (enable) ? "newroute" : "delroute",
-			c->ifname, to, via, (from[0]) ? from : NULL, NULL};
+			c->ifname, to, via, metric,
+			(from[0]) ? from : NULL, NULL};
 	platform_call(argv);
 }
 

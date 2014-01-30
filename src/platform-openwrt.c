@@ -268,6 +268,8 @@ static void platform_commit(struct uloop_timeout *t)
 		inet_ntop(AF_INET, &r->via.s6_addr[12], buf3, INET_ADDRSTRLEN);
 		blobmsg_add_string_buffer(&b);
 
+		blobmsg_add_u32(&b, "metric", r->metric);
+
 		L_DEBUG("	to %s/%s via %s", buf, buf2, buf3);
 
 		blobmsg_close_table(&b, l);
@@ -296,6 +298,8 @@ static void platform_commit(struct uloop_timeout *t)
 		char *buf4 = blobmsg_alloc_string_buffer(&b, "source", PREFIX_MAXBUFFLEN);
 		prefix_ntop(buf4, PREFIX_MAXBUFFLEN, &r->from, true);
 		blobmsg_add_string_buffer(&b);
+
+		blobmsg_add_u32(&b, "metric", r->metric);
 
 		L_DEBUG("	from %s to %s/%s via %s", buf4, buf, buf2, buf3);
 

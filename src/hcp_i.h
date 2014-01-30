@@ -166,6 +166,7 @@ struct hcp_bfs_head {
 	/* Next-hop in path (also used to mark visited nodes) */
 	const struct in6_addr *next_hop;
 	const char *ifname;
+	unsigned hopcount;
 };
 
 

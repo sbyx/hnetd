@@ -62,6 +62,7 @@ static void hcp_bfs_run(struct uloop_timeout *t)
 	vlist_for_each_element(&hcp->nodes, c, in_nodes) {
 		// Mark all nodes as not visited
 		c->bfs.next_hop = NULL;
+		c->bfs.hopcount = 0;
 
 		// TODO: bail if homenet has chosen real routing algorithm
 	}
@@ -114,6 +115,7 @@ static void hcp_bfs_run(struct uloop_timeout *t)
 				if (!n->bfs.next_hop || !n->bfs.ifname)
 					continue;
 
+				n->bfs.hopcount = c->bfs.hopcount + 1;
 				list_add_tail(&n->bfs.head, &queue);
 			} else if (tlv_id(a) == HCP_T_DELEGATED_PREFIX && hcp_tlv_dp_valid(a) && c != hcp->own_node) {
 				hcp_t_delegated_prefix_header dp = tlv_data(a);
@@ -123,7 +125,7 @@ static void hcp_bfs_run(struct uloop_timeout *t)
 				memcpy(&from.prefix, &dp[1], plen);
 
 				if (c->bfs.next_hop && c->bfs.ifname)
-					iface_add_default_route(c->bfs.ifname, &from, c->bfs.next_hop);
+					iface_add_default_route(c->bfs.ifname, &from, c->bfs.next_hop, c->bfs.hopcount);
 			} else if (tlv_id(a) == HCP_T_ASSIGNED_PREFIX && hcp_tlv_ap_valid(a) && c != hcp->own_node) {
 				hcp_t_assigned_prefix_header ap = tlv_data(a);
 
@@ -132,7 +134,7 @@ static void hcp_bfs_run(struct uloop_timeout *t)
 				memcpy(&to.prefix, &ap[1], plen);
 
 				if (c->bfs.next_hop && c->bfs.ifname)
-					iface_add_internal_route(c->bfs.ifname, &to, c->bfs.next_hop);
+					iface_add_internal_route(c->bfs.ifname, &to, c->bfs.next_hop, c->bfs.hopcount);
 			}
 		}
 

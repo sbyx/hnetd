@@ -27,10 +27,10 @@ newaddr|deladdr)
 
 newroute|delroute)
 	[ "$1" = "newroute" ] && act="replace" || act="del"
-	if [ -n "$5" ]; then
-		ip -6 route "$act" "$3" from "$5" via "$4" dev "$2"
+	if [ -n "$6" ]; then
+		ip -6 route "$act" "$3" from "$6" via "$4" dev "$2" metric "$5"
 	else
-		ip route "$act" "$3" via "$4" dev "$2"
+		ip route "$act" "$3" via "$4" dev "$2" metric "$5"
 	fi
 	;;
 
