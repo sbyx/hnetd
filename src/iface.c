@@ -3,6 +3,7 @@
 #include <net/if.h>
 #include <assert.h>
 #include <ifaddrs.h>
+#include <stdarg.h>
 #include <arpa/inet.h>
 
 #include "iface.h"
@@ -74,11 +75,18 @@ static void iface_notify_data_state(struct iface *c, bool enabled)
 {
 	void *data = (enabled) ? c->dhcpv6_data_in : NULL;
 	size_t len = (enabled) ? c->dhcpv6_len_in : 0;
+	void *data4 = (enabled) ? c->dhcp_data_in : NULL;
+	size_t len4 = (enabled) ? c->dhcp_len_in : 0;
 
 	struct iface_user *u;
-	list_for_each_entry(u, &users, head)
+	list_for_each_entry(u, &users, head) {
 		if (u->cb_extdata)
 			u->cb_extdata(u, c->ifname, data, len);
+		if (u->ipv4_update)
+			u->ipv4_update(u, c->ifname, data4, len4);
+	}
+
+
 }
 
 
@@ -101,14 +109,22 @@ void iface_unregister_user(struct iface_user *user)
 }
 
 
-void iface_set_dhcpv6_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len)
+void iface_set_dhcpv6_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len, const void *dhcp_data, size_t dhcp_len)
 {
 	struct iface *c = iface_get(ifname);
-	if (c && (c->dhcpv6_len_out != dhcpv6_len || memcmp(c->dhcpv6_data_out, dhcpv6_data, dhcpv6_len))) {
+	if (c && (c->dhcpv6_len_out != dhcpv6_len || c->dhcp_len_out ||
+			memcmp(c->dhcpv6_data_out, dhcpv6_data, dhcpv6_len) ||
+			memcmp(c->dhcp_data_out, dhcp_data, dhcp_len))) {
+
 		c->dhcpv6_data_out = realloc(c->dhcpv6_data_out, dhcpv6_len);
 		memcpy(c->dhcpv6_data_out, dhcpv6_data, dhcpv6_len);
 		c->dhcpv6_len_out = dhcpv6_len;
-		platform_set_dhcpv6_send(c, c->dhcpv6_data_out, c->dhcpv6_len_out);
+
+		c->dhcp_data_out = realloc(c->dhcp_data_out, dhcp_len);
+		memcpy(c->dhcp_data_out, dhcp_data, dhcp_len);
+		c->dhcp_len_out = dhcp_len;
+
+		platform_set_dhcpv6_send(c, c->dhcpv6_data_out, c->dhcpv6_len_out, c->dhcp_data_out, c->dhcp_len_out);
 	}
 }
 
@@ -298,6 +314,8 @@ void iface_remove(struct iface *c)
 
 	free(c->dhcpv6_data_in);
 	free(c->dhcpv6_data_out);
+	free(c->dhcp_data_in);
+	free(c->dhcp_data_out);
 	free(c);
 }
 
@@ -377,11 +395,56 @@ void iface_flush(void)
 }
 
 
-void iface_set_v4leased(struct iface *c, bool v4leased)
+void iface_set_dhcp_received(struct iface *c, bool leased, ...)
 {
-	if (c->v4leased != v4leased) {
-		c->v4leased = v4leased;
+	if (c->v4leased != leased) {
+		c->v4leased = leased;
 		iface_discover_border(c);
+	}
+
+	bool equal = true;
+	size_t offset = 0;
+	va_list ap;
+
+	va_start(ap, leased);
+	for (;;) {
+		void *data = va_arg(ap, void*);
+		if (!data)
+			break;
+
+		size_t len = va_arg(ap, size_t);
+		if (!equal || offset + len > c->dhcp_len_in ||
+				memcmp(((uint8_t*)c->dhcp_data_in) + offset, data, len))
+			equal = false;
+
+		offset += len;
+	}
+	va_end(ap);
+
+	if (equal && offset != c->dhcp_len_in)
+		equal = false;
+
+	if (!equal) {
+		c->dhcp_data_in = realloc(c->dhcp_data_in, offset);
+		c->dhcp_len_in = offset;
+
+		offset = 0;
+
+		va_start(ap, leased);
+		for (;;) {
+			void *data = va_arg(ap, void*);
+			if (!data)
+				break;
+
+			size_t len = va_arg(ap, size_t);
+			memcpy(((uint8_t*)c->dhcp_data_in) + offset, data, len);
+
+			offset += len;
+		}
+		va_end(ap);
+
+		if (!c->internal)
+			iface_notify_data_state(c, true);
 	}
 }
 
@@ -416,12 +479,48 @@ void iface_commit_delegated(struct iface *c)
 }
 
 
-void iface_set_dhcpv6_received(struct iface *c, const void *dhcpv6_data, size_t dhcpv6_len)
+void iface_set_dhcpv6_received(struct iface *c, ...)
 {
-	if (c->dhcpv6_len_in != dhcpv6_len || memcmp(c->dhcpv6_data_in, dhcpv6_data, dhcpv6_len)) {
-		c->dhcpv6_data_in = realloc(c->dhcpv6_data_in, dhcpv6_len);
-		memcpy(c->dhcpv6_data_in, dhcpv6_data, dhcpv6_len);
-		c->dhcpv6_len_in = dhcpv6_len;
+	bool equal = true;
+	size_t offset = 0;
+	va_list ap;
+
+	va_start(ap, c);
+	for (;;) {
+		void *data = va_arg(ap, void*);
+		if (!data)
+			break;
+
+		size_t len = va_arg(ap, size_t);
+		if (!equal || offset + len > c->dhcpv6_len_in ||
+				memcmp(((uint8_t*)c->dhcpv6_data_in) + offset, data, len))
+			equal = false;
+
+		offset += len;
+	}
+	va_end(ap);
+
+	if (equal && offset != c->dhcp_len_in)
+		equal = false;
+
+	if (!equal) {
+		c->dhcpv6_data_in = realloc(c->dhcpv6_data_in, offset);
+		c->dhcpv6_len_in = offset;
+
+		offset = 0;
+
+		va_start(ap, c);
+		for (;;) {
+			void *data = va_arg(ap, void*);
+			if (!data)
+				break;
+
+			size_t len = va_arg(ap, size_t);
+			memcpy(((uint8_t*)c->dhcpv6_data_in) + offset, data, len);
+
+			offset += len;
+		}
+		va_end(ap);
 
 		if (!c->internal)
 			iface_notify_data_state(c, true);

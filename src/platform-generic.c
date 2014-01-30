@@ -11,6 +11,7 @@
 #include <arpa/inet.h>
 
 #include "dhcpv6.h"
+#include "dhcp.h"
 #include "platform.h"
 #include "iface.h"
 #include "prefix_utils.h"
@@ -153,7 +154,7 @@ void platform_set_owner(struct iface *c, bool enable)
 }
 
 
-void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t len)
+void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t len, const void *dhcp_data, size_t len4)
 {
 	// DNS options
 	const size_t dns_max = 4;
@@ -174,14 +175,34 @@ void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t l
 		}
 	}
 
+	// DNS options
+	size_t dns4_cnt = 0;
+	struct in_addr dns4[dns_max];
+
+	// Add per interface DHCPv6 options
+	uint8_t *o4end = ((uint8_t*)dhcp_data) + len4;
+	struct dhcpv4_option *opt;
+	dhcpv4_for_each_option(dhcp_data, o4end, opt) {
+		if (opt->type == DHCPV4_OPT_DNSSERVER) {
+			size_t cnt = opt->len / sizeof(*dns4);
+			if (cnt + dns4_cnt > dns_max)
+				cnt = dns_max - dns_cnt;
+
+			memcpy(&dns4[dns4_cnt], opt->data, cnt * sizeof(*dns4));
+			dns4_cnt += cnt;
+		}
+	}
+
 	pid_t pid = fork();
 	if (pid == 0) {
 		char *argv[] = {backend, "setdhcpv6", c->ifname, NULL};
 
-		char *dnsbuf = malloc(dns_cnt * INET6_ADDRSTRLEN + 5);
+		char *dnsbuf = malloc((dns_cnt + dns4_cnt) * INET6_ADDRSTRLEN + 5);
 		strcpy(dnsbuf, "DNS=");
 		for (size_t i = 0; i < dns_cnt; ++i)
 			inet_ntop(AF_INET6, &dns[i], dnsbuf + strlen(dnsbuf), INET6_ADDRSTRLEN);
+		for (size_t i = 0; i < dns4_cnt; ++i)
+			inet_ntop(AF_INET, &dns4[i], dnsbuf + strlen(dnsbuf), INET_ADDRSTRLEN);
 		putenv(dnsbuf);
 
 		execv(argv[0], argv);

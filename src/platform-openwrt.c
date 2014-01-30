@@ -13,6 +13,7 @@
 #include <libubus.h>
 
 #include "dhcpv6.h"
+#include "dhcp.h"
 #include "platform.h"
 #include "iface.h"
 
@@ -154,7 +155,8 @@ void platform_set_owner(struct iface *c,
 
 
 void platform_set_dhcpv6_send(struct iface *c,
-		__unused const void *dhcpv6_data, __unused size_t len)
+		__unused const void *dhcpv6_data, __unused size_t len,
+		__unused const void *dhcp_data, __unused size_t len4)
 {
 	platform_set_internal(c, false);
 }
@@ -318,8 +320,9 @@ static void platform_commit(struct uloop_timeout *t)
 
 	// DNS options
 	const size_t dns_max = 4;
-	size_t dns_cnt = 0;
+	size_t dns_cnt = 0, dns4_cnt = 0;
 	struct in6_addr dns[dns_max];
+	struct in_addr dns4[dns_max];
 
 	// Add per interface DHCPv6 options
 	uint8_t *oend = ((uint8_t*)c->dhcpv6_data_out) + c->dhcpv6_len_out, *odata;
@@ -335,12 +338,33 @@ static void platform_commit(struct uloop_timeout *t)
 		}
 	}
 
-	if (dns_cnt) {
+	// Add per interface DHCP options
+	uint8_t *o4end = ((uint8_t*)c->dhcp_data_out) + c->dhcp_len_out;
+	struct dhcpv4_option *opt;
+	dhcpv4_for_each_option(c->dhcp_data_out, o4end, opt) {
+		if (opt->type == DHCPV4_OPT_DNSSERVER) {
+			size_t cnt = opt->len / sizeof(*dns4);
+			if (cnt + dns4_cnt > dns_max)
+				cnt = dns_max - dns_cnt;
+
+			memcpy(&dns4[dns4_cnt], opt->data, cnt * sizeof(*dns4));
+			dns4_cnt += cnt;
+		}
+	}
+
+	if (dns_cnt || dns4_cnt) {
 		k = blobmsg_open_array(&b, "dns");
 
 		for (size_t i = 0; i < dns_cnt; ++i) {
 			char *buf = blobmsg_alloc_string_buffer(&b, NULL, INET6_ADDRSTRLEN);
 			inet_ntop(AF_INET6, &dns[i], buf, INET6_ADDRSTRLEN);
+			blobmsg_add_string_buffer(&b);
+			L_DEBUG("	DNS: %s", buf);
+		}
+
+		for (size_t i = 0; i < dns4_cnt; ++i) {
+			char *buf = blobmsg_alloc_string_buffer(&b, NULL, INET_ADDRSTRLEN);
+			inet_ntop(AF_INET, &dns4[i], buf, INET_ADDRSTRLEN);
 			blobmsg_add_string_buffer(&b);
 			L_DEBUG("	DNS: %s", buf);
 		}
@@ -468,12 +492,17 @@ static void update_delegated(struct iface *c, struct blob_attr *tb[IFACE_ATTR_MA
 
 
 	const size_t dns_max = 4;
-	size_t dns_cnt = 0;
+	size_t dns_cnt = 0, dns4_cnt = 0;
 	struct {
 		uint16_t type;
 		uint16_t len;
 		struct in6_addr addr[dns_max];
 	} dns;
+	struct {
+		uint8_t type;
+		uint8_t len;
+		struct in_addr addr[dns_max];
+	} dns4;
 
 	if (tb[IFACE_ATTR_DNS]) {
 		struct blob_attr *k;
@@ -481,8 +510,13 @@ static void update_delegated(struct iface *c, struct blob_attr *tb[IFACE_ATTR_MA
 
 		blobmsg_for_each_attr(k, tb[IFACE_ATTR_DNS], rem) {
 			if (dns_cnt >= dns_max || blobmsg_type(k) != BLOBMSG_TYPE_STRING ||
-					inet_pton(AF_INET6, blobmsg_data(k), &dns.addr[dns_cnt]) < 1)
+					inet_pton(AF_INET6, blobmsg_data(k), &dns.addr[dns_cnt]) < 1) {
+				if (dns4_cnt >= dns_max ||
+						inet_pton(AF_INET, blobmsg_data(k), &dns4.addr[dns4_cnt]) < 1)
+					continue;
+				++dns4_cnt;
 				continue;
+			}
 
 			++dns_cnt;
 		}
@@ -491,9 +525,9 @@ static void update_delegated(struct iface *c, struct blob_attr *tb[IFACE_ATTR_MA
 	if (dns_cnt) {
 		dns.type = htons(DHCPV6_OPT_DNS_SERVERS);
 		dns.len = htons(dns_cnt * sizeof(struct in6_addr));
-		iface_set_dhcpv6_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns));
+		iface_set_dhcpv6_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns), NULL);
 	} else {
-		iface_set_dhcpv6_received(c, NULL, 0);
+		iface_set_dhcpv6_received(c, NULL);
 	}
 }
 
@@ -536,7 +570,7 @@ static void platform_update(void *data, size_t len)
 					v4leased = true;
 			}
 
-			iface_set_v4leased(c, v4leased);
+			iface_set_dhcp_received(c, v4leased, NULL, 0);
 		} else if (!strcmp(proto, "hnet")) {
 			if ((a = tb[IFACE_ATTR_UP]) && !blobmsg_get_bool(a))
 				iface_remove(c);
@@ -548,7 +582,8 @@ static void platform_update(void *data, size_t len)
 		if ((a = tb[IFACE_ATTR_DELEGATION]) && blobmsg_get_bool(a))
 			tb[IFACE_ATTR_PREFIX] = NULL;
 
-		bool empty = !(a = tb[IFACE_ATTR_PREFIX]) || blobmsg_data_len(a) <= 0;
+		bool empty = (!(a = tb[IFACE_ATTR_PREFIX]) || blobmsg_data_len(a) <= 0) &&
+				(!(a = tb[IFACE_ATTR_V4ADDR]) || blobmsg_data_len(a));
 
 		// If we don't know this interface yet but it has a PD for us create it
 		if (!c && !empty)

@@ -41,7 +41,7 @@ void iface_register_user(struct iface_user *user);
 void iface_unregister_user(struct iface_user *user);
 
 // Update DHCPv6 out data
-void iface_set_dhcpv6_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len);
+void iface_set_dhcpv6_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len, const void *dhcp_data, size_t dhcp_len);
 
 
 // Begin route update cycle
@@ -99,6 +99,12 @@ struct iface {
 	size_t dhcpv6_len_in;
 	size_t dhcpv6_len_out;
 
+	// DHCP data
+	void *dhcp_data_in;
+	void *dhcp_data_out;
+	size_t dhcp_len_in;
+	size_t dhcp_len_out;
+
 	// Interface name
 	char ifname[];
 };
@@ -133,11 +139,11 @@ void iface_commit_delegated(struct iface *c);
 
 
 // Set DHCPv4 leased flag and rerun border discovery
-void iface_set_v4leased(struct iface *c, bool v4leased);
+void iface_set_dhcp_received(struct iface *c, bool leased, ...);
 
 
 // Set DHCPv6 data received
-void iface_set_dhcpv6_received(struct iface *c, const void *dhcpv6_data, size_t dhcpv6_len);
+void iface_set_dhcpv6_received(struct iface *c, ...);
 
 // Flush all interfaces
 void iface_flush(void);

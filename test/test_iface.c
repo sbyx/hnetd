@@ -16,7 +16,8 @@ void platform_set_route(__unused struct iface *c, __unused struct iface_route *a
 void platform_iface_free(__unused struct iface *c) {}
 void platform_set_internal(__unused struct iface *c, __unused bool internal) {}
 void platform_iface_new(__unused struct iface *c, __unused const char *handle) { c->platform = (void*)1; }
-void platform_set_dhcpv6_send(__unused struct iface *c, __unused const void *dhcpv6_data, __unused size_t len) {}
+void platform_set_dhcpv6_send(__unused struct iface *c, __unused const void *dhcpv6_data, __unused size_t len,
+		__unused const void *dhcp_data, __unused size_t len4) {}
 
 
 void intiface_mock(__unused struct iface_user *u, __unused const char *ifname, bool enabled)
@@ -91,10 +92,10 @@ void iface_test_new_managed(void)
 
 	smock_pull_bool_is("test0", true);
 
-	iface_set_v4leased(iface, true);
+	iface_set_dhcp_received(iface, true, NULL, 0);
 	smock_pull_bool_is("test0", false);
 
-	iface_set_v4leased(iface, false);
+	iface_set_dhcp_received(iface, false, NULL, 0);
 	smock_pull_bool_is("test0", true);
 
 	iface_update_delegated(iface);
@@ -108,11 +109,11 @@ void iface_test_new_managed(void)
 	sput_fail_unless(!strcmp(smock_pull("dhcpv6_data"), "test"), "dhcpv6_data");
 	smock_pull_int_is("dhcpv6_len", sizeof(test));
 
-	iface_set_v4leased(iface, true);
+	iface_set_dhcp_received(iface, true, NULL, 0);
 	iface_update_delegated(iface);
 	iface_commit_delegated(iface);
 	smock_pull_bool_is("prefix_remove", true);
-	iface_set_v4leased(iface, false);
+	iface_set_dhcp_received(iface, false, NULL, 0);
 	smock_pull_bool_is("test0", true);
 
 	iface_remove(iface);

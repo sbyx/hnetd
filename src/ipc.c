@@ -12,6 +12,7 @@
 
 #include "ipc.h"
 #include "iface.h"
+#include "dhcp.h"
 #include "dhcpv6.h"
 
 static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events);
@@ -134,9 +135,35 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 		} else if (!strcmp(cmd, "ifdown")) {
 			iface_remove(c);
 		} else if (!strcmp(cmd, "set_v4lease")) {
-			iface_set_v4leased(c, true);
+			const size_t dns_max = 4;
+			size_t dns_cnt = 0;
+			struct {
+				uint8_t type;
+				uint8_t len;
+				struct in_addr addr[dns_max];
+			} dns;
+
+			if (tb[OPT_DNS]) {
+				struct blob_attr *k;
+				unsigned rem;
+
+				blobmsg_for_each_attr(k, tb[OPT_DNS], rem) {
+					if (dns_cnt >= dns_max || blobmsg_type(k) != BLOBMSG_TYPE_STRING ||
+							inet_pton(AF_INET, blobmsg_data(k), &dns.addr[dns_cnt]) < 1)
+						continue;
+
+					++dns_cnt;
+				}
+			}
+
+			if (dns_cnt) {
+				dns.type = DHCPV4_OPT_DNSSERVER;
+				dns.len = 4 * dns_cnt;
+			}
+
+			iface_set_dhcp_received(c, true, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns), NULL);
 		} else if (!strcmp(cmd, "unset_v4lease")) {
-			iface_set_v4leased(c, false);
+			iface_set_dhcp_received(c, false, NULL);
 		} else if (!strcmp(cmd, "set_prefixes") && (p = tb[OPT_PREFIX])) {
 			hnetd_time_t now = hnetd_time();
 			iface_update_delegated(c);
@@ -207,9 +234,9 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			if (dns_cnt) {
 				dns.type = htons(DHCPV6_OPT_DNS_SERVERS);
 				dns.len = htons(dns_cnt * sizeof(struct in6_addr));
-				iface_set_dhcpv6_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns));
+				iface_set_dhcpv6_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns), NULL);
 			} else {
-				iface_set_dhcpv6_received(c, NULL, 0);
+				iface_set_dhcpv6_received(c, NULL);
 			}
 		}
 	}

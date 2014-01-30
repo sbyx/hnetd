@@ -21,7 +21,8 @@ void platform_set_route(__unused struct iface *c, __unused struct iface_route *a
 void platform_iface_free(__unused struct iface *c) {}
 void platform_set_internal(__unused struct iface *c, __unused bool internal) {}
 void platform_iface_new(__unused struct iface *c, __unused const char *handle) { c->platform = (void*)1; }
-void platform_set_dhcpv6_send(__unused struct iface *c, __unused const void *dhcpv6_data, __unused size_t len) {}
+void platform_set_dhcpv6_send(__unused struct iface *c, __unused const void *dhcpv6_data, __unused size_t len,
+		__unused const void *dhcp_data, __unused size_t len4) {}
 
 void hcp_bfs_one(void)
 {
