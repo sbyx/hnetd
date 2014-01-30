@@ -238,6 +238,12 @@ static void update_addr(struct vlist_tree *t, struct vlist_node *node_new, struc
 		hnetd_time_t bound = hnetd_time() + (7200 * HNETD_TIME_PER_SECOND);
 		if (a_old->valid_until > bound)
 			a_old->valid_until = bound;
+
+		// Reinsert deprecated if not flushing all
+		if (t->version != -1) {
+			vlist_add(t, &a_old->node, &a_old->prefix);
+			node_old = NULL;
+		}
 	}
 
 	platform_set_address(c, (node_new) ? a_new : a_old, enable);
