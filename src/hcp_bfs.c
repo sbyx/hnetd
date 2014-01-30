@@ -57,7 +57,7 @@ static void hcp_bfs_callback(hcp_subscriber s, __unused hcp_node n,
 static void hcp_bfs_run(struct uloop_timeout *t)
 {
 	hcp hcp = container_of(t, hcp_bfs_s, t)->hcp;
-	struct list_head queue = LIST_HEAD_INIT(queue), queue_ap = LIST_HEAD_INIT(queue_ap);
+	struct list_head queue = LIST_HEAD_INIT(queue);
 	hcp_node c, n;
 	vlist_for_each_element(&hcp->nodes, c, in_nodes) {
 		// Mark all nodes as not visited
@@ -124,22 +124,7 @@ static void hcp_bfs_run(struct uloop_timeout *t)
 
 				if (c->bfs.next_hop && c->bfs.ifname)
 					iface_add_default_route(c->bfs.ifname, &from, c->bfs.next_hop);
-			}
-		}
-
-		list_del(&c->bfs.head);
-		if (c != hcp->own_node)
-			list_add(&c->bfs.head, &queue_ap);
-	}
-
-	// We use a second iteration so iface already knows the default routes to lookup the source restrictions
-	while (!list_empty(&queue_ap)) {
-		c = container_of(list_first_entry(&queue_ap, struct hcp_bfs_head, head), hcp_node_s, bfs);
-
-		struct tlv_attr *a, *tlvs = hcp_node_get_tlvs(c);
-		unsigned rem;
-		tlv_for_each_attr(a, tlvs, rem) {
-			if (tlv_id(a) == HCP_T_ASSIGNED_PREFIX && hcp_tlv_ap_valid(a)) {
+			} else if (tlv_id(a) == HCP_T_ASSIGNED_PREFIX && hcp_tlv_ap_valid(a) && c != hcp->own_node) {
 				hcp_t_assigned_prefix_header ap = tlv_data(a);
 
 				struct prefix to = { .plen = ap->prefix_length_bits };
@@ -153,6 +138,5 @@ static void hcp_bfs_run(struct uloop_timeout *t)
 
 		list_del(&c->bfs.head);
 	}
-
 	iface_commit_routes();
 }
