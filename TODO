@@ -5,11 +5,31 @@
 
 - IPv6
  - routing (sbyx; need testing)
+  - seems to be 'slow' traceroute6 within 'home'; and exterior hop
+    does not work (same config + Babel does work); have to track down
+    why this happens..
 
 - L2 up/down detection on Linux; that is, we should ignore interfaces
   that aren't up
  - l2 down == no SD DDZ, no PA prefixes on link
 
 - 'generic Linux' case needs to be tested thoroughly at some point
+ - made it work within ttin too
 
 - make sure router names don't conflict with DDZs
+
+- draft compliance
+ - rename hcp -> hncp (sigh)
+ - make sure implementations are in sync with what's in drafts
+  - generic PA
+  - hncp
+  - hncp-border
+  - hncp-routing
+  - hncp-sd (+generic SD)
+
+- get PCP in somehow?
+ - it would be nice for IPv4 use for various cases; is it a priority though? hmm.
+ (for IPv6 it is also relevant if it can make holes in incoming firewall)
+
+- MLD? multicast routing?
+
