@@ -17,8 +17,13 @@ if(${BACKEND} MATCHES "openwrt")
 else(${BACKEND} MATCHES "openwrt")
 	set(BACKEND_SOURCE "src/platform-generic.c")
 	set(BACKEND_LINK "")
+        install(PROGRAMS generic/dhcp.script generic/dhcpv6.script DESTINATION share/hnetd/)
+        install(PROGRAMS generic/hnetd-backend DESTINATION sbin/)
+        # Symlinks for different hnetd aliases
+        install(CODE "execute_process(COMMAND ln -s hnetd \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/sbin/hnet-ifup)")
+        install(CODE "execute_process(COMMAND ln -s hnetd \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/sbin/hnet-ifdown)")
+        install(CODE "execute_process(COMMAND ln -s hnetd \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/sbin/hnet-call)")
 endif(${BACKEND} MATCHES "openwrt")
-
 
 # TODO: split platform logic
 set(HCP_NIO_BASE src/hcp.c src/hcp_notify.c src/hcp_proto.c src/hcp_timeout.c src/prefix_utils.c src/tlv.c)
