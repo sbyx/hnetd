@@ -1230,6 +1230,7 @@ static void pa_local_ula_create(struct pa *pa, struct pa_local_elem *elem)
 			/* Generate a new one */
 			p0.plen = 0;
 			prefix_random(&p0, &pr, pa->conf.random_ula_plen);
+			pr.prefix.s6_addr[0] = 0xFD;
 			p = &pr;
 			if(pa->conf.storage) /* Saving the chosen ula */
 				pa_store_ula_set(pa->conf.storage, p);
