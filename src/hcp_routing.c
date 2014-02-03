@@ -22,7 +22,7 @@ struct hcp_routing_struct {
 	hcp hcp;
 	struct uloop_timeout t;
 	enum hcp_routing_protocol active;
-	int preference[HCP_ROUTING_MAX];
+	struct tlv_attr *tlv[HCP_ROUTING_MAX];
 	const char *script;
 };
 
@@ -61,9 +61,6 @@ hcp_bfs hcp_routing_create(hcp hcp, const char *script)
 	bfs->script = script;
 	hcp_subscribe(hcp, &bfs->subscr);
 
-	for (size_t i = 0; i < HCP_ROUTING_MAX; ++i)
-		bfs->preference[i] = -1;
-
 	// Load supported protocols and preferences
 	if (script) {
 		int fd[2];
@@ -77,8 +74,18 @@ hcp_bfs hcp_routing_create(hcp hcp, const char *script)
 			while (fgets(buf, sizeof(buf), fp)) {
 				unsigned proto, preference;
 				if (sscanf(buf, "%u %u", &proto, &preference) == 2 &&
-						proto < HCP_ROUTING_MAX && preference < 256)
-					bfs->preference[proto] = preference;
+						proto < HCP_ROUTING_MAX && preference < 256 &&
+						!bfs->tlv[proto]) {
+					struct {
+						struct tlv_attr hdr;
+						uint8_t proto;
+						uint8_t preference;
+					} tlv;
+					tlv_init(&tlv.hdr, HCP_T_ROUTING_PROTOCOL, 6);
+					tlv.proto = proto;
+					tlv.preference = preference;
+					bfs->tlv[proto] = hcp_add_tlv(hcp, &tlv.hdr);
+				}
 			}
 			fclose(fp);
 		} else {
@@ -93,6 +100,14 @@ void hcp_routing_destroy(hcp_bfs bfs)
 {
 	uloop_timeout_cancel(&bfs->t);
 	hcp_unsubscribe(bfs->hcp, &bfs->subscr);
+
+	for (size_t i = 0; i < HCP_ROUTING_MAX; ++i) {
+		if (!bfs->tlv[i])
+			continue;
+
+		hcp_remove_tlv(bfs->hcp, bfs->tlv[i]);
+		free(bfs->tlv[i]);
+	}
 	free(bfs);
 }
 
