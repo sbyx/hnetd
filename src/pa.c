@@ -285,7 +285,7 @@ void pa_conf_default(struct pa_conf *conf)
 
 	conf->use_ipv4 = PA_CONF_DFLT_USE_V4;
 	conf->no_ipv4_if_glb_ipv6 = PA_CONF_DFLT_NO_V4_IF_V6;
-	memcpy(&conf->v4_prefix, &PA_CONF_DFLT_V4, sizeof(conf->v4_prefix));
+	conf->v4_prefix = PA_CONF_DFLT_V4;
 
 	conf->storage = NULL;
 
@@ -298,14 +298,14 @@ void pa_flood_subscribe(pa_t pa, const struct pa_flood_callbacks *cb)
 {
 	L_DEBUG("Flooding protocol just subscribed (%d,%d)",
 			!!cb->updated_lap, !!cb->updated_ldp);
-	memcpy(&pa->fcb, cb, sizeof(struct pa_flood_callbacks));
+	pa->fcb = *cb;
 }
 
 void pa_iface_subscribe(pa_t pa, const struct pa_iface_callbacks *cb)
 {
 	L_DEBUG("Iface just subscribed (%d,%d)",
 				!!cb->update_link_owner, !!cb->update_prefix);
-	memcpy(&pa->ifcb, cb, sizeof(struct pa_iface_callbacks));
+	pa->ifcb = *cb;
 }
 
 /**************************************************************/
@@ -547,8 +547,8 @@ static struct pa_eap *pa_eap_create(struct pa *pa, const struct prefix *prefix,
 
 	eap->iface = NULL; /* Important for assign */
 
-	memcpy(&eap->rid, rid, sizeof(struct pa_rid));
-	memcpy(&eap->prefix, prefix, sizeof(struct prefix));
+	eap->rid = *rid;
+	eap->prefix = *prefix;
 
 	eap->avl_node.key = &eap->prefix;
 	if(avl_insert(&pa->eaps, &eap->avl_node))
@@ -664,7 +664,7 @@ static struct pa_lap *pa_lap_create(struct pa *pa, const struct prefix *prefix,
 	lap->flooded = false;
 	lap->invalid = false; /* For pa algo */
 	lap->own = false;
-	memcpy(&lap->prefix, prefix, sizeof(struct prefix));
+	lap->prefix = *prefix;
 	lap->avl_node.key = &lap->prefix;
 	lap->pa = pa;
 	if(avl_insert(&pa->laps, &lap->avl_node)) {
@@ -946,7 +946,7 @@ static int pa_dp_excluded_set(struct pa *pa,
 
 	dp->excluded_valid = !!excluded;
 	if(excluded)
-		memcpy(&dp->excluded, excluded, sizeof(struct prefix));
+		dp->excluded = *excluded;
 
 	/* The excluded prefix just changed. Which means we need to destroy lap
 	 * that has become invalid. */
@@ -1043,7 +1043,7 @@ static struct pa_dp *pa_dp_create(struct pa *pa,
 	if(!(dp = calloc(1, sizeof(struct pa_dp))))
 		return NULL;
 
-	memcpy(&dp->prefix, prefix, sizeof(struct prefix));
+	dp->prefix = *prefix;
 	list_init_head(&dp->laps);
 	dp->valid_until = 0;
 	dp->preferred_until = 0;
@@ -1055,7 +1055,7 @@ static struct pa_dp *pa_dp_create(struct pa *pa,
 		dp->local = 1;
 	} else {
 		dp->local = 0;
-		memcpy(&dp->rid, rid, sizeof(struct pa_rid));
+		dp->rid = *rid;
 	}
 	dp->l = NULL;
 
@@ -1220,6 +1220,7 @@ static uint8_t pa_local_ula_get_status(struct pa *pa,
 static void pa_local_ula_create(struct pa *pa, struct pa_local_elem *elem)
 {
 	const struct prefix *p = NULL;
+	struct prefix pr, p0;
 
 	if(pa->conf.use_random_ula) {
 		if(pa->conf.storage) {
@@ -1227,7 +1228,6 @@ static void pa_local_ula_create(struct pa *pa, struct pa_local_elem *elem)
 		}
 		if(!p) {
 			/* Generate a new one */
-			struct prefix pr, p0;
 			p0.plen = 0;
 			prefix_random(&p0, &pr, pa->conf.random_ula_plen);
 			p = &pr;
@@ -1515,7 +1515,7 @@ static int pa_storage_getprefix(struct pa *pa, struct pa_iface *iface,
 	priv.dp = dp;
 
 	if((p = pa_store_prefix_find(pa->conf.storage, iface->ifname, pa_store_match, &priv))) {
-		memcpy(new_prefix, p, sizeof(struct prefix));
+		*new_prefix = *p;
 		return 0;
 	}
 
@@ -1820,7 +1820,7 @@ void pa_set_rid(pa_t pa, const struct pa_rid *rid)
 		return;
 
 	L_NOTICE("Setting router id to "PA_RID_L, PA_RID_LA(rid));
-	memcpy(&pa->rid, rid, sizeof(struct pa_rid));
+	pa->rid = *rid;
 	pa_schedule(pa, PA_TODO_ALL);
 }
 
@@ -1965,7 +1965,7 @@ int pa_set_conf(pa_t pa, const struct pa_conf *conf)
 			!prefix_is_ipv6_ula(&conf->ula_prefix))
 		return -1;
 
-	memcpy(&pa->conf, conf, sizeof(struct pa_conf));
+	pa->conf = *conf;
 	return 0;
 }
 
