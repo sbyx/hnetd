@@ -5,9 +5,11 @@
 
 - IPv6
  - routing (sbyx; need testing)
-  - seems to be 'slow' traceroute6 within 'home'; and exterior hop
-    does not work (same config + Babel does work); have to track down
-    why this happens..
+
+- prefix assignment
+ - there seems to be issues; with random prefixes, lots of lap's wind
+   up floating around when dp disappears and appears again; without
+   random prefixes, problem is hopefully concealed..
 
 - L2 up/down detection on Linux; that is, we should ignore interfaces
   that aren't up
@@ -22,10 +24,8 @@
  - rename hcp -> hncp (sigh)
  - make sure implementations are in sync with what's in drafts
   - generic PA
+  - generic SD
   - hncp
-  - hncp-border
-  - hncp-routing
-  - hncp-sd (+generic SD)
 
 - get PCP in somehow?
  - it would be nice for IPv4 use for various cases; is it a priority though? hmm.
