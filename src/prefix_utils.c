@@ -168,7 +168,7 @@ void prefix_canonical(struct prefix *dst, const struct prefix *src)
 	struct in6_addr zero;
 	memset(&zero, 0, sizeof(zero));
 	if(src != dst)
-		memcpy(dst, src, sizeof(struct prefix));
+		*dst = *src;
 	bmemcpy(&dst->prefix, &zero, dst->plen, 128 - dst->plen);
 }
 
@@ -185,7 +185,7 @@ int prefix_random(const struct prefix *p, struct prefix *dst,
 		rand.s6_addr[i] = random();
 
 	dst->plen = plen;
-	memcpy(&dst->prefix, &p->prefix, sizeof(struct in6_addr));
+	dst->prefix = p->prefix;
 	bmemcpy(&dst->prefix, &rand, p->plen, plen - p->plen);
 	return 0;
 }

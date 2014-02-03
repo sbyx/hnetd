@@ -145,6 +145,9 @@ struct pa_conf {
 	 * default = 330 * HNETD_TIME_PER_SECOND */
 	uint32_t local_update_delay;
 
+	/* Enable random assigned prefixes. default = false */
+	bool random_assigned_prefixes;
+
 	/* Pointer to an initialized pa permanent storage structure.
 	 * May be left to NULL so that no permanent storage is used.
 	 * Default is NULL */

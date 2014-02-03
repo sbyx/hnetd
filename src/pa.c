@@ -21,6 +21,7 @@
 #include <string.h>
 #include <libubox/list.h>
 #include <libubox/avl.h>
+#include <libubox/md5.h>
 
 /* Different algorithm flavours */
 #define PA_ALGO_ARKKO	0
@@ -288,6 +289,7 @@ void pa_conf_default(struct pa_conf *conf)
 	conf->v4_prefix = PA_CONF_DFLT_V4;
 
 	conf->storage = NULL;
+	conf->random_assigned_prefixes = false;
 
 	conf->local_valid_lifetime = PA_CONF_DFLT_LOCAL_VALID;
 	conf->local_preferred_lifetime = PA_CONF_DFLT_LOCAL_PREFERRED;
@@ -1456,7 +1458,24 @@ static int pa_get_newprefix_random(struct pa *pa,
 	}
 
 	looped = false;
-	prefix_random(&dp->prefix, new_prefix, plen);
+
+	/* Use of prefix_random here isn't really wise; if prefix storage
+	 * is not available, results are quite bad if e.g. dp is removed
+	 * and then added again. So, we do something else.. But we're
+	 * leaving the random prefix as non-default option (for testing
+	 * the retry logic among other things). */
+	if (pa->conf.random_assigned_prefixes) {
+		prefix_random(&dp->prefix, new_prefix, plen);
+	}
+	else {
+		md5_ctx_t ctx;
+		md5_begin(&ctx);
+		md5_hash(iface->ifname, strlen(iface->ifname), &ctx);
+		md5_hash(&pa->rid, sizeof(pa->rid), &ctx);
+		md5_end(&new_prefix->prefix, &ctx);
+		bmemcpy(&new_prefix->prefix, &dp->prefix, 0, plen);
+		new_prefix->plen = plen;
+	}
 	for(i=0; i<rounds; i++) {
 		if(dp->excluded_valid && prefix_contains(&dp->excluded, new_prefix)) {
 			L_DEBUG("Skipping excluded prefixes");

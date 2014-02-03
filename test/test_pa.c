@@ -1461,6 +1461,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 	pa_conf_default(&conf);
 	conf.use_ula = 0;
 	conf.use_ipv4 = 0;
+	conf.random_assigned_prefixes = true;
 	sput_run_test(pa_test_init);
 	sput_run_test(pa_test_minimal);
 	sput_run_test(pa_test_collisions);
@@ -1475,6 +1476,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 	pa_conf_default(&conf);
 	conf.use_ula = 0;
 	conf.use_ipv4 = 0;
+	conf.random_assigned_prefixes = true;
 	store_conf.max_px = 100;
 	store_conf.max_px_per_if = 10;
 	conf.storage = pa_store_create(&store_conf, PA_STORE_FILE);

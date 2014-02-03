@@ -23,6 +23,11 @@ extern struct prefix ipv6_ula_prefix;
 extern struct prefix ipv6_ll_prefix;
 extern struct prefix ipv6_global_prefix;
 
+/* Copy bits of memory from src to dst.
+ * Starts from bit #frombit and copies nbits.
+ */
+void bmemcpy(void *dst, const void *src, size_t frombit, size_t nbits);
+
 /* Tests whether p1 contains p2 */
 bool prefix_contains(const struct prefix *p1,
 					const struct prefix *p2);
