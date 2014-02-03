@@ -64,6 +64,8 @@ enum {
   HCP_T_DNS_ROUTER_NAME = 51, /* router name (moderately optional) */
   HCP_T_DNS_DOMAIN_NAME = 52, /* non-default domain (very optional) */
 
+  HCP_T_ROUTING_PROTOCOL = 60,
+
   HCP_T_SIGNATURE = 0xFFFF /* not implemented */
 };
 
@@ -119,6 +121,12 @@ typedef struct __packed {
   /* Prefix data, padded so that ends at 4 byte boundary (0s). */
   uint8_t prefix_data[];
 } hcp_t_assigned_prefix_header_s, *hcp_t_assigned_prefix_header;
+
+/* HCP_T_ROUTING_PROTOCOL */
+typedef struct __packed {
+  uint8_t protocol;
+  uint8_t preference;
+} hcp_t_routing_protocol_s, *hcp_t_routing_protocol;
 
 /* HCP_T_DNS_DELEGATED_ZONE */
 typedef struct __packed {

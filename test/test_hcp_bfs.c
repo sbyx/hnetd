@@ -4,14 +4,13 @@
 
 #define L_LEVEL 7
 
-#include "hcp.h"
-#include "hcp_bfs.h"
+#include "../src/hcp_routing.c"
+#include "../src/iface.c"
+#include "../src/hcp_proto.c"
+
 #include "sput.h"
 #include "smock.h"
 
-#include "../src/iface.c"
-#include "../src/hcp_proto.c"
-#include "../src/hcp_bfs.c"
 
 void pa_iface_subscribe(__unused pa_t pa, __unused const struct pa_iface_callbacks *cb) {}
 void platform_set_owner(__unused struct iface *c, __unused bool enable) {}
@@ -27,7 +26,7 @@ void platform_set_dhcpv6_send(__unused struct iface *c, __unused const void *dhc
 void hcp_bfs_one(void)
 {
 	hcp hcp = hcp_create();
-	hcp_bfs bfs = hcp_bfs_create(hcp);
+	hcp_bfs bfs = hcp_routing_create(hcp, NULL);
 
 	hcp_hash_s h = {{0}};
 	hcp_node n0 = hcp->own_node;
@@ -193,7 +192,7 @@ void hcp_bfs_one(void)
 	n4->tlv_container = tlv_memdup(b.head);
 
 
-	hcp_bfs_run(&bfs->t);
+	hcp_routing_run(&bfs->t);
 
 	struct iface_route up31 = {.from = {.prefix = dp.prefix, .plen = 48}, .via = *((struct in6_addr*)n3->node_identifier_hash.buf)};
 	sput_fail_unless(!!vlist_find(&i3->routes, &up31, &up31, node), "uplink 3 #1");

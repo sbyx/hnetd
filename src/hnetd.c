@@ -27,7 +27,7 @@
 
 #include "hcp_pa.h"
 #include "hcp_sd.h"
-#include "hcp_bfs.h"
+#include "hcp_routing.h"
 #include "ipc.h"
 #include "platform.h"
 
@@ -111,16 +111,14 @@ int main(__unused int argc, char* const argv[])
 		return 17;
 	}
 
+	const char *routing_script = NULL;
 	const char *dnsmasq_script = NULL;
 	const char *dnsmasq_bonus_file = NULL;
 	const char *ohp_script = NULL;
 	const char *router_name = NULL;
 
-	while ((c = getopt(argc, argv, "bd:f:o:n:")) != -1) {
+	while ((c = getopt(argc, argv, "d:f:o:n:r:")) != -1) {
 		switch (c) {
-		case 'b':
-		  hcp_bfs_create(h);
-		  break;
 		case 'd':
 			dnsmasq_script = optarg;
 			break;
@@ -132,6 +130,9 @@ int main(__unused int argc, char* const argv[])
 			break;
 		case 'n':
 			router_name = optarg;
+			break;
+		case 'r':
+			routing_script = optarg;
 			break;
 		}
 	}
@@ -147,6 +148,8 @@ int main(__unused int argc, char* const argv[])
 			return 71;
 		}
 	}
+
+	hcp_routing_create(h, routing_script);
 
 	/* Init ipc */
 	iface_init(pa);
