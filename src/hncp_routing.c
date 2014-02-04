@@ -150,6 +150,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 	vlist_for_each_element(&hncp->nodes, c, in_nodes) {
 		// Mark all nodes as not visited
 		c->bfs.next_hop = NULL;
+		c->bfs.next_hop4 = NULL;
 		c->bfs.hopcount = 0;
 
 		++routercnt;
@@ -197,6 +198,8 @@ static void hncp_routing_run(struct uloop_timeout *t)
 		return;
 
 	// Run BFS fallback algorithm
+	bool have_v4uplink = false;
+
 	iface_update_routes();
 	list_add_tail(&hncp->own_node->bfs.head, &queue);
 
@@ -236,8 +239,20 @@ static void hncp_routing_run(struct uloop_timeout *t)
 						n->bfs.next_hop = &neigh->last_address;
 						n->bfs.ifname = link->ifname;
 					}
+
+					unsigned nrem;
+					struct tlv_attr *na, *ntlvs = n->tlv_container;
+					tlv_for_each_attr(na, ntlvs, nrem) {
+						if (tlv_id(na) == HNCP_T_ROUTER_ADDRESS &&
+								tlv_len(na) == sizeof(struct in6_addr) &&
+								IN6_IS_ADDR_V4MAPPED(tlv_data(na))) {
+							n->bfs.next_hop4 = tlv_data(na);
+							break;
+						}
+					}
 				} else { // Inherit next-hop from predecessor
 					n->bfs.next_hop = c->bfs.next_hop;
+					n->bfs.next_hop4 = c->bfs.next_hop4;
 					n->bfs.ifname = c->bfs.ifname;
 				}
 
@@ -253,8 +268,15 @@ static void hncp_routing_run(struct uloop_timeout *t)
 				size_t plen = ROUND_BITS_TO_BYTES(from.plen);
 				memcpy(&from.prefix, &dp[1], plen);
 
-				if (c->bfs.next_hop && c->bfs.ifname)
-					iface_add_default_route(c->bfs.ifname, &from, c->bfs.next_hop, c->bfs.hopcount);
+				if (!IN6_IS_ADDR_V4MAPPED(&from.prefix)) {
+					if (c->bfs.next_hop && c->bfs.ifname)
+						iface_add_default_route(c->bfs.ifname, &from, c->bfs.next_hop, c->bfs.hopcount);
+				} else {
+					if (c->bfs.next_hop4 && c->bfs.ifname && !have_v4uplink) {
+						iface_add_default_route(c->bfs.ifname, NULL, c->bfs.next_hop4, c->bfs.hopcount);
+						have_v4uplink = true;
+					}
+				}
 			} else if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX && hncp_tlv_ap_valid(a) && c != hncp->own_node) {
 				hncp_t_assigned_prefix_header ap = tlv_data(a);
 
@@ -262,8 +284,13 @@ static void hncp_routing_run(struct uloop_timeout *t)
 				size_t plen = ROUND_BITS_TO_BYTES(to.plen);
 				memcpy(&to.prefix, &ap[1], plen);
 
-				if (c->bfs.next_hop && c->bfs.ifname)
-					iface_add_internal_route(c->bfs.ifname, &to, c->bfs.next_hop, c->bfs.hopcount);
+				if (!IN6_IS_ADDR_V4MAPPED(&to.prefix)) {
+					if (c->bfs.next_hop && c->bfs.ifname)
+						iface_add_internal_route(c->bfs.ifname, &to, c->bfs.next_hop, c->bfs.hopcount);
+				} else {
+					if (c->bfs.next_hop4 && c->bfs.ifname)
+						iface_add_internal_route(c->bfs.ifname, &to, c->bfs.next_hop4, c->bfs.hopcount);
+				}
 			}
 		}
 

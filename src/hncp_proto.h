@@ -59,6 +59,7 @@ enum {
   HNCP_T_ASSIGNED_PREFIX = 43, /* may contain TLVs */
 
   HNCP_T_DHCPV6_OPTIONS = 45, /* contains just raw DHCPv6 options */
+  HNCP_T_ROUTER_ADDRESS = 46, /* router address */
 
   HNCP_T_DNS_DELEGATED_ZONE = 50, /* the 'beef' */
   HNCP_T_DNS_ROUTER_NAME = 51, /* router name (moderately optional) */

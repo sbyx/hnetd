@@ -142,16 +142,25 @@ void iface_add_default_route(const char *ifname, const struct prefix *from, cons
 	struct iface *c = iface_get(ifname);
 	if (c) {
 		struct iface_route *r = calloc(1, sizeof(*r));
-		r->from = *from;
+		if (!IN6_IS_ADDR_V4MAPPED(via)) {
+			r->from = *from;
+		} else {
+			r->to.plen = 96;
+			r->to.prefix.s6_addr[10] = 0xff;
+			r->to.prefix.s6_addr[11] = 0xff;
+		}
+
 		r->via = *via;
 		r->metric = hopcount + 10000;
 		vlist_add(&c->routes, &r->node, r);
 
-		r = calloc(1, sizeof(*r));
-		r->from.plen = 128;
-		r->via = *via;
-		r->metric = hopcount + 10000;
-		vlist_add(&c->routes, &r->node, r);
+		if (!IN6_IS_ADDR_V4MAPPED(via)) {
+			r = calloc(1, sizeof(*r));
+			r->from.plen = 128;
+			r->via = *via;
+			r->metric = hopcount + 10000;
+			vlist_add(&c->routes, &r->node, r);
+		}
 	}
 }
 
