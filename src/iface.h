@@ -5,6 +5,7 @@
 #include "prefix_utils.h"
 
 #include <libubox/list.h>
+#include <libubox/uloop.h>
 #include <libubox/vlist.h>
 #include <netinet/in.h>
 #include <time.h>
@@ -105,6 +106,9 @@ struct iface {
 	void *dhcp_data_out;
 	size_t dhcp_len_in;
 	size_t dhcp_len_out;
+
+	// Internal transition timeout
+	struct uloop_timeout transition;
 
 	// Interface name
 	char ifname[];

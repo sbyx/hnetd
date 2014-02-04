@@ -328,6 +328,9 @@ void iface_remove(struct iface *c)
 	free(c->dhcpv6_data_out);
 	free(c->dhcp_data_in);
 	free(c->dhcp_data_out);
+
+	uloop_timeout_cancel(&c->transition);
+
 	free(c);
 }
 
@@ -336,6 +339,15 @@ void iface_update_init(struct iface *c)
 {
 	vlist_update(&c->assigned);
 	vlist_update(&c->delegated);
+}
+
+
+static void iface_announce_border(struct uloop_timeout *t)
+{
+	struct iface *c = container_of(t, struct iface, transition);
+	iface_notify_data_state(c, c->internal);
+	iface_notify_internal_state(c, c->internal);
+	platform_set_internal(c, c->internal);
 }
 
 
@@ -350,10 +362,13 @@ static void iface_discover_border(struct iface *c)
 	if (c->internal != internal) {
 		L_INFO("iface: %s border discovery detected state %s",
 				c->ifname, (internal) ? "internal" : "external");
+
 		c->internal = internal;
-		iface_notify_data_state(c, internal);
-		iface_notify_internal_state(c, internal);
-		platform_set_internal(c, internal);
+
+		if (c->transition.pending)
+			uloop_timeout_cancel(&c->transition); // Flapped back to original state
+		else
+			uloop_timeout_set(&c->transition, (internal) ? 5000 : 0);
 	}
 }
 
@@ -387,6 +402,7 @@ struct iface* iface_create(const char *ifname, const char *handle)
 		vlist_init(&c->assigned, compare_addrs, update_addr);
 		vlist_init(&c->delegated, compare_addrs, update_prefix);
 		vlist_init(&c->routes, compare_routes, update_route);
+		c->transition.cb = iface_announce_border;
 
 		list_add(&c->head, &interfaces);
 	}
