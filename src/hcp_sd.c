@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Fri Jan 17 16:10:07 2014 mstenber
- * Edit time:     312 min
+ * Last modified: Tue Feb  4 15:07:58 2014 mstenber
+ * Edit time:     317 min
  *
  */
 
@@ -291,10 +291,6 @@ bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
             if (hcp_node_is_self(n))
               {
                 server = LOCAL_OHP_ADDRESS;
-                /* Ignore ones without flags - we just assume they're
-                 * reverse .arpa. ones for now. */
-                if (!dh->flags)
-                  continue;
               }
             else
               {
