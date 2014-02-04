@@ -66,10 +66,12 @@ int main(__unused int argc, char* const argv[])
 	int c;
 	hncp_iface_user_s hiu;
 
+#ifdef WITH_IPC
 	if (strstr(argv[0], "hnet-call"))
 		return ipc_client(argv[1]);
 	else if ((strstr(argv[0], "hnet-ifup") || strstr(argv[0], "hnet-ifdown")) && argc >= 2)
 		return ipc_ifupdown(argv[0], argv[1], argv[2]);
+#endif
 
 	openlog("hnetd", LOG_PERROR | LOG_PID, LOG_DAEMON);
 	uloop_init();
@@ -79,10 +81,12 @@ int main(__unused int argc, char* const argv[])
 		return 2;
 	}
 
+#ifdef WITH_IPC
 	if (ipc_init()) {
 		L_ERR("Failed to init IPC: %s", strerror(errno));
 		return 5;
 	}
+#endif
 
 	int urandom_fd;
 	if ((urandom_fd = open("/dev/urandom", O_CLOEXEC | O_RDONLY)) >= 0) {
