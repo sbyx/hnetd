@@ -92,32 +92,14 @@ int main(__unused int argc, char* const argv[])
 		srandom(seed);
 	}
 
-	pa_conf_default(&pa_conf);
-	pa_conf.flooding_delay = FLOODING_DELAY;
-	pa = pa_create(&pa_conf);
-	if (!pa) {
-		L_ERR("Unable to initialize PA");
-		return 13;
-	}
-
-	h = hcp_create();
-	if (!h) {
-		L_ERR("Unable to initialize HCP");
-		return 42;
-	}
-
-	if (!hcp_pa_glue_create(h, pa)) {
-		L_ERR("Unable to connect hcp and pa");
-		return 17;
-	}
-
 	const char *routing_script = NULL;
 	const char *dnsmasq_script = NULL;
 	const char *dnsmasq_bonus_file = NULL;
 	const char *ohp_script = NULL;
 	const char *router_name = NULL;
+	const char *pa_store_file = NULL;
 
-	while ((c = getopt(argc, argv, "d:f:o:n:r:")) != -1) {
+	while ((c = getopt(argc, argv, "d:f:o:n:r:s:")) != -1) {
 		switch (c) {
 		case 'd':
 			dnsmasq_script = optarg;
@@ -134,7 +116,36 @@ int main(__unused int argc, char* const argv[])
 		case 'r':
 			routing_script = optarg;
 			break;
+		case 's':
+			pa_store_file = optarg;
+			break;
 		}
+	}
+
+	pa_conf_default(&pa_conf);
+	pa_conf.flooding_delay = FLOODING_DELAY;
+	if (pa_store_file) {
+		static struct pa_store_conf store_conf;
+		store_conf.max_px = 100;
+		store_conf.max_px_per_if = 10;
+		pa_conf.storage = pa_store_create(&store_conf, pa_store_file);
+	}
+
+	pa = pa_create(&pa_conf);
+	if (!pa) {
+		L_ERR("Unable to initialize PA");
+		return 13;
+	}
+	
+	h = hcp_create();
+	if (!h) {
+		L_ERR("Unable to initialize HCP");
+		return 42;
+	}
+
+	if (!hcp_pa_glue_create(h, pa)) {
+		L_ERR("Unable to connect hcp and pa");
+		return 17;
 	}
 
 	/* At some point should think of subset of these options is
