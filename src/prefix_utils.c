@@ -155,6 +155,11 @@ int prefix_cmp(const struct prefix *p1,
 	return bmemcmp(&p1->prefix, &p2->prefix, p1->plen);
 }
 
+void prefix_cpy(struct prefix *dst, const struct prefix *src)
+{
+	memcpy(dst, src, sizeof(struct prefix));
+}
+
 uint8_t prefix_af_length(const struct prefix *p)
 {
 	if(prefix_is_ipv4(p)) {

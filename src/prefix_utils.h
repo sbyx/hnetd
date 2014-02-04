@@ -48,6 +48,8 @@ bool prefix_contains(const struct prefix *p1,
 int prefix_cmp(const struct prefix *p1,
 		const struct prefix *p2);
 
+void prefix_cpy(struct prefix *dst, const struct prefix *src);
+
 /* Returns the IPv6 prefix length if p is IPv6, and the
  * IPv4 prefix length if p is IPv4. */
 uint8_t prefix_af_length(const struct prefix *p);

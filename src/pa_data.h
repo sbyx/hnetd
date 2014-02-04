@@ -60,8 +60,8 @@ struct pa_dp {
 	hnetd_time_t valid_until;     /* Valid until (zero means not valid) */
 	hnetd_time_t preferred_until;
 	struct list_head cps;         /* cps attached to that prefix */
-	size_t dhcpv6_len;            /* dhcpv6 data length (or 0) */
-	void *dhcpv6_data;     	      /* dhcpv6 data (or NULL) */
+	size_t dhcp_len;              /* dhcp data length (or 0) */
+	void *dhcp_data;     	      /* dhcp data (or NULL) */
 	bool local;                   /* Whether it is ldp or edp */
 
 #define PA_DP_L			"dp %s(local=%d)"
@@ -154,12 +154,31 @@ struct pa_eaa {
 
 /* Prefix assignment's data structure */
 struct pa_data {
-	struct avl_tree aps;  /* Assigned prefixes */
 	struct list_head ifs; /* Ifaces */
-	struct list_head cps; /* Chosen prefixes */
 	struct list_head dps; /* Delegated prefixes */
+	struct avl_tree  aps; /* Assigned prefixes */
+	struct list_head cps; /* Chosen prefixes */
 	struct list_head aas; /* Address assignments */
 };
+
+
+void pa_data_init(struct pa_data *);
+
+#define pa_for_each_dp(pa_data, pa_dp) \
+	list_for_each_entry(pa_dp, &(pa_data)->dps, le)
+/* Sets dhcp data. Returns 1 if modified. -1 if error. 0 Otherwise. */
+int pa_dp_set_dhcp(struct pa_dp *, const void *dhcp_data, size_t dhcp_len);
+/* Returns an existing ldp with the specified prefix, or NULL. */
+struct pa_ldp *pa_ldp_get(struct pa_data *, const struct prefix *);
+/* Returns an existing or creating ldp, or NULL if error. */
+struct pa_ldp *pa_ldp_goc(struct pa_data *, const struct prefix *);
+/* Set iface and return whether it was modified. */
+int pa_ldp_set_iface( struct pa_ldp *, struct pa_iface *);
+/* Destroyes ldp entry and unlinks it from other structures. */
+void pa_ldp_destroy(struct pa_data *, struct pa_ldp *);
+
+
+
 
 #endif
 
