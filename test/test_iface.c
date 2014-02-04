@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <stdbool.h>
+#include <unistd.h>
 
 #include "prefix_utils.c"
 #include "iface.c"
@@ -23,6 +24,7 @@ void platform_set_dhcpv6_send(__unused struct iface *c, __unused const void *dhc
 void intiface_mock(__unused struct iface_user *u, __unused const char *ifname, bool enabled)
 {
 	smock_push_bool(ifname, enabled);
+	uloop_end();
 }
 
 void extdata_mock(__unused struct iface_user *u, __unused const char *ifname, __unused const void *dhcpv6_data, size_t dhcpv6_len)
@@ -90,18 +92,26 @@ void iface_test_new_managed(void)
 	struct iface *iface3 = iface_create("test0", "test0");
 	sput_fail_unless(iface == iface3, "create after create");
 
+	uloop_run();
 	smock_pull_bool_is("test0", true);
 
 	iface_set_dhcp_received(iface, true, NULL, 0);
+
+	uloop_cancelled = false;
+	uloop_run();
 	smock_pull_bool_is("test0", false);
 
 	iface_set_dhcp_received(iface, false, NULL, 0);
+	uloop_cancelled = false;
+	uloop_run();
 	smock_pull_bool_is("test0", true);
 
 	iface_update_delegated(iface);
 	iface_add_delegated(iface, &p, NULL, HNETD_TIME_MAX, 0, test, sizeof(test));
 	iface_commit_delegated(iface);
 
+	uloop_cancelled = false;
+	uloop_run();
 	smock_pull_bool_is("test0", false);
 	sput_fail_unless(!prefix_cmp(&p, smock_pull("prefix_prefix")), "prefix address");
 	smock_pull_int_is("prefix_valid", HNETD_TIME_MAX);
@@ -114,11 +124,13 @@ void iface_test_new_managed(void)
 	iface_commit_delegated(iface);
 	smock_pull_bool_is("prefix_remove", true);
 	iface_set_dhcp_received(iface, false, NULL, 0);
+
+	uloop_cancelled = false;
+	uloop_run();
 	smock_pull_bool_is("test0", true);
 
 	iface_remove(iface);
 	sput_fail_unless(!iface_get("test0"), "delete");
-
 	smock_pull_bool_is("test0", false);
 	smock_is_empty();
 	iface_unregister_user(&user_mock);
