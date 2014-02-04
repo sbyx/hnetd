@@ -194,17 +194,17 @@ void hcp_bfs_one(void)
 
 	hcp_routing_run(&bfs->t);
 
-	struct iface_route up31 = {.from = {.prefix = dp.prefix, .plen = 48}, .via = *((struct in6_addr*)n3->node_identifier_hash.buf)};
+	struct iface_route up31 = {.from = {.prefix = dp.prefix, .plen = 48}, .via = *((struct in6_addr*)n3->node_identifier_hash.buf), .metric = 10000 + 1};
 	sput_fail_unless(!!vlist_find(&i3->routes, &up31, &up31, node), "uplink 3 #1");
 
-	struct iface_route up32 = {.from = {.plen = 128}, .via = *((struct in6_addr*)n3->node_identifier_hash.buf)};
+	struct iface_route up32 = {.from = {.plen = 128}, .via = *((struct in6_addr*)n3->node_identifier_hash.buf), .metric = 10000 + 1};
 	sput_fail_unless(!!vlist_find(&i3->routes, &up32, &up32, node), "uplink 3 #2");
 
 	dp.prefix.s6_addr[5] = 0;
-	struct iface_route up11 = {.from = {.prefix = dp.prefix, .plen = 48}, .via = *((struct in6_addr*)n1->node_identifier_hash.buf)};
+	struct iface_route up11 = {.from = {.prefix = dp.prefix, .plen = 48}, .via = *((struct in6_addr*)n1->node_identifier_hash.buf), .metric = 10000 + 2};
 	sput_fail_unless(!!vlist_find(&i1->routes, &up11, &up11, node), "uplink 1 #1");
 
-	struct iface_route up12 = {.from = {.plen = 128}, .via = *((struct in6_addr*)n1->node_identifier_hash.buf)};
+	struct iface_route up12 = {.from = {.plen = 128}, .via = *((struct in6_addr*)n1->node_identifier_hash.buf), .metric = 10000 + 2};
 	sput_fail_unless(!!vlist_find(&i1->routes, &up12, &up12, node), "uplink 1 #2");
 }
 
