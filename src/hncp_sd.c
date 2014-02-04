@@ -1,17 +1,17 @@
 /*
- * $Id: hcp_sd.c $
+ * $Id: hncp_sd.c $
  *
  * Author: Markus Stenberg <markus stenberg@iki.fi>
  *
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Tue Feb  4 15:07:58 2014 mstenber
+ * Last modified: Tue Feb  4 18:22:44 2014 mstenber
  * Edit time:     317 min
  *
  */
 
-/* This module implements the HCP-based service discovery support.
+/* This module implements the HNCP-based service discovery support.
  *
  * By default, if this isn't enabled, _normal_ DNS based activity
  * across a network should still work (thanks to DNS servers being
@@ -29,8 +29,8 @@
 #include <sys/wait.h>
 #include <libubox/md5.h>
 
-#include "hcp_sd.h"
-#include "hcp_i.h"
+#include "hncp_sd.h"
+#include "hncp_i.h"
 #include "dns_util.h"
 
 #define LOCAL_OHP_ADDRESS "127.0.0.2"
@@ -47,12 +47,12 @@
  * frequently the dnsmasq/ohp scripts are called. */
 #define UPDATE_TIMEOUT 100
 
-struct hcp_sd_struct
+struct hncp_sd_struct
 {
-  hcp hcp;
+  hncp hncp;
 
-  /* HCP notification subscriber structure */
-  hcp_subscriber_s subscriber;
+  /* HNCP notification subscriber structure */
+  hncp_subscriber_s subscriber;
 
   /* Mask of what we need to update (in a timeout or at republish(ddz)). */
   int should_update;
@@ -70,8 +70,8 @@ struct hcp_sd_struct
   char *ohp_script;
 
   /* State hashes used to keep track of what has been committed. */
-  hcp_hash_s dnsmasq_state;
-  hcp_hash_s ohp_state;
+  hncp_hash_s dnsmasq_state;
+  hncp_hash_s ohp_state;
 };
 
 
@@ -84,13 +84,13 @@ static void _fork_execv(char *argv[])
     execv(argv[0], argv);
     _exit(128);
   }
-  L_DEBUG("hcp_sd calling %s", argv[0]);
+  L_DEBUG("hncp_sd calling %s", argv[0]);
   waitpid(pid, NULL, 0);
 }
 
-static void _should_update(hcp_sd sd, int v)
+static void _should_update(hncp_sd sd, int v)
 {
-  L_DEBUG("hcp_sd/should_update:%d", v);
+  L_DEBUG("hncp_sd/should_update:%d", v);
   if ((sd->should_update & v) == v)
     return;
   sd->should_update |= v;
@@ -100,9 +100,9 @@ static void _should_update(hcp_sd sd, int v)
 }
 
 /* Convenience wrapper around MD5 hashing */
-static bool _sh_changed(md5_ctx_t *ctx, hcp_hash reference)
+static bool _sh_changed(md5_ctx_t *ctx, hncp_hash reference)
 {
-  hcp_hash_s h;
+  hncp_hash_s h;
 
   md5_end(&h, ctx);
   if (memcmp(&h, reference, sizeof(h)))
@@ -155,27 +155,27 @@ static int _push_reverse_ll(struct prefix *p, uint8_t *buf, int buf_len)
   return buf - obuf;
 }
 
-static void _publish_ddzs(hcp_sd sd)
+static void _publish_ddzs(hncp_sd sd)
 {
   struct tlv_attr *a;
   int i;
-  hcp_tlv t;
-  hcp_t_assigned_prefix_header ah;
+  hncp_tlv t;
+  hncp_t_assigned_prefix_header ah;
 
   if (!(sd->should_update & UPDATE_FLAG_DDZ))
     return;
   sd->should_update &= ~UPDATE_FLAG_DDZ;
   L_DEBUG("_publish_ddzs");
-  hcp_node_for_each_tlv_i(sd->hcp->own_node, a, i)
-    if (tlv_id(a) == HCP_T_DNS_DELEGATED_ZONE)
-      (void)hcp_remove_tlv(sd->hcp, a);
-  vlist_for_each_element(&sd->hcp->tlvs, t, in_tlvs)
+  hncp_node_for_each_tlv_i(sd->hncp->own_node, a, i)
+    if (tlv_id(a) == HNCP_T_DNS_DELEGATED_ZONE)
+      (void)hncp_remove_tlv(sd->hncp, a);
+  vlist_for_each_element(&sd->hncp->tlvs, t, in_tlvs)
     {
       a = &t->tlv;
-      if (tlv_id(a) == HCP_T_ASSIGNED_PREFIX)
+      if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX)
         {
           /* Forward DDZ handling */
-          hcp_t_dns_delegated_zone dh;
+          hncp_t_dns_delegated_zone dh;
           unsigned char buf[sizeof(struct tlv_attr) +
                             sizeof(*dh) +
                             DNS_MAX_ESCAPED_LEN];
@@ -184,7 +184,7 @@ static void _publish_ddzs(hcp_sd sd)
           char tbuf[DNS_MAX_ESCAPED_LEN];
           struct in6_addr our_addr;
 
-          if (!hcp_tlv_ap_valid(a))
+          if (!hncp_tlv_ap_valid(a))
             {
               L_ERR("invalid ap _published by us: %s", TLV_REPR(a));
               continue;
@@ -194,15 +194,15 @@ static void _publish_ddzs(hcp_sd sd)
           /* Should publish DDZ entry. */
           uint32_t link_id = be32_to_cpu(ah->link_id);
 
-          hcp_link l = hcp_find_link_by_id(sd->hcp, link_id);
+          hncp_link l = hncp_find_link_by_id(sd->hncp, link_id);
           if (!l)
             {
-              L_ERR("unable to find hcp link by id #%d", link_id);
+              L_ERR("unable to find hncp link by id #%d", link_id);
               continue;
             }
           sprintf(tbuf, "%s.%s.%s", l->ifname, sd->router_name, sd->domain);
 
-          if (!hcp_io_get_ipv6(&our_addr, l->ifname))
+          if (!hncp_io_get_ipv6(&our_addr, l->ifname))
             {
               L_ERR("unable to get ipv6 address");
               _should_update(sd, UPDATE_FLAG_DDZ);
@@ -217,10 +217,10 @@ static void _publish_ddzs(hcp_sd sd)
           if (r < 0)
             continue;
           flen = TLV_SIZE + sizeof(*dh) + r;
-          dh->flags = HCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE;
-          tlv_init(na, HCP_T_DNS_DELEGATED_ZONE, flen);
+          dh->flags = HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE;
+          tlv_init(na, HNCP_T_DNS_DELEGATED_ZONE, flen);
           tlv_fill_pad(na);
-          hcp_add_tlv(sd->hcp, na);
+          hncp_add_tlv(sd->hncp, na);
 
           /* Reverse DDZ handling */
           /* (no BROWSE flag, .ip6.arpa. or .in-addr.arpa.). */
@@ -232,16 +232,16 @@ static void _publish_ddzs(hcp_sd sd)
             continue;
           flen = TLV_SIZE + sizeof(*dh) + r;
           dh->flags = 0;
-          tlv_init(na, HCP_T_DNS_DELEGATED_ZONE, flen);
+          tlv_init(na, HNCP_T_DNS_DELEGATED_ZONE, flen);
           tlv_fill_pad(na);
-          hcp_add_tlv(sd->hcp, na);
+          hncp_add_tlv(sd->hncp, na);
         }
     }
 }
 
-bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
+bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
 {
-  hcp_node n;
+  hncp_node n;
   struct tlv_attr *a;
   int i;
   FILE *f = fopen(filename, "w");
@@ -253,7 +253,7 @@ bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
       L_ERR("unable to open %s for writing dnsmasq conf", filename);
       return false;
     }
-  /* Basic idea: Traverse through the hcp node+tlv graph _once_,
+  /* Basic idea: Traverse through the hncp node+tlv graph _once_,
    * producing appropriate configuration file.
    *
    * What do we need to take care of?
@@ -262,16 +262,16 @@ bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
    * <subdomain>'s ~NS (local, LOCAL_OHP_ADDRESS)
    */
   md5_hash(sd->domain, strlen(sd->domain), &ctx);
-  hcp_for_each_node(sd->hcp, n)
+  hncp_for_each_node(sd->hncp, n)
     {
-      hcp_node_for_each_tlv_i(n, a, i)
-        if (tlv_id(a) == HCP_T_DNS_DELEGATED_ZONE)
+      hncp_node_for_each_tlv_i(n, a, i)
+        if (tlv_id(a) == HNCP_T_DNS_DELEGATED_ZONE)
           {
             /* Decode the labels */
             char buf[DNS_MAX_ESCAPED_LEN];
             char buf2[256];
             char *server;
-            hcp_t_dns_delegated_zone dh;
+            hncp_t_dns_delegated_zone dh;
 
             if (tlv_len(a) < (sizeof(*dh)+1))
               continue;
@@ -283,12 +283,12 @@ bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
 
             md5_hash(a, tlv_raw_len(a), &ctx);
 
-            if (dh->flags & HCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE)
+            if (dh->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE)
               {
                 fprintf(f, "ptr-record=b._dns-sd._udp.%s,%s\n",
                         sd->domain, buf);
               }
-            if (hcp_node_is_self(n))
+            if (hncp_node_is_self(n))
               {
                 server = LOCAL_OHP_ADDRESS;
               }
@@ -298,7 +298,7 @@ bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
                 if (!inet_ntop(AF_INET6, dh->address,
                                buf2, sizeof(buf2)))
                   {
-                    L_ERR("inet_ntop failed in hcp_sd_write_dnsmasq_conf");
+                    L_ERR("inet_ntop failed in hncp_sd_write_dnsmasq_conf");
                     continue;
                   }
               }
@@ -309,7 +309,7 @@ bool hcp_sd_write_dnsmasq_conf(hcp_sd sd, const char *filename)
   return _sh_changed(&ctx, &sd->dnsmasq_state);
 }
 
-bool hcp_sd_restart_dnsmasq(hcp_sd sd)
+bool hncp_sd_restart_dnsmasq(hncp_sd sd)
 {
   char *args[] = { (char *)sd->dnsmasq_script, "restart", NULL};
 
@@ -319,30 +319,30 @@ bool hcp_sd_restart_dnsmasq(hcp_sd sd)
 
 
 #define PUSH_ARG(s) do                                  \
-{                                                       \
-  int _arg = narg++;                                    \
-  if (narg == OHP_ARGS_MAX_COUNT)                       \
-  {                                                     \
-    L_DEBUG("too many arguments");                      \
-    return false;                                       \
-  }                                                     \
-  if (strlen(s) + 1 + c > (buf + OHP_ARGS_MAX_LEN))     \
     {                                                   \
-      L_DEBUG("out of buffer");                         \
-    }                                                   \
-  args[_arg] = c;                                       \
-  strcpy(c, s);                                         \
-  c += strlen(s) + 1;                                   \
-} while(0)
+      int _arg = narg++;                                \
+      if (narg == OHP_ARGS_MAX_COUNT)                   \
+        {                                               \
+          L_DEBUG("too many arguments");                \
+          return false;                                 \
+        }                                               \
+      if (strlen(s) + 1 + c > (buf + OHP_ARGS_MAX_LEN)) \
+        {                                               \
+          L_DEBUG("out of buffer");                     \
+        }                                               \
+      args[_arg] = c;                                   \
+      strcpy(c, s);                                     \
+      c += strlen(s) + 1;                               \
+    } while(0)
 
-bool hcp_sd_reconfigure_ohp(hcp_sd sd)
+bool hncp_sd_reconfigure_ohp(hncp_sd sd)
 {
   char buf[OHP_ARGS_MAX_LEN];
   char *c = buf;
   char *args[OHP_ARGS_MAX_COUNT];
   int narg = 0;
   uint32_t dumped_link_id = 0;
-  hcp_t_assigned_prefix_header ah;
+  hncp_t_assigned_prefix_header ah;
   char tbuf[DNS_MAX_ESCAPED_LEN];
 
   struct tlv_attr *a;
@@ -352,7 +352,7 @@ bool hcp_sd_reconfigure_ohp(hcp_sd sd)
 
   if (!sd->ohp_script)
     {
-      L_ERR("no ohp_script set yet hcp_sd_reconfigure_ohp called");
+      L_ERR("no ohp_script set yet hncp_sd_reconfigure_ohp called");
       return false;
     }
   md5_begin(&ctx);
@@ -360,8 +360,8 @@ bool hcp_sd_reconfigure_ohp(hcp_sd sd)
 
   /* We're responsible only for those interfaces that we have assigned
    * prefix for. */
-  hcp_node_for_each_tlv_i(sd->hcp->own_node, a, i)
-    if (tlv_id(a) == HCP_T_ASSIGNED_PREFIX)
+  hncp_node_for_each_tlv_i(sd->hncp->own_node, a, i)
+    if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX)
       {
         ah = tlv_data(a);
         /* If we already dumped this link, no need to do it
@@ -371,7 +371,7 @@ bool hcp_sd_reconfigure_ohp(hcp_sd sd)
           continue;
         dumped_link_id = ah->link_id;
         uint32_t link_id = be32_to_cpu(dumped_link_id);
-        hcp_link l = hcp_find_link_by_id(sd->hcp, link_id);
+        hncp_link l = hncp_find_link_by_id(sd->hncp, link_id);
 
         if (!l)
           {
@@ -406,60 +406,60 @@ bool hcp_sd_reconfigure_ohp(hcp_sd sd)
 }
 
 static void
-_set_router_name(hcp_sd sd, bool add)
+_set_router_name(hncp_sd sd, bool add)
 {
   /* Set the current router name. */
   unsigned char buf[sizeof(struct tlv_attr) + DNS_MAX_ESCAPED_L_LEN + 5];
   struct tlv_attr *a = (struct tlv_attr *)buf;
   int rlen = strlen(sd->router_name);
 
-  tlv_init(a, HCP_T_DNS_ROUTER_NAME, TLV_SIZE + rlen);
+  tlv_init(a, HNCP_T_DNS_ROUTER_NAME, TLV_SIZE + rlen);
   memcpy(tlv_data(a), sd->router_name, rlen);
   tlv_fill_pad(a);
   if (add)
     {
-      if (!hcp_add_tlv(sd->hcp, a))
+      if (!hncp_add_tlv(sd->hncp, a))
         L_ERR("failed to add router name TLV");
     }
   else
     {
-      if (!hcp_remove_tlv(sd->hcp, a))
+      if (!hncp_remove_tlv(sd->hncp, a))
         L_ERR("failed to remove router name TLV");
     }
 }
 
 static bool
-_tlv_router_name_matches(hcp_sd sd, struct tlv_attr *a)
+_tlv_router_name_matches(hncp_sd sd, struct tlv_attr *a)
 {
-    if (tlv_id(a) == HCP_T_DNS_ROUTER_NAME)
-      {
-        if (tlv_len(a) == strlen(sd->router_name)
-            && strncmp(tlv_data(a), sd->router_name, tlv_len(a)) == 0)
-          return true;
-      }
-    return false;
+  if (tlv_id(a) == HNCP_T_DNS_ROUTER_NAME)
+    {
+      if (tlv_len(a) == strlen(sd->router_name)
+          && strncmp(tlv_data(a), sd->router_name, tlv_len(a)) == 0)
+        return true;
+    }
+  return false;
 }
 
-static hcp_node
-_find_router_name(hcp_sd sd)
+static hncp_node
+_find_router_name(hncp_sd sd)
 {
-  hcp_node n;
+  hncp_node n;
   struct tlv_attr *a;
   int i;
 
-  hcp_for_each_node(sd->hcp, n)
+  hncp_for_each_node(sd->hncp, n)
     {
-      hcp_node_for_each_tlv_i(n, a, i)
+      hncp_node_for_each_tlv_i(n, a, i)
         {
           if (_tlv_router_name_matches(sd, a))
             return n;
         }
     }
-    return NULL;
+  return NULL;
 }
 
 static void
-_change_router_name(hcp_sd sd)
+_change_router_name(hncp_sd sd)
 {
   /* Remove the old name. */
   _set_router_name(sd, false);
@@ -477,15 +477,15 @@ _change_router_name(hcp_sd sd)
     }
 }
 
-static void _local_tlv_cb(hcp_subscriber s,
+static void _local_tlv_cb(hncp_subscriber s,
                           struct tlv_attr *tlv, bool add __unused)
 {
-  hcp_sd sd = container_of(s, hcp_sd_s, subscriber);
+  hncp_sd sd = container_of(s, hncp_sd_s, subscriber);
 
   /* Note also assigned prefix changes here; they mean our published
    * zone information is no longer valid and should be republished at
    * some point. OHP configuration may also change at this point. */
-  if (tlv_id(tlv) == HCP_T_ASSIGNED_PREFIX)
+  if (tlv_id(tlv) == HNCP_T_ASSIGNED_PREFIX)
     {
       _should_update(sd, UPDATE_FLAG_DDZ | UPDATE_FLAG_OHP);
     }
@@ -493,32 +493,32 @@ static void _local_tlv_cb(hcp_subscriber s,
    * invalid. The OHP code is 'smart' and does not unneccessarily
    * really prod ohp unless things really change so doing this
    * spuriously is ok too. */
-  if (tlv_id(tlv) == HCP_T_DNS_DELEGATED_ZONE)
+  if (tlv_id(tlv) == HNCP_T_DNS_DELEGATED_ZONE)
     {
       _should_update(sd, UPDATE_FLAG_OHP);
     }
 }
 
-static void _republish_cb(hcp_subscriber s)
+static void _republish_cb(hncp_subscriber s)
 {
-  hcp_sd sd = container_of(s, hcp_sd_s, subscriber);
+  hncp_sd sd = container_of(s, hncp_sd_s, subscriber);
 
   _publish_ddzs(sd);
 }
 
-static void _tlv_cb(hcp_subscriber s,
-                    hcp_node n, struct tlv_attr *tlv, bool add)
+static void _tlv_cb(hncp_subscriber s,
+                    hncp_node n, struct tlv_attr *tlv, bool add)
 {
-  hcp_sd sd = container_of(s, hcp_sd_s, subscriber);
-  hcp o = sd->hcp;
+  hncp_sd sd = container_of(s, hncp_sd_s, subscriber);
+  hncp o = sd->hncp;
 
   /* Handle router name collision detection; we're interested only in
    * nodes with higher router id overriding our choice. */
-  if (tlv_id(tlv) == HCP_T_DNS_ROUTER_NAME)
+  if (tlv_id(tlv) == HNCP_T_DNS_ROUTER_NAME)
     {
       if (add
           && _tlv_router_name_matches(sd, tlv)
-          && hcp_node_cmp(n, o->own_node) > 0)
+          && hncp_node_cmp(n, o->own_node) > 0)
         _change_router_name(sd);
       /* Router name itself should not trigger reconfiguration unless
        * local; however, remote DDZ changes should. */
@@ -526,39 +526,39 @@ static void _tlv_cb(hcp_subscriber s,
 
   /* Dnsmasq forwarder file reflects what's in published DDZ's. If
    * they change, it (could) change too. */
-  if (tlv_id(tlv) == HCP_T_DNS_DELEGATED_ZONE)
+  if (tlv_id(tlv) == HNCP_T_DNS_DELEGATED_ZONE)
     _should_update(sd, UPDATE_FLAG_DNSMASQ);
 }
 
 static void _timeout_cb(struct uloop_timeout *t)
 {
-  hcp_sd sd = container_of(t, hcp_sd_s, timeout);
+  hncp_sd sd = container_of(t, hncp_sd_s, timeout);
 
-  L_DEBUG("hcp_sd/timeout:%d", sd->should_update);
+  L_DEBUG("hncp_sd/timeout:%d", sd->should_update);
   _publish_ddzs(sd);
   if (sd->should_update & UPDATE_FLAG_DNSMASQ)
     {
       sd->should_update &= ~UPDATE_FLAG_DNSMASQ;
-      if (hcp_sd_write_dnsmasq_conf(sd, sd->dnsmasq_bonus_file))
-        hcp_sd_restart_dnsmasq(sd);
+      if (hncp_sd_write_dnsmasq_conf(sd, sd->dnsmasq_bonus_file))
+        hncp_sd_restart_dnsmasq(sd);
     }
   if (sd->should_update & UPDATE_FLAG_OHP)
     {
       sd->should_update &= ~UPDATE_FLAG_OHP;
-      hcp_sd_reconfigure_ohp(sd);
+      hncp_sd_reconfigure_ohp(sd);
     }
 }
 
 
-hcp_sd hcp_sd_create(hcp h,
-                     const char *dnsmasq_script,
-                     const char *dnsmasq_bonus_file,
-                     const char *ohp_script,
-                     const char *router_name)
+hncp_sd hncp_sd_create(hncp h,
+                       const char *dnsmasq_script,
+                       const char *dnsmasq_bonus_file,
+                       const char *ohp_script,
+                       const char *router_name)
 {
-  hcp_sd sd = calloc(1, sizeof(*sd));
+  hncp_sd sd = calloc(1, sizeof(*sd));
 
-  sd->hcp = h;
+  sd->hncp = h;
   sd->timeout.cb = _timeout_cb;
   if (!sd
       || !(sd->dnsmasq_script = strdup(dnsmasq_script))
@@ -576,14 +576,14 @@ hcp_sd hcp_sd_create(hcp h,
   sd->subscriber.local_tlv_change_callback = _local_tlv_cb;
   sd->subscriber.tlv_change_callback = _tlv_cb;
   sd->subscriber.republish_callback = _republish_cb;
-  hcp_subscribe(h, &sd->subscriber);
+  hncp_subscribe(h, &sd->subscriber);
   return sd;
 }
 
-void hcp_sd_destroy(hcp_sd sd)
+void hncp_sd_destroy(hncp_sd sd)
 {
   uloop_timeout_cancel(&sd->timeout);
-  hcp_unsubscribe(sd->hcp, &sd->subscriber);
+  hncp_unsubscribe(sd->hncp, &sd->subscriber);
   free(sd->dnsmasq_script);
   free(sd->dnsmasq_bonus_file);
   free(sd->ohp_script);

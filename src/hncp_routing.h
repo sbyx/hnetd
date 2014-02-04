@@ -1,21 +1,21 @@
-#ifndef HCP_ROUTING_H_
-#define HCP_ROUTING_H_
+#ifndef HNCP_ROUTING_H_
+#define HNCP_ROUTING_H_
 
-#include "hcp.h"
+#include "hncp.h"
 
-struct hcp_routing_struct;
-typedef struct hcp_routing_struct hcp_bfs_s, *hcp_bfs;
+struct hncp_routing_struct;
+typedef struct hncp_routing_struct hncp_bfs_s, *hncp_bfs;
 
-hcp_bfs hcp_routing_create(hcp hcp, const char *script);
-void hcp_routing_destroy(hcp_bfs bfs);
+hncp_bfs hncp_routing_create(hncp hncp, const char *script);
+void hncp_routing_destroy(hncp_bfs bfs);
 
-enum hcp_routing_protocol {
-	HCP_ROUTING_NONE,
-	HCP_ROUTING_BABEL,
-	HCP_ROUTING_OSPF,
-	HCP_ROUTING_ISIS,
-	HCP_ROUTING_RIP,
-	HCP_ROUTING_MAX
+enum hncp_routing_protocol {
+	HNCP_ROUTING_NONE,
+	HNCP_ROUTING_BABEL,
+	HNCP_ROUTING_OSPF,
+	HNCP_ROUTING_ISIS,
+	HNCP_ROUTING_RIP,
+	HNCP_ROUTING_MAX
 };
 
-#endif /* HCP_ROUTING_H_ */
+#endif /* HNCP_ROUTING_H_ */

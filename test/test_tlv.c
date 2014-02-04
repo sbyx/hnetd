@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 11:53:11 2013 mstenber
- * Last modified: Wed Dec  4 13:03:50 2013 mstenber
+ * Last modified: Tue Feb  4 18:24:33 2014 mstenber
  * Edit time:     15 min
  *
  */
@@ -135,7 +135,7 @@ void tlv_cmp(void)
 int main(__unused int argc, __unused char **argv)
 {
   setbuf(stdout, NULL); /* so that it's in sync with stderr when redirected */
-  openlog("test_hcp", LOG_CONS | LOG_PERROR, LOG_DAEMON);
+  openlog("test_tlv", LOG_CONS | LOG_PERROR, LOG_DAEMON);
   sput_start_testing();
   sput_enter_suite("tlv"); /* optional */
   sput_run_test(tlv_iter);

@@ -11,7 +11,7 @@
 #include <time.h>
 
 
-// API for PA / HCP & friends
+// API for PA / HNCP & friends
 
 struct iface_user {
 	// We will just add this struct to our linked-list so please keep it around by yourself ;)

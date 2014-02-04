@@ -68,7 +68,7 @@ static struct prefix PA_CONF_DFLT_V4 = {
 	.plen = 104 };
 
 /* PA's interface structure.
- * We don't only care about internal because hcp could
+ * We don't only care about internal because hncp could
  * possibly provide eaps on external interfaces. */
 struct pa_iface {
 	struct list_head le;   /* Linked in pa's ifaces list */
@@ -111,7 +111,7 @@ struct pa_lap {
 
 	struct pa *pa;            /* Need that because of timeout callback */
 
-	bool flooded;             /* Whether it was given to hcp */
+	bool flooded;             /* Whether it was given to hncp */
 	bool assigned;            /* Whether it was assigned */
 
 	/* Used by pa algo. marked true before running.
@@ -197,7 +197,7 @@ struct pa {
 
 	struct pa_rid rid; /* Our router id */
 
-	struct pa_flood_callbacks fcb;  /* hcp callbacks */
+	struct pa_flood_callbacks fcb;  /* hncp callbacks */
 	struct pa_iface_callbacks ifcb; /* iface callbacks */
 
 	struct iface_user ifu; /* Subscriber to ifaces callbacks */
@@ -568,7 +568,7 @@ malloc:
 	return NULL;
 }
 
-/* Only hcp controls eaps.
+/* Only hncp controls eaps.
  * Destroying it is straightworward. */
 static void pa_eap_destroy(struct pa *pa, struct pa_eap *eap)
 {
@@ -692,9 +692,9 @@ static struct pa_lap *pa_lap_create(struct pa *pa, const struct prefix *prefix,
 	return lap;
 }
 
-static void pa_lap_tellhcp(struct pa *pa, struct pa_lap *lap)
+static void pa_lap_tellhncp(struct pa *pa, struct pa_lap *lap)
 {
-	// Tell hcp about that
+	// Tell hncp about that
 		if(pa->fcb.updated_lap)
 			pa->fcb.updated_lap(&lap->prefix, lap->iface->ifname,
 					!lap->flooded, pa->fcb.priv);
@@ -726,7 +726,7 @@ static void pa_lap_setflood(struct pa *pa, struct pa_lap *lap,
 	L_INFO("Setting "PA_LAP_L" flood flag to %d", PA_LAP_LA(lap), enable);
 	lap->flooded = enable;
 
-	pa_lap_tellhcp(pa, lap);
+	pa_lap_tellhncp(pa, lap);
 }
 
 static void pa_lap_setassign(struct pa *pa, struct pa_lap *lap,
@@ -1023,10 +1023,10 @@ static int pa_dp_times_set(struct pa *pa, struct pa_dp *dp,
 	return 1;
 }
 
-static void pa_dp_tell_hcp(struct pa *pa,
+static void pa_dp_tell_hncp(struct pa *pa,
 		struct pa_dp *dp)
 {
-	//Notify hcp iff local
+	//Notify hncp iff local
 	if(dp->local && pa->fcb.updated_ldp)
 			pa->fcb.updated_ldp(&dp->prefix, /* prefix */
 								(dp->excluded_valid)?&dp->excluded:NULL,
@@ -1117,8 +1117,8 @@ static void pa_dp_destroy(struct pa *pa, struct pa_dp *dp)
 	pa_dp_dhcpv6_set(dp, NULL, 0);
 	pa_dp_times_set(pa, dp, 0, 0);
 
-	//Notify hcp iff local
-	pa_dp_tell_hcp(pa, dp);
+	//Notify hncp iff local
+	pa_dp_tell_hncp(pa, dp);
 
 	//Remove that dp from database
 	list_remove(&dp->le);
@@ -1135,13 +1135,13 @@ static void pa_dp_update(struct pa *pa, struct pa_dp *dp,
 	struct pa_lap *lap;
 
 	if(!valid_until) {
-		pa_dp_destroy(pa, dp); /* That already tells hcp */
+		pa_dp_destroy(pa, dp); /* That already tells hncp */
 	} else if((b1 |= pa_dp_times_set(pa, dp, valid_until, preferred_until)) |
 			(b2 |= pa_dp_dhcpv6_set(dp, dhcpv6_data, dhcpv6_len)) |
 			pa_dp_excluded_set(pa, dp, excluded) |
 			pa_dp_iface_assignbyname(pa, dp, ifname)) {
 		if(dp->local)
-			pa_dp_tell_hcp(pa, dp);
+			pa_dp_tell_hncp(pa, dp);
 
 		/* Iface needs dp info for each lap.
 		 * When a lap is modified we tell iface (iff assigned) */
@@ -1831,7 +1831,7 @@ static void pa_do_uloop(struct uloop_timeout *t)
 
 
 /**************************************************************/
-/********************* hcp interface **************************/
+/********************* hncp interface **************************/
 /**************************************************************/
 
 void pa_set_rid(pa_t pa, const struct pa_rid *rid)
@@ -1844,7 +1844,7 @@ void pa_set_rid(pa_t pa, const struct pa_rid *rid)
 	pa_schedule(pa, PA_TODO_ALL);
 }
 
-/* Called by hcp when it wants to update an eap */
+/* Called by hncp when it wants to update an eap */
 int pa_update_eap(pa_t pa, const struct prefix *prefix,
 		const struct pa_rid *rid,
 		const char *ifname, bool to_delete)

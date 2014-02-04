@@ -270,9 +270,9 @@ static struct dmy_iface {
 } iface = { .registered = 0 };
 
 
-static struct dmy_hcp {
+static struct dmy_hncp {
 	struct pa_flood_callbacks floodcb;
-} hcp;
+} hncp;
 
 static pa_t pa;
 
@@ -942,7 +942,7 @@ void pa_test_collisions(void) {
 	/* Creating dp */
 	iface.user->cb_prefix(iface.user, TEST_IFNAME_WAN, prefix, excluded,
 				dp_valid_until, dp_preferred_until, TEST_DHCPV6_DATA, TEST_DHCPV6_LEN);
-	/* hcp dp update */
+	/* hncp dp update */
 	ldp = smock_pull(SMOCK_LDP_UPDATE);
 	if(ldp) {
 		sput_fail_unless(ldp->preferred_until == dp_preferred_until, "Correct preferred lifetime");
@@ -974,7 +974,7 @@ void pa_test_collisions(void) {
 	if(lap) {
 		sput_fail_if(strcmp(lap->ifname, TEST_IFNAME_1), "Correct lap ifname");
 		sput_fail_if(prefix_cmp(first_not_excluded, &lap->prefix), "Correct lap prefix");
-		sput_fail_unless(lap->priv == &hcp.floodcb, "Correct hcp private field");
+		sput_fail_unless(lap->priv == &hncp.floodcb, "Correct hncp private field");
 		sput_fail_unless(lap->to_delete == 0, "New lap");
 		free(lap);
 	}
@@ -1062,7 +1062,7 @@ void pa_test_collisions(void) {
 									TEST_IFNAME_1, 0);
 	now_time += PA_SCHEDULE_RUNNEXT_MS;
 	test_pa_timeout_fire(&pa->pa_short_timeout);
-	/* Should remove prefix from hcp and not be owner for the link */
+	/* Should remove prefix from hncp and not be owner for the link */
 	lap = smock_pull(SMOCK_LAP_UPDATE);
 	if(lap) {
 		sput_fail_if(prefix_cmp(second_not_excluded, &lap->prefix), "Correct lap prefix");
@@ -1217,7 +1217,7 @@ void pa_test_minimal(void)
 	if(ldp_update) {
 		sput_fail_unless(ldp_update->preferred_until == preferred_until, "Correct preferred lifetime");
 		sput_fail_unless(ldp_update->valid_until == valid_until, "Correct valid lifetime");
-		sput_fail_unless(ldp_update->priv == &hcp.floodcb, "Correct private field");
+		sput_fail_unless(ldp_update->priv == &hncp.floodcb, "Correct private field");
 		sput_fail_if(prefix_cmp(&ldp_update->prefix, &p1), "Correct dp value");
 		sput_fail_unless(ldp_update->dhcpv6_len == TEST_DHCPV6_LEN, "Correct dhcpv6 len value");
 		if(ldp_update->dhcpv6_len == TEST_DHCPV6_LEN) {
@@ -1253,7 +1253,7 @@ void pa_test_minimal(void)
 	if(lap_update) {
 		sput_fail_if(strcmp(lap_update->ifname, TEST_IFNAME_1), "Correct lap ifname");
 		sput_fail_unless(prefix_contains(&p1, &lap_update->prefix), "Created prefix is in p1");
-		sput_fail_unless(lap_update->priv == &hcp.floodcb, "Correct hcp private field");
+		sput_fail_unless(lap_update->priv == &hncp.floodcb, "Correct hncp private field");
 		sput_fail_unless(lap_update->to_delete == 0, "New lap");
 		memcpy(&chosen_prefix, &lap_update->prefix, sizeof(struct prefix));
 		free(lap_update);
@@ -1406,10 +1406,10 @@ void pa_test_init(void)
 	iface.ifcb.update_prefix = dmy_update_prefix;
 	pa_iface_subscribe(pa, &iface.ifcb);
 
-	hcp.floodcb.priv = &hcp.floodcb;
-	hcp.floodcb.updated_lap = dmy_updated_lap;
-	hcp.floodcb.updated_ldp = dmy_updated_ldp;
-	pa_flood_subscribe(pa, &hcp.floodcb);
+	hncp.floodcb.priv = &hncp.floodcb;
+	hncp.floodcb.updated_lap = dmy_updated_lap;
+	hncp.floodcb.updated_ldp = dmy_updated_ldp;
+	pa_flood_subscribe(pa, &hncp.floodcb);
 
 	pa_set_rid(pa, &rid); /* This will schedule a PA */
 	to = smock_pull(SMOCK_SET_TIMEOUT);

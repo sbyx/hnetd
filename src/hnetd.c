@@ -25,9 +25,9 @@
 
 #include <libubox/uloop.h>
 
-#include "hcp_pa.h"
-#include "hcp_sd.h"
-#include "hcp_routing.h"
+#include "hncp_pa.h"
+#include "hncp_sd.h"
+#include "hncp_routing.h"
 #include "ipc.h"
 #include "platform.h"
 
@@ -35,24 +35,24 @@
 
 typedef struct {
 	struct iface_user iu;
-	hcp hcp;
-} hcp_iface_user_s, *hcp_iface_user;
+	hncp hncp;
+} hncp_iface_user_s, *hncp_iface_user;
 
 
-void hcp_iface_intiface_callback(struct iface_user *u,
+void hncp_iface_intiface_callback(struct iface_user *u,
 				 const char *ifname, bool enabled)
 {
-	hcp_iface_user hiu = container_of(u, hcp_iface_user_s, iu);
+	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
 
-	hcp_set_link_enabled(hiu->hcp, ifname, enabled);
+	hncp_set_link_enabled(hiu->hncp, ifname, enabled);
 }
 
-void hcp_iface_glue(hcp_iface_user hiu, hcp h)
+void hncp_iface_glue(hncp_iface_user hiu, hncp h)
 {
 	/* Initialize hiu appropriately */
 	memset(hiu, 0, sizeof(*hiu));
-	hiu->iu.cb_intiface = hcp_iface_intiface_callback;
-	hiu->hcp = h;
+	hiu->iu.cb_intiface = hncp_iface_intiface_callback;
+	hiu->hncp = h;
 
 	/* We don't care about other callbacks for now. */
 	iface_register_user(&hiu->iu);
@@ -60,11 +60,11 @@ void hcp_iface_glue(hcp_iface_user hiu, hcp h)
 
 int main(__unused int argc, char* const argv[])
 {
-	hcp h;
+	hncp h;
 	struct pa_conf pa_conf;
 	pa_t pa;
 	int c;
-	hcp_iface_user_s hiu;
+	hncp_iface_user_s hiu;
 
 	if (strstr(argv[0], "hnet-call"))
 		return ipc_client(argv[1]);
@@ -137,14 +137,14 @@ int main(__unused int argc, char* const argv[])
 		return 13;
 	}
 	
-	h = hcp_create();
+	h = hncp_create();
 	if (!h) {
-		L_ERR("Unable to initialize HCP");
+		L_ERR("Unable to initialize HNCP");
 		return 42;
 	}
 
-	if (!hcp_pa_glue_create(h, pa)) {
-		L_ERR("Unable to connect hcp and pa");
+	if (!hncp_pa_glue_create(h, pa)) {
+		L_ERR("Unable to connect hncp and pa");
 		return 17;
 	}
 
@@ -152,7 +152,7 @@ int main(__unused int argc, char* const argv[])
 	 * meaningful; if not, should combine them to single option,
 	 * perhaps? */
 	if (dnsmasq_script && ohp_script && dnsmasq_bonus_file) {
-		if (!hcp_sd_create(h,
+		if (!hncp_sd_create(h,
 						   dnsmasq_script, dnsmasq_bonus_file,
 						   ohp_script, router_name)) {
 			L_ERR("unable to initialize rd, exiting");
@@ -160,13 +160,13 @@ int main(__unused int argc, char* const argv[])
 		}
 	}
 
-	hcp_routing_create(h, routing_script);
+	hncp_routing_create(h, routing_script);
 
 	/* Init ipc */
 	iface_init(pa);
 
-	/* Glue together HCP and iface */
-	hcp_iface_glue(&hiu, h);
+	/* Glue together HNCP and iface */
+	hncp_iface_glue(&hiu, h);
 
 	/* Fire up the prefix assignment code. */
 	pa_start(pa);

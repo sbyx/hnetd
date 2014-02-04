@@ -1,36 +1,36 @@
 /*
- * $Id: hcp.h $
+ * $Id: hncp.h $
  *
  * Author: Markus Stenberg <markus stenberg@iki.fi>
  *
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Wed Jan 15 11:18:38 2014 mstenber
+ * Last modified: Tue Feb  4 18:20:55 2014 mstenber
  * Edit time:     101 min
  *
  */
 
-#ifndef HCP_H
-#define HCP_H
+#ifndef HNCP_H
+#define HNCP_H
 
 #include "hnetd.h"
 #include "tlv.h"
-#include "hcp_proto.h"
+#include "hncp_proto.h"
 
 #include <libubox/list.h>
 
-/* Opaque pointer that represents hcp instance. */
-typedef struct hcp_struct hcp_s, *hcp;
+/* Opaque pointer that represents hncp instance. */
+typedef struct hncp_struct hncp_s, *hncp;
 
 /* Opaque pointer that represents single node (own or another) in
-   hcp. It is effectlively TLV list. */
-typedef struct hcp_node_struct hcp_node_s, *hcp_node;
+   hncp. It is effectlively TLV list. */
+typedef struct hncp_node_struct hncp_node_s, *hncp_node;
 
-typedef struct hcp_subscriber_struct hcp_subscriber_s, *hcp_subscriber;
+typedef struct hncp_subscriber_struct hncp_subscriber_s, *hncp_subscriber;
 
 /*
- * Flow of HCP state change notifications (outbound case):
+ * Flow of HNCP state change notifications (outbound case):
  *
  * - (if local TLV change), local_tlv_change_callback is called
  * .. at some point, when TLV changes are to be published to the network ..
@@ -38,9 +38,9 @@ typedef struct hcp_subscriber_struct hcp_subscriber_s, *hcp_subscriber;
  * - tlv_change_callback is called
  */
 
-struct hcp_subscriber_struct {
+struct hncp_subscriber_struct {
   /**
-   * Place within list of subscribers (owned by hcp while subscription
+   * Place within list of subscribers (owned by hncp while subscription
    * is valid). Using the same subscriber object twice will result in
    * undefined (and most likely bad) behavior.
    */
@@ -56,7 +56,7 @@ struct hcp_subscriber_struct {
    * @param tlv The TLV that is being added or removed (there is no 'update').
    * @param add Flag which indicates whether the operation was add or remove.
    */
-  void (*local_tlv_change_callback)(hcp_subscriber s,
+  void (*local_tlv_change_callback)(hncp_subscriber s,
                                     struct tlv_attr *tlv, bool add);
 
   /**
@@ -66,12 +66,12 @@ struct hcp_subscriber_struct {
    * It is called _before_ TLV change notifications for _local_ TLVs
    * are provided.
    */
-  void (*republish_callback)(hcp_subscriber r);
+  void (*republish_callback)(hncp_subscriber r);
 
   /**
    * TLV change notification.
    *
-   * This is called whenever one TLV within one node in HCP
+   * This is called whenever one TLV within one node in HNCP
    * changes. This INCLUDE also the local node itself.
    *
    * @param cbs The subscriber structure.
@@ -79,116 +79,116 @@ struct hcp_subscriber_struct {
    * @param tlv The TLV that is being added or removed (there is no 'update').
    * @param add Flag which indicates whether the operation was add or remove.
    */
-  void (*tlv_change_callback)(hcp_subscriber s,
-                              hcp_node n, struct tlv_attr *tlv, bool add);
+  void (*tlv_change_callback)(hncp_subscriber s,
+                              hncp_node n, struct tlv_attr *tlv, bool add);
 
   /**
    * Node change notification.
    *
    * This is called whenever a node is being added or removed within
-   * HCP.
+   * HNCP.
    *
    * @param cbs The subscriber structure.
    * @param n The node which is being added or removed.
    * @param add Flag which indicates whether the operation was add or remove.
    */
-  void (*node_change_callback)(hcp_subscriber s, hcp_node n, bool add);
+  void (*node_change_callback)(hncp_subscriber s, hncp_node n, bool add);
 };
 
-/************************************************ API for whole hcp instance */
+/************************************************ API for whole hncp instance */
 
 /**
- * Create HCP instance.
+ * Create HNCP instance.
  *
- * This call will create the hcp object, and register it to uloop. In
+ * This call will create the hncp object, and register it to uloop. In
  * case of error, NULL is returned.
  */
-hcp hcp_create(void);
+hncp hncp_create(void);
 
 /**
- * Destroy HCP instance
+ * Destroy HNCP instance
  *
- * This call will destroy the previous created HCP object.
+ * This call will destroy the previous created HNCP object.
  */
-void hcp_destroy(hcp o);
+void hncp_destroy(hncp o);
 
 /**
- * Get first HCP node.
+ * Get first HNCP node.
  */
-hcp_node hcp_get_first_node(hcp o);
+hncp_node hncp_get_first_node(hncp o);
 
 /**
  * Publish a single TLV.
  *
  * @return The newly allocated TLV, which is valid until
- * hcp_remove_tlv is called for it (or a pointer to a TLV that
+ * hncp_remove_tlv is called for it (or a pointer to a TLV that
  * tlv_attr_equal's it).
  */
-struct tlv_attr *hcp_add_tlv(hcp o, struct tlv_attr *tlv);
+struct tlv_attr *hncp_add_tlv(hncp o, struct tlv_attr *tlv);
 
 /**
  * Remove a single TLV.
  */
-bool hcp_remove_tlv(hcp o, struct tlv_attr *tlv);
+bool hncp_remove_tlv(hncp o, struct tlv_attr *tlv);
 
 /**
  * Enable/disable on an interface.
  */
-bool hcp_set_link_enabled(hcp o, const char *ifname, bool enabled);
+bool hncp_set_link_enabled(hncp o, const char *ifname, bool enabled);
 
 /**
- * Subscribe to HCP state change events.
+ * Subscribe to HNCP state change events.
  *
- * This call will register the caller as subscriber to HCP state
+ * This call will register the caller as subscriber to HNCP state
  * changes. It will also trigger a series of add notifications for
  * existing state.
  */
-void hcp_subscribe(hcp o, hcp_subscriber s);
+void hncp_subscribe(hncp o, hncp_subscriber s);
 
 /**
- * Unsubscribe from HCP state change events.
+ * Unsubscribe from HNCP state change events.
  *
- * Inverse of hcp_subscribe (including calls to pretend to remove all
+ * Inverse of hncp_subscribe (including calls to pretend to remove all
  * state).
  */
-void hcp_unsubscribe(hcp o, hcp_subscriber s);
+void hncp_unsubscribe(hncp o, hncp_subscriber s);
 
 /**
- * Run HCP state machine once. It should re-queue itself when needed.
+ * Run HNCP state machine once. It should re-queue itself when needed.
  * (This should be mainly called from timeout callback, or from unit
  * tests).
  */
-void hcp_run(hcp o);
+void hncp_run(hncp o);
 
 /**
  * Poll the i/o system once. This should be called from event loop
  * whenever the udp socket has inputs.
  */
-void hcp_poll(hcp o);
+void hncp_poll(hncp o);
 
 /************************************************************** Per-node API */
 
 /**
- * Get next HCP node (in order, from HCP).
+ * Get next HNCP node (in order, from HNCP).
  */
-hcp_node hcp_node_get_next(hcp_node n);
+hncp_node hncp_node_get_next(hncp_node n);
 
 /**
- * Check if the HCP node is ourselves (may require different handling).
+ * Check if the HNCP node is ourselves (may require different handling).
  */
-bool hcp_node_is_self(hcp_node n);
+bool hncp_node_is_self(hncp_node n);
 
 /**
- * Get the TLVs for particular HCP node.
+ * Get the TLVs for particular HNCP node.
  */
-struct tlv_attr *hcp_node_get_tlvs(hcp_node n);
+struct tlv_attr *hncp_node_get_tlvs(hncp_node n);
 
-#define hcp_for_each_node(o, n) \
-  for (n = hcp_get_first_node(o) ; n ; n = hcp_node_get_next(n))
+#define hncp_for_each_node(o, n)                                        \
+  for (n = hncp_get_first_node(o) ; n ; n = hncp_node_get_next(n))
 
-#define hcp_node_for_each_tlv(n, a, i) \
-  tlv_for_each_attr(a, hcp_node_get_tlvs(n), i)
+#define hncp_node_for_each_tlv(n, a, i)                 \
+  tlv_for_each_attr(a, hncp_node_get_tlvs(n), i)
 
 /*********************************************** Service discovery submodule */
 
-#endif /* HCP_H */
+#endif /* HNCP_H */

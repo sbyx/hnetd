@@ -9,24 +9,24 @@
 #include <string.h>
 #include <fcntl.h>
 
-#include "hcp_routing.h"
-#include "hcp_i.h"
+#include "hncp_routing.h"
+#include "hncp_i.h"
 #include "iface.h"
 
-static void hcp_routing_run(struct uloop_timeout *t);
-static void hcp_routing_callback(hcp_subscriber s, __unused hcp_node n,
+static void hncp_routing_run(struct uloop_timeout *t);
+static void hncp_routing_callback(hncp_subscriber s, __unused hncp_node n,
 		__unused struct tlv_attr *tlv, __unused bool add);
 
-struct hcp_routing_struct {
-	hcp_subscriber_s subscr;
-	hcp hcp;
+struct hncp_routing_struct {
+	hncp_subscriber_s subscr;
+	hncp hncp;
 	struct uloop_timeout t;
-	enum hcp_routing_protocol active;
-	struct tlv_attr *tlv[HCP_ROUTING_MAX];
+	enum hncp_routing_protocol active;
+	struct tlv_attr *tlv[HNCP_ROUTING_MAX];
 	const char *script;
 };
 
-static int call_backend(hcp_bfs bfs, const char *action, enum hcp_routing_protocol proto, int stdin)
+static int call_backend(hncp_bfs bfs, const char *action, enum hncp_routing_protocol proto, int stdin)
 {
 	char protobuf[4];
 	snprintf(protobuf, sizeof(protobuf), "%u", proto);
@@ -51,22 +51,22 @@ static int call_backend(hcp_bfs bfs, const char *action, enum hcp_routing_protoc
 	return status;
 }
 
-hcp_bfs hcp_routing_create(hcp hcp, const char *script)
+hncp_bfs hncp_routing_create(hncp hncp, const char *script)
 {
-	hcp_bfs bfs = calloc(1, sizeof(*bfs));
-	bfs->subscr.tlv_change_callback = hcp_routing_callback;
-	bfs->hcp = hcp;
-	bfs->t.cb = hcp_routing_run;
-	bfs->active = HCP_ROUTING_MAX;
+	hncp_bfs bfs = calloc(1, sizeof(*bfs));
+	bfs->subscr.tlv_change_callback = hncp_routing_callback;
+	bfs->hncp = hncp;
+	bfs->t.cb = hncp_routing_run;
+	bfs->active = HNCP_ROUTING_MAX;
 	bfs->script = script;
-	hcp_subscribe(hcp, &bfs->subscr);
+	hncp_subscribe(hncp, &bfs->subscr);
 
 	// Load supported protocols and preferences
 	if (script) {
 		int fd[2];
 		pipe(fd);
 		fcntl(fd[0], F_SETFD, fcntl(fd[0], F_GETFD) | FD_CLOEXEC);
-		call_backend(bfs, "enumerate", HCP_ROUTING_NONE, fd[1]);
+		call_backend(bfs, "enumerate", HNCP_ROUTING_NONE, fd[1]);
 
 		FILE *fp = fdopen(fd[0], "r");
 		if (fp) {
@@ -74,17 +74,17 @@ hcp_bfs hcp_routing_create(hcp hcp, const char *script)
 			while (fgets(buf, sizeof(buf), fp)) {
 				unsigned proto, preference;
 				if (sscanf(buf, "%u %u", &proto, &preference) == 2 &&
-						proto < HCP_ROUTING_MAX && preference < 256 &&
+						proto < HNCP_ROUTING_MAX && preference < 256 &&
 						!bfs->tlv[proto]) {
 					struct {
 						struct tlv_attr hdr;
 						uint8_t proto;
 						uint8_t preference;
 					} tlv;
-					tlv_init(&tlv.hdr, HCP_T_ROUTING_PROTOCOL, 6);
+					tlv_init(&tlv.hdr, HNCP_T_ROUTING_PROTOCOL, 6);
 					tlv.proto = proto;
 					tlv.preference = preference;
-					bfs->tlv[proto] = hcp_add_tlv(hcp, &tlv.hdr);
+					bfs->tlv[proto] = hncp_add_tlv(hncp, &tlv.hdr);
 				}
 			}
 			fclose(fp);
@@ -96,30 +96,30 @@ hcp_bfs hcp_routing_create(hcp hcp, const char *script)
 	return bfs;
 }
 
-void hcp_routing_destroy(hcp_bfs bfs)
+void hncp_routing_destroy(hncp_bfs bfs)
 {
 	uloop_timeout_cancel(&bfs->t);
-	hcp_unsubscribe(bfs->hcp, &bfs->subscr);
+	hncp_unsubscribe(bfs->hncp, &bfs->subscr);
 
-	for (size_t i = 0; i < HCP_ROUTING_MAX; ++i) {
+	for (size_t i = 0; i < HNCP_ROUTING_MAX; ++i) {
 		if (!bfs->tlv[i])
 			continue;
 
-		hcp_remove_tlv(bfs->hcp, bfs->tlv[i]);
+		hncp_remove_tlv(bfs->hncp, bfs->tlv[i]);
 		free(bfs->tlv[i]);
 	}
 	free(bfs);
 }
 
-static bool hcp_routing_neighbors_are_mutual(hcp_node node, hcp_hash node_identifier_hash,
+static bool hncp_routing_neighbors_are_mutual(hncp_node node, hncp_hash node_identifier_hash,
 		uint32_t link_id, uint32_t neighbor_link_id)
 {
 	struct tlv_attr *a, *tlvs = node->tlv_container;
 	unsigned rem;
 	tlv_for_each_attr(a, tlvs, rem) {
-		if (tlv_id(a) == HCP_T_NODE_DATA_NEIGHBOR &&
-				tlv_len(a) == sizeof(hcp_t_node_data_neighbor_s)) {
-			hcp_t_node_data_neighbor ne = tlv_data(a);
+		if (tlv_id(a) == HNCP_T_NODE_DATA_NEIGHBOR &&
+				tlv_len(a) == sizeof(hncp_t_node_data_neighbor_s)) {
+			hncp_t_node_data_neighbor ne = tlv_data(a);
 			if (ne->link_id == neighbor_link_id && ne->neighbor_link_id == link_id &&
 					!memcmp(&ne->neighbor_node_identifier_hash,
 							node_identifier_hash, sizeof(*node_identifier_hash)))
@@ -129,25 +129,25 @@ static bool hcp_routing_neighbors_are_mutual(hcp_node node, hcp_hash node_identi
 	return false;
 }
 
-static void hcp_routing_callback(hcp_subscriber s, __unused hcp_node n,
+static void hncp_routing_callback(hncp_subscriber s, __unused hncp_node n,
 		__unused struct tlv_attr *tlv, __unused bool add)
 {
-	hcp_bfs bfs = container_of(s, hcp_bfs_s, subscr);
+	hncp_bfs bfs = container_of(s, hncp_bfs_s, subscr);
 	uloop_timeout_set(&bfs->t, 0);
 }
 
-static void hcp_routing_run(struct uloop_timeout *t)
+static void hncp_routing_run(struct uloop_timeout *t)
 {
-	hcp_bfs bfs = container_of(t, hcp_bfs_s, t);
-	hcp hcp = bfs->hcp;
+	hncp_bfs bfs = container_of(t, hncp_bfs_s, t);
+	hncp hncp = bfs->hncp;
 	struct list_head queue = LIST_HEAD_INIT(queue);
-	hcp_node c, n;
+	hncp_node c, n;
 
 	size_t routercnt = 0;
-	unsigned routing_preference[HCP_ROUTING_MAX] = {0};
-	unsigned routing_supported[HCP_ROUTING_MAX] = {0};
+	unsigned routing_preference[HNCP_ROUTING_MAX] = {0};
+	unsigned routing_supported[HNCP_ROUTING_MAX] = {0};
 
-	vlist_for_each_element(&hcp->nodes, c, in_nodes) {
+	vlist_for_each_element(&hncp->nodes, c, in_nodes) {
 		// Mark all nodes as not visited
 		c->bfs.next_hop = NULL;
 		c->bfs.hopcount = 0;
@@ -156,10 +156,10 @@ static void hcp_routing_run(struct uloop_timeout *t)
 		struct tlv_attr *a, *tlvs = c->tlv_container;
 		unsigned rem;
 		tlv_for_each_attr(a, tlvs, rem) {
-			if (tlv_id(a) == HCP_T_ROUTING_PROTOCOL &&
-					tlv_len(a) >= sizeof(hcp_t_routing_protocol_s)) {
-				hcp_t_routing_protocol p = tlv_data(a);
-				if (p->protocol < HCP_ROUTING_MAX) {
+			if (tlv_id(a) == HNCP_T_ROUTING_PROTOCOL &&
+					tlv_len(a) >= sizeof(hncp_t_routing_protocol_s)) {
+				hncp_t_routing_protocol p = tlv_data(a);
+				if (p->protocol < HNCP_ROUTING_MAX) {
 					++routing_supported[p->protocol];
 					routing_preference[p->protocol] += p->preference;
 				}
@@ -169,9 +169,9 @@ static void hcp_routing_run(struct uloop_timeout *t)
 
 	// Elect routing protocol
 	size_t current_pref = 0;
-	size_t current_proto = HCP_ROUTING_NONE;
+	size_t current_proto = HNCP_ROUTING_NONE;
 
-	for (size_t i = 1; i < HCP_ROUTING_MAX; ++i) {
+	for (size_t i = 1; i < HNCP_ROUTING_MAX; ++i) {
 		if (routing_supported[i] == routercnt &&
 				routing_preference[i] >= current_pref) {
 			current_proto = i;
@@ -180,53 +180,53 @@ static void hcp_routing_run(struct uloop_timeout *t)
 	}
 
 	// Disable old routing protocol
-	if (current_proto != bfs->active && bfs->active != HCP_ROUTING_MAX) {
-		if (bfs->active == HCP_ROUTING_NONE) {
+	if (current_proto != bfs->active && bfs->active != HNCP_ROUTING_MAX) {
+		if (bfs->active == HNCP_ROUTING_NONE) {
 			iface_update_routes();
 			iface_commit_routes();
 		} else {
 			call_backend(bfs, "disable", bfs->active, -1);
 		}
 
-		if (current_proto != HCP_ROUTING_NONE)
+		if (current_proto != HNCP_ROUTING_NONE)
 			call_backend(bfs, "enable", current_proto, -1);
 	}
 
 	bfs->active = current_proto;
-	if (bfs->active != HCP_ROUTING_NONE)
+	if (bfs->active != HNCP_ROUTING_NONE)
 		return;
 
 	// Run BFS fallback algorithm
 	iface_update_routes();
-	list_add_tail(&hcp->own_node->bfs.head, &queue);
+	list_add_tail(&hncp->own_node->bfs.head, &queue);
 
 	while (!list_empty(&queue)) {
-		c = container_of(list_first_entry(&queue, struct hcp_bfs_head, head), hcp_node_s, bfs);
+		c = container_of(list_first_entry(&queue, struct hncp_bfs_head, head), hncp_node_s, bfs);
 		L_WARN("Router %d", c->node_identifier_hash.buf[0]);
 
 		struct tlv_attr *a, *tlvs = c->tlv_container;
 		unsigned rem;
 		tlv_for_each_attr(a, tlvs, rem) {
-			if (tlv_id(a) == HCP_T_NODE_DATA_NEIGHBOR &&
-					tlv_len(a) == sizeof(hcp_t_node_data_neighbor_s)) {
+			if (tlv_id(a) == HNCP_T_NODE_DATA_NEIGHBOR &&
+					tlv_len(a) == sizeof(hncp_t_node_data_neighbor_s)) {
 
-				hcp_t_node_data_neighbor ne = tlv_data(a);
-				n = hcp_find_node_by_hash(hcp,
+				hncp_t_node_data_neighbor ne = tlv_data(a);
+				n = hncp_find_node_by_hash(hncp,
 					&ne->neighbor_node_identifier_hash, false);
 
-				if (!n || n->bfs.next_hop || n == hcp->own_node)
+				if (!n || n->bfs.next_hop || n == hncp->own_node)
 					continue; // Already visited
 
-				if (!hcp_routing_neighbors_are_mutual(n, &c->node_identifier_hash,
+				if (!hncp_routing_neighbors_are_mutual(n, &c->node_identifier_hash,
 						ne->link_id, ne->neighbor_link_id))
 					continue; // Connection not mutual
 
-				if (c == hcp->own_node) { // We are at the start, lookup neighbor
-					hcp_link link = hcp_find_link_by_id(hcp, be32_to_cpu(ne->link_id));
+				if (c == hncp->own_node) { // We are at the start, lookup neighbor
+					hncp_link link = hncp_find_link_by_id(hncp, be32_to_cpu(ne->link_id));
 					if (!link)
 						continue;
 
-					hcp_neighbor_s *neigh, query = {
+					hncp_neighbor_s *neigh, query = {
 						.node_identifier_hash = ne->neighbor_node_identifier_hash,
 						.iid = be32_to_cpu(ne->neighbor_link_id)
 					};
@@ -246,8 +246,8 @@ static void hcp_routing_run(struct uloop_timeout *t)
 
 				n->bfs.hopcount = c->bfs.hopcount + 1;
 				list_add_tail(&n->bfs.head, &queue);
-			} else if (tlv_id(a) == HCP_T_DELEGATED_PREFIX && hcp_tlv_dp_valid(a) && c != hcp->own_node) {
-				hcp_t_delegated_prefix_header dp = tlv_data(a);
+			} else if (tlv_id(a) == HNCP_T_DELEGATED_PREFIX && hncp_tlv_dp_valid(a) && c != hncp->own_node) {
+				hncp_t_delegated_prefix_header dp = tlv_data(a);
 
 				struct prefix from = { .plen = dp->prefix_length_bits };
 				size_t plen = ROUND_BITS_TO_BYTES(from.plen);
@@ -255,8 +255,8 @@ static void hcp_routing_run(struct uloop_timeout *t)
 
 				if (c->bfs.next_hop && c->bfs.ifname)
 					iface_add_default_route(c->bfs.ifname, &from, c->bfs.next_hop, c->bfs.hopcount);
-			} else if (tlv_id(a) == HCP_T_ASSIGNED_PREFIX && hcp_tlv_ap_valid(a) && c != hcp->own_node) {
-				hcp_t_assigned_prefix_header ap = tlv_data(a);
+			} else if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX && hncp_tlv_ap_valid(a) && c != hncp->own_node) {
+				hncp_t_assigned_prefix_header ap = tlv_data(a);
 
 				struct prefix to = { .plen = ap->prefix_length_bits };
 				size_t plen = ROUND_BITS_TO_BYTES(to.plen);
