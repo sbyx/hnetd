@@ -1473,7 +1473,7 @@ static int pa_get_newprefix_random(struct pa *pa,
 		md5_hash(iface->ifname, strlen(iface->ifname), &ctx);
 		md5_hash(&pa->rid, sizeof(pa->rid), &ctx);
 		md5_end(&new_prefix->prefix, &ctx);
-		bmemcpy(&new_prefix->prefix, &dp->prefix, 0, plen);
+		bmemcpy(&new_prefix->prefix, &dp->prefix, 0, dp->prefix.plen);
 		new_prefix->plen = plen;
 	}
 	for(i=0; i<rounds; i++) {
