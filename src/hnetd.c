@@ -164,7 +164,8 @@ int main(__unused int argc, char* const argv[])
 		}
 	}
 
-	hncp_routing_create(h, routing_script);
+	if (routing_script)
+		hncp_routing_create(h, routing_script);
 
 	/* Init ipc */
 	iface_init(pa);
