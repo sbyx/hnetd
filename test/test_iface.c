@@ -83,8 +83,12 @@ void iface_test_new_managed(void)
 	struct prefix p = {IN6ADDR_LOOPBACK_INIT, 0};
 	char test[] = "test";
 
+	struct iface *iface00 = iface_create("test00", "test00");
+	iface_set_dhcp_received(iface00, true, NULL, 0);
+	smock_pull_bool_is("test00", false);
+
 	struct iface *iface = iface_create("test0", "test0");
-	sput_fail_unless(!!iface, "alloc unmanaged");
+	sput_fail_unless(!!iface, "alloc managed");
 
 	struct iface *iface2 = iface_get("test0");
 	sput_fail_unless(iface == iface2, "get after create");
@@ -92,13 +96,13 @@ void iface_test_new_managed(void)
 	struct iface *iface3 = iface_create("test0", "test0");
 	sput_fail_unless(iface == iface3, "create after create");
 
+	smock_pull_bool_is("test0", false);
+
+	uloop_cancelled = false;
 	uloop_run();
 	smock_pull_bool_is("test0", true);
 
 	iface_set_dhcp_received(iface, true, NULL, 0);
-
-	uloop_cancelled = false;
-	uloop_run();
 	smock_pull_bool_is("test0", false);
 
 	iface_set_dhcp_received(iface, false, NULL, 0);
@@ -110,8 +114,6 @@ void iface_test_new_managed(void)
 	iface_add_delegated(iface, &p, NULL, HNETD_TIME_MAX, 0, test, sizeof(test));
 	iface_commit_delegated(iface);
 
-	uloop_cancelled = false;
-	uloop_run();
 	smock_pull_bool_is("test0", false);
 	sput_fail_unless(!prefix_cmp(&p, smock_pull("prefix_prefix")), "prefix address");
 	smock_pull_int_is("prefix_valid", HNETD_TIME_MAX);

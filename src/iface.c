@@ -376,8 +376,10 @@ static void iface_discover_border(struct iface *c)
 
 		if (c->transition.pending)
 			uloop_timeout_cancel(&c->transition); // Flapped back to original state
+		else if (internal)
+			uloop_timeout_set(&c->transition, 5000);
 		else
-			uloop_timeout_set(&c->transition, (internal) ? 5000 : 0);
+			iface_announce_border(&c->transition);
 	}
 }
 
@@ -418,6 +420,7 @@ struct iface* iface_create(const char *ifname, const char *handle)
 
 	if (!c->platform && handle) {
 		platform_iface_new(c, handle);
+		iface_announce_border(&c->transition);
 		iface_discover_border(c);
 	}
 
