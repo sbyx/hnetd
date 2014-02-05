@@ -5,6 +5,7 @@
 
 - IPv6
  - routing (sbyx; need testing)
+ - prefix class support (sbyx; both odhcpd + here)
 
 - prefix assignment
  - there seems to be issues; with random prefixes, lots of lap's wind
@@ -21,11 +22,14 @@
 - make sure router names don't conflict with DDZs
 
 - draft compliance
- - rename hcp -> hncp (sigh)
  - make sure implementations are in sync with what's in drafts
   - generic PA
   - generic SD
   - hncp
+   - core
+   - border discovery/PA
+   - routing
+   - SD
 
 - get PCP in somehow?
  - it would be nice for IPv4 use for various cases; is it a priority though? hmm.
@@ -33,3 +37,5 @@
 
 - MLD? multicast routing?
 
+- draft additions + implementation
+ - downstream PD?
