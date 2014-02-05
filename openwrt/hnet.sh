@@ -43,6 +43,9 @@ proto_hnet_setup() {
     # Require PD, not only NA/SLAAC
     json_add_string forceprefix 1
 
+    # Class
+    json_add_string userclass HOMENET
+
     # Disable automatic netifd-level prefix delegation for this interface
     json_add_boolean delegate 0
 
