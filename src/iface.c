@@ -243,8 +243,18 @@ static void update_addr(struct vlist_tree *t, struct vlist_node *node_new, struc
 	struct iface_addr *a_old = container_of(node_old, struct iface_addr, node);
 
 	struct iface *c = container_of(t, struct iface, assigned);
-
 	bool enable = !!node_new;
+
+	if (!node_old != !node_new) {
+		struct iface_user *u;
+		list_for_each_entry(u, &users, head)
+			if (u->cb_intaddr)
+				u->cb_intaddr(u, c->ifname,
+						(node_old) ? &a_old->prefix : &a_new->prefix,
+						enable);
+	}
+
+
 	if (!enable && !IN6_IS_ADDR_V4MAPPED(&a_old->prefix.prefix)) {
 		// Don't actually remove addresses, but deprecate them so the change is announced
 		enable = true;

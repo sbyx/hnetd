@@ -33,6 +33,10 @@ struct iface_user {
 	/* Callback for IPv4 connectivity state */
 	void (*ipv4_update)(struct iface_user *u, bool available,
 			const void *dhcp_data, size_t dhcp_len);
+
+	/* Callback for internal addresses */
+	void (*cb_intaddr)(struct iface_user *u, const char *ifname,
+			const struct prefix *addr, bool enabled);
 };
 
 // Register user for interface events (callbacks with NULL-values are ignored)
