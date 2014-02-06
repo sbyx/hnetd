@@ -245,16 +245,6 @@ static void update_addr(struct vlist_tree *t, struct vlist_node *node_new, struc
 	struct iface *c = container_of(t, struct iface, assigned);
 	bool enable = !!node_new;
 
-	if (!node_old != !node_new) {
-		struct iface_user *u;
-		list_for_each_entry(u, &users, head)
-			if (u->cb_intaddr)
-				u->cb_intaddr(u, c->ifname,
-						(node_old) ? &a_old->prefix : &a_new->prefix,
-						node_new && a_new->preferred_until > hnetd_time());
-	}
-
-
 	if (!enable && !IN6_IS_ADDR_V4MAPPED(&a_old->prefix.prefix)) {
 		// Don't actually remove addresses, but deprecate them so the change is announced
 		enable = true;
@@ -281,6 +271,8 @@ static void update_addr(struct vlist_tree *t, struct vlist_node *node_new, struc
 
 	if (node_old)
 		free(a_old);
+
+	uloop_timeout_set(&c->preferred, 100);
 }
 
 // Update address if necessary (node_new: addr that will be present, node_old: addr that was present)
@@ -349,6 +341,10 @@ void iface_remove(struct iface *c)
 	free(c->dhcp_data_out);
 
 	uloop_timeout_cancel(&c->transition);
+	uloop_timeout_cancel(&c->preferred);
+
+	if (c->internal)
+		c->preferred.cb(&c->preferred);
 
 	free(c);
 }
@@ -367,6 +363,32 @@ static void iface_announce_border(struct uloop_timeout *t)
 	iface_notify_data_state(c, c->internal);
 	iface_notify_internal_state(c, c->internal);
 	platform_set_internal(c, c->internal);
+
+	if (!c->internal)
+		uloop_timeout_set(&c->preferred, 100);
+}
+
+
+static void iface_announce_preferred(struct uloop_timeout *t)
+{
+	struct iface *c = container_of(t, struct iface, transition);
+	hnetd_time_t now = hnetd_time();
+
+	struct iface_addr *a, *pref6 = NULL, *pref4 = NULL;
+	vlist_for_each_element(&c->assigned, a, node) {
+		if (!IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix)) {
+			if (a->preferred_until > now &&
+					(!pref6 || a->preferred_until > pref6->preferred_until))
+				pref6 = a;
+		} else if (!pref4) {
+			pref4 = a;
+		}
+	}
+
+	struct iface_user *u;
+	list_for_each_entry(u, &users, head)
+		if (u->cb_intaddr)
+			u->cb_intaddr(u, c->ifname, &pref6->prefix, &pref4->prefix);
 }
 
 
@@ -424,6 +446,7 @@ struct iface* iface_create(const char *ifname, const char *handle)
 		vlist_init(&c->delegated, compare_addrs, update_prefix);
 		vlist_init(&c->routes, compare_routes, update_route);
 		c->transition.cb = iface_announce_border;
+		c->preferred.cb = iface_announce_preferred;
 
 		list_add(&c->head, &interfaces);
 	}

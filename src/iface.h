@@ -36,7 +36,7 @@ struct iface_user {
 
 	/* Callback for internal addresses */
 	void (*cb_intaddr)(struct iface_user *u, const char *ifname,
-			const struct prefix *addr, bool enabled);
+			const struct prefix *addr6, const struct prefix *addr4);
 };
 
 // Register user for interface events (callbacks with NULL-values are ignored)
@@ -113,6 +113,7 @@ struct iface {
 
 	// Internal transition timeout
 	struct uloop_timeout transition;
+	struct uloop_timeout preferred;
 
 	// Interface name
 	char ifname[];
