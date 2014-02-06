@@ -251,7 +251,7 @@ static void update_addr(struct vlist_tree *t, struct vlist_node *node_new, struc
 			if (u->cb_intaddr)
 				u->cb_intaddr(u, c->ifname,
 						(node_old) ? &a_old->prefix : &a_new->prefix,
-						enable);
+						node_new && a_new->preferred_until > hnetd_time());
 	}
 
 
