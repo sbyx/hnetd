@@ -245,7 +245,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 					tlv_for_each_attr(na, ntlvs, nrem) {
 						if (tlv_id(na) == HNCP_T_ROUTER_ADDRESS &&
 								tlv_len(na) == sizeof(struct in6_addr) &&
-								IN6_IS_ADDR_V4MAPPED(tlv_data(na))) {
+							IN6_IS_ADDR_V4MAPPED((struct in6_addr *)tlv_data(na))) {
 							n->bfs.next_hop4 = tlv_data(na);
 							break;
 						}
