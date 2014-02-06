@@ -12,14 +12,16 @@
    up floating around when dp disappears and appears again; without
    random prefixes, problem is hopefully concealed..
 
+- service discovery
+ - make sure router names don't conflict with DDZs
+ - fix IP address stuff to use iface
+
 - L2 up/down detection on Linux; that is, we should ignore interfaces
   that aren't up
  - l2 down == no SD DDZ, no PA prefixes on link
 
 - 'generic Linux' case needs to be tested thoroughly at some point
  - made it work within ttin too
-
-- make sure router names don't conflict with DDZs
 
 - draft compliance
  - make sure implementations are in sync with what's in drafts
