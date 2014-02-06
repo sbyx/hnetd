@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Tue Feb  4 18:22:44 2014 mstenber
- * Edit time:     317 min
+ * Last modified: Thu Feb  6 17:49:14 2014 mstenber
+ * Edit time:     333 min
  *
  */
 
@@ -440,6 +440,31 @@ _tlv_router_name_matches(hncp_sd sd, struct tlv_attr *a)
   return false;
 }
 
+static bool
+_tlv_ddz_matches(hncp_sd sd, struct tlv_attr *a)
+{
+  /* Create the buffer we want to match against. */
+  char buf[DNS_MAX_ESCAPED_L_LEN];
+  unsigned char tbuf[DNS_MAX_L_LEN];
+  int len;
+
+  sprintf(buf, "%s.%s", sd->router_name, sd->domain);
+  if ((len = escaped2ll(buf, tbuf, sizeof(tbuf)))<0)
+    return false;
+  if (tlv_id(a) == HNCP_T_DNS_DELEGATED_ZONE)
+    {
+      hncp_t_dns_delegated_zone ddz = tlv_data(a);
+      if (tlv_len(a) > sizeof(*ddz))
+        {
+          unsigned char *tbuf2 = ddz->ll;
+          int len2 = tlv_len(a) - sizeof(*ddz);
+          if (len2 >= len && memcmp(tbuf2 + (len2 - len), tbuf, len) == 0)
+            return true;
+        }
+    }
+  return false;
+}
+
 static hncp_node
 _find_router_name(hncp_sd sd)
 {
@@ -527,7 +552,15 @@ static void _tlv_cb(hncp_subscriber s,
   /* Dnsmasq forwarder file reflects what's in published DDZ's. If
    * they change, it (could) change too. */
   if (tlv_id(tlv) == HNCP_T_DNS_DELEGATED_ZONE)
-    _should_update(sd, UPDATE_FLAG_DNSMASQ);
+    {
+      /* Check also if it's name matches our router name directly ->
+       * rename us if it does. */
+      if (_tlv_ddz_matches(sd, tlv)
+          && n != o->own_node)
+        _change_router_name(sd);
+
+      _should_update(sd, UPDATE_FLAG_DNSMASQ);
+    }
 }
 
 static void _timeout_cb(struct uloop_timeout *t)

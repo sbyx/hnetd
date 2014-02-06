@@ -13,7 +13,6 @@
    random prefixes, problem is hopefully concealed..
 
 - service discovery
- - make sure router names don't conflict with DDZs
  - fix IP address stuff to use iface
 
 - L2 up/down detection on Linux; that is, we should ignore interfaces
