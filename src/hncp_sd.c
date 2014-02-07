@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Fri Feb  7 12:33:12 2014 mstenber
- * Edit time:     346 min
+ * Last modified: Fri Feb  7 14:36:16 2014 mstenber
+ * Edit time:     347 min
  *
  */
 
@@ -32,6 +32,8 @@
 #include "hncp_sd.h"
 #include "hncp_i.h"
 #include "dns_util.h"
+
+#define DNS_PORT 53
 
 #define LOCAL_OHP_ADDRESS "127.0.0.2"
 #define LOCAL_OHP_PORT 54
@@ -271,6 +273,7 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
             char buf[DNS_MAX_ESCAPED_LEN];
             char buf2[256];
             char *server;
+            int port;
             hncp_t_dns_delegated_zone dh;
 
             if (tlv_len(a) < (sizeof(*dh)+1))
@@ -291,10 +294,12 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
             if (hncp_node_is_self(n))
               {
                 server = LOCAL_OHP_ADDRESS;
+                port = LOCAL_OHP_PORT;
               }
             else
               {
                 server = buf2;
+                port = DNS_PORT;
                 if (!inet_ntop(AF_INET6, dh->address,
                                buf2, sizeof(buf2)))
                   {
@@ -302,7 +307,7 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
                     continue;
                   }
               }
-            fprintf(f, "server=/%s/%s#%d\n", buf, server, LOCAL_OHP_PORT);
+            fprintf(f, "server=/%s/%s#%d\n", buf, server, port);
           }
     }
   fclose(f);
