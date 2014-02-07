@@ -367,7 +367,7 @@ static void _updated_lap(const struct prefix *prefix, const char *ifname,
   hncp_glue g = priv;
   hncp o = g->hncp;
 
-  return hncp_tlv_ap_update(o, prefix, ifname, !to_delete);
+  return hncp_tlv_ap_update(o, prefix, ifname, false, 0, !to_delete);
 }
 
 static void _updated_ldp(const struct prefix *prefix,

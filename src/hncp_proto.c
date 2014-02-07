@@ -526,6 +526,8 @@ void hncp_poll(hncp o)
 void hncp_tlv_ap_update(hncp o,
                         const struct prefix *prefix,
                         const char *ifname,
+                        bool authoritative,
+                        unsigned int preference,
                         bool add)
 {
   struct prefix p;
@@ -546,6 +548,8 @@ void hncp_tlv_ap_update(hncp o,
   l = hncp_find_link_by_name(o, ifname, false);
   if (l)
     ah->link_id = cpu_to_be32(l->iid);
+  ah->authoritative = authoritative;
+  ah->preference = preference;
   ah->prefix_length_bits = p.plen;
   ah++;
   memcpy(ah, &p, plen);
