@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Thu Feb  6 17:49:14 2014 mstenber
- * Edit time:     333 min
+ * Last modified: Fri Feb  7 12:22:04 2014 mstenber
+ * Edit time:     345 min
  *
  */
 
@@ -458,7 +458,11 @@ _tlv_ddz_matches(hncp_sd sd, struct tlv_attr *a)
         {
           unsigned char *tbuf2 = ddz->ll;
           int len2 = tlv_len(a) - sizeof(*ddz);
-          if (len2 >= len && memcmp(tbuf2 + (len2 - len), tbuf, len) == 0)
+          /* XXX - do we want len2 == len, or len2 >= len?  len2 >=
+           * len also matches 'well behaved' routers with subdomain
+           * names, so I'm tempted to keep the equality to defend just
+           * the router name using this logic. */
+          if (len2 == len && memcmp(tbuf2 + (len2 - len), tbuf, len) == 0)
             return true;
         }
     }
@@ -496,6 +500,7 @@ _change_router_name(hncp_sd sd)
               sd->router_name_base, ++sd->router_name_iteration);
       if (!_find_router_name(sd))
         {
+          L_DEBUG("renamed to %s", sd->router_name);
           _set_router_name(sd, true);
           return;
         }
@@ -557,7 +562,10 @@ static void _tlv_cb(hncp_subscriber s,
        * rename us if it does. */
       if (_tlv_ddz_matches(sd, tlv)
           && n != o->own_node)
-        _change_router_name(sd);
+        {
+          L_DEBUG("found matching DDZ with our router name -> force rename");
+          _change_router_name(sd);
+        }
 
       _should_update(sd, UPDATE_FLAG_DNSMASQ);
     }
