@@ -371,7 +371,7 @@ static void iface_announce_border(struct uloop_timeout *t)
 
 static void iface_announce_preferred(struct uloop_timeout *t)
 {
-	struct iface *c = container_of(t, struct iface, transition);
+	struct iface *c = container_of(t, struct iface, preferred);
 	hnetd_time_t now = hnetd_time();
 
 	struct iface_addr *a, *pref6 = NULL, *pref4 = NULL;
