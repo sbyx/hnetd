@@ -7,7 +7,7 @@
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
  * Last_neighast modified: Thu Dec  5 10:34:22 2013 mstenber
- * Edit time:     378 min
+ * Edit time:     381 min
  *
  */
 
@@ -548,4 +548,42 @@ void hncp_calculate_network_hash(hncp o)
   L_DEBUG("hncp_calculate_network_hash @%p =%llx",
           o, hncp_hash64(&o->network_hash));
   o->network_hash_dirty = false;
+}
+
+bool
+hncp_get_ipv6_address(hncp o, char *prefer_ifname, struct in6_addr *addr)
+{
+  hncp_link l = NULL;
+
+  if (prefer_ifname)
+    l = hncp_find_link_by_name(o, prefer_ifname, false);
+  if (!l || !l->has_ipv6_address)
+    {
+      /* Iterate through the links in order, stopping at one with IPv6
+       * address. */
+      vlist_for_each_element(&o->links, l, in_links)
+        if (l->has_ipv6_address)
+          break;
+    }
+  if (l && l->has_ipv6_address)
+    {
+      *addr = l->ipv6_address;
+      return true;
+    }
+  return false;
+}
+
+
+void
+hncp_link_set_ipv6_address(hncp_link l, struct in6_addr *addr)
+{
+  if (!addr && !l->has_ipv6_address)
+    return;
+  if (addr && l->has_ipv6_address
+      && memcmp(&l->ipv6_address, addr, sizeof(*addr) == 0))
+    return;
+  l->has_ipv6_address = addr != NULL;
+  if (addr)
+    l->ipv6_address = *addr;
+  hncp_notify_subscribers_link_ipv6_address_changed(l);
 }

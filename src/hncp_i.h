@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Feb  4 18:21:10 2014 mstenber
- * Edit time:     116 min
+ * Last modified: Fri Feb  7 11:39:47 2014 mstenber
+ * Edit time:     122 min
  *
  */
 
@@ -117,9 +117,6 @@ struct hncp_link_struct {
   /* Name of the (local) link. */
   char ifname[IFNAMSIZ];
 
-  /* Address of the interface (_only_ used in testing) */
-  struct in6_addr address;
-
   /* Interface identifier - these should be unique over lifetime of
    * hncp process. */
   iid_t iid;
@@ -132,6 +129,10 @@ struct hncp_link_struct {
   hnetd_time_t send_time; /* when do we send if c < k*/
   hnetd_time_t interval_end_time; /* when does current interval end */
   int c; /* counter */
+
+  /* 'Best' address (if any) */
+  bool has_ipv6_address;
+  struct in6_addr ipv6_address;
 };
 
 typedef struct hncp_neighbor_struct hncp_neighbor_s, *hncp_neighbor;
@@ -224,6 +225,7 @@ hncp_node hncp_find_node_by_hash(hncp o, const hncp_hash h, bool create);
 bool hncp_node_set_tlvs(hncp_node n, struct tlv_attr *a);
 int hncp_node_cmp(hncp_node n1, hncp_node n2);
 
+bool hncp_get_ipv6_address(hncp o, char *prefer_ifname, struct in6_addr *addr);
 void hncp_schedule(hncp o);
 
 /* Flush own TLV changes to own node. */
@@ -241,9 +243,8 @@ static inline unsigned long long hncp_hash64(hncp_hash h)
 bool hncp_link_send_network_state(hncp_link l,
                                   struct in6_addr *dst,
                                   size_t maximum_size);
-bool hncp_link_send_req_network_state(hncp_link l,
-                                      struct in6_addr *dst);
-
+bool hncp_link_send_req_network_state(hncp_link l, struct in6_addr *dst);
+void hncp_link_set_ipv6_address(hncp_link l, struct in6_addr *addr);
 
 /* Subscription stuff (hncp_notify.c) */
 void hncp_notify_subscribers_tlvs_changed(hncp_node n,
@@ -254,6 +255,7 @@ void hncp_notify_subscribers_about_to_republish_tlvs(hncp_node n);
 void hncp_notify_subscribers_local_tlv_changed(hncp o,
                                                struct tlv_attr *a,
                                                bool add);
+void hncp_notify_subscribers_link_ipv6_address_changed(hncp_link l);
 
 /* Low-level interface module stuff. */
 
@@ -271,7 +273,6 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
 ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
                        const char *ifname,
                        const struct in6_addr *dst);
-bool hncp_io_get_ipv6(struct in6_addr *addr, char *prefer_ifname);
 
 /* Multicast rejoin utility. (in hncp.c) */
 bool hncp_link_join(hncp_link l);
