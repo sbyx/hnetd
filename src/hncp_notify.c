@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 10:04:30 2013 mstenber
- * Last modified: Tue Feb  4 18:21:39 2014 mstenber
- * Edit time:     41 min
+ * Last modified: Fri Feb  7 11:42:22 2014 mstenber
+ * Edit time:     43 min
  *
  */
 
@@ -218,4 +218,14 @@ void hncp_notify_subscribers_about_to_republish_tlvs(hncp_node n)
   list_for_each_entry(s, &n->hncp->subscribers, lh)
     if (s->republish_callback)
       s->republish_callback(s);
+}
+
+
+void hncp_notify_subscribers_link_ipv6_address_changed(hncp_link l)
+{
+  hncp_subscriber s;
+
+  list_for_each_entry(s, &l->hncp->subscribers, lh)
+    if (s->link_ipv6_address_change_callback)
+      s->link_ipv6_address_change_callback(s);
 }

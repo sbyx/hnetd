@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Feb  4 18:21:24 2014 mstenber
- * Edit time:     212 min
+ * Last modified: Fri Feb  7 11:32:00 2014 mstenber
+ * Edit time:     228 min
  *
  */
 
@@ -37,40 +37,6 @@
 #include <linux/if_packet.h>
 #endif /* __linux__ */
 
-
-bool
-hncp_io_get_ipv6(struct in6_addr *addr, char *prefer_ifname)
-{
-  struct ifaddrs *ia, *p;
-  int r = getifaddrs(&ia);
-  bool found = false;
-
-  if (r)
-    return false;
-  for (p = ia ; p ; p = p->ifa_next)
-    if (p->ifa_addr && p->ifa_addr->sa_family == AF_INET6)
-      {
-        struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)p->ifa_addr;
-
-        /* Is it global or ULA? */
-        if (!(
-              ((sin6->sin6_addr.s6_addr[0] & 0xe0) == 0x20)
-              || ((sin6->sin6_addr.s6_addr[0] & 0xfe) == 0xfc)))
-          continue;
-        /* Handle 'preferred' address first. */
-        if (prefer_ifname && strcmp(p->ifa_name, prefer_ifname)==0)
-          {
-            *addr = sin6->sin6_addr;
-            return true;
-          }
-        if (!found || memcmp(addr, &sin6->sin6_addr, sizeof(*addr)) > 0)
-          {
-            found = true;
-            *addr = sin6->sin6_addr;
-          }
-      }
-  return found;
-}
 
 int
 hncp_io_get_hwaddrs(unsigned char *buf, int buf_left)

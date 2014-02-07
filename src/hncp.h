@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Tue Feb  4 18:20:55 2014 mstenber
- * Edit time:     101 min
+ * Last modified: Fri Feb  7 11:42:16 2014 mstenber
+ * Edit time:     103 min
  *
  */
 
@@ -52,7 +52,6 @@ struct hncp_subscriber_struct {
    * This is called whenever one local set of TLVs (to be published at
    * some point) changes.
    *
-   * @param cbs The subscriber structure.
    * @param tlv The TLV that is being added or removed (there is no 'update').
    * @param add Flag which indicates whether the operation was add or remove.
    */
@@ -74,7 +73,6 @@ struct hncp_subscriber_struct {
    * This is called whenever one TLV within one node in HNCP
    * changes. This INCLUDE also the local node itself.
    *
-   * @param cbs The subscriber structure.
    * @param n The node for which change notification occurs.
    * @param tlv The TLV that is being added or removed (there is no 'update').
    * @param add Flag which indicates whether the operation was add or remove.
@@ -88,11 +86,19 @@ struct hncp_subscriber_struct {
    * This is called whenever a node is being added or removed within
    * HNCP.
    *
-   * @param cbs The subscriber structure.
    * @param n The node which is being added or removed.
    * @param add Flag which indicates whether the operation was add or remove.
    */
   void (*node_change_callback)(hncp_subscriber s, hncp_node n, bool add);
+
+  /**
+   * Link IPv6 address changed notification.
+   *
+   * This is called whenever a link's preferred IPv6 address changes.
+   * (Link omitted because it's assumed this is just general
+   * reconfiguration signal).
+   */
+  void (*link_ipv6_address_change_callback)(hncp_subscriber s);
 };
 
 /************************************************ API for whole hncp instance */

@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Thu Feb  6 17:49:14 2014 mstenber
- * Edit time:     333 min
+ * Last modified: Fri Feb  7 11:46:50 2014 mstenber
+ * Edit time:     338 min
  *
  */
 
@@ -202,10 +202,10 @@ static void _publish_ddzs(hncp_sd sd)
             }
           sprintf(tbuf, "%s.%s.%s", l->ifname, sd->router_name, sd->domain);
 
-          if (!hncp_io_get_ipv6(&our_addr, l->ifname))
+          if (!hncp_get_ipv6_address(sd->hncp, l->ifname, &our_addr))
             {
               L_ERR("unable to get ipv6 address");
-              _should_update(sd, UPDATE_FLAG_DDZ);
+              /* _should_update(sd, UPDATE_FLAG_DDZ); */
               return;
             }
 
@@ -531,6 +531,13 @@ static void _republish_cb(hncp_subscriber s)
   _publish_ddzs(sd);
 }
 
+static void _force_republish_cb(hncp_subscriber s)
+{
+  hncp_sd sd = container_of(s, hncp_sd_s, subscriber);
+
+  _should_update(sd, UPDATE_FLAG_DDZ);
+}
+
 static void _tlv_cb(hncp_subscriber s,
                     hncp_node n, struct tlv_attr *tlv, bool add)
 {
@@ -609,6 +616,7 @@ hncp_sd hncp_sd_create(hncp h,
   sd->subscriber.local_tlv_change_callback = _local_tlv_cb;
   sd->subscriber.tlv_change_callback = _tlv_cb;
   sd->subscriber.republish_callback = _republish_cb;
+  sd->subscriber.link_ipv6_address_change_callback = _force_republish_cb;
   hncp_subscribe(h, &sd->subscriber);
   return sd;
 }

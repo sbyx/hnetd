@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Tue Feb  4 18:23:31 2014 mstenber
- * Edit time:     29 min
+ * Last modified: Fri Feb  7 11:31:10 2014 mstenber
+ * Edit time:     33 min
  *
  */
 
@@ -223,9 +223,7 @@ hncp_link net_sim_hncp_find_link_by_name(hncp o, const char *name)
       /* Let's pretend it's /64; clear out 2-7 */
       for (i = 2 ; i < 8 ; i++)
         h.buf[i] = 0;
-      memcpy(&l->address, &h, sizeof(l->address));
-      sput_fail_unless(sizeof(l->address) == HNCP_HASH_LEN,
-                       "weird address size");
+      hncp_link_set_ipv6_address(l, (struct in6_addr *)&h);
     }
   return l;
 }
@@ -530,7 +528,8 @@ void _sendto(net_sim s, void *buf, size_t len, hncp_link sl, hncp_link dl,
   sput_fail_unless(m->buf, "malloc buf");
   memcpy(m->buf, buf, len);
   m->len = len;
-  m->src = sl->address;
+  sput_fail_unless(sl->has_ipv6_address, "no ipv6 address?!?");
+  m->src = sl->ipv6_address;
   m->dst = *dst;
   m->readable_at = wt;
   list_add(&m->h, &s->messages);
@@ -564,7 +563,8 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
     {
       if (n->src == l
           && (is_multicast
-              || memcmp(&n->dst->address, dst, sizeof(*dst)) == 0))
+              || (n->dst->has_ipv6_address
+                  && memcmp(&n->dst->ipv6_address, dst, sizeof(*dst)) == 0)))
         _sendto(s, buf, len, n->src, n->dst, dst);
     }
   /* Loop at self too, just for fun. */
