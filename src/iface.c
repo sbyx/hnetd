@@ -6,6 +6,21 @@
 #include <stdarg.h>
 #include <arpa/inet.h>
 
+#include <sys/socket.h>
+#include <linux/rtnetlink.h>
+
+#ifndef SOL_NETLINK
+#define SOL_NETLINK 270
+#endif
+
+#ifndef NETLINK_ADD_MEMBERSHIP
+#define NETLINK_ADD_MEMBERSHIP 1
+#endif
+
+#ifndef IFF_LOWER_UP
+#define IFF_LOWER_UP 0x10000
+#endif
+
 #include "iface.h"
 #include "platform.h"
 #include "pa.h"
@@ -15,6 +30,7 @@ static void iface_update_prefix(const struct prefix *p, const char *ifname,
 		const void *dhcpv6_data, size_t dhcpv6_len,
 		__unused void *priv);
 static void iface_update_link_owner(const char *ifname, bool owner, void *priv);
+static void iface_discover_border(struct iface *c);
 
 static struct list_head interfaces = LIST_HEAD_INIT(interfaces);
 static struct list_head users = LIST_HEAD_INIT(users);
@@ -22,6 +38,8 @@ static struct pa_iface_callbacks pa_cb = {
 	.update_prefix = iface_update_prefix,
 	.update_link_owner = iface_update_link_owner
 };
+
+static struct uloop_fd rtnl_fd = { .fd = -1 };
 
 
 static void iface_update_prefix(const struct prefix *p, const char *ifname,
@@ -90,8 +108,56 @@ static void iface_notify_data_state(struct iface *c, bool enabled)
 }
 
 
+static void iface_link_event(struct uloop_fd *fd, __unused unsigned events)
+{
+	struct {
+		struct nlmsghdr hdr;
+		struct ifinfomsg msg;
+		uint8_t pad[4000];
+	} resp;
+
+	ssize_t read;
+	do {
+		read = recv(fd->fd, &resp, sizeof(resp), MSG_DONTWAIT);
+		if (read < 0 || !NLMSG_OK(&resp.hdr, (size_t)read) ||
+				(resp.hdr.nlmsg_type != RTM_NEWLINK &&
+						resp.hdr.nlmsg_type != RTM_DELLINK))
+			continue;
+
+		char namebuf[IF_NAMESIZE];
+		if (!if_indextoname(resp.msg.ifi_index, namebuf))
+			continue;
+
+		struct iface *c = iface_get(namebuf);
+		if (!c)
+			continue;
+
+		bool up = resp.hdr.nlmsg_type == RTM_NEWLINK && (resp.msg.ifi_flags & IFF_LOWER_UP);
+		if (c->carrier != up) {
+			c->carrier = up;
+			syslog(LOG_NOTICE, "carrier => %i event on %s", (int)up, namebuf);
+			iface_discover_border(c);
+		}
+	} while (read > 0);
+}
+
+
 int iface_init(pa_t pa)
 {
+	rtnl_fd.fd = socket(AF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, NETLINK_ROUTE);
+	if (rtnl_fd.fd < 0)
+		return -1;
+
+	struct sockaddr_nl rtnl_kernel = { .nl_family = AF_NETLINK };
+	if (connect(rtnl_fd.fd, (const struct sockaddr*)&rtnl_kernel, sizeof(rtnl_kernel)) < 0)
+		return -1;
+
+	int val = RTNLGRP_LINK;
+	setsockopt(rtnl_fd.fd, SOL_NETLINK, NETLINK_ADD_MEMBERSHIP, &val, sizeof(val));
+
+	rtnl_fd.cb = iface_link_event;
+	uloop_fd_add(&rtnl_fd, ULOOP_READ | ULOOP_EDGE_TRIGGER);
+
 	pa_iface_subscribe(pa, &pa_cb);
 	return platform_init();
 }
@@ -399,7 +465,7 @@ static void iface_discover_border(struct iface *c)
 
 	// Perform border-discovery (border on DHCPv4 assignment or DHCPv6-PD)
 	bool internal = avl_is_empty(&c->delegated.avl) &&
-			!c->v4leased && !c->dhcpv6_len_in;
+			!c->v4leased && !c->dhcpv6_len_in && c->carrier;
 	if (c->internal != internal) {
 		L_INFO("iface: %s border discovery detected state %s",
 				c->ifname, (internal) ? "internal" : "external");
@@ -447,6 +513,15 @@ struct iface* iface_create(const char *ifname, const char *handle)
 		vlist_init(&c->routes, compare_routes, update_route);
 		c->transition.cb = iface_announce_border;
 		c->preferred.cb = iface_announce_preferred;
+
+		struct {
+			struct nlmsghdr hdr;
+			struct ifinfomsg ifi;
+		} req = {
+			.hdr = {sizeof(req), RTM_GETLINK, NLM_F_REQUEST, 1, 0},
+			.ifi = {.ifi_index = if_nametoindex(ifname)}
+		};
+		send(rtnl_fd.fd, &req, sizeof(req), 0);
 
 		list_add(&c->head, &interfaces);
 	}
