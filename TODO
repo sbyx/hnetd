@@ -13,7 +13,9 @@
    random prefixes, problem is hopefully concealed..
 
 - service discovery
- - fix IP address stuff to use iface
+ - think if we should publish non-browseable record for _every_
+   <linkname>.<router>.<home> but include them in browse path if and
+   only if they're the owner of the prefix(es) on that link..
 
 - L2 up/down detection on Linux; that is, we should ignore interfaces
   that aren't up
