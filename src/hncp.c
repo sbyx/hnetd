@@ -7,7 +7,7 @@
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
  * Last_neighast modified: Thu Dec  5 10:34:22 2013 mstenber
- * Edit time:     383 min
+ * Edit time:     385 min
  *
  */
 
@@ -235,11 +235,15 @@ bool hncp_init(hncp o, const void *node_identifier, int len)
   vlist_init(&o->tlvs, compare_tlvs, update_tlv);
   vlist_init(&o->links, compare_links, update_link);
   hncp_calculate_hash(node_identifier, len, &h);
-  if (!inet_pton(AF_INET6, HNCP_MCAST_GROUP, &o->multicast_address))
+  if (!inet_pton(AF_INET6, HNCP_MCAST_GROUP, &o->multicast_address)) {
+    L_ERR("unable to inet_pton multicast group address");
     return false;
+  }
   n = hncp_find_node_by_hash(o, &h, true);
-  if (!n)
+  if (!n) {
+    L_ERR("unable to create own node");
     return false;
+  }
   o->own_node = n;
   o->tlvs_dirty = true; /* by default, they are, even if no neighbors yet. */
   o->first_free_iid = 1;
@@ -256,8 +260,10 @@ hncp hncp_create(void)
   if (!o)
     return NULL;
   c += hncp_io_get_hwaddrs(buf, sizeof(buf));
-  if (c == buf)
+  if (c == buf) {
+    L_ERR("no hardware address available, fatal error");
     goto err;
+  }
   if (!hncp_init(o, buf, c-buf))
     goto err;
   if (!hncp_io_init(o))

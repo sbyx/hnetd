@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Fri Feb  7 11:32:00 2014 mstenber
- * Edit time:     228 min
+ * Last modified: Fri Feb  7 13:40:58 2014 mstenber
+ * Edit time:     231 min
  *
  */
 
@@ -109,14 +109,20 @@ bool hncp_io_init(hncp o)
   struct sockaddr_in6 addr;
 
   s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-  if (s<0)
+  if (s<0) {
+    L_ERR("unable to create IPv6 UDP socket");
     return false;
+  }
   fcntl(s, F_SETFL, O_NONBLOCK);
   memset(&addr, 0, sizeof(addr));
   addr.sin6_family = AF_INET6;
   addr.sin6_port = htons(HNCP_PORT);
-  if (bind(s, (struct sockaddr *)&addr, sizeof(addr))<0)
+  const int one = 1;
+  setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+  if (bind(s, (struct sockaddr *)&addr, sizeof(addr))<0) {
+    L_ERR("unable to bind to port %d", HNCP_PORT);
     return false;
+  }
 #endif
   if (setsockopt(s, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) < 0)
     {
