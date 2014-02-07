@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Tue Feb  4 18:24:16 2014 mstenber
- * Edit time:     37 min
+ * Last modified: Fri Feb  7 12:32:37 2014 mstenber
+ * Edit time:     45 min
  *
  */
 #define L_LEVEL 7
@@ -78,6 +78,7 @@ void test_hncp_sd(void)
                    "router names different");
   smock_is_empty();
 
+  /* Play with dnsmasq utilities */
   rv = hncp_sd_write_dnsmasq_conf(node1->sd, "/tmp/n1.conf");
   sput_fail_unless(rv, "write 1 works");
   smock_is_empty();
@@ -96,6 +97,7 @@ void test_hncp_sd(void)
   sput_fail_unless(rv, "restart dnsmasq works");
   smock_is_empty();
 
+  /* Play with ohybridproxy */
   smock_push("execv_cmd", "/bin/no");
   smock_push("execv_arg", "start");
   smock_push("execv_arg", "-a");
@@ -109,6 +111,22 @@ void test_hncp_sd(void)
 
   /* Make sure second run is NOP */
   rv = hncp_sd_reconfigure_ohp(node1->sd);
+  sput_fail_unless(rv, "reconfigure ohp works");
+  smock_is_empty();
+
+  smock_push("execv_cmd", "/bin/no");
+  smock_push("execv_arg", "start");
+  smock_push("execv_arg", "-a");
+  smock_push("execv_arg", "127.0.0.2");
+  smock_push("execv_arg", "-p");
+  smock_push("execv_arg", "54");
+  smock_push("execv_arg", "eth2=eth2.r1.home.");
+  rv = hncp_sd_reconfigure_ohp(node2->sd);
+  sput_fail_unless(rv, "reconfigure ohp works");
+  smock_is_empty();
+
+  /* Make sure second run is NOP */
+  rv = hncp_sd_reconfigure_ohp(node2->sd);
   sput_fail_unless(rv, "reconfigure ohp works");
   smock_is_empty();
 
