@@ -7,7 +7,7 @@
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
  * Last_neighast modified: Thu Dec  5 10:34:22 2013 mstenber
- * Edit time:     381 min
+ * Edit time:     383 min
  *
  */
 
@@ -575,7 +575,7 @@ hncp_get_ipv6_address(hncp o, char *prefer_ifname, struct in6_addr *addr)
 
 
 void
-hncp_link_set_ipv6_address(hncp_link l, struct in6_addr *addr)
+hncp_link_set_ipv6_address(hncp_link l, const struct in6_addr *addr)
 {
   if (!addr && !l->has_ipv6_address)
     return;
@@ -586,4 +586,12 @@ hncp_link_set_ipv6_address(hncp_link l, struct in6_addr *addr)
   if (addr)
     l->ipv6_address = *addr;
   hncp_notify_subscribers_link_ipv6_address_changed(l);
+}
+
+void
+hncp_set_ipv6_address(hncp o, const char *ifname, const struct in6_addr *a)
+{
+  hncp_link l = hncp_find_link_by_name(o, ifname, false);
+  if (l)
+    hncp_link_set_ipv6_address(l, a);
 }

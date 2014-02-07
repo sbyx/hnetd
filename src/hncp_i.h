@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Fri Feb  7 11:39:47 2014 mstenber
+ * Last modified: Fri Feb  7 12:38:42 2014 mstenber
  * Edit time:     122 min
  *
  */
@@ -26,9 +26,6 @@
 #define HNCP_MAXIMUM_MULTICAST_SIZE 1280
 
 #include <libubox/vlist.h>
-
-/* in6_addr */
-#include <netinet/in.h>
 
 /* IFNAMSIZ */
 #include <net/if.h>
@@ -244,7 +241,7 @@ bool hncp_link_send_network_state(hncp_link l,
                                   struct in6_addr *dst,
                                   size_t maximum_size);
 bool hncp_link_send_req_network_state(hncp_link l, struct in6_addr *dst);
-void hncp_link_set_ipv6_address(hncp_link l, struct in6_addr *addr);
+void hncp_link_set_ipv6_address(hncp_link l, const struct in6_addr *addr);
 
 /* Subscription stuff (hncp_notify.c) */
 void hncp_notify_subscribers_tlvs_changed(hncp_node n,

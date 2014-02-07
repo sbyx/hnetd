@@ -39,6 +39,16 @@ typedef struct {
 } hncp_iface_user_s, *hncp_iface_user;
 
 
+void hncp_iface_intaddr_callback(struct iface_user *u, const char *ifname,
+								 const struct prefix *addr6,
+								 const struct prefix *addr4 __unused)
+{
+	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
+
+	hncp_set_ipv6_address(hiu->hncp, ifname, addr6 ? &addr6->prefix : NULL);
+}
+
+
 void hncp_iface_intiface_callback(struct iface_user *u,
 				 const char *ifname, bool enabled)
 {
@@ -52,6 +62,7 @@ void hncp_iface_glue(hncp_iface_user hiu, hncp h)
 	/* Initialize hiu appropriately */
 	memset(hiu, 0, sizeof(*hiu));
 	hiu->iu.cb_intiface = hncp_iface_intiface_callback;
+        hiu->iu.cb_intaddr = hncp_iface_intaddr_callback;
 	hiu->hncp = h;
 
 	/* We don't care about other callbacks for now. */

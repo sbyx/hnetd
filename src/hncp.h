@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Fri Feb  7 11:42:16 2014 mstenber
- * Edit time:     103 min
+ * Last modified: Fri Feb  7 12:38:31 2014 mstenber
+ * Edit time:     104 min
  *
  */
 
@@ -17,6 +17,9 @@
 #include "hnetd.h"
 #include "tlv.h"
 #include "hncp_proto.h"
+
+/* in6_addr */
+#include <netinet/in.h>
 
 #include <libubox/list.h>
 
@@ -171,6 +174,13 @@ void hncp_run(hncp o);
  * whenever the udp socket has inputs.
  */
 void hncp_poll(hncp o);
+
+
+/**
+ * Set IPv6 address for given interface.
+ */
+void hncp_set_ipv6_address(hncp o,
+                           const char *ifname, const struct in6_addr *a);
 
 /************************************************************** Per-node API */
 
