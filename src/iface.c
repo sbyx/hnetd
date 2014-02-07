@@ -388,7 +388,7 @@ static void iface_announce_preferred(struct uloop_timeout *t)
 	struct iface_user *u;
 	list_for_each_entry(u, &users, head)
 		if (u->cb_intaddr)
-			u->cb_intaddr(u, c->ifname, &pref6->prefix, &pref4->prefix);
+			u->cb_intaddr(u, c->ifname, pref6 ? &pref6->prefix : NULL, pref4 ? &pref4->prefix: NULL);
 }
 
 
