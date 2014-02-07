@@ -202,7 +202,10 @@ int prefix_increment(struct prefix *dst, const struct prefix *p, uint8_t protect
 	current = ntohl(current);
 	current += step;
 	current = htonl(current);
-	memcpy(dst, p, sizeof(struct prefix));
+
+	if (dst != p)
+		memcpy(dst, p, sizeof(struct prefix));
+
 	bmemcpy_shift(&dst->prefix, protected_len, &current, 0, blen);
 
 	return (current)?0:1;
