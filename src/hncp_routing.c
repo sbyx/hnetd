@@ -25,7 +25,7 @@ struct hncp_routing_struct {
 	struct tlv_attr *tlv[HNCP_ROUTING_MAX];
 	struct iface_user iface;
 	const char *script;
-	char **ifaces;
+	const char **ifaces;
 	size_t ifaces_cnt;
 };
 
@@ -72,7 +72,6 @@ static void hncp_routing_intiface(struct iface_user *u, const char *ifname, bool
 		bfs->ifaces = realloc(bfs->ifaces, ++bfs->ifaces_cnt * sizeof(char*));
 		bfs->ifaces[bfs->ifaces_cnt - 1] = ifname;
 	} else {
-		bool remove = false;
 		for (size_t i = 0; i < bfs->ifaces_cnt; ++i) {
 			if (!strcmp(bfs->ifaces[i], ifname)) {
 				memmove(&bfs->ifaces[i], &bfs->ifaces[i+1], --bfs->ifaces_cnt - i);
