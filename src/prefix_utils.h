@@ -8,6 +8,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 
@@ -106,5 +107,10 @@ int prefix_pton(const char *addr, struct prefix *p);
 /* Convenience variant of PREFIX_NTOP, which just chooses to
  * canonicalize the prefix. */
 #define PREFIX_REPR(p) PREFIX_NTOP(p, true)
+
+#define ADDR_REPR(addr) \
+		(IN6_IS_ADDR_V4MAPPED(addr))?\
+				inet_ntop(AF_INET, &(addr)->s6_addr[12], alloca(INET_ADDRSTRLEN), INET_ADDRSTRLEN):\
+				inet_ntop(AF_INET6, addr, alloca(INET6_ADDRSTRLEN), INET6_ADDRSTRLEN)
 
 #endif
