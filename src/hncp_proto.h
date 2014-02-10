@@ -55,9 +55,10 @@ enum {
 
   HNCP_T_CUSTOM = 9, /* not implemented */
 
+  HNCP_T_EXTERNAL_CONNECTION = 41,
   HNCP_T_DELEGATED_PREFIX = 42, /* may contain TLVs */
   HNCP_T_ASSIGNED_PREFIX = 43, /* may contain TLVs */
-
+  HNCP_T_DHCP_OPTIONS = 44,
   HNCP_T_DHCPV6_OPTIONS = 45, /* contains just raw DHCPv6 options */
   HNCP_T_ROUTER_ADDRESS = 46, /* router address */
 
@@ -118,6 +119,9 @@ typedef struct __packed {
 /* HNCP_T_ASSIGNED_PREFIX */
 typedef struct __packed {
   uint32_t link_id;
+  unsigned int reserved: 3;
+  unsigned int authoritative: 1;
+  unsigned int preference: 4;
   uint8_t prefix_length_bits;
   /* Prefix data, padded so that ends at 4 byte boundary (0s). */
   uint8_t prefix_data[];

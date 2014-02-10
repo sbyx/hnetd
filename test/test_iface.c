@@ -88,6 +88,9 @@ void iface_test_new_managed(void)
 	smock_pull_bool_is("test00", false);
 
 	struct iface *iface = iface_create("test0", "test0");
+	iface->carrier = true;
+	iface_discover_border(iface);
+
 	sput_fail_unless(!!iface, "alloc managed");
 
 	struct iface *iface2 = iface_get("test0");

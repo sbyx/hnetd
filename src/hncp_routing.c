@@ -23,16 +23,28 @@ struct hncp_routing_struct {
 	struct uloop_timeout t;
 	enum hncp_routing_protocol active;
 	struct tlv_attr *tlv[HNCP_ROUTING_MAX];
+	struct iface_user iface;
 	const char *script;
+	const char **ifaces;
+	size_t ifaces_cnt;
 };
 
-static int call_backend(hncp_bfs bfs, const char *action, enum hncp_routing_protocol proto, int stdin)
+static int call_backend(hncp_bfs bfs, const char *action, int stdin)
 {
-	char protobuf[4];
-	snprintf(protobuf, sizeof(protobuf), "%u", proto);
+	if (!bfs->script)
+		return 0;
 
-	char *argv[] = {(char*)bfs->script, (char*)action, protobuf, NULL};
-	pid_t pid = vfork();
+	char protobuf[4];
+	snprintf(protobuf, sizeof(protobuf), "%u", bfs->active);
+
+	char **argv = malloc((bfs->ifaces_cnt + 4) * sizeof(char*));
+	argv[0] = (char*)bfs->script;
+	argv[1] = (char*)action;
+	argv[2] = protobuf;
+	memcpy(&argv[3], bfs->ifaces, bfs->ifaces_cnt);
+	argv[3 + bfs->ifaces_cnt] = NULL;
+
+	pid_t pid = fork();
 	if (pid == 0) {
 		if (stdin >= 0) {
 			dup2(stdin, STDOUT_FILENO);
@@ -46,9 +58,28 @@ static int call_backend(hncp_bfs bfs, const char *action, enum hncp_routing_prot
 	if (stdin >= 0)
 		close(stdin);
 
+	free(argv);
+
 	int status;
 	waitpid(pid, &status, 0);
 	return status;
+}
+
+static void hncp_routing_intiface(struct iface_user *u, const char *ifname, bool enable)
+{
+	hncp_bfs bfs = container_of(u, hncp_bfs_s, iface);
+	if (enable) {
+		bfs->ifaces = realloc(bfs->ifaces, ++bfs->ifaces_cnt * sizeof(char*));
+		bfs->ifaces[bfs->ifaces_cnt - 1] = ifname;
+	} else {
+		for (size_t i = 0; i < bfs->ifaces_cnt; ++i) {
+			if (!strcmp(bfs->ifaces[i], ifname)) {
+				memmove(&bfs->ifaces[i], &bfs->ifaces[i+1], --bfs->ifaces_cnt - i);
+				break;
+			}
+		}
+	}
+	call_backend(bfs, "reconfigure", -1);
 }
 
 hncp_bfs hncp_routing_create(hncp hncp, const char *script)
@@ -59,14 +90,16 @@ hncp_bfs hncp_routing_create(hncp hncp, const char *script)
 	bfs->t.cb = hncp_routing_run;
 	bfs->active = HNCP_ROUTING_MAX;
 	bfs->script = script;
+	bfs->iface.cb_intiface = hncp_routing_intiface;
 	hncp_subscribe(hncp, &bfs->subscr);
+	iface_register_user(&bfs->iface);
 
 	// Load supported protocols and preferences
 	if (script) {
 		int fd[2];
 		pipe(fd);
 		fcntl(fd[0], F_SETFD, fcntl(fd[0], F_GETFD) | FD_CLOEXEC);
-		call_backend(bfs, "enumerate", HNCP_ROUTING_NONE, fd[1]);
+		call_backend(bfs, "enumerate", fd[1]);
 
 		FILE *fp = fdopen(fd[0], "r");
 		if (fp) {
@@ -99,6 +132,7 @@ hncp_bfs hncp_routing_create(hncp hncp, const char *script)
 void hncp_routing_destroy(hncp_bfs bfs)
 {
 	uloop_timeout_cancel(&bfs->t);
+	iface_unregister_user(&bfs->iface);
 	hncp_unsubscribe(bfs->hncp, &bfs->subscr);
 
 	for (size_t i = 0; i < HNCP_ROUTING_MAX; ++i) {
@@ -181,19 +215,19 @@ static void hncp_routing_run(struct uloop_timeout *t)
 	}
 
 	// Disable old routing protocol
-	if (current_proto != bfs->active && bfs->active != HNCP_ROUTING_MAX) {
+	if (current_proto != bfs->active) {
 		if (bfs->active == HNCP_ROUTING_NONE) {
 			iface_update_routes();
 			iface_commit_routes();
 		} else {
-			call_backend(bfs, "disable", bfs->active, -1);
+			call_backend(bfs, "disable", -1);
 		}
 
+		bfs->active = current_proto;
 		if (current_proto != HNCP_ROUTING_NONE)
-			call_backend(bfs, "enable", current_proto, -1);
+			call_backend(bfs, "enable", -1);
 	}
 
-	bfs->active = current_proto;
 	if (bfs->active != HNCP_ROUTING_NONE)
 		return;
 

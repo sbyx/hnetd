@@ -67,12 +67,12 @@ void test_hncp_sd(void)
   net_sim_set_connected(l1, l2, true);
   net_sim_set_connected(l2, l1, true);
   sput_fail_unless(prefix_pton("2001:dead:beef::/64", &p), "prefix_pton");
-  hncp_tlv_ap_update(n1, &p, "eth0", true);
+  hncp_tlv_ap_update(n1, &p, "eth0", false, 0, true);
   sput_fail_unless(prefix_pton("1.2.3.4/24", &p), "prefix_pton");
   sput_fail_unless(prefix_is_ipv4(&p), "IPv4 prefix parsing failed");
-  hncp_tlv_ap_update(n1, &p, "eth0", true);
+  hncp_tlv_ap_update(n1, &p, "eth0", false, 0, true);
   sput_fail_unless(prefix_pton("2001:feed:beef::/64", &p), "prefix_pton");
-  hncp_tlv_ap_update(n2, &p, "eth2", true);
+  hncp_tlv_ap_update(n2, &p, "eth2", false, 0, true);
   SIM_WHILE(&s, 100, !net_sim_is_converged(&s));
   sput_fail_unless(strcmp(node1->sd->router_name, node2->sd->router_name),
                    "router names different");

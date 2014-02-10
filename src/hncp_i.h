@@ -279,6 +279,8 @@ bool hncp_link_join(hncp_link l);
 void hncp_tlv_ap_update(hncp o,
                         const struct prefix *prefix,
                         const char *ifname,
+                        bool authoritative,
+                        unsigned int preference,
                         bool add);
 
 

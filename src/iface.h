@@ -90,6 +90,7 @@ struct iface {
 	bool linkowner;
 	bool internal;
 	bool v4leased;
+	bool carrier;
 
 	// LL-address
 	struct in6_addr eui64_addr;
