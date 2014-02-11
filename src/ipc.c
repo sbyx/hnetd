@@ -186,10 +186,10 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 					prefix_pton(blobmsg_get_string(tb[PREFIX_EXCLUDED]), &ex);
 
 				if (tb[PREFIX_PREFERRED])
-					preferred = now + blobmsg_get_u32(tb[PREFIX_PREFERRED]);
+					preferred = now + blobmsg_get_u32(tb[PREFIX_PREFERRED]) * HNETD_TIME_PER_SECOND;
 
 				if (tb[PREFIX_VALID])
-					valid = now + blobmsg_get_u32(tb[PREFIX_VALID]);
+					valid = now + blobmsg_get_u32(tb[PREFIX_VALID]) * HNETD_TIME_PER_SECOND;
 
 				void *data = NULL;
 				size_t len = 0;
