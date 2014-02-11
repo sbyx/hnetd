@@ -10,6 +10,7 @@
 #define L_PREFIX "pa_data - "
 
 #include "pa_data.h"
+#include "pa.h"
 
 #include <stdio.h>
 
@@ -31,8 +32,7 @@ static int pa_data_avl_prefix_cmp (const void *k1, const void *k2,
 	return (i>0)?1:-1;
 }
 
-void pa_data_init(struct pa_data *data,
-	pa_apply_cb_t cp_apply, laa_apply_cb_t laa_apply)
+void pa_data_init(struct pa_data *data)
 {
 	L_NOTICE("Initializing data structure.");
 
@@ -41,19 +41,43 @@ void pa_data_init(struct pa_data *data,
 	INIT_LIST_HEAD(&data->eaas);
 	INIT_LIST_HEAD(&data->dps);
 	INIT_LIST_HEAD(&data->cps);
-
-	data->cp_apply_cb = cp_apply;
-	data->laa_apply_cb = laa_apply;
 }
 
 void pa_data_term(struct pa_data *data)
 {
-	L_NOTICE("Terminating data structure.");
-	data->laa_apply_cb = NULL;
-	/* todo: Destroy all related structures */
+	L_NOTICE("Terminating database structure.");
+
+	struct pa_ap *ap;
+	pa_for_each_ap(ap, data) {
+		pa_ap_destroy(data, ap);
+	}
+
+	struct pa_cp *cp;
+	pa_for_each_cp(cp, data) {
+		pa_cp_destroy(cp);
+	}
+
+	struct pa_dp *dp;
+	pa_for_each_dp(dp, data) {
+		if(dp->local)
+			pa_ldp_destroy(container_of(dp, struct pa_ldp, dp));
+		else
+			pa_edp_destroy(container_of(dp, struct pa_edp, dp));
+	}
+
+	struct pa_eaa *eaa;
+	pa_for_each_eaa(eaa, data) {
+		pa_eaa_destroy(eaa);
+	}
+
+	struct pa_iface *iface;
+	pa_for_each_iface(iface, data) {
+		pa_iface_destroy(data, iface);
+	}
+
 }
 
-struct pa_iface *pa_iface_get(struct pa_data *data, const char *ifname)
+struct pa_iface *__pa_iface_get(struct pa_data *data, const char *ifname)
 {
 	struct pa_iface *iface;
 	pa_for_each_iface(iface, data) {
@@ -63,14 +87,17 @@ struct pa_iface *pa_iface_get(struct pa_data *data, const char *ifname)
 	return NULL;
 }
 
-struct pa_iface *pa_iface_goc(struct pa_data *data, const char *ifname)
+struct pa_iface *pa_iface_get(struct pa_data *data, const char *ifname, bool *created)
 {
 	struct pa_iface *iface;
+
+	if(created)
+		*created = false;
 
 	if(strlen(ifname) >= IFNAMSIZ)
 		return NULL;
 
-	if((iface = pa_iface_get(data, ifname)))
+	if((iface = __pa_iface_get(data, ifname)) || !created)
 		return iface;
 
 	PA_P_ALLOC(iface);
@@ -81,7 +108,7 @@ struct pa_iface *pa_iface_goc(struct pa_data *data, const char *ifname)
 	iface->do_dhcp = false;
 	iface->internal = false;
 	list_add(&iface->le, &data->ifs);
-
+	*created = true;
 	L_INFO("Created "PA_IF_L, PA_IF_LA(iface));
 	return iface;
 }
@@ -110,6 +137,7 @@ void pa_dp_init(struct pa_data *data, struct pa_dp *dp, const struct prefix *p)
 	dp->valid_until = 0;
 	prefix_cpy(&dp->prefix, p);
 	list_add(&dp->le, &data->dps);
+	INIT_LIST_HEAD(&dp->cps);
 	L_DEBUG("Initialized "PA_DP_L, PA_DP_LA(dp));
 }
 
@@ -164,12 +192,16 @@ int pa_dp_set_lifetime(struct pa_dp *dp, hnetd_time_t preferred, hnetd_time_t va
 void pa_dp_term(struct pa_dp *dp)
 {
 	L_DEBUG("Terminating "PA_DP_L, PA_DP_LA(dp));
+	struct pa_cp *cp;
+	pa_for_each_cp_in_dp(cp, dp) {
+		pa_cp_set_dp(cp, NULL);
+	}
 	pa_dp_set_dhcp(dp, NULL, 0);
 	pa_dp_set_lifetime(dp, 0, 0);
 	list_remove(&dp->le);
 }
 
-struct pa_ldp *pa_ldp_get(struct pa_data *data, const struct prefix *p)
+struct pa_ldp *__pa_ldp_get(struct pa_data *data, const struct prefix *p)
 {
 	struct pa_ldp *ldp;
 	pa_for_each_ldp_begin(ldp, data) {
@@ -179,18 +211,38 @@ struct pa_ldp *pa_ldp_get(struct pa_data *data, const struct prefix *p)
 	return NULL;
 }
 
-struct pa_ldp *pa_ldp_goc(struct pa_data *data, const struct prefix *p)
+struct pa_ldp *pa_ldp_get(struct pa_data *data, const struct prefix *p, bool *created)
 {
 	struct pa_ldp *ldp;
 
-	if((ldp = pa_ldp_get(data, p)))
+	if(created)
+		*created = false;
+
+	if((ldp = __pa_ldp_get(data, p)) || !created)
 		return ldp;
 
 	PA_P_ALLOC(ldp);
 	ldp->dp.local = true;
 	pa_dp_init(data, &ldp->dp, p);
-	ldp->excluded = NULL;
+	ldp->excluded.valid = false;
+	ldp->excluded.cp = NULL;
+	*created = true;
 	return ldp;
+}
+
+int pa_ldp_set_excluded(struct pa_ldp *ldp, const struct prefix *excluded)
+{
+	if((!excluded && !ldp->excluded.valid) || (excluded && !prefix_cmp(excluded, &ldp->excluded.excluded)))
+			return 0;
+
+	if(excluded) {
+		prefix_cpy(&ldp->excluded.excluded, excluded);
+		ldp->excluded.valid = true;
+	} else {
+		ldp->excluded.valid = false;
+	}
+
+	return 1;
 }
 
 void pa_ldp_destroy(struct pa_ldp *ldp) {
@@ -198,7 +250,7 @@ void pa_ldp_destroy(struct pa_ldp *ldp) {
 	free(ldp);
 }
 
-struct pa_edp *pa_edp_get(struct pa_data *data, const struct prefix *p, const struct pa_rid *rid)
+struct pa_edp *__pa_edp_get(struct pa_data *data, const struct prefix *p, const struct pa_rid *rid)
 {
 	struct pa_edp *edp;
 	pa_for_each_edp_begin(edp, data) {
@@ -208,17 +260,22 @@ struct pa_edp *pa_edp_get(struct pa_data *data, const struct prefix *p, const st
 	return NULL;
 }
 
-struct pa_edp *pa_edp_goc(struct pa_data *data, const struct prefix *p, const struct pa_rid *rid)
+struct pa_edp *pa_edp_get(struct pa_data *data, const struct prefix *p,
+		const struct pa_rid *rid, bool *created)
 {
-	struct pa_edp *edp = pa_edp_get(data, p, rid);
+	struct pa_edp *edp;
 
-	if(edp)
+	if(created)
+		*created = false;
+
+	if((edp = __pa_edp_get(data, p, rid)) || !created)
 		return edp;
 
 	PA_P_ALLOC(edp);
 	edp->dp.local = false;
 	pa_dp_init(data, &edp->dp, p);
 	PA_RIDCPY(&edp->rid, rid);
+	*created = true;
 	return edp;
 }
 
@@ -227,7 +284,7 @@ void pa_edp_destroy(struct pa_edp *edp) {
 	free(edp);
 }
 
-struct pa_ap *pa_ap_get(struct pa_data *data, const struct prefix *p, const struct pa_rid *rid)
+struct pa_ap *__pa_ap_get(struct pa_data *data, const struct prefix *p, const struct pa_rid *rid)
 {
 	struct pa_ap *ap, *first, *last;
 
@@ -245,15 +302,19 @@ struct pa_ap *pa_ap_get(struct pa_data *data, const struct prefix *p, const stru
 	return NULL;
 }
 
-struct pa_ap *pa_ap_goc(struct pa_data *data, const struct prefix *p, const struct pa_rid *rid)
+struct pa_ap *pa_ap_get(struct pa_data *data, const struct prefix *p,
+		const struct pa_rid *rid, bool *created)
 {
-	struct pa_ap *ap = pa_ap_get(data, p, rid);
+	struct pa_ap *ap;
 
-	if(ap)
+	if(created)
+		*created = false;
+
+	if((ap = __pa_ap_get(data, p, rid)) || ! created)
 		return ap;
 
 	PA_P_ALLOC(ap);
-	ap->authority = false;
+	ap->authoritative = false;
 	ap->priority = PA_PRIORITY_DEFAULT;
 	ap->iface = NULL;
 	prefix_cpy(&ap->prefix, p);
@@ -264,6 +325,7 @@ struct pa_ap *pa_ap_goc(struct pa_data *data, const struct prefix *p, const stru
 		free(ap);
 		return NULL;
 	}
+	*created = true;
 	L_INFO("Created "PA_AP_L, PA_AP_LA(ap));
 	return ap;
 }
@@ -297,8 +359,7 @@ static void pa_laa_apply_cb(struct uloop_timeout *to)
 {
 	struct pa_laa *laa = container_of(to, struct pa_laa, apply_to);
 	L_DEBUG("Applying "PA_AA_L, PA_AA_LA(&laa->aa));
-	if(laa->cp->pa_data->laa_apply_cb)
-		laa->cp->pa_data->laa_apply_cb(laa->cp->pa_data, laa);
+	pa_laa_apply(laa->cp->pa_data, laa);
 }
 
 
@@ -342,7 +403,7 @@ void pa_laa_set_apply_timeout(struct pa_laa *laa, int msecs)
 	}
 }
 
-struct pa_cp *pa_cp_get(struct pa_data *data, const struct prefix *prefix)
+struct pa_cp *__pa_cp_get(struct pa_data *data, const struct prefix *prefix)
 {
 	struct pa_cp *cp;
 	pa_for_each_cp(cp, data) {
@@ -356,15 +417,17 @@ static void pa_cp_apply_cb(struct uloop_timeout *to)
 {
 	struct pa_cp *cp = container_of(to, struct pa_cp, apply_to);
 	L_DEBUG("Applying "PA_CP_L, PA_CP_LA(cp));
-	if(cp->pa_data->cp_apply_cb)
-		cp->pa_data->cp_apply_cb(cp->pa_data, cp);
+	pa_cp_apply(cp->pa_data, cp);
 }
 
-struct pa_cp *pa_cp_goc(struct pa_data *data, const struct prefix *prefix)
+struct pa_cp *pa_cp_get(struct pa_data *data, const struct prefix *prefix, bool *created)
 {
-	struct pa_cp *cp = pa_cp_get(data, prefix);
+	struct pa_cp *cp;
 
-	if(cp)
+	if(created)
+		*created = false;
+
+	if((cp = __pa_cp_get(data, prefix)) || !created)
 		return cp;
 
 	PA_P_ALLOC(cp);
@@ -381,6 +444,8 @@ struct pa_cp *pa_cp_goc(struct pa_data *data, const struct prefix *prefix)
 	list_add(&cp->le, &data->cps);
 	cp->apply_to.pending = false;
 	cp->apply_to.cb = pa_cp_apply_cb;
+	cp->dp = NULL;
+	*created = true;
 	L_DEBUG("Created "PA_CP_L, PA_CP_LA(cp));
 	return cp;
 }
@@ -433,14 +498,32 @@ int pa_cp_set_address(struct pa_cp *cp, const struct in6_addr *addr)
 	return 1;
 }
 
+int pa_cp_set_dp(struct pa_cp *cp, struct pa_dp *dp)
+{
+	if(cp->dp == dp)
+		return 0;
+
+	if(cp->dp)
+		list_remove(&cp->dp_le);
+
+	if(dp)
+		list_add(&cp->dp_le, &dp->cps);
+
+	cp->dp = dp;
+
+	return 1;
+}
+
 void pa_cp_destroy(struct pa_cp *cp)
 {
+	pa_cp_set_dp(cp, NULL);
 	pa_cp_set_iface(cp, NULL);
+	pa_cp_set_address(cp, NULL);
 	list_remove(&cp->le);
 	free(cp);
 }
 
-struct pa_eaa *pa_eaa_get(struct pa_data *data, const struct in6_addr *addr, const struct pa_rid *rid)
+struct pa_eaa *__pa_eaa_get(struct pa_data *data, const struct in6_addr *addr, const struct pa_rid *rid)
 {
 	struct pa_eaa *eaa;
 	pa_for_each_eaa(eaa, data) {
@@ -451,11 +534,14 @@ struct pa_eaa *pa_eaa_get(struct pa_data *data, const struct in6_addr *addr, con
 	return NULL;
 }
 
-struct pa_eaa *pa_eaa_goc(struct pa_data *data, const struct in6_addr *addr, const struct pa_rid *rid)
+struct pa_eaa *pa_eaa_get(struct pa_data *data, const struct in6_addr *addr, const struct pa_rid *rid, bool *created)
 {
 	struct pa_eaa *eaa;
 
-	if((eaa = pa_eaa_get(data, addr, rid)))
+	if(created)
+		*created = false;
+
+	if((eaa = __pa_eaa_get(data, addr, rid)) || !created)
 		return eaa;
 
 	PA_P_ALLOC(eaa);
@@ -463,6 +549,7 @@ struct pa_eaa *pa_eaa_goc(struct pa_data *data, const struct in6_addr *addr, con
 	memcpy(&eaa->aa.address, addr, sizeof(struct in6_addr));
 	eaa->aa.local = false;
 	list_add(&eaa->le, &data->eaas);
+	*created = true;
 	L_DEBUG("Created "PA_AA_L, PA_AA_LA(&eaa->aa));
 	return eaa;
 }

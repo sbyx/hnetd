@@ -67,6 +67,7 @@ struct pa_dp {
 	hnetd_time_t preferred_until; /* Preferred until */
 	size_t dhcp_len;              /* dhcp data length (or 0) */
 	void *dhcp_data;     	      /* dhcp data (or NULL) */
+	struct list_head cps;         /* cps that are associated to that dp */
 	bool local;                   /* Whether it is ldp or edp */
 
 #define PA_DP_L			"dp %s(local=%d)"
@@ -82,7 +83,11 @@ struct pa_edp {
 /* Local dps */
 struct pa_ldp {
 	struct pa_dp dp;
-	struct pa_cp *excluded;   /* The excluded prefix cp (or null). */
+	struct {
+		bool valid;
+		struct prefix excluded;
+		struct pa_cp *cp;
+	} excluded;
 };
 
 struct pa_ap {
@@ -90,15 +95,14 @@ struct pa_ap {
 	struct prefix prefix;	  /* The assigned prefix */
 	struct pa_rid rid;        /* Sender's router id */
 
-	bool authority;           /* Authority bit */
+	bool authoritative;           /* Authority bit */
 	uint8_t priority;         /* Priority value */
 
 	struct pa_iface *iface;   /* Iface for that cp or null if no interface */
 	struct list_head if_le;   /* Linked in iface list */
 
-
 #define PA_AP_L         "ap %s%%"PA_IFNAME_L" from "PA_RID_L" priority %d:%d"
-#define PA_AP_LA(ap)    PREFIX_REPR(&(ap)->prefix), PA_IFNAME_LA((ap)->iface), PA_RID_LA(&(ap)->rid), !!(ap)->authority, (ap)->priority
+#define PA_AP_LA(ap)    PREFIX_REPR(&(ap)->prefix), PA_IFNAME_LA((ap)->iface), PA_RID_LA(&(ap)->rid), !!(ap)->authoritative, (ap)->priority
 };
 
 struct pa_cp {
@@ -114,6 +118,9 @@ struct pa_cp {
 
 	struct pa_iface *iface;   /* Iface for that cp or null if no interface */
 	struct list_head if_le;   /* Linked in iface list */
+
+	struct pa_dp *dp;         /* The dp associated to that cp */
+	struct list_head dp_le;   /* Linked in dp's list */
 
 	struct pa_data *pa_data;        /* Need that because of timeout callback */
 	struct uloop_timeout apply_to;  /* When to apply the prefix */
@@ -150,32 +157,23 @@ struct pa_eaa {
 	struct list_head le;      /* Put in pa_data's eaa list */
 };
 
-/* Prefix assignment's data structure */
-typedef void(*pa_apply_cb_t)(struct pa_data *, struct pa_cp *);
-typedef void(*laa_apply_cb_t)(struct pa_data *, struct pa_laa *);
-
 struct pa_data {
 	struct list_head ifs;  /* Ifaces */
 	struct list_head dps;  /* Delegated prefixes */
 	struct avl_tree  aps;  /* Assigned prefixes */
 	struct list_head  cps;  /* Chosen prefixes */
 	struct list_head eaas; /* Externally Address assignments */
-
-	pa_apply_cb_t cp_apply_cb;   /* Callback to apply a CB */
-	laa_apply_cb_t laa_apply_cb; /* Callback to apply a LAA */
 };
 
 #define PA_SET_SCALAR(var, new) \
 	(((var)==(new))?(0):(((var) = (new)) || 1))
 
-void pa_data_init(struct pa_data *,
-		pa_apply_cb_t cp_apply, laa_apply_cb_t laa_apply);
+void pa_data_init(struct pa_data *);
 void pa_data_term(struct pa_data *);
 
 #define pa_for_each_iface(pa_iface, pa_data) \
 	list_for_each_entry(pa_iface, &(pa_data)->ifs, le)
-struct pa_iface *pa_iface_get(struct pa_data *, const char *ifname);
-struct pa_iface *pa_iface_goc(struct pa_data *, const char *ifname);
+struct pa_iface *pa_iface_get(struct pa_data *, const char *ifname, bool *created);
 #define pa_iface_set_internal(iface, intern) PA_SET_SCALAR((iface)->internal, intern)
 #define pa_iface_set_designated(iface, design) PA_SET_SCALAR((iface)->designated, design)
 #define pa_iface_set_dodhcp(iface, dodhcp) PA_SET_SCALAR((iface)->do_dhcp, dodhcp)
@@ -200,8 +198,8 @@ int pa_dp_set_lifetime(struct pa_dp *, hnetd_time_t preferred, hnetd_time_t vali
 #define pa_for_each_ldp_end while(0); }
 #define pa_for_each_ldp_in_iface(pa_ldp, pa_iface) \
 	list_for_each_entry(pa_ldp, &(pa_iface)->ldps, if_le)
-struct pa_ldp *pa_ldp_get(struct pa_data *, const struct prefix *);
-struct pa_ldp *pa_ldp_goc(struct pa_data *, const struct prefix *);
+struct pa_ldp *pa_ldp_get(struct pa_data *, const struct prefix *, bool *created);
+int pa_ldp_set_excluded(struct pa_ldp *, const struct prefix *excluded);
 void pa_ldp_destroy(struct pa_ldp *);
 
 
@@ -214,8 +212,7 @@ void pa_ldp_destroy(struct pa_ldp *);
 
 	} */
 #define pa_for_each_edp_end while(0); }
-struct pa_edp *pa_edp_get(struct pa_data *, const struct prefix *, const struct pa_rid *rid);
-struct pa_edp *pa_edp_goc(struct pa_data *, const struct prefix *, const struct pa_rid *rid);
+struct pa_edp *pa_edp_get(struct pa_data *, const struct prefix *, const struct pa_rid *rid, bool *created);
 void pa_edp_destroy(struct pa_edp *);
 
 
@@ -226,23 +223,26 @@ void pa_edp_destroy(struct pa_edp *);
 		                        pa_ap, avl_node)
 #define pa_for_each_ap_in_iface(pa_ap, pa_iface) \
 	list_for_each_entry(pa_ap, &(pa_iface)->aps, if_le)
-struct pa_ap *pa_ap_get(struct pa_data *, const struct prefix *, const struct pa_rid *rid);
-struct pa_ap *pa_ap_goc(struct pa_data *, const struct prefix *, const struct pa_rid *rid);
+struct pa_ap *pa_ap_get(struct pa_data *, const struct prefix *, const struct pa_rid *rid, bool *created);
 int pa_ap_set_iface(struct pa_ap *ap, struct pa_iface *iface);
 #define pa_ap_set_priority(ap, prio) PA_SET_SCALAR((ap)->priority, prio)
-#define pa_ap_set_authority(ap, auth) PA_SET_SCALAR((ap)->authority, auth)
+#define pa_ap_set_authoritative(ap, auth) PA_SET_SCALAR((ap)->authoritative, auth)
 void pa_ap_destroy(struct pa_data *, struct pa_ap *);
-
 
 
 #define pa_for_each_cp(pa_cp, pa_data) \
 		list_for_each_entry(pa_cp, &(pa_data)->cps, le)
 #define pa_for_each_cp_in_iface(pa_cp, pa_iface) \
 	list_for_each_entry(pa_cp, &(pa_iface)->cps, if_le)
-struct pa_cp *pa_cp_get(struct pa_data *, const struct prefix *);
-struct pa_cp *pa_cp_goc(struct pa_data *, const struct prefix *);
+#define pa_for_each_cp_in_dp(pa_cp, pa_dp) \
+	list_for_each_entry(pa_cp, &(pa_dp)->cps, dp_le)
+struct pa_cp *pa_cp_get(struct pa_data *, const struct prefix *, bool *created);
 int pa_cp_set_iface(struct pa_cp *, struct pa_iface *);
 int pa_cp_set_address(struct pa_cp *, const struct in6_addr *);
+int pa_cp_set_dp(struct pa_cp *, struct pa_dp *dp);
+#define pa_cp_set_priority(cp, prio) PA_SET_SCALAR((cp)->priority, prio)
+#define pa_cp_set_authoritative(cp, auth) PA_SET_SCALAR((cp)->authoritative, auth)
+#define pa_cp_set_advertised(cp, adv) PA_SET_SCALAR((cp)->advertised, adv)
 void pa_cp_set_apply_timeout(struct pa_cp *, int msecs);
 void pa_cp_destroy(struct pa_cp *);
 
@@ -251,8 +251,7 @@ void pa_laa_set_apply_timeout(struct pa_laa *, int msecs);
 
 #define pa_for_each_eaa(pa_eaa, pa_data) \
 		list_for_each_entry(pa_eaa, &(pa_data)->eaas, le)
-struct pa_eaa *pa_eaa_get(struct pa_data *, const struct in6_addr *, const struct pa_rid *);
-struct pa_eaa *pa_eaa_goc(struct pa_data *, const struct in6_addr *, const struct pa_rid *);
+struct pa_eaa *pa_eaa_get(struct pa_data *, const struct in6_addr *, const struct pa_rid *, bool *created);
 void pa_eaa_destroy(struct pa_eaa *);
 
 

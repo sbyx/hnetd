@@ -1,42 +1,29 @@
 /*
+ * pa_data.h
+ *
  * Author: Pierre Pfister
  *
- * Prefix assignment algorithm.
- *
- * This file provides a protocol independent interface
- * for prefix allocation and assignment in home networks.
+ * Interfacing functions between Prefix Assignment Algorithm
+ * and other elements (hcp or iface).
  *
  */
 
-#ifndef PA_H
-#define PA_H
 
-#include <libubox/avl.h>
+#ifndef PA_H_
+#define PA_H_
+
 #include <libubox/uloop.h>
-#include <net/if.h>
 #include <stdint.h>
-#include <time.h>
 
-typedef struct pa *pa_t;
+#include "pa_core.h"
+#include "pa_data.h"
+#include "pa_local.h"
+#include "pa_store.h"
 
 #include "hnetd.h"
+
+typedef struct pa *pa_t;
 #include "iface.h"
-#include "pa_store.h"
-#include "prefix_utils.h"
-
-/* Length of router ids */
-#define PA_RIDLEN 16
-
-struct pa_rid {
-	uint8_t id[PA_RIDLEN];
-};
-
-#define PA_RID_L		"%02x%02x%02x%02x:%02x%02x%02x%02x:%02x%02x%02x%02x:%02x%02x%02x%02x"
-#define PA_RID_LA(rid)  (rid)->id[0], (rid)->id[1], (rid)->id[2], (rid)->id[3], \
-		(rid)->id[4], (rid)->id[5], (rid)->id[6], (rid)->id[7], \
-		(rid)->id[8], (rid)->id[9], (rid)->id[10], (rid)->id[11], \
-		(rid)->id[12], (rid)->id[13], (rid)->id[15], (rid)->id[15]
-
 
 /* Callbacks for flooding protocol. */
 struct pa_flood_callbacks {
@@ -48,6 +35,7 @@ struct pa_flood_callbacks {
 	 * @param to_delete Whether that lap needs to be deleted
 	 * @param priv Private pointer as provided by subscriber */
 	void (*updated_lap)(const struct prefix *prefix, const char *ifname,
+							bool authoritative, uint8_t priority,
 							int to_delete, void *priv);
 
 	/* Called whenever a locally delegated prefix is modified.
@@ -61,10 +49,17 @@ struct pa_flood_callbacks {
 	 * @param dhcpv6_len The length of the dhcpv6 data (0 if not data)
 	 * @param priv Private pointer as provided by subscriber */
 	void (*updated_ldp)(const struct prefix *prefix,
-				const struct prefix *excluded, const char *dp_ifname,
 				hnetd_time_t valid_until, hnetd_time_t preferred_until,
 				const void *dhcpv6_data, size_t dhcpv6_len,
 				void *priv);
+
+	/* Called whenever a locally assigned address is modified.
+	 * @param prefix The assigned prefix
+	 * @param ifname Interface on which assignment is made
+	 * @param to_delete Whether that aap needs to be deleted
+	 * @param priv Private pointer as provided by subscriber */
+	void (*updated_laa)(const struct in6_addr *addr, const char *ifname,
+			int to_delete, void *priv);
 };
 
 struct pa_iface_callbacks {
@@ -90,15 +85,13 @@ struct pa_iface_callbacks {
 	 * @param owner Whether we should do dhcp+ra
 	 * @param priv Private pointer as provided by subscriber */
 	void (*update_link_owner)(const char *ifname, bool owner, void *priv);
+
+	/* Called whenever an assigned address must be applied or unapplied. */
+	void (*update_address)(const char *ifname, const struct in6_addr *addr,
+			int to_delete, void *priv);
 };
 
 struct pa_conf {
-
-	/* Time it gets for an update to be propagated through the network.
-	 * It should be set depending on used flooding protocol.
-	 * default = 15 * HNETD_TIME_PER_SECOND */
-	hnetd_time_t flooding_delay;
-
 	/* Enables ULA use
 	 * default = 1 */
 	char use_ula;
@@ -151,39 +144,58 @@ struct pa_conf {
 	struct pa_store *storage;
 };
 
+struct pa_flood {
+	struct pa_rid rid;
+	hnetd_time_t flooding_delay;
+	hnetd_time_t flooding_delay_ll;
+};
 
-/* Sets conf values to defaults. */
-void pa_conf_default(struct pa_conf *);
+struct pa {
+	struct pa_core core;                  /* Algorithm core elements */
+	struct pa_flood flood;                /* Main information from flooding */
+	struct pa_data data;                  /* PAA database */
+	struct pa_conf conf;                  /* Configuration */
+	struct pa_local local;                /* Ipv4 and ULA elements */
+	struct pa_flood_callbacks flood_cbs;  /* HCP callbacks */
+	struct pa_iface_callbacks iface_cbs;  /* Iface callbacks */
+	struct iface_user ifu;
+};
 
-/* Initializes the prefix assignment algorithm with a default
- * configuration.
- * Returns a pa struct on success and NULL on error. */
-pa_t pa_create(const struct pa_conf *);
 
-/* Starts the pa algorithm
- * All registrations with other modules (uloop, iface, ...) are
- * done here. */
-int pa_start(pa_t);
+/************************************/
+/********** Main interface **********/
+/************************************/
 
-/* Stops and destroys the prefix assignment.
- * Init must be called to use it again. */
-void pa_destroy(pa_t);
+void pa_conf_set_defaults(struct pa_conf *conf);
+/* Initializes the pa structure. */
+void pa_init(struct pa *pa, const struct pa_conf *conf);
+/* Start the pa algorithm. */
+void pa_start(struct pa *pa);
+/* Pause the pa alforithm (Possibly wrong state). */
+void pa_stop(struct pa *pa);
+/* Reset pa to post-init state, without modifying configuration. */
+void pa_term(struct pa *pa);
 
-/* Subscribes to lap change events.
- * Will be used by iface.c to obtain new laps information.
- * Subscribing will override previous subscription (if any). */
-void pa_iface_subscribe(pa_t, const struct pa_iface_callbacks *);
+
+/************************************/
+/********* Iface interface **********/
+/************************************/
+
+/* Subscribes to lap change events. */
+void pa_iface_subscribe(struct pa *pa, const struct pa_iface_callbacks *);
+
+
+/************************************/
+/********* Flood interface **********/
+/************************************/
 
 /* Sets flooder algorithm callbacks.
  * Subscribing will override previous subscription (if any).
  * The provided structure can be destroyed after function returns. */
 void pa_flood_subscribe(pa_t, const struct pa_flood_callbacks *);
 
-
-/* Sets the router id.
- * This must be called after creation. Otherwise,
- * an rid of zero will be used (lowest priority). */
-void pa_set_rid(pa_t, const struct pa_rid *rid);
+/* Sets the router id. */
+void pa_set_rid(struct pa *pa, const struct pa_rid *rid);
 
 /* Flooding protocol must call that function whenever an assigned
  * prefix advertised by some *other* node is modified or deleted.
@@ -193,29 +205,56 @@ void pa_set_rid(pa_t, const struct pa_rid *rid);
  * @param do_delete Whether this eap must be deleted
  * @param rid The source router id
  * @return 0 on success. A different value on error. */
-int pa_update_eap(pa_t, const struct prefix *prefix,
+int pa_update_ap(struct pa *pa, const struct prefix *prefix,
 				const struct pa_rid *rid,
-				const char *ifname, bool to_delete);
+				const char *ifname, bool authoritative, uint8_t priority,
+				bool to_delete);
 
 /* Flooding protocol must call that function whenever a delegated
  * prefix advertised by some *other* node is modified or deleted.
  * @param prefix The delegated prefix
  * @param rid Prefix owner's router id
- * @param excluded Prefix to not assign (NULL if not assigned)
  * @param valid_until Time when the prefix becomes invalid (0 for deletion)
  * @param preferred_until - Time when the prefix is not preferred anymore.
  * @param dhcpv6_data Data provided by the delegating dhcpv6 server (NULL if no data)
  * @param dhcpv6_len The length of the dhcpv6 data (0 if not data)
  * @return 0 on success. A different value on error. */
-int pa_update_edp(pa_t, const struct prefix *prefix,
+int pa_update_edp(struct pa *pa, const struct prefix *prefix,
 				const struct pa_rid *rid,
-				const struct prefix *excluded,
 				hnetd_time_t valid_until, hnetd_time_t preferred_until,
 				const void *dhcpv6_data, size_t dhcpv6_len);
 
-#endif
+/* Flooding protocol must call that function whenever an address assigned by
+ * another router is modified. */
+int pa_update_eaa(struct pa *pa, const struct in6_addr *addr,
+				const struct pa_rid *rid, bool to_delete);
 
 
+/************************************/
+/******** pa_core interface *********/
+/************************************/
 
+/* When a local element is modifed */
+void pa_updated_cp(struct pa_core *core, struct pa_cp *cp, bool to_delete, bool tell_flood, bool tell_iface);
+void pa_updated_laa(struct pa_core *core, struct pa_laa *laa, bool to_delete);
 
+/* When an iface is modified */
+void pa_updated_dodhcp(struct pa_core *core, struct pa_iface *iface);
 
+/************************************/
+/******* pa_local interface *********/
+/************************************/
+
+void pa_update_local(struct pa_core *core,
+		const struct prefix *prefix, const struct prefix *excluded,
+		hnetd_time_t valid_until, hnetd_time_t preferred_until,
+		const void *dhcp_data, size_t dhcp_len);
+
+/************************************/
+/******* pa_data interface **********/
+/************************************/
+
+void pa_cp_apply(struct pa_data *data, struct pa_cp *cp);
+void pa_laa_apply(struct pa_data *data, struct pa_laa *laa);
+
+#endif /* PA_H_ */
