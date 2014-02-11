@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Fri Feb  7 13:40:58 2014 mstenber
- * Edit time:     231 min
+ * Last modified: Tue Feb 11 12:01:19 2014 mstenber
+ * Edit time:     237 min
  *
  */
 
@@ -260,7 +260,10 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
              (struct sockaddr *)&dst, sizeof(dst));
   if (r < 0)
     {
-      L_ERR("unable to send on %s - sendto:%s", ifname, strerror(errno));
+      char buf[128];
+      const char *c = inet_ntop(AF_INET6, to, buf, sizeof(buf));
+      L_ERR("unable to send to %s%%%s - sendto:%s",
+            c ? c : "?", ifname, strerror(errno));
     }
   return r;
 }
