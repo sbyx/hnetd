@@ -74,7 +74,7 @@ int ipc_client(const char *buffer)
 	blob_buf_init(&b, 0);
 
 	if (!blobmsg_add_json_from_string(&b, buffer)) {
-		fputs("Failed to parse input data\n", stderr);
+		fprintf(stderr, "Failed to parse input data: %s\n", buffer);
 		return 1;
 	}
 
@@ -105,7 +105,7 @@ int ipc_ifupdown(const char *action, const char *ifname, const char *external)
 	if (!external || strcmp(external, "external"))
 		blobmsg_add_string(&b, "handle", ifname);
 
-	return ipc_client(blobmsg_format_json(b.head, false));
+	return ipc_client(blobmsg_format_json(b.head, true));
 }
 
 
