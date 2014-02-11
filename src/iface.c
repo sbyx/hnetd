@@ -7,7 +7,9 @@
 #include <arpa/inet.h>
 
 #include <sys/socket.h>
+#ifdef __linux__
 #include <linux/rtnetlink.h>
+#endif /* __linux__ */
 
 #ifndef SOL_NETLINK
 #define SOL_NETLINK 270
@@ -38,9 +40,6 @@ static struct pa_iface_callbacks pa_cb = {
 	.update_prefix = iface_update_prefix,
 	.update_link_owner = iface_update_link_owner
 };
-
-static struct uloop_fd rtnl_fd = { .fd = -1 };
-
 
 static void iface_update_prefix(const struct prefix *p, const char *ifname,
 		hnetd_time_t valid_until, hnetd_time_t preferred_until,
@@ -107,6 +106,7 @@ static void iface_notify_data_state(struct iface *c, bool enabled)
 
 }
 
+#ifdef __linux__
 
 static void iface_link_event(struct uloop_fd *fd, __unused unsigned events)
 {
@@ -141,9 +141,13 @@ static void iface_link_event(struct uloop_fd *fd, __unused unsigned events)
 	} while (read > 0);
 }
 
+static struct uloop_fd rtnl_fd = { .fd = -1 };
+
+#endif /* __linux__ */
 
 int iface_init(pa_t pa)
 {
+#ifdef __linux__
 	rtnl_fd.fd = socket(AF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, NETLINK_ROUTE);
 	if (rtnl_fd.fd < 0)
 		return -1;
@@ -157,6 +161,7 @@ int iface_init(pa_t pa)
 
 	rtnl_fd.cb = iface_link_event;
 	uloop_fd_add(&rtnl_fd, ULOOP_READ | ULOOP_EDGE_TRIGGER);
+#endif /* __linux__ */
 
 	pa_iface_subscribe(pa, &pa_cb);
 	return platform_init();
@@ -514,6 +519,7 @@ struct iface* iface_create(const char *ifname, const char *handle)
 		c->transition.cb = iface_announce_border;
 		c->preferred.cb = iface_announce_preferred;
 
+#ifdef __linux__
 		struct {
 			struct nlmsghdr hdr;
 			struct ifinfomsg ifi;
@@ -522,6 +528,7 @@ struct iface* iface_create(const char *ifname, const char *handle)
 			.ifi = {.ifi_index = if_nametoindex(ifname)}
 		};
 		send(rtnl_fd.fd, &req, sizeof(req), 0);
+#endif /* __linux__ */
 
 		list_add(&c->head, &interfaces);
 	}
