@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Tue Feb  4 18:21:47 2014 mstenber
- * Edit time:     182 min
+ * Last modified: Tue Feb 11 15:12:04 2014 mstenber
+ * Edit time:     190 min
  *
  */
 
@@ -173,6 +173,26 @@ static void _update_a_tlv(hncp_glue g, hncp_node n,
   return;
 }
 
+hnetd_time_t _remote_rel_to_local_abs(hnetd_time_t base, uint32_t netvalue)
+{
+  if (netvalue == UINT32_MAX)
+    return HNETD_TIME_MAX;
+  return base + be32_to_cpu(netvalue);
+}
+
+uint32_t _local_abs_to_remote_rel(hnetd_time_t now, hnetd_time_t v)
+{
+  if (v == HNETD_TIME_MAX)
+    return cpu_to_be32(UINT32_MAX);
+  if (now > v)
+    return 0;
+  hnetd_time_t delta = v - now;
+  /* Convert to infinite if it would overflow too. */
+  if (delta >= UINT32_MAX)
+    return cpu_to_be32(UINT32_MAX);
+  return cpu_to_be32(delta);
+}
+
 static void _update_d_tlv(hncp_glue g, hncp_node n,
                           struct tlv_attr *tlv, bool add)
 {
@@ -197,8 +217,10 @@ static void _update_d_tlv(hncp_glue g, hncp_node n,
     }
   else
     {
-      valid = n->origination_time + be32_to_cpu(dh->ms_valid_at_origination);
-      preferred = n->origination_time + be32_to_cpu(dh->ms_preferred_at_origination);
+      valid = _remote_rel_to_local_abs(n->origination_time,
+                                       dh->ms_valid_at_origination);
+      preferred = _remote_rel_to_local_abs(n->origination_time,
+                                           dh->ms_preferred_at_origination);
     }
   /* XXX - handle dhcpv6 data */
   unsigned int flen = sizeof(hncp_t_delegated_prefix_header_s) + plen;
@@ -326,16 +348,8 @@ static void _republish_cb(hncp_subscriber s)
         {
           tlv_init(t, HNCP_T_DELEGATED_PREFIX, flen);
           dph = tlv_data(t);
-          if (dp->valid_until >= now)
-            dph->ms_valid_at_origination =
-              cpu_to_be32(dp->valid_until - now);
-          else
-            dph->ms_valid_at_origination = 0;
-          if (dp->preferred_until >= now)
-            dph->ms_preferred_at_origination =
-              cpu_to_be32(dp->preferred_until - now);
-          else
-            dph->ms_preferred_at_origination = 0;
+          dph->ms_valid_at_origination = _local_abs_to_remote_rel(now, dp->valid_until);
+          dph->ms_preferred_at_origination = _local_abs_to_remote_rel(now, dp->preferred_until);
           dph->prefix_length_bits = dp->prefix.plen;
           dph++;
           memcpy(dph, &dp->prefix, plen);
