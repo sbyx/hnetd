@@ -260,6 +260,8 @@ bool tlv_sort(void *data, int len)
 		memcpy(t, al[i], l);
 		t += l;
 	}
+	if (t != (tmp + len))
+		return false;
 	memcpy(data, tmp, len);
 	free(tmp);
 	return true;

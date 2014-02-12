@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 10:04:30 2013 mstenber
- * Last modified: Fri Feb  7 11:42:22 2014 mstenber
- * Edit time:     43 min
+ * Last modified: Wed Feb 12 22:27:47 2014 mstenber
+ * Edit time:     44 min
  *
  */
 
@@ -26,7 +26,6 @@ void hncp_subscribe(hncp o, hncp_subscriber s)
   hncp_node n;
   hncp_tlv t;
   struct tlv_attr *a;
-  int i;
 
   list_add(&s->lh, &o->subscribers);
   if (s->local_tlv_change_callback)
@@ -39,7 +38,7 @@ void hncp_subscribe(hncp o, hncp_subscriber s)
       NODE_CHANGE_CALLBACK(s, n, true);
       if (s->tlv_change_callback)
         {
-          hncp_node_for_each_tlv(n, a, i)
+          hncp_node_for_each_tlv(n, a)
             s->tlv_change_callback(s, n, a, true);
         }
     }
@@ -49,7 +48,6 @@ void hncp_unsubscribe(hncp o, hncp_subscriber s)
 {
   hncp_node n;
   struct tlv_attr *a;
-  int i;
   hncp_tlv t;
 
   if (s->local_tlv_change_callback)
@@ -61,7 +59,7 @@ void hncp_unsubscribe(hncp o, hncp_subscriber s)
     {
       if (s->tlv_change_callback)
         {
-          hncp_node_for_each_tlv(n, a, i)
+          hncp_node_for_each_tlv(n, a)
             s->tlv_change_callback(s, n, a, false);
         }
       NODE_CHANGE_CALLBACK(s, n, false);

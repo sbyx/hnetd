@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Fri Feb  7 12:38:31 2014 mstenber
- * Edit time:     104 min
+ * Last modified: Wed Feb 12 22:27:26 2014 mstenber
+ * Edit time:     105 min
  *
  */
 
@@ -141,6 +141,13 @@ struct tlv_attr *hncp_add_tlv(hncp o, struct tlv_attr *tlv);
 bool hncp_remove_tlv(hncp o, struct tlv_attr *tlv);
 
 /**
+ * Remove all TLVs of particular type.
+ *
+ * @return The number of TLVs removed.
+ */
+int hncp_remove_tlvs_by_type(hncp o, int type);
+
+/**
  * Enable/disable on an interface.
  */
 bool hncp_set_link_enabled(hncp o, const char *ifname, bool enabled);
@@ -202,8 +209,8 @@ struct tlv_attr *hncp_node_get_tlvs(hncp_node n);
 #define hncp_for_each_node(o, n)                                        \
   for (n = hncp_get_first_node(o) ; n ; n = hncp_node_get_next(n))
 
-#define hncp_node_for_each_tlv(n, a, i)                 \
-  tlv_for_each_attr(a, hncp_node_get_tlvs(n), i)
+#define hncp_node_for_each_tlv(n, a)    \
+  tlv_for_each_attr(a, hncp_node_get_tlvs(n))
 
 /*********************************************** Service discovery submodule */
 

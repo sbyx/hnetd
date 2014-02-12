@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Fri Feb  7 11:31:10 2014 mstenber
+ * Last modified: Wed Feb 12 22:50:27 2014 mstenber
  * Edit time:     33 min
  *
  */
@@ -599,6 +599,13 @@ void pa_set_rid(pa_t pa, const struct pa_rid *rid)
                           HNCP_HASH_LEN) == 0,
                    "rid same");
 
+}
+
+/********************************************************************* iface */
+
+struct iface* iface_get(const char *ifname)
+{
+  return NULL;
 }
 
 

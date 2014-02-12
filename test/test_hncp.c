@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Thu Dec  5 10:52:05 2013 mstenber
- * Edit time:     66 min
+ * Last modified: Wed Feb 12 22:51:40 2014 mstenber
+ * Edit time:     67 min
  *
  */
 
@@ -18,6 +18,11 @@
 /* Fake structures to keep pa's default config happy. */
 void *iface_register_user;
 void *iface_unregister_user;
+
+struct iface* iface_get(const char *ifname __unused)
+{
+  return NULL;
+}
 
 /**************************************************************** Test cases */
 

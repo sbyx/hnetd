@@ -149,8 +149,7 @@ static bool hncp_routing_neighbors_are_mutual(hncp_node node, hncp_hash node_ide
 		uint32_t link_id, uint32_t neighbor_link_id)
 {
 	struct tlv_attr *a, *tlvs = node->tlv_container;
-	unsigned rem;
-	tlv_for_each_attr(a, tlvs, rem) {
+	tlv_for_each_attr(a, tlvs) {
 		if (tlv_id(a) == HNCP_T_NODE_DATA_NEIGHBOR &&
 				tlv_len(a) == sizeof(hncp_t_node_data_neighbor_s)) {
 			hncp_t_node_data_neighbor ne = tlv_data(a);
@@ -189,8 +188,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 
 		++routercnt;
 		struct tlv_attr *a, *tlvs = c->tlv_container;
-		unsigned rem;
-		tlv_for_each_attr(a, tlvs, rem) {
+		tlv_for_each_attr(a, tlvs) {
 			if (tlv_id(a) == HNCP_T_ROUTING_PROTOCOL &&
 					tlv_len(a) >= sizeof(hncp_t_routing_protocol_s)) {
 				hncp_t_routing_protocol p = tlv_data(a);
@@ -242,8 +240,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 		L_WARN("Router %d", c->node_identifier_hash.buf[0]);
 
 		struct tlv_attr *a, *tlvs = c->tlv_container;
-		unsigned rem;
-		tlv_for_each_attr(a, tlvs, rem) {
+		tlv_for_each_attr(a, tlvs) {
 			if (tlv_id(a) == HNCP_T_NODE_DATA_NEIGHBOR &&
 					tlv_len(a) == sizeof(hncp_t_node_data_neighbor_s)) {
 
@@ -274,9 +271,8 @@ static void hncp_routing_run(struct uloop_timeout *t)
 						n->bfs.ifname = link->ifname;
 					}
 
-					unsigned nrem;
 					struct tlv_attr *na, *ntlvs = n->tlv_container;
-					tlv_for_each_attr(na, ntlvs, nrem) {
+					tlv_for_each_attr(na, ntlvs) {
 						if (tlv_id(na) == HNCP_T_ROUTER_ADDRESS &&
 								tlv_len(na) == sizeof(struct in6_addr) &&
 							IN6_IS_ADDR_V4MAPPED((struct in6_addr *)tlv_data(na))) {

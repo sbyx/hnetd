@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Fri Feb  7 12:38:42 2014 mstenber
- * Edit time:     122 min
+ * Last modified: Wed Feb 12 22:28:32 2014 mstenber
+ * Edit time:     125 min
  *
  */
 
@@ -296,8 +296,8 @@ static inline hnetd_time_t hncp_time(hncp o)
 
 #define HNCP_NODE_REPR(n) HEX_REPR(&n->node_identifier_hash, HNCP_HASH_LEN)
 
-#define hncp_node_for_each_tlv_i(n, a, i)       \
-  tlv_for_each_attr(a, (n)->tlv_container, i)
+#define hncp_node_for_each_tlv_i(n, a)  \
+  tlv_for_each_attr(a, (n)->tlv_container)
 
 #define ROUND_BITS_TO_BYTES(b) (((b) + 7) / 8)
 #define ROUND_BYTES_TO_4BYTES(b) ((((b) + 3) / 4) * 4)

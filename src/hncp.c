@@ -7,7 +7,7 @@
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
  * Last_neighast modified: Thu Dec  5 10:34:22 2013 mstenber
- * Edit time:     385 min
+ * Edit time:     391 min
  *
  */
 
@@ -354,6 +354,21 @@ bool hncp_remove_tlv(hncp o, struct tlv_attr *tlv)
   vlist_delete(&o->tlvs, &old->in_tlvs);
   return true;
 }
+
+int hncp_remove_tlvs_by_type(hncp o, int type)
+{
+  hncp_tlv t, t2;
+  int c = 0;
+
+  avl_for_each_element_safe(&o->tlvs.avl, t, in_tlvs.avl, t2)
+    {
+      if ((int)tlv_id(&t->tlv) == type)
+        if (hncp_remove_tlv(o, &t->tlv))
+          c++;
+    }
+  return c;
+}
+
 
 hncp_link hncp_find_link_by_name(hncp o, const char *ifname, bool create)
 {

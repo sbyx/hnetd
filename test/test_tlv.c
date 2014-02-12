@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 11:53:11 2013 mstenber
- * Last modified: Wed Feb 12 22:10:50 2014 mstenber
- * Edit time:     44 min
+ * Last modified: Wed Feb 12 22:38:00 2014 mstenber
+ * Edit time:     46 min
  *
  */
 
@@ -26,7 +26,6 @@ void tlv_iter(void)
   struct tlv_buf tb;
   struct tlv_attr *a, *a1, *a2, *a3;
   int c;
-  unsigned int rem;
   void *tmp;
 
   /* Initialize test structure. */
@@ -39,14 +38,14 @@ void tlv_iter(void)
 
   /* Make sure iteration is sane. */
   c = 0;
-  tlv_for_each_attr(a, tb.head, rem)
+  tlv_for_each_attr(a, tb.head)
     c++;
   sput_fail_unless(c == 3, "right iter result 1");
 
   /* remove 3 bytes -> a3 header complete but not body. */
   tlv_init(tb.head, 0, tlv_raw_len(tb.head) - 3);
   c = 0;
-  tlv_for_each_attr(a, tb.head, rem)
+  tlv_for_each_attr(a, tb.head)
     c++;
   sput_fail_unless(c == 2, "right iter result 2");
 
@@ -55,7 +54,7 @@ void tlv_iter(void)
   c = 0;
   tmp = malloc(tlv_raw_len(tb.head));
   memcpy(tmp, tb.head, tlv_raw_len(tb.head));
-  tlv_for_each_attr(a, tmp, rem)
+  tlv_for_each_attr(a, tmp)
     c++;
   sput_fail_unless(c == 2, "right iter result 3");
   free(tmp);
@@ -138,7 +137,6 @@ void tlv_nest()
   void *cookie;
   int c, d;
   struct tlv_attr *a, *a2;
-  unsigned int rem;
   int cs = 0;
   int ds = 0;
 
@@ -159,14 +157,14 @@ void tlv_nest()
 
   /* Make sure what we produced looks sane. */
   c = 0;
-  tlv_for_each_attr(a, tb.head, rem)
+  tlv_for_each_attr(a, tb.head)
     c++;
   L_DEBUG("# of root attrs:%d", c);
   sput_fail_unless(c == 2, "should be just 2 root attr");
 
   c = 0;
   d = 0;
-  tlv_for_each_attr(a, tb.head, rem)
+  tlv_for_each_attr(a, tb.head)
     {
       cs += tlv_id(a);
       void *base = tlv_data(a);
@@ -195,7 +193,6 @@ void test_tlv_sort()
 {
   struct tlv_buf tb;
   struct tlv_attr *a;
-  unsigned int rem;
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0);
@@ -210,7 +207,7 @@ void test_tlv_sort()
   /* Make sure they come out in ascending order. */
   int last = -1;
   int c = 0;
-  tlv_for_each_attr(a, tb.head, rem)
+  tlv_for_each_attr(a, tb.head)
     {
       int nid = tlv_id(a);
       L_DEBUG("last:%d id:%d", last, nid);

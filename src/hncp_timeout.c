@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Tue Feb  4 18:22:54 2014 mstenber
+ * Last modified: Wed Feb 12 22:26:08 2014 mstenber
  * Edit time:     99 min
  *
  */
@@ -46,7 +46,6 @@ static void trickle_send(hncp_link l)
 static void hncp_prune_rec(hncp_node n)
 {
   struct tlv_attr *tlvs, *a;
-  unsigned int rem;
   hncp_t_node_data_neighbor ne;
   hncp_node n2;
 
@@ -72,7 +71,7 @@ static void hncp_prune_rec(hncp_node n)
   vlist_add(&n->hncp->nodes, &n->in_nodes, n);
 
   /* Look at it's neighbors. */
-  tlv_for_each_attr(a, tlvs, rem)
+  tlv_for_each_attr(a, tlvs)
     if (tlv_id(a) == HNCP_T_NODE_DATA_NEIGHBOR)
       {
         if (tlv_len(a) == sizeof(hncp_t_node_data_neighbor_s))

@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Fri Feb  7 14:36:16 2014 mstenber
- * Edit time:     347 min
+ * Last modified: Wed Feb 12 22:29:01 2014 mstenber
+ * Edit time:     352 min
  *
  */
 
@@ -160,7 +160,6 @@ static int _push_reverse_ll(struct prefix *p, uint8_t *buf, int buf_len)
 static void _publish_ddzs(hncp_sd sd)
 {
   struct tlv_attr *a;
-  int i;
   hncp_tlv t;
   hncp_t_assigned_prefix_header ah;
 
@@ -168,9 +167,7 @@ static void _publish_ddzs(hncp_sd sd)
     return;
   sd->should_update &= ~UPDATE_FLAG_DDZ;
   L_DEBUG("_publish_ddzs");
-  hncp_node_for_each_tlv_i(sd->hncp->own_node, a, i)
-    if (tlv_id(a) == HNCP_T_DNS_DELEGATED_ZONE)
-      (void)hncp_remove_tlv(sd->hncp, a);
+  (void)hncp_remove_tlvs_by_type(sd->hncp, HNCP_T_DNS_DELEGATED_ZONE);
   vlist_for_each_element(&sd->hncp->tlvs, t, in_tlvs)
     {
       a = &t->tlv;
@@ -245,7 +242,6 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
 {
   hncp_node n;
   struct tlv_attr *a;
-  int i;
   FILE *f = fopen(filename, "w");
   md5_ctx_t ctx;
 
@@ -266,7 +262,7 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
   md5_hash(sd->domain, strlen(sd->domain), &ctx);
   hncp_for_each_node(sd->hncp, n)
     {
-      hncp_node_for_each_tlv_i(n, a, i)
+      hncp_node_for_each_tlv_i(n, a)
         if (tlv_id(a) == HNCP_T_DNS_DELEGATED_ZONE)
           {
             /* Decode the labels */
@@ -351,7 +347,6 @@ bool hncp_sd_reconfigure_ohp(hncp_sd sd)
   char tbuf[DNS_MAX_ESCAPED_LEN];
 
   struct tlv_attr *a;
-  int i;
   bool first = true;
   md5_ctx_t ctx;
 
@@ -365,7 +360,7 @@ bool hncp_sd_reconfigure_ohp(hncp_sd sd)
 
   /* We're responsible only for those interfaces that we have assigned
    * prefix for. */
-  hncp_node_for_each_tlv_i(sd->hncp->own_node, a, i)
+  hncp_node_for_each_tlv_i(sd->hncp->own_node, a)
     if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX)
       {
         ah = tlv_data(a);
@@ -479,11 +474,10 @@ _find_router_name(hncp_sd sd)
 {
   hncp_node n;
   struct tlv_attr *a;
-  int i;
 
   hncp_for_each_node(sd->hncp, n)
     {
-      hncp_node_for_each_tlv_i(n, a, i)
+      hncp_node_for_each_tlv_i(n, a)
         {
           if (_tlv_router_name_matches(sd, a))
             return n;

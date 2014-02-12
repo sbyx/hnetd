@@ -126,16 +126,16 @@ extern bool tlv_sort(void *buf, int len);
 /* Paranoid version: Have faith only in the caller providing correct
  * buf + len; pos is used to maintain the current position within buf. */
 #define tlv_for_each_in_buf(pos, buf, len)                              \
-  for (pos = (void *)buf;                                               \
-       ((void *)pos + sizeof(struct tlv_attr)) <= ((void *)buf + len)   \
-         && tlv_pad_len(pos) >= sizeof(struct tlv_attr)                 \
-         && (void *)tlv_next(pos) <= ((void *)buf + len);               \
+  for (pos = (void *)(buf);                                             \
+       (void *)pos + sizeof(struct tlv_attr) <= (void *)(buf) + (len)   \
+         && tlv_raw_len(pos) >= sizeof(struct tlv_attr)                 \
+         && (void *)pos + tlv_raw_len(pos) <= (void *)(buf) + (len);    \
        pos = tlv_next(pos))
 
 /* Assume the root 'attr' is trusted. The rest may contain garbage and
  * we should still not blow up. */
-#define tlv_for_each_attr(pos, attr, x) \
-  x = attr ? tlv_len(attr) : 0; tlv_for_each_in_buf(pos, tlv_data(attr), x)
+#define tlv_for_each_attr(pos, attr) \
+  tlv_for_each_in_buf(pos, tlv_data(attr), (attr) ? tlv_len(attr) : 0)
 
 static inline const char *hex_repr(char *buf, const void *data, int len)
 {

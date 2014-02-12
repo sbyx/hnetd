@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:34:12 2013 mstenber
- * Last modified: Tue Feb  4 18:21:54 2014 mstenber
- * Edit time:     1 min
+ * Last modified: Wed Feb 12 17:30:59 2014 mstenber
+ * Edit time:     2 min
  *
  */
 
@@ -27,5 +27,8 @@ typedef struct hncp_glue_struct hncp_glue_s, *hncp_glue;
 hncp_glue hncp_pa_glue_create(hncp o, pa_t pa);
 
 void hncp_pa_glue_destroy(hncp_glue glue);
+
+/* Callback to indicate that (some) iface dhcpv6_data_in changed. */
+void hncp_pa_set_dhcpv6_data_in_dirty(hncp_glue glue);
 
 #endif /* HNCP_PA_H */

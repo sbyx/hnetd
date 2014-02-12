@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Tue Feb 11 15:12:04 2014 mstenber
- * Edit time:     190 min
+ * Last modified: Wed Feb 12 22:49:38 2014 mstenber
+ * Edit time:     266 min
  *
  */
 
@@ -24,20 +24,23 @@
 
    Strategy for dealing with different data types:
 
-   - assigned prefixes received from hncp: pushed pa _every time_
-   there's some local TLV change (this hopefully reflects also changes
-   in neighbor relations and potential changes in interface names etc)
-   (also handled on TLV change notification)
+   - assigned prefixes
 
-   - delegated prefixes received from hncp: just added/deleted
-   dynamically based on TLV change notification
+    - from hncp: pushed pa when we get tlv callback from HNCP
 
-   - assigned prefixes from pa: added/deleted dynamically as hncp TLVs
-   (no data that changes)
+    - from pa: added/deleted dynamically as hncp TLVs (no data that
+      changes)
 
-   - delegated prefixes received from pa: maintained locally (hncp_dp),
-   and republished to hncp whenever local TLVs change (as otherwise
-   timestamps which are per-node and not per-TLV would be wrong).
+   - delegated prefixes
+
+    - from hncp: pushed pa when we get tlv callback from HNCP
+
+    - from pa: maintained locally (hncp_dp), and republished to hncp
+    whenever local TLVs change (as otherwise timestamps which are
+    per-node and not per-TLV would be wrong).
+
+   As fun additional piece of complexity, as of -00 draft, the
+   delegated prefixes are inside external connection TLV.
 */
 
 #include "hncp_pa.h"
@@ -54,9 +57,6 @@ typedef struct {
   hnetd_time_t preferred_until;
   void *dhcpv6_data;
   size_t dhcpv6_len;
-
-  /* What have already stuck in hncp :-) */
-  struct tlv_attr *dp_tlv;
 } hncp_dp_s, *hncp_dp;
 
 struct hncp_glue_struct {
@@ -71,19 +71,17 @@ struct hncp_glue_struct {
   pa_t pa;
 };
 
-static int
-compare_dps(const void *a, const void *b, void *ptr __unused)
+static int compare_dps(const void *a, const void *b, void *ptr __unused)
 {
   hncp_dp t1 = (hncp_dp) a, t2 = (hncp_dp) b;
 
   return prefix_cmp(&t1->prefix, &t2->prefix);
 }
 
-static void update_dp(struct vlist_tree *t,
+static void update_dp(struct vlist_tree *t __unused,
                       struct vlist_node *node_new,
                       struct vlist_node *node_old)
 {
-  hncp_glue g = container_of(t, hncp_glue_s, dps);
   hncp_dp old = container_of(node_old, hncp_dp_s, in_dps);
   __unused hncp_dp new = container_of(node_new, hncp_dp_s, in_dps);
 
@@ -97,8 +95,6 @@ static void update_dp(struct vlist_tree *t,
    */
   if (old)
     {
-      if (old->dp_tlv)
-        hncp_remove_tlv(g->hncp, old->dp_tlv);
       if (old->dhcpv6_data)
         free(old->dhcpv6_data);
       free(old);
@@ -129,12 +125,11 @@ static hncp_link _find_local_link(hncp_node onode, uint32_t olink_no)
 {
   hncp o = onode->hncp;
   struct tlv_attr *a;
-  int i;
 
   /* We're lazy and just compare published information; we _could_
    * of course also look at per-link and per-neighbor structures,
    * but this is simpler.. */
-  hncp_node_for_each_tlv_i(o->own_node, a, i)
+  hncp_node_for_each_tlv_i(o->own_node, a)
     if (tlv_id(a) == HNCP_T_NODE_DATA_NEIGHBOR)
       {
         hncp_t_node_data_neighbor nh = tlv_data(a);
@@ -222,36 +217,32 @@ static void _update_d_tlv(hncp_glue g, hncp_node n,
       preferred = _remote_rel_to_local_abs(n->origination_time,
                                            dh->ms_preferred_at_origination);
     }
-  /* XXX - handle dhcpv6 data */
   unsigned int flen = sizeof(hncp_t_delegated_prefix_header_s) + plen;
-  if (tlv_len(tlv) > flen)
+  struct tlv_attr *stlv;
+  int left;
+  void *start;
+
+  /* Account for prefix padding */
+  flen = ROUND_BYTES_TO_4BYTES(flen);
+
+  start = tlv_data(tlv) + flen;
+  left = tlv_len(tlv) - flen;
+  L_DEBUG("considering what is at offset %lu->%u: %s",
+          sizeof(hncp_t_delegated_prefix_header_s) + plen,
+          flen,
+          HEX_REPR(start, left));
+  /* Now, flen is actually padded length of stuff, _before_ DHCPv6
+   * options. */
+  tlv_for_each_in_buf(stlv, start, left)
     {
-      struct tlv_attr *stlv;
-      int left;
-      void *start;
-
-      /* Account for prefix padding */
-      flen = ROUND_BYTES_TO_4BYTES(flen);
-
-      start = tlv_data(tlv) + flen;
-      left = tlv_len(tlv) - flen;
-      L_DEBUG("considering what is at offset %lu->%u: %s",
-              sizeof(hncp_t_delegated_prefix_header_s) + plen,
-              flen,
-              HEX_REPR(start, left));
-      /* Now, flen is actually padded length of stuff, _before_ DHCPv6
-       * options. */
-      tlv_for_each_in_buf(stlv, start, left)
+      if (tlv_id(stlv) == HNCP_T_DHCPV6_OPTIONS)
         {
-          if (tlv_id(stlv) == HNCP_T_DHCPV6_OPTIONS)
-            {
-              dhcpv6_data = tlv_data(stlv);
-              dhcpv6_len = tlv_len(stlv);
-            }
-          else
-            {
-              L_NOTICE("unknown delegated prefix option seen:%d", tlv_id(stlv));
-            }
+          dhcpv6_data = tlv_data(stlv);
+          dhcpv6_len = tlv_len(stlv);
+        }
+      else
+        {
+          L_NOTICE("unknown delegated prefix option seen:%d", tlv_id(stlv));
         }
     }
 
@@ -269,7 +260,6 @@ static void _tlv_cb(hncp_subscriber s,
                     hncp_node n, struct tlv_attr *tlv, bool add)
 {
   hncp_glue g = container_of(s, hncp_glue_s, subscriber);
-  hncp o = g->hncp;
 
   L_NOTICE("_tlv_cb %s %s %s",
            add ? "add" : "remove",
@@ -284,18 +274,25 @@ static void _tlv_cb(hncp_subscriber s,
 
   switch (tlv_id(tlv))
     {
-    case HNCP_T_DELEGATED_PREFIX:
-      _update_d_tlv(g, n, tlv, add);
+    case HNCP_T_EXTERNAL_CONNECTION:
+      {
+        struct tlv_attr *a;
+        int c = 0;
+        tlv_for_each_attr(a, tlv)
+        {
+          if (tlv_id(a) == HNCP_T_DELEGATED_PREFIX)
+            _update_d_tlv(g, n, a, add);
+          else {
+            L_INFO("unsupported external connection tlv:#%d", tlv_id(a));
+          }
+          c++;
+        }
+        if (!c)
+          L_INFO("empty external connection TLV");
+      }
       break;
     case HNCP_T_ASSIGNED_PREFIX:
       _update_a_tlv(g, n, tlv, add);
-      break;
-    case HNCP_T_NODE_DATA_NEIGHBOR:
-      /* Someone else may be our neighbor; set tlvs_dirty to force
-       * republish attempt to recalculate next hops to assigned
-       * prefixes. */
-      o->tlvs_dirty = true;
-      hncp_schedule(o);
       break;
     default:
       return;
@@ -303,51 +300,58 @@ static void _tlv_cb(hncp_subscriber s,
 
 }
 
+void hncp_pa_set_dhcpv6_data_in_dirty(hncp_glue g)
+{
+  hncp o = g->hncp;
+
+  o->tlvs_dirty = true;
+  hncp_schedule(o);
+}
+
+
 static void _republish_cb(hncp_subscriber s)
 {
   hncp_glue g = container_of(s, hncp_glue_s, subscriber);
   hncp o = g->hncp;
   hnetd_time_t now = hncp_time(o);
-  hncp_dp dp;
-  int len, flen, plen;
-  struct tlv_attr *t, *st;
+  hncp_dp dp, dp2;
+  int flen, plen;
+  struct tlv_attr *st;
   hncp_t_delegated_prefix_header dph;
-  hncp_node n;
-  struct tlv_attr *a;
-  int i;
+  struct tlv_buf tb;
 
-  /* This is very brute force. Oh well. */
-
-  /* As we don't keep track of interface changes that actively, nor of
-     neighbor changes, we push _every_ assigned prefix at pa API every
-     time this callback is called. */
-  hncp_for_each_node(o, n)
+  hncp_remove_tlvs_by_type(o, HNCP_T_EXTERNAL_CONNECTION);
+  /* This is very brute force. Oh well. (O(N^2) to # of delegated
+     prefixes. Most likely it's small enough not to matter.)*/
+  vlist_for_each_element(&g->dps, dp2, in_dps)
     {
-      if (n == o->own_node)
-        continue;
-      hncp_node_for_each_tlv_i(n, a, i)
+      bool done = false;
+      vlist_for_each_element(&g->dps, dp, in_dps)
         {
-          if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX)
-            _update_a_tlv(g, n, a, true);
+          if (dp == dp2)
+            break;
+          if (strcmp(dp->ifname, dp2->ifname) == 0)
+            {
+              done = true;
+              break;
+            }
         }
-    }
-
-  vlist_for_each_element(&g->dps, dp, in_dps)
-    {
-      if (dp->dp_tlv)
-        hncp_remove_tlv(o, dp->dp_tlv);
-
-      /* Determine how much space we need for TLV. */
-      plen = ROUND_BITS_TO_BYTES(dp->prefix.plen);
-      flen = TLV_SIZE + sizeof(hncp_t_delegated_prefix_header_s) + plen;
-      len = ROUND_BYTES_TO_4BYTES(flen);
-      if (dp->dhcpv6_len)
-        len += TLV_SIZE + ROUND_BYTES_TO_4BYTES(dp->dhcpv6_len);
-      t = calloc(1, len);
-      if (t)
+      if (done)
+        continue;
+      memset(&tb, 0, sizeof(tb));
+      tlv_buf_init(&tb, HNCP_T_EXTERNAL_CONNECTION);
+      vlist_for_each_element(&g->dps, dp, in_dps)
         {
-          tlv_init(t, HNCP_T_DELEGATED_PREFIX, flen);
-          dph = tlv_data(t);
+          void *cookie;
+          /* Different IF -> not interested */
+          if (strcmp(dp->ifname, dp2->ifname))
+            continue;
+          /* Determine how much space we need for TLV. */
+          plen = ROUND_BITS_TO_BYTES(dp->prefix.plen);
+          flen = sizeof(hncp_t_delegated_prefix_header_s) + plen;
+          cookie = tlv_nest_start(&tb, HNCP_T_DELEGATED_PREFIX, flen);
+
+          dph = tlv_data(tb.head);
           dph->ms_valid_at_origination = _local_abs_to_remote_rel(now, dp->valid_until);
           dph->ms_preferred_at_origination = _local_abs_to_remote_rel(now, dp->preferred_until);
           dph->prefix_length_bits = dp->prefix.plen;
@@ -355,14 +359,20 @@ static void _republish_cb(hncp_subscriber s)
           memcpy(dph, &dp->prefix, plen);
           if (dp->dhcpv6_len)
             {
-              st = tlv_next(t);
-              tlv_init(st, HNCP_T_DHCPV6_OPTIONS, TLV_SIZE + dp->dhcpv6_len);
+              st = tlv_new(&tb, HNCP_T_DHCPV6_OPTIONS, dp->dhcpv6_len);
               memcpy(tlv_data(st), dp->dhcpv6_data, dp->dhcpv6_len);
-              tlv_init(t, HNCP_T_DELEGATED_PREFIX, len);
             }
-          dp->dp_tlv = hncp_add_tlv(o, t);
-          free(t);
+          tlv_nest_end(&tb, cookie);
         }
+      tlv_sort(tb.head, tlv_pad_len(tb.head));
+      struct iface *ifo = iface_get(dp2->ifname);
+      if (ifo && ifo->dhcpv6_data_in && ifo->dhcpv6_len_in)
+        {
+          st = tlv_new(&tb, HNCP_T_DHCPV6_OPTIONS, ifo->dhcpv6_len_in);
+          memcpy(tlv_data(st), ifo->dhcpv6_data_in, ifo->dhcpv6_len_in);
+        }
+      hncp_add_tlv(o, tb.head);
+      tlv_buf_free(&tb);
     }
 }
 

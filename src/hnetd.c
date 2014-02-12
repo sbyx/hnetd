@@ -36,6 +36,7 @@
 typedef struct {
 	struct iface_user iu;
 	hncp hncp;
+	hncp_glue glue;
 } hncp_iface_user_s, *hncp_iface_user;
 
 
@@ -50,20 +51,34 @@ void hncp_iface_intaddr_callback(struct iface_user *u, const char *ifname,
 
 
 void hncp_iface_intiface_callback(struct iface_user *u,
-				 const char *ifname, bool enabled)
+								  const char *ifname, bool enabled)
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
 
 	hncp_set_link_enabled(hiu->hncp, ifname, enabled);
 }
 
-void hncp_iface_glue(hncp_iface_user hiu, hncp h)
+
+void hncp_iface_extdata_callback(struct iface_user *u,
+								 const char *ifname __unused,
+								 const void *dhcpv6_data __unused,
+								 size_t dhcpv6_len __unused)
+{
+	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
+
+	hncp_pa_set_dhcpv6_data_in_dirty(hiu->glue);
+}
+
+
+void hncp_iface_glue(hncp_iface_user hiu, hncp h, hncp_glue g)
 {
 	/* Initialize hiu appropriately */
 	memset(hiu, 0, sizeof(*hiu));
 	hiu->iu.cb_intiface = hncp_iface_intiface_callback;
-        hiu->iu.cb_intaddr = hncp_iface_intaddr_callback;
+	hiu->iu.cb_intaddr = hncp_iface_intaddr_callback;
+	hiu->iu.cb_extdata = hncp_iface_extdata_callback;
 	hiu->hncp = h;
+	hiu->glue = g;
 
 	/* We don't care about other callbacks for now. */
 	iface_register_user(&hiu->iu);
@@ -76,6 +91,7 @@ int main(__unused int argc, char* const argv[])
 	pa_t pa;
 	int c;
 	hncp_iface_user_s hiu;
+	hncp_glue hg;
 
 #ifdef WITH_IPC
 	if (strstr(argv[0], "hnet-call"))
@@ -158,7 +174,7 @@ int main(__unused int argc, char* const argv[])
 		return 42;
 	}
 
-	if (!hncp_pa_glue_create(h, pa)) {
+	if (!(hg=hncp_pa_glue_create(h, pa))) {
 		L_ERR("Unable to connect hncp and pa");
 		return 17;
 	}
@@ -181,8 +197,8 @@ int main(__unused int argc, char* const argv[])
 	/* Init ipc */
 	iface_init(pa);
 
-	/* Glue together HNCP and iface */
-	hncp_iface_glue(&hiu, h);
+	/* Glue together HNCP, PA-glue and and iface */
+	hncp_iface_glue(&hiu, h, hg);
 
 	/* Fire up the prefix assignment code. */
 	pa_start(pa);
