@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 11:53:11 2013 mstenber
- * Last modified: Wed Feb 12 17:59:08 2014 mstenber
- * Edit time:     27 min
+ * Last modified: Wed Feb 12 22:10:50 2014 mstenber
+ * Edit time:     44 min
  *
  */
 
@@ -136,29 +136,58 @@ void tlv_nest()
 {
   struct tlv_buf tb;
   void *cookie;
-  int c;
-  struct tlv_attr *a;
+  int c, d;
+  struct tlv_attr *a, *a2;
   unsigned int rem;
+  int cs = 0;
+  int ds = 0;
 
   memset(&tb, 0, sizeof(tb));
   /* Produce test data - one 'container' TLV, with fixed
    * TLV_ATTR_ALIGN sized header, and then two sub-TLVs. */
   tlv_buf_init(&tb, 0);
-  cookie = tlv_nest_start(&tb, 1, TLV_ATTR_ALIGN);
-  tlv_new(&tb, 2, 0);
-  tlv_new(&tb, 3, 1);
+  cookie = tlv_nest_start(&tb, 33, TLV_ATTR_ALIGN * 2);
+  memset(tlv_data(tb.head), 42, TLV_ATTR_ALIGN * 2);
+  tlv_new(&tb, 34, 0);
+  a = tlv_new(&tb, 35, 1);
+  *((unsigned char*)tlv_data(a)) = 0x42;
+  tlv_nest_end(&tb, cookie);
+  cookie = tlv_nest_start(&tb, 36, TLV_ATTR_ALIGN);
+  memset(tlv_data(tb.head), 66, TLV_ATTR_ALIGN);
+  tlv_new(&tb, 37, 0);
   tlv_nest_end(&tb, cookie);
 
   /* Make sure what we produced looks sane. */
   c = 0;
   tlv_for_each_attr(a, tb.head, rem)
     c++;
-  sput_fail_unless(c == 1, "should be just 1 root attr");
+  L_DEBUG("# of root attrs:%d", c);
+  sput_fail_unless(c == 2, "should be just 2 root attr");
 
   c = 0;
-  tlv_for_each_attr(a, tlv_data(tb.head) + TLV_ATTR_ALIGN, rem)
-    c++;
-  sput_fail_unless(c == 2, "should be 2 nested attrs");
+  d = 0;
+  tlv_for_each_attr(a, tb.head, rem)
+    {
+      cs += tlv_id(a);
+      void *base = tlv_data(a);
+      base += (2 - c) * TLV_ATTR_ALIGN;
+      void *end = tlv_data(a) + tlv_len(a);
+      c++;
+      tlv_for_each_in_buf(a2, base, end-base)
+        {
+          ds += tlv_id(a2);
+          d++;
+        }
+    }
+  sput_fail_unless(cs == 33 + 36, "cs correct");
+  sput_fail_unless(ds == 34 + 35 + 37, "ds correct");
+  sput_fail_unless(d == 3, "should be 3 nested attrs");
+
+  L_DEBUG("nested tlv:%s", TLV_REPR(tb.head));
+  sput_fail_unless(tlv_len(tb.head) ==
+                   4 * TLV_ATTR_ALIGN +
+                   5 * sizeof(struct tlv_attr) , "right nested whole size");
+
 }
 
 
@@ -167,7 +196,6 @@ void test_tlv_sort()
   struct tlv_buf tb;
   struct tlv_attr *a;
   unsigned int rem;
-  void *tmp;
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0);

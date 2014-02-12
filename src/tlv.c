@@ -166,7 +166,7 @@ void *
 tlv_nest_start(struct tlv_buf *buf, int id, int len)
 {
 	unsigned long offset = attr_to_offset(buf, buf->head);
-	buf->head = tlv_new(buf, id, len);
+	buf->head = tlv_add(buf, tlv_next(buf->head), id, len);
 	return (void *) offset;
 }
 
@@ -174,7 +174,7 @@ void
 tlv_nest_end(struct tlv_buf *buf, void *cookie)
 {
 	struct tlv_attr *attr = offset_to_attr(buf, (unsigned long) cookie);
-	tlv_set_raw_len(attr, tlv_pad_len(attr) + tlv_len(buf->head));
+	tlv_set_raw_len(attr, tlv_pad_len(attr) + tlv_raw_len(buf->head));
 	buf->head = attr;
 }
 
