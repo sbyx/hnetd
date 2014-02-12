@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 11:53:11 2013 mstenber
- * Last modified: Wed Feb 12 12:49:16 2014 mstenber
- * Edit time:     20 min
+ * Last modified: Wed Feb 12 17:59:08 2014 mstenber
+ * Edit time:     27 min
  *
  */
 
@@ -139,7 +139,6 @@ void tlv_nest()
   int c;
   struct tlv_attr *a;
   unsigned int rem;
-  void *tmp;
 
   memset(&tb, 0, sizeof(tb));
   /* Produce test data - one 'container' TLV, with fixed
@@ -162,6 +161,38 @@ void tlv_nest()
   sput_fail_unless(c == 2, "should be 2 nested attrs");
 }
 
+
+void test_tlv_sort()
+{
+  struct tlv_buf tb;
+  struct tlv_attr *a;
+  unsigned int rem;
+  void *tmp;
+
+  memset(&tb, 0, sizeof(tb));
+  tlv_buf_init(&tb, 0);
+  tlv_new(&tb, 2, 0);
+  tlv_new(&tb, 3, 0);
+  tlv_new(&tb, 1, 0);
+  tlv_new(&tb, 42, 0);
+
+  /* Sort the TLVs */
+  tlv_sort(tlv_data(tb.head), tlv_len(tb.head));
+
+  /* Make sure they come out in ascending order. */
+  int last = -1;
+  int c = 0;
+  tlv_for_each_attr(a, tb.head, rem)
+    {
+      int nid = tlv_id(a);
+      L_DEBUG("last:%d id:%d", last, nid);
+      sput_fail_unless(last < nid, "last < id");
+      last = nid;
+      c++;
+    }
+  sput_fail_unless(c == 4, "should be 4 attrs");
+}
+
 int main(__unused int argc, __unused char **argv)
 {
   setbuf(stdout, NULL); /* so that it's in sync with stderr when redirected */
@@ -171,6 +202,7 @@ int main(__unused int argc, __unused char **argv)
   sput_run_test(tlv_iter);
   sput_run_test(tlv_cmp);
   sput_run_test(tlv_nest);
+  sput_run_test(test_tlv_sort);
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();

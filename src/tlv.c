@@ -228,3 +228,39 @@ tlv_memdup(struct tlv_attr *attr)
 	memcpy(ret, attr, size);
 	return ret;
 }
+
+static int
+_qsort_tlv_cmp(const void *t1, const void *t2)
+{
+	const struct tlv_attr **aa1 = (void *)t1, **aa2 = (void *)t2;
+	return tlv_attr_cmp(*aa1, *aa2);
+}
+
+bool tlv_sort(void *data, int len)
+{
+	void *tmp = malloc(len), *t = tmp;
+	struct tlv_attr *a, **al;
+	int c = 0, i;
+
+	if (!tmp)
+		return false;
+	tlv_for_each_in_buf(a, data, len)
+		c++;
+	if (c <= 1)
+		return true;
+	al = alloca(sizeof(struct tlv_attr *) * c);
+	if (!al)
+		return false;
+	c = 0;
+	tlv_for_each_in_buf(a, data, len)
+		al[c++] = a;
+	qsort(al, c, sizeof(al[0]), _qsort_tlv_cmp);
+	for (i = 0 ; i < c ; i++) {
+		int l = tlv_pad_len(al[i]);
+		memcpy(t, al[i], l);
+		t += l;
+	}
+	memcpy(data, tmp, len);
+	free(tmp);
+	return true;
+}

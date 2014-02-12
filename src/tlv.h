@@ -119,9 +119,9 @@ extern struct tlv_attr *tlv_new(struct tlv_buf *buf, int id, int payload);
 extern void *tlv_nest_start(struct tlv_buf *buf, int id, int len);
 extern void tlv_nest_end(struct tlv_buf *buf, void *cookie);
 extern struct tlv_attr *tlv_put(struct tlv_buf *buf, int id, const void *ptr, int len);
-extern bool tlv_check_type(const void *ptr, int len, int type);
 extern struct tlv_attr *tlv_memdup(struct tlv_attr *attr);
 extern struct tlv_attr *tlv_put_raw(struct tlv_buf *buf, const void *ptr, int len);
+extern bool tlv_sort(void *buf, int len);
 
 /* Paranoid version: Have faith only in the caller providing correct
  * buf + len; pos is used to maintain the current position within buf. */
