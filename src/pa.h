@@ -25,6 +25,14 @@
 typedef struct pa *pa_t;
 #include "iface.h"
 
+#define PA_PRIORITY_MIN              0
+#define PA_PRIORITY_AUTHORITY_MIN    4
+#define PA_PRIORITY_AUTO_MIN         6
+#define PA_PRIORITY_DEFAULT          8
+#define PA_PRIORITY_AUTO_MAX         10
+#define PA_PRIORITY_AUTHORITY_MAX    12
+#define PA_PRIORITY_MAX              15
+
 /* Callbacks for flooding protocol. */
 struct pa_flood_callbacks {
 	/* Private pointer provided by the subscriber */
@@ -145,12 +153,14 @@ struct pa_conf {
 };
 
 struct pa_flood {
+	bool rid_valid;
 	struct pa_rid rid;
 	hnetd_time_t flooding_delay;
 	hnetd_time_t flooding_delay_ll;
 };
 
 struct pa {
+	bool started;
 	struct pa_core core;                  /* Algorithm core elements */
 	struct pa_flood flood;                /* Main information from flooding */
 	struct pa_data data;                  /* PAA database */
@@ -171,7 +181,7 @@ void pa_conf_set_defaults(struct pa_conf *conf);
 void pa_init(struct pa *pa, const struct pa_conf *conf);
 /* Start the pa algorithm. */
 void pa_start(struct pa *pa);
-/* Pause the pa alforithm (Possibly wrong state). */
+/* Pause the pa alforithm (In a possibly wrong state). */
 void pa_stop(struct pa *pa);
 /* Reset pa to post-init state, without modifying configuration. */
 void pa_term(struct pa *pa);
@@ -192,7 +202,7 @@ void pa_iface_subscribe(struct pa *pa, const struct pa_iface_callbacks *);
 /* Sets flooder algorithm callbacks.
  * Subscribing will override previous subscription (if any).
  * The provided structure can be destroyed after function returns. */
-void pa_flood_subscribe(pa_t, const struct pa_flood_callbacks *);
+void pa_flood_subscribe(struct pa *pa, const struct pa_flood_callbacks *);
 
 /* Sets the router id. */
 void pa_set_rid(struct pa *pa, const struct pa_rid *rid);
@@ -206,8 +216,8 @@ void pa_set_rid(struct pa *pa, const struct pa_rid *rid);
  * @param rid The source router id
  * @return 0 on success. A different value on error. */
 int pa_update_ap(struct pa *pa, const struct prefix *prefix,
-				const struct pa_rid *rid,
-				const char *ifname, bool authoritative, uint8_t priority,
+				const struct pa_rid *rid, const char *ifname,
+				bool authoritative, uint8_t priority,
 				bool to_delete);
 
 /* Flooding protocol must call that function whenever a delegated
@@ -238,8 +248,8 @@ int pa_update_eaa(struct pa *pa, const struct in6_addr *addr,
 void pa_updated_cp(struct pa_core *core, struct pa_cp *cp, bool to_delete, bool tell_flood, bool tell_iface);
 void pa_updated_laa(struct pa_core *core, struct pa_laa *laa, bool to_delete);
 
-/* When an iface is modified */
-void pa_updated_dodhcp(struct pa_core *core, struct pa_iface *iface);
+/* When dodhcp value is modified */
+void pa_updated_iface(struct pa_core *core, struct pa_iface *iface);
 
 /************************************/
 /******* pa_local interface *********/

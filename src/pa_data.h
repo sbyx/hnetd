@@ -38,8 +38,6 @@ struct pa_rid {
 		(rid)->id[12], (rid)->id[13], (rid)->id[15], (rid)->id[15]
 };
 
-#define PA_PRIORITY_DEFAULT 8
-
 /* Interface */
 struct pa_iface {
 	struct list_head le;   /* Linked in pa_data's ifaces list */
@@ -148,6 +146,7 @@ struct pa_laa {
 	struct pa_cp *cp;              /* The associated cp */
 	bool applied;                  /* Whether it was applied */
 	struct uloop_timeout apply_to; /* When to apply the prefix */
+	bool invalid;
 };
 
 /* External AA */
@@ -188,14 +187,6 @@ int pa_dp_set_lifetime(struct pa_dp *, hnetd_time_t preferred, hnetd_time_t vali
 
 
 
-#define pa_for_each_ldp_begin(pa_ldp, pa_data) \
-	list_for_each_entry(pa_ldp, &(pa_data)->dps, dp.le) { \
-	if(!(pa_ldp)->dp.local) \
-		continue; \
-	do /* {
-
-	} */
-#define pa_for_each_ldp_end while(0); }
 #define pa_for_each_ldp_in_iface(pa_ldp, pa_iface) \
 	list_for_each_entry(pa_ldp, &(pa_iface)->ldps, if_le)
 struct pa_ldp *pa_ldp_get(struct pa_data *, const struct prefix *, bool *created);
@@ -204,14 +195,6 @@ void pa_ldp_destroy(struct pa_ldp *);
 
 
 
-#define pa_for_each_edp_begin(pa_edp, pa_data) \
-	list_for_each_entry(pa_edp, &(pa_data)->dps, dp.le) { \
-	if((pa_edp)->dp.local) \
-		continue; \
-	do /* {
-
-	} */
-#define pa_for_each_edp_end while(0); }
 struct pa_edp *pa_edp_get(struct pa_data *, const struct prefix *, const struct pa_rid *rid, bool *created);
 void pa_edp_destroy(struct pa_edp *);
 
@@ -243,10 +226,12 @@ int pa_cp_set_dp(struct pa_cp *, struct pa_dp *dp);
 #define pa_cp_set_priority(cp, prio) PA_SET_SCALAR((cp)->priority, prio)
 #define pa_cp_set_authoritative(cp, auth) PA_SET_SCALAR((cp)->authoritative, auth)
 #define pa_cp_set_advertised(cp, adv) PA_SET_SCALAR((cp)->advertised, adv)
+#define pa_cp_set_applied(cp, appl) PA_SET_SCALAR((cp)->applied, appl)
 void pa_cp_set_apply_timeout(struct pa_cp *, int msecs);
 void pa_cp_destroy(struct pa_cp *);
 
 void pa_laa_set_apply_timeout(struct pa_laa *, int msecs);
+#define pa_laa_set_applied(laa, appl) PA_SET_SCALAR((laa)->applied, appl)
 
 
 #define pa_for_each_eaa(pa_eaa, pa_data) \

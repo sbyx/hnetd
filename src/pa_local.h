@@ -14,17 +14,35 @@
 #include <stdbool.h>
 #include <libubox/uloop.h>
 
+#include "prefix_utils.h"
 #include "hnetd.h"
 
+struct pa_local_elem {
+	hnetd_time_t create_start;
+	hnetd_time_t timeout;
+	bool enabled;
+	struct prefix prefix;
+
+#define PA_LOCAL_CAN_CREATE 0x01
+#define PA_LOCAL_CAN_KEEP	0x02
+	uint8_t (*get_status)(struct pa_local_elem *);
+	void (*create)(struct pa_local_elem *);
+	hnetd_time_t (*update)(struct pa_local_elem *elem, hnetd_time_t now);
+};
+
 struct pa_local {
+
+	struct pa_local_elem ula;
+	struct pa_local_elem ipv4;
+
 	struct {
 		bool available;
 		void *dhcp_data;
 		size_t dhcp_len;
-	} ipv4;
+	} ipv4_access;
 
-	bool started;
-	hnetd_time_t when;
+	hnetd_time_t start_time;
+	hnetd_time_t current_timeout;
 	struct uloop_timeout timeout;
 };
 

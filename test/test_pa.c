@@ -6,13 +6,15 @@
 
 void iface_register_user(struct iface_user *user)
 {
-
+	if(user)
+		return;
 }
 
 
 void iface_unregister_user(struct iface_user *user)
 {
-
+	if(user)
+			return;
 }
 
 

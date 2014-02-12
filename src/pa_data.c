@@ -10,6 +10,7 @@
 #define L_PREFIX "pa_data - "
 
 #include "pa_data.h"
+#include "pa_core.h"
 #include "pa.h"
 
 #include <stdio.h>
@@ -203,11 +204,11 @@ void pa_dp_term(struct pa_dp *dp)
 
 struct pa_ldp *__pa_ldp_get(struct pa_data *data, const struct prefix *p)
 {
-	struct pa_ldp *ldp;
-	pa_for_each_ldp_begin(ldp, data) {
-		if(!prefix_cmp(p, &ldp->dp.prefix))
-			return ldp;
-	} pa_for_each_ldp_end;
+	struct pa_dp *dp;
+	pa_for_each_dp(dp, data) {
+		if(dp->local && !prefix_cmp(p, &dp->prefix))
+			return container_of(dp, struct pa_ldp, dp);
+	}
 	return NULL;
 }
 
@@ -252,11 +253,15 @@ void pa_ldp_destroy(struct pa_ldp *ldp) {
 
 struct pa_edp *__pa_edp_get(struct pa_data *data, const struct prefix *p, const struct pa_rid *rid)
 {
+	struct pa_dp *dp;
 	struct pa_edp *edp;
-	pa_for_each_edp_begin(edp, data) {
-		if(!prefix_cmp(p, &edp->dp.prefix) && !PA_RIDCMP(rid, &edp->rid))
-					return edp;
-	} pa_for_each_edp_end;
+	pa_for_each_dp(dp, data) {
+		if(dp->local)
+			continue;
+		edp = container_of(dp, struct pa_edp, dp);
+		if(!prefix_cmp(p, &dp->prefix) && !PA_RIDCMP(rid, &edp->rid))
+			return edp;
+	}
 	return NULL;
 }
 

@@ -14,9 +14,33 @@
 #define PA_CORE_MIN_DELAY 3
 #define PA_CORE_DELAY_FACTOR 10
 
+#define PA_CORE_PREFIX_SEARCH_MAX_ROUNDS 256
+#define PA_CORE_ADDRESS_SEARCH_MAX_ROUNDS 256
+
 #define core_pa(core) (container_of(core, struct pa, core))
 #define core_rid(core) (&((core_pa(core))->flood.rid))
 #define core_p(core, field) (&(core_pa(core)->field))
+
+
+bool __pa_compute_dodhcp(struct pa_iface *iface)
+{
+	if(!iface->designated)
+		return false;
+
+	struct pa_cp *cp;
+	pa_for_each_cp_in_iface(cp, iface) {
+		if(cp->applied)
+			return true;
+	}
+
+	return false;
+}
+
+void __pa_update_dodhcp(struct pa_core *core, struct pa_iface *iface)
+{
+	if(pa_iface_set_dodhcp(iface, __pa_compute_dodhcp(iface)))
+		pa_updated_iface(core, iface);
+}
 
 /* Accepting an ap */
 static void pa_core_accept_ap(struct pa_core *core, struct pa_ap *ap, struct pa_dp *dp, bool advertise)
@@ -75,9 +99,138 @@ static void pa_core_create_cp(struct pa_core *core, const struct prefix *p,
 	pa_updated_cp(core, cp, false, true, false);
 }
 
+static struct prefix *__pa_core_prefix_getcollision(struct pa_core *core, const struct prefix *prefix)
+{
+	struct pa_ap *ap;
+	pa_for_each_ap(ap, core_p(core, data)) {
+		if(prefix_contains(prefix, &ap->prefix) || prefix_contains(&ap->prefix, prefix)) {
+			return &ap->prefix;
+		}
+	}
+
+	struct pa_cp *cp;
+	pa_for_each_cp(cp, core_p(core, data)) {
+		if(prefix_contains(prefix, &cp->prefix) || prefix_contains(&cp->prefix, prefix)) {
+			return &cp->prefix;
+		}
+	}
+
+	return NULL;
+}
+
+static int pa_getprefix_random(struct pa_core *core,
+		struct pa_dp *dp, struct prefix *new_prefix) {
+
+	int res;
+	bool looped;
+	uint32_t rounds, i;
+	uint8_t plen = dp->prefix.plen;
+	struct prefix *collision;
+
+
+	/* Selecting required prefix length */
+	if(plen < 64) {
+		plen = 64;
+	} else if (plen >= 64 && plen < 104) {
+		plen = plen + 16;
+	} else if (plen >= 104 && plen < 112) {
+		plen = 120;
+	} else if (plen >= 112 && plen <= 128) { //IPv4
+		plen = 120 + (plen - 112)/2;
+	} else {
+		L_ERR("Invalid prefix length (%d)", plen);
+		return -1;
+	}
+
+	/* The router first choose a random prefix. Then it iterates over all
+	 * the next prefixes, with a limit of PA_PREFIX_SEARCH_MAX_ROUNDS iterations. */
+	if(plen - dp->prefix.plen >= 32 || (1 << (plen - dp->prefix.plen)) >= PA_CORE_PREFIX_SEARCH_MAX_ROUNDS) {
+		rounds = PA_CORE_PREFIX_SEARCH_MAX_ROUNDS;
+	} else {
+		rounds = (1 << (plen - dp->prefix.plen));
+	}
+
+	looped = false;
+	prefix_random(&dp->prefix, new_prefix, plen);
+	for(i=0; i<rounds; i++) {
+
+		if(!(collision = __pa_core_prefix_getcollision(core, new_prefix)))
+			return 0;
+
+		L_DEBUG("Prefix %s can't be used", PREFIX_REPR(new_prefix));
+
+		if(prefix_contains(new_prefix, collision)) {
+			if((res = prefix_increment(new_prefix, new_prefix, dp->prefix.plen)) == -1)
+				return -1;
+		} else if(prefix_contains(collision, new_prefix)) {
+			if((res = prefix_increment(new_prefix, collision, dp->prefix.plen)) == -1)
+				return -1;
+			new_prefix->plen = plen;
+		} else {
+			/* Should not happen */
+			return -1;
+		}
+
+		if(res) {
+			if(looped)
+				return -1;
+			looped = true;
+		}
+
+	}
+
+	return -1;
+}
+
+
+struct pa_storage_match_priv {
+	struct pa_core *core;
+	struct pa_dp *dp;
+};
+
+static int pa_store_match(const struct prefix *p,
+		__attribute__((unused))const char *ifname,  void *priv)
+{
+	struct pa_storage_match_priv *pr = (struct pa_storage_match_priv *)priv;
+
+	if(prefix_contains(&pr->dp->prefix, p) &&
+			!__pa_core_prefix_getcollision(pr->core, p))
+		return 1;
+
+	return 0;
+}
+
+static const struct prefix * pa_getprefix_storage(struct pa_core *core, struct pa_iface *iface,
+		struct pa_dp *dp) {
+	struct pa_storage_match_priv priv;
+
+	struct pa_store *store = core_p(core, conf)->storage;
+
+	if(!store)
+		return NULL;
+
+	priv.core = core;
+	priv.dp = dp;
+
+	return pa_store_prefix_find(store, iface->ifname, pa_store_match, &priv);
+}
+
 static void pa_core_make_new_assignment(struct pa_core *core, struct pa_dp *dp, struct pa_iface *iface)
 {
+	const struct prefix *p;
+	struct prefix np;
 
+	/* Get from storage */
+	p = pa_getprefix_storage(core, iface, dp);
+
+	/* If no storage */
+	if(!p && !pa_getprefix_random(core, dp, &np))
+		p = &np;
+
+	if(!p)
+		return;
+
+	pa_core_create_cp(core, p, dp, iface, 0, PA_PRIORITY_DEFAULT);
 }
 
 static void pa_core_destroy_cp(struct pa_core *core, struct pa_cp *cp)
@@ -144,7 +297,7 @@ static bool pa_core_iface_is_designated(struct pa_core *core, struct pa_iface *i
 	return true;
 }
 
-static struct pa_cp *pa_core_getcp(struct pa_core *core, struct pa_dp *dp, struct pa_iface *iface)
+static struct pa_cp *pa_core_getcp(struct pa_dp *dp, struct pa_iface *iface)
 {
 	struct pa_cp *cp;
 
@@ -194,7 +347,6 @@ static bool pa_core_cp_check_global_validity(struct pa_core *core, struct pa_cp 
 	if(cp->authoritative)
 		return true;
 
-	//Todo: use same code for cp and ap validity
 	pa_for_each_ap(ap_iter, data) {
 		if(pa_core_precedence_apcp(ap_iter, cp) > 0
 				&& (prefix_contains(&ap_iter->prefix, &cp->prefix) || prefix_contains(&cp->prefix, &ap_iter->prefix)))
@@ -239,18 +391,18 @@ static struct pa_ap *pa_core_getap(struct pa_core *core, struct pa_dp *dp, struc
 	return NULL;
 }
 
-static void pa_core_case1(struct pa_core *core, struct pa_iface *iface, struct pa_dp *dp)
+static inline void pa_core_case1(struct pa_core *core, struct pa_iface *iface, struct pa_dp *dp)
 {
 	if(iface->designated)
 		pa_core_make_new_assignment(core, dp, iface);
 }
 
-static void pa_core_case2(struct pa_core *core, struct pa_iface *iface, struct pa_dp *dp, struct pa_ap *ap)
+static inline void pa_core_case2(struct pa_core *core, struct pa_iface *iface, struct pa_dp *dp, struct pa_ap *ap)
 {
 	pa_core_accept_ap(core, ap, dp, iface->designated);
 }
 
-static void pa_core_case3(struct pa_core *core, struct pa_iface *iface, struct pa_dp *dp, struct pa_cp *cp)
+static inline void pa_core_case3(struct pa_core *core, struct pa_iface *iface, struct pa_dp *dp, struct pa_cp *cp)
 {
 	if(pa_core_cp_check_global_validity(core, cp)) {
 		cp->invalid = false;
@@ -260,7 +412,7 @@ static void pa_core_case3(struct pa_core *core, struct pa_iface *iface, struct p
 	}
 }
 
-static void pa_core_case4(struct pa_core *core, struct pa_iface *iface, struct pa_dp *dp, struct pa_ap *ap, struct pa_cp *cp)
+static inline void pa_core_case4(struct pa_core *core, struct pa_iface *iface, struct pa_dp *dp, struct pa_ap *ap, struct pa_cp *cp)
 {
 	if(prefix_cmp(&ap->prefix, &cp->prefix)) {
 		if(!cp->authoritative) {
@@ -303,7 +455,7 @@ void pa_algo_do(struct pa_core *core)
 			if(!iface->internal)
 				continue;
 
-			cp = pa_core_getcp(core, dp, iface);
+			cp = pa_core_getcp(dp, iface);
 			ap = pa_core_getap(core, dp, iface, cp);
 
 			if(cp) {
@@ -325,6 +477,67 @@ void pa_algo_do(struct pa_core *core)
 	pa_for_each_cp(cp, data) {
 		if(cp->invalid)
 			pa_core_destroy_cp(core, cp);
+	}
+}
+
+int __pa_address_valid(struct pa_core *core, struct in6_addr *addr)
+{
+	struct pa_eaa *eaa;
+	pa_for_each_eaa(eaa, core_p(core, data)) {
+		if(!memcmp(&eaa->aa.address, addr, sizeof(struct in6_addr)) && PA_RIDCMP(&core_p(core, flood)->rid, &eaa->rid) > 0)
+			return 0;
+	}
+	return 1;
+}
+
+static inline int __pa_address_find_random(struct pa_core *core, struct pa_cp *cp, struct in6_addr *addr)
+{
+	uint32_t rounds;
+	uint8_t diff = 128 - cp->prefix.plen;
+	struct prefix pr;
+	int res;
+	/*  */
+	if(diff >= 32 || (rounds = 1 << diff) >= PA_CORE_PREFIX_SEARCH_MAX_ROUNDS) {
+		rounds = PA_CORE_PREFIX_SEARCH_MAX_ROUNDS;
+	}
+
+	bool looped = false;
+
+	prefix_random(&cp->prefix, &pr, 128);
+	for(; rounds; rounds--) {
+		if(!__pa_address_valid(core, &pr.prefix)) {
+			memcpy(addr, &pr.prefix, sizeof(struct in6_addr));
+			return 0;
+		}
+		if((res = prefix_increment(&pr, &pr, 104)) == -1)
+			return -1;
+
+		if(res) {
+			if(looped)
+				return -1;
+			looped = true;
+		}
+	}
+	return -1;
+}
+
+void pa_address_do(struct pa_core *core)
+{
+	struct pa_data *data = core_p(core, data);
+	struct pa_cp *cp;
+	struct in6_addr addr;
+
+	pa_for_each_cp(cp, data) {
+		/* Delete if invalid */
+		if(cp->laa && !__pa_address_valid(core, &cp->laa->aa.address)) {
+			pa_updated_laa(core, cp->laa, true);
+			pa_cp_set_address(cp, NULL);
+			cp->laa = NULL;
+		}
+
+		/* Create new if no assigned */
+		if(!cp->laa && !__pa_address_find_random(core, cp, &addr))
+			pa_cp_set_address(cp, &addr);
 	}
 }
 
@@ -351,74 +564,118 @@ void pa_core_update_excluded(struct pa_core *core, struct pa_ldp *ldp)
 
 static void __pa_core_to_cb(struct uloop_timeout *to)
 {
-	struct pa_core *core = container_of(to, struct pa_core, timeout);
+	struct pa_core *core = container_of(to, struct pa_core, paa.to);
+	core->paa.scheduled = false;
 	pa_algo_do(core);
 }
 
-static void __pa_core_schedule(struct pa_core *core, bool first)
+static void __pa_core_schedule(struct pa_core *core)
 {
-	if(core->timeout.pending)
+	if(!core->start_time || core->paa.to.pending)
 		return;
 
-	hnetd_time_t delay = core_pa(core)->flood.flooding_delay;
+	hnetd_time_t flood = core_pa(core)->flood.flooding_delay;
+	hnetd_time_t delay = flood / PA_CORE_DELAY_FACTOR;
 
-	if(!first)
-		delay /= PA_CORE_DELAY_FACTOR;
+	if(hnetd_time() + delay < core->start_time + flood)
+		delay = flood;
 
 	if(delay < PA_CORE_MIN_DELAY)
 		delay = PA_CORE_MIN_DELAY;
 	if(delay > INT32_MAX)
 		delay = INT32_MAX;
 
-	uloop_timeout_set(&core->timeout, (int) delay);
+	uloop_timeout_set(&core->paa.to, (int) delay);
+}
+
+static void __pa_address_to_cb(struct uloop_timeout *to)
+{
+	struct pa_core *core = container_of(to, struct pa_core, aaa.to);
+	core->aaa.scheduled = false;
+	pa_address_do(core);
+}
+
+static void __pa_address_schedule(struct pa_core *core)
+{
+	if(!core->start_time || core->paa.to.pending)
+		return;
+
+	hnetd_time_t delay = core_pa(core)->flood.flooding_delay_ll / PA_CORE_DELAY_FACTOR;
+
+	if(delay < PA_CORE_MIN_DELAY)
+		delay = PA_CORE_MIN_DELAY;
+	if(delay > INT32_MAX)
+		delay = INT32_MAX;
+
+	uloop_timeout_set(&core->aaa.to, (int) delay);
 }
 
 void pa_core_init(struct pa_core *core)
 {
-	core->scheduled = false;
-	core->started = false;
-	core->timeout.pending = false;
-	core->timeout.cb = __pa_core_to_cb;
+	core->start_time = 0;
+
+	core->paa.scheduled = false;
+	core->paa.to.pending = false;
+	core->paa.to.cb = __pa_core_to_cb;
+
+	core->aaa.scheduled = false;
+	core->aaa.to.pending = false;
+	core->aaa.to.cb = __pa_address_to_cb;
 }
 
 void pa_core_start(struct pa_core *core)
 {
-	if(core->started)
+	if(core->start_time)
 		return;
 
-	core->started = true;
-	if(core->scheduled)
-		__pa_core_schedule(core, true);
+	core->start_time = hnetd_time();
+	if(core->paa.scheduled)
+		__pa_core_schedule(core);
+
+	if(core->aaa.scheduled)
+		__pa_address_schedule(core);
 }
 
 void pa_core_stop(struct pa_core *core)
 {
-	if(!core->started)
+	if(!core->start_time)
 		return;
 
-	core->started = false;
-	if(core->timeout.pending)
-		uloop_timeout_cancel(&core->timeout);
+	core->start_time = 0;
+	if(core->paa.to.pending)
+		uloop_timeout_cancel(&core->paa.to);
+
+	if(core->aaa.to.pending)
+		uloop_timeout_cancel(&core->aaa.to);
 }
 
 void pa_core_term(struct pa_core *core)
 {
+	//todo: properly destroy cps and laas
 	pa_core_stop(core);
-	//todo: destroy cps and laas
 }
 
 void pa_core_schedule(struct pa_core *core)
 {
-	if(core->scheduled)
+	if(core->paa.scheduled)
 		return;
 
-	core->scheduled = true;
-
-	if(core->started)
-		__pa_core_schedule(core, false);
+	core->paa.scheduled = true;
+	__pa_core_schedule(core);
 }
 
 void pa_address_schedule(struct pa_core *core)
 {
+	if(core->aaa.scheduled)
+		return;
 
+	core->aaa.scheduled = true;
+	__pa_address_schedule(core);
 }
+
+void pa_core_cp_apply_modified(struct pa_core *core, struct pa_cp *cp)
+{
+	if(cp->iface)
+		__pa_update_dodhcp(core, cp->iface);
+}
+
