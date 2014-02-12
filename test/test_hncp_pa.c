@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:15:44 2013 mstenber
- * Last modified: Tue Feb 11 15:29:52 2014 mstenber
- * Edit time:     135 min
+ * Last modified: Wed Feb 12 23:14:26 2014 mstenber
+ * Edit time:     142 min
  *
  */
 
@@ -269,12 +269,8 @@ void hncp_pa_two(void)
   SIM_WHILE(&s, 1000, node2->updated_edp != 4);
   node2->updated_edp = 0;
 
-  /* Make sure we have exactly two entries. And by lucky coindidence,
-   * as stuff should stay ordered, we should be able just to iterate
-   * through them. */
-  sput_fail_unless(edps.next != &edps, "edps not empty");
-
   /* First element */
+  sput_fail_unless(edps.next != &edps, "edps not empty");
   ed = list_entry(edps.next, edp_s, rp.lh);
   sput_fail_unless(prefix_cmp(&ed->rp.p, &p1) == 0, "p1 same");
   sput_fail_unless(memcmp(&ed->rid, &node1->n.own_node->node_identifier_hash,
@@ -322,20 +318,52 @@ void hncp_pa_two(void)
 
 
   /* Insert some dummy TLV at node 1 which should cause fresh edp
-   * reception; timestamps should not change, though. (Note that as
-   * content of p4 should not change as it's at 'infinite', it isn't
-   * received) */
+   * reception; timestamps should not change, though. */
 
   L_DEBUG("inserting fake TLV (empty)");
 
   struct tlv_attr tmp;
   tlv_init(&tmp, 67, TLV_SIZE);
   hncp_add_tlv(&node1->n, &tmp);
-  SIM_WHILE(&s, 1000, node2->updated_edp != (2 * 3));
+  SIM_WHILE(&s, 1000, node2->updated_edp != (2 * 4));
   node2->updated_edp = 0;
 
-  /* First element (p4) */
+  /* First element */
+  sput_fail_unless(edps.next != &edps, "edps not empty");
   ed = list_entry(edps.next, edp_s, rp.lh);
+  sput_fail_unless(prefix_cmp(&ed->rp.p, &p1) == 0, "p1 same");
+  sput_fail_unless(memcmp(&ed->rid, &node1->n.own_node->node_identifier_hash,
+                          HNCP_HASH_LEN) == 0, "rid ok");
+  sput_fail_unless(ed->preferred == p1_preferred + 1, "p1 preferred ok");
+  sput_fail_unless(ed->valid, "p1 valid ok");
+  sput_fail_unless(ed->dhcpv6_len == 0, "dhcpv6_len == 0");
+
+
+  /* Second element */
+  sput_fail_unless(ed->rp.lh.next != &edps, "edps has >= 2");
+  ed = list_entry(ed->rp.lh.next, edp_s, rp.lh);
+  sput_fail_unless(prefix_cmp(&ed->rp.p, &p2) == 0, "p2 same");
+  sput_fail_unless(memcmp(&ed->rid, &node1->n.own_node->node_identifier_hash,
+                          HNCP_HASH_LEN) == 0, "rid ok");
+  sput_fail_unless(ed->preferred, "p2 preferred ok");
+  sput_fail_unless(ed->valid == p2_valid + 1, "p2 valid ok");
+  sput_fail_unless(ed->dhcpv6_len == 4, "dhcpv6_len == 4");
+  sput_fail_unless(ed->dhcpv6_data && strcmp(ed->dhcpv6_data, "foo")==0, "foo");
+
+  /* Third element */
+  sput_fail_unless(ed->rp.lh.next != &edps, "edps has >= 3");
+  ed = list_entry(ed->rp.lh.next, edp_s, rp.lh);
+  sput_fail_unless(prefix_cmp(&ed->rp.p, &p3) == 0, "p3 same");
+  sput_fail_unless(memcmp(&ed->rid, &node1->n.own_node->node_identifier_hash,
+                          HNCP_HASH_LEN) == 0, "rid ok");
+  sput_fail_unless(ed->preferred == p3_preferred + 1, "p3 preferred ok");
+  sput_fail_unless(ed->valid == p3_valid + 1, "p3 valid ok");
+  sput_fail_unless(ed->dhcpv6_len == 4, "dhcpv6_len == 4");
+  sput_fail_unless(ed->dhcpv6_data && strcmp(ed->dhcpv6_data, "bar")==0, "bar");
+
+  /* Fourth element (infinite lifetime) */
+  sput_fail_unless(ed->rp.lh.next != &edps, "edps has >= 4");
+  ed = list_entry(ed->rp.lh.next, edp_s, rp.lh);
   sput_fail_unless(prefix_cmp(&ed->rp.p, &p4) == 0, "p4 same");
   sput_fail_unless(memcmp(&ed->rid, &node1->n.own_node->node_identifier_hash,
                           HNCP_HASH_LEN) == 0, "rid ok");
@@ -343,31 +371,6 @@ void hncp_pa_two(void)
   sput_fail_unless(ed->valid == HNETD_TIME_MAX, "p4 valid ok");
   sput_fail_unless(ed->dhcpv6_len == 4, "dhcpv6_len == 4");
   sput_fail_unless(ed->dhcpv6_data && strcmp(ed->dhcpv6_data, "baz")==0, "baz");
-
-  /* Second element (p1) */
-  sput_fail_unless(ed->rp.lh.next != &edps, "edps has >= 2");
-  ed = list_entry(ed->rp.lh.next, edp_s, rp.lh);
-  sput_fail_unless(prefix_cmp(&ed->rp.p, &p1) == 0, "p1 same");
-  sput_fail_unless(ed->preferred == p1_preferred + 1, "p1 preferred ok");
-  sput_fail_unless(ed->valid, "p1 valid ok");
-  sput_fail_unless(ed->updated == s.now, "updated now");
-
-
-  /* Third element (p2) */
-  sput_fail_unless(ed->rp.lh.next != &edps, "edps has >= 3");
-  ed = list_entry(ed->rp.lh.next, edp_s, rp.lh);
-  sput_fail_unless(prefix_cmp(&ed->rp.p, &p2) == 0, "p2 same");
-  sput_fail_unless(ed->preferred, "p2 preferred ok");
-  sput_fail_unless(ed->valid == p2_valid + 1, "p2 valid ok");
-  sput_fail_unless(ed->updated == s.now, "updated now");
-
-  /* Fourth element (p3) */
-  sput_fail_unless(ed->rp.lh.next != &edps, "edps has >= 4");
-  ed = list_entry(ed->rp.lh.next, edp_s, rp.lh);
-  sput_fail_unless(prefix_cmp(&ed->rp.p, &p3) == 0, "p3 same");
-  sput_fail_unless(ed->preferred == p3_preferred + 1, "p3 preferred ok");
-  sput_fail_unless(ed->valid == p3_valid + 1, "p3 valid ok");
-  sput_fail_unless(ed->updated == s.now, "updated now");
 
   /* The end */
   sput_fail_unless(ed->rp.lh.next == &edps, "edps had 4");
@@ -381,6 +384,7 @@ void hncp_pa_two(void)
                             NULL, 0, 0,
                             NULL, 0, node1->g);
 
+  L_DEBUG("waiting for delete effects");
   /* should get 2 updates + 2 deletes */
   SIM_WHILE(&s, 1000, node2->updated_edp != (4 + 2));
 

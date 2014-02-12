@@ -141,7 +141,7 @@ static inline const char *hex_repr(char *buf, const void *data, int len)
 {
   char *r = buf;
 
-  if (!len)
+  if (len <= 0)
     {
       *r = 0;
       return r;

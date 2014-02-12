@@ -254,7 +254,7 @@ bool tlv_sort(void *data, int len)
 	c = 0;
 	tlv_for_each_in_buf(a, data, len)
 		al[c++] = a;
-	qsort(al, c, sizeof(al[0]), _qsort_tlv_cmp);
+	qsort(al, c, sizeof(struct tlv_attr *), _qsort_tlv_cmp);
 	for (i = 0 ; i < c ; i++) {
 		int l = tlv_pad_len(al[i]);
 		memcpy(t, al[i], l);

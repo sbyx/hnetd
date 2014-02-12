@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Wed Feb 12 22:49:38 2014 mstenber
- * Edit time:     266 min
+ * Last modified: Wed Feb 12 23:16:17 2014 mstenber
+ * Edit time:     272 min
  *
  */
 
@@ -364,7 +364,7 @@ static void _republish_cb(hncp_subscriber s)
             }
           tlv_nest_end(&tb, cookie);
         }
-      tlv_sort(tb.head, tlv_pad_len(tb.head));
+      tlv_sort(tlv_data(tb.head), tlv_len(tb.head));
       struct iface *ifo = iface_get(dp2->ifname);
       if (ifo && ifo->dhcpv6_data_in && ifo->dhcpv6_len_in)
         {
@@ -414,36 +414,36 @@ static void _updated_ldp(const struct prefix *prefix,
   if (!add)
     {
       vlist_delete(&g->dps, &dp->in_dps);
-      return;
     }
-
-  /* Add or update. So update the fields. */
-  if (dp_ifname)
-    strcpy(dp->ifname, dp_ifname);
   else
-    dp->ifname[0] = 0;
-  dp->valid_until = valid_until;
-  dp->preferred_until = preferred_until;
-  if (dp->dhcpv6_data)
     {
-      free(dp->dhcpv6_data);
-      dp->dhcpv6_data = NULL;
-    }
-  if (dhcpv6_data)
-    {
-      dp->dhcpv6_data = malloc(dhcpv6_len);
-      if (!dp->dhcpv6_data)
-        {
-          dp->dhcpv6_len = 0;
-          L_ERR("oom in dhcpv6_data malloc %d", (int)dhcpv6_len);
-        }
+      /* Add or update. So update the fields. */
+      if (dp_ifname)
+        strcpy(dp->ifname, dp_ifname);
       else
+        dp->ifname[0] = 0;
+      dp->valid_until = valid_until;
+      dp->preferred_until = preferred_until;
+      if (dp->dhcpv6_data)
         {
-          dp->dhcpv6_len = dhcpv6_len;
-          memcpy(dp->dhcpv6_data, dhcpv6_data, dhcpv6_len);
+          free(dp->dhcpv6_data);
+          dp->dhcpv6_data = NULL;
+        }
+      if (dhcpv6_data)
+        {
+          dp->dhcpv6_data = malloc(dhcpv6_len);
+          if (!dp->dhcpv6_data)
+            {
+              dp->dhcpv6_len = 0;
+              L_ERR("oom in dhcpv6_data malloc %d", (int)dhcpv6_len);
+            }
+          else
+            {
+              dp->dhcpv6_len = dhcpv6_len;
+              memcpy(dp->dhcpv6_data, dhcpv6_data, dhcpv6_len);
+            }
         }
     }
-
   /* Force republish (the actual TLV will be actually refreshed in the
    * subscriber callback) */
   o->tlvs_dirty = true;
