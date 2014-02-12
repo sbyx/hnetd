@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 11:53:11 2013 mstenber
- * Last modified: Tue Feb  4 18:24:33 2014 mstenber
- * Edit time:     15 min
+ * Last modified: Wed Feb 12 12:49:16 2014 mstenber
+ * Edit time:     20 min
  *
  */
 
@@ -132,6 +132,36 @@ void tlv_cmp(void)
       }
 }
 
+void tlv_nest()
+{
+  struct tlv_buf tb;
+  void *cookie;
+  int c;
+  struct tlv_attr *a;
+  unsigned int rem;
+  void *tmp;
+
+  memset(&tb, 0, sizeof(tb));
+  /* Produce test data - one 'container' TLV, with fixed
+   * TLV_ATTR_ALIGN sized header, and then two sub-TLVs. */
+  tlv_buf_init(&tb, 0);
+  cookie = tlv_nest_start(&tb, 1, TLV_ATTR_ALIGN);
+  tlv_new(&tb, 2, 0);
+  tlv_new(&tb, 3, 1);
+  tlv_nest_end(&tb, cookie);
+
+  /* Make sure what we produced looks sane. */
+  c = 0;
+  tlv_for_each_attr(a, tb.head, rem)
+    c++;
+  sput_fail_unless(c == 1, "should be just 1 root attr");
+
+  c = 0;
+  tlv_for_each_attr(a, tlv_data(tb.head) + TLV_ATTR_ALIGN, rem)
+    c++;
+  sput_fail_unless(c == 2, "should be 2 nested attrs");
+}
+
 int main(__unused int argc, __unused char **argv)
 {
   setbuf(stdout, NULL); /* so that it's in sync with stderr when redirected */
@@ -140,6 +170,7 @@ int main(__unused int argc, __unused char **argv)
   sput_enter_suite("tlv"); /* optional */
   sput_run_test(tlv_iter);
   sput_run_test(tlv_cmp);
+  sput_run_test(tlv_nest);
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();

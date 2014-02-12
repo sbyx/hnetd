@@ -29,19 +29,6 @@
 #include <libubox/utils.h>
 
 #define TLV_COOKIE		0x01234567
-
-enum {
-	TLV_ATTR_UNSPEC,
-	TLV_ATTR_NESTED,
-	TLV_ATTR_BINARY,
-	TLV_ATTR_STRING,
-	TLV_ATTR_INT8,
-	TLV_ATTR_INT16,
-	TLV_ATTR_INT32,
-	TLV_ATTR_INT64,
-	TLV_ATTR_LAST
-};
-
 #define TLV_ATTR_ID_MASK  0xffff0000
 #define TLV_ATTR_ID_SHIFT 16
 #define TLV_ATTR_LEN_MASK 0x0000ffff
@@ -114,65 +101,6 @@ tlv_pad_len(const struct tlv_attr *attr)
 	return len;
 }
 
-static inline uint8_t
-tlv_get_u8(const struct tlv_attr *attr)
-{
-	return *((uint8_t *) attr->data);
-}
-
-static inline uint16_t
-tlv_get_u16(const struct tlv_attr *attr)
-{
-	uint16_t *tmp = (uint16_t*)attr->data;
-	return be16_to_cpu(*tmp);
-}
-
-static inline uint32_t
-tlv_get_u32(const struct tlv_attr *attr)
-{
-	uint32_t *tmp = (uint32_t*)attr->data;
-	return be32_to_cpu(*tmp);
-}
-
-static inline uint64_t
-tlv_get_u64(const struct tlv_attr *attr)
-{
-	uint32_t *ptr = tlv_data(attr);
-	uint64_t tmp = ((uint64_t) be32_to_cpu(ptr[0])) << 32;
-	tmp |= be32_to_cpu(ptr[1]);
-	return tmp;
-}
-
-static inline int8_t
-tlv_get_int8(const struct tlv_attr *attr)
-{
-	return tlv_get_u8(attr);
-}
-
-static inline int16_t
-tlv_get_int16(const struct tlv_attr *attr)
-{
-	return tlv_get_u16(attr);
-}
-
-static inline int32_t
-tlv_get_int32(const struct tlv_attr *attr)
-{
-	return tlv_get_u32(attr);
-}
-
-static inline int64_t
-tlv_get_int64(const struct tlv_attr *attr)
-{
-	return tlv_get_u64(attr);
-}
-
-static inline const char *
-tlv_get_string(const struct tlv_attr *attr)
-{
-	return attr->data;
-}
-
 static inline struct tlv_attr *
 tlv_next(const struct tlv_attr *attr)
 {
@@ -188,51 +116,12 @@ extern int tlv_buf_init(struct tlv_buf *buf, int id);
 extern void tlv_buf_free(struct tlv_buf *buf);
 extern void tlv_buf_grow(struct tlv_buf *buf, int required);
 extern struct tlv_attr *tlv_new(struct tlv_buf *buf, int id, int payload);
-extern void *tlv_nest_start(struct tlv_buf *buf, int id);
+extern void *tlv_nest_start(struct tlv_buf *buf, int id, int len);
 extern void tlv_nest_end(struct tlv_buf *buf, void *cookie);
 extern struct tlv_attr *tlv_put(struct tlv_buf *buf, int id, const void *ptr, int len);
 extern bool tlv_check_type(const void *ptr, int len, int type);
-extern int tlv_parse(struct tlv_attr *attr, struct tlv_attr **data, const struct tlv_attr_info *info, int max);
 extern struct tlv_attr *tlv_memdup(struct tlv_attr *attr);
 extern struct tlv_attr *tlv_put_raw(struct tlv_buf *buf, const void *ptr, int len);
-
-static inline struct tlv_attr *
-tlv_put_string(struct tlv_buf *buf, int id, const char *str)
-{
-	return tlv_put(buf, id, str, strlen(str) + 1);
-}
-
-static inline struct tlv_attr *
-tlv_put_u8(struct tlv_buf *buf, int id, uint8_t val)
-{
-	return tlv_put(buf, id, &val, sizeof(val));
-}
-
-static inline struct tlv_attr *
-tlv_put_u16(struct tlv_buf *buf, int id, uint16_t val)
-{
-	val = cpu_to_be16(val);
-	return tlv_put(buf, id, &val, sizeof(val));
-}
-
-static inline struct tlv_attr *
-tlv_put_u32(struct tlv_buf *buf, int id, uint32_t val)
-{
-	val = cpu_to_be32(val);
-	return tlv_put(buf, id, &val, sizeof(val));
-}
-
-static inline struct tlv_attr *
-tlv_put_u64(struct tlv_buf *buf, int id, uint64_t val)
-{
-	val = cpu_to_be64(val);
-	return tlv_put(buf, id, &val, sizeof(val));
-}
-
-#define tlv_put_int8	tlv_put_u8
-#define tlv_put_int16	tlv_put_u16
-#define tlv_put_int32	tlv_put_u32
-#define tlv_put_int64	tlv_put_u64
 
 /* Paranoid version: Have faith only in the caller providing correct
  * buf + len; pos is used to maintain the current position within buf. */
