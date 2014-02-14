@@ -183,20 +183,22 @@ void iface_unregister_user(struct iface_user *user)
 void iface_set_dhcpv6_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len, const void *dhcp_data, size_t dhcp_len)
 {
 	struct iface *c = iface_get(ifname);
-	if (c && (c->dhcpv6_len_out != dhcpv6_len || c->dhcp_len_out ||
-			memcmp(c->dhcpv6_data_out, dhcpv6_data, dhcpv6_len) ||
-			memcmp(c->dhcp_data_out, dhcp_data, dhcp_len))) {
 
-		c->dhcpv6_data_out = realloc(c->dhcpv6_data_out, dhcpv6_len);
-		memcpy(c->dhcpv6_data_out, dhcpv6_data, dhcpv6_len);
-		c->dhcpv6_len_out = dhcpv6_len;
+	if (!c)
+		return;
+	if (c->dhcp_len_out == dhcp_len && (!dhcp_len || memcmp(c->dhcp_data_out, dhcp_data, dhcp_len) == 0) && 
+	    c->dhcpv6_len_out == dhcpv6_len && (!dhcpv6_len || memcmp(c->dhcpv6_data_out, dhcpv6_data, dhcpv6_len) == 0))
+		return;
 
-		c->dhcp_data_out = realloc(c->dhcp_data_out, dhcp_len);
-		memcpy(c->dhcp_data_out, dhcp_data, dhcp_len);
-		c->dhcp_len_out = dhcp_len;
+	c->dhcpv6_data_out = realloc(c->dhcpv6_data_out, dhcpv6_len);
+	memcpy(c->dhcpv6_data_out, dhcpv6_data, dhcpv6_len);
+	c->dhcpv6_len_out = dhcpv6_len;
 
-		platform_set_dhcpv6_send(c, c->dhcpv6_data_out, c->dhcpv6_len_out, c->dhcp_data_out, c->dhcp_len_out);
-	}
+	c->dhcp_data_out = realloc(c->dhcp_data_out, dhcp_len);
+	memcpy(c->dhcp_data_out, dhcp_data, dhcp_len);
+	c->dhcp_len_out = dhcp_len;
+
+	platform_set_dhcpv6_send(c, c->dhcpv6_data_out, c->dhcpv6_len_out, c->dhcp_data_out, c->dhcp_len_out);
 }
 
 // Begin route update cycle
