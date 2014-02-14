@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Wed Feb 12 22:51:40 2014 mstenber
- * Edit time:     67 min
+ * Last modified: Fri Feb 14 10:40:50 2014 mstenber
+ * Edit time:     68 min
  *
  */
 
@@ -15,13 +15,22 @@
 #include "sput.h"
 #include "smock.h"
 
+/* Lots of stubs here, rather not put __unused all over the place. */
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+
 /* Fake structures to keep pa's default config happy. */
 void *iface_register_user;
 void *iface_unregister_user;
 
-struct iface* iface_get(const char *ifname __unused)
+struct iface* iface_get(const char *ifname )
 {
   return NULL;
+}
+
+void iface_set_dhcpv6_send(const char *ifname,
+                           const void *dhcpv6_data, size_t dhcpv6_len,
+                           const void *dhcp_data, size_t dhcp_len)
+{
 }
 
 /**************************************************************** Test cases */
@@ -164,7 +173,7 @@ void hncp_int(void)
   tlv_buf_free(&tb);
 }
 
-int main(__unused int argc, __unused char **argv)
+int main(int argc, char **argv)
 {
   setbuf(stdout, NULL); /* so that it's in sync with stderr when redirected */
   openlog("test_hncp", LOG_CONS | LOG_PERROR, LOG_DAEMON);

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Wed Feb 12 23:16:17 2014 mstenber
- * Edit time:     272 min
+ * Last modified: Fri Feb 14 10:41:26 2014 mstenber
+ * Edit time:     287 min
  *
  */
 
@@ -289,6 +289,13 @@ static void _tlv_cb(hncp_subscriber s,
         }
         if (!c)
           L_INFO("empty external connection TLV");
+
+        /* _Potentially_ DHCPv6 data was dirty too. So schedule us
+         * (it's NOP if nothing changes). (If we do this for own node,
+         * loop occurs). */
+        if (g->hncp->own_node != n)
+          hncp_pa_set_dhcpv6_data_in_dirty(g);
+
       }
       break;
     case HNCP_T_ASSIGNED_PREFIX:
@@ -308,6 +315,21 @@ void hncp_pa_set_dhcpv6_data_in_dirty(hncp_glue g)
   hncp_schedule(o);
 }
 
+#define APPEND_BUF(buf, len, ibuf, ilen)        \
+do                                              \
+  {                                             \
+  if (ilen)                                     \
+    {                                           \
+      buf = realloc(buf, len + ilen);           \
+      if (!buf)                                 \
+        {                                       \
+          L_ERR("oom gathering buf");           \
+          return;                               \
+        }                                       \
+      memcpy(buf + len, ibuf, ilen);            \
+      len += ilen;                              \
+    }                                           \
+ } while(0)
 
 static void _republish_cb(hncp_subscriber s)
 {
@@ -319,6 +341,8 @@ static void _republish_cb(hncp_subscriber s)
   struct tlv_attr *st;
   hncp_t_delegated_prefix_header dph;
   struct tlv_buf tb;
+  char *dhcpv6_options = NULL;
+  int dhcpv6_options_len = 0;
 
   hncp_remove_tlvs_by_type(o, HNCP_T_EXTERNAL_CONNECTION);
   /* This is very brute force. Oh well. (O(N^2) to # of delegated
@@ -361,6 +385,8 @@ static void _republish_cb(hncp_subscriber s)
             {
               st = tlv_new(&tb, HNCP_T_DHCPV6_OPTIONS, dp->dhcpv6_len);
               memcpy(tlv_data(st), dp->dhcpv6_data, dp->dhcpv6_len);
+              APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
+                         dp->dhcpv6_data, dp->dhcpv6_len);
             }
           tlv_nest_end(&tb, cookie);
         }
@@ -374,16 +400,34 @@ static void _republish_cb(hncp_subscriber s)
       hncp_add_tlv(o, tb.head);
       tlv_buf_free(&tb);
     }
-}
+  hncp_node n;
+  struct tlv_attr *a, *a2;
 
-#if 0
-/* Not sure if we have anything node specific we care about? */
-static void _node_cb(hncp_subscriber s, hncp_node n, bool add)
-{
-  hncp_glue g = container_of(s, hncp_glue_s, subscriber);
+  hncp_for_each_node(o, n)
+    {
+      if (n != o->own_node)
+        {
+          hncp_node_for_each_tlv_i(n, a)
+            if (tlv_id(a) == HNCP_T_EXTERNAL_CONNECTION)
+              {
+                tlv_for_each_attr(a2, a)
+                  if (tlv_id(a2) == HNCP_T_DHCPV6_OPTIONS)
+                    {
+                      APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
+                                 tlv_data(a2), tlv_len(a2));
+                    }
+              }
+        }
+    }
 
+  hncp_link l;
+  vlist_for_each_element(&o->links, l, in_links)
+    iface_set_dhcpv6_send(l->ifname,
+                          dhcpv6_options, dhcpv6_options_len,
+                          NULL, 0);
+  if (dhcpv6_options)
+    free(dhcpv6_options);
 }
-#endif /* 0 */
 
 static void _updated_lap(const struct prefix *prefix, const char *ifname,
                          int to_delete, void *priv)
