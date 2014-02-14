@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Fri Feb 14 10:59:56 2014 mstenber
- * Edit time:     291 min
+ * Last modified: Fri Feb 14 11:22:41 2014 mstenber
+ * Edit time:     296 min
  *
  */
 
@@ -385,8 +385,6 @@ static void _republish_cb(hncp_subscriber s)
             {
               st = tlv_new(&tb, HNCP_T_DHCPV6_OPTIONS, dp->dhcpv6_len);
               memcpy(tlv_data(st), dp->dhcpv6_data, dp->dhcpv6_len);
-              APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
-                         dp->dhcpv6_data, dp->dhcpv6_len);
             }
           tlv_nest_end(&tb, cookie);
         }
@@ -396,6 +394,8 @@ static void _republish_cb(hncp_subscriber s)
         {
           st = tlv_new(&tb, HNCP_T_DHCPV6_OPTIONS, ifo->dhcpv6_len_in);
           memcpy(tlv_data(st), ifo->dhcpv6_data_in, ifo->dhcpv6_len_in);
+          APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
+                     tlv_data(st), tlv_len(st));
         }
       hncp_add_tlv(o, tb.head);
       tlv_buf_free(&tb);
