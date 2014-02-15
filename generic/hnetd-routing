@@ -4,18 +4,18 @@
 action="$1"
 proto="$2"
 
+BABEL_EXE=/usr/sbin/babeld
+BABEL_PID=/var/run/babeld-hnetd.pid
+
 case "$action" in
 	enumerate)
 		## echo PROTOCOL-ID PREFERENCE
 		## example for babel:
-		echo 1 128
+		[ -x "$BABEL_EXE" ] && echo 1 128
 	;;
 	enable|reconfigure|disable)
 		case "$proto" in
 			1)
-				BABEL_EXE=/usr/sbin/babeld
-				BABEL_PID=/var/run/babeld-hnetd.pid
-				
 				start-stop-daemon -K -o -x $BABEL_EXE -p $BABEL_PID
 				rm -f $BABEL_PID
 				
