@@ -1,7 +1,7 @@
 #ifdef L_LEVEL
 #undef L_LEVEL
 #endif
-#define L_LEVEL PAS_L_LEVEL
+#define L_LEVEL 7
 #define L_PREFIX "pa-store - "
 
 #include "pa_store.h"
@@ -111,6 +111,7 @@ static int pas_load(struct pa_store *store)
 		return -1;
 
 	if(!freopen(NULL, "r", store->f))
+		return -2;
 
 	while(!err) {
 		/* Get type */
@@ -171,26 +172,29 @@ static void __pa_store_dps(struct pa_data_user *user, struct pa_dp *dp, uint32_t
 	if((flags & PADF_DP_CREATED) && dp->local && prefix_is_ipv6_ula(&dp->prefix)) {
 		prefix_cpy(&store->ula, &dp->prefix);
 		store->ula_valid = true;
+		if(store->f)
+			pas_save(store);
 	}
 }
 
 static void __pa_store_cps(struct pa_data_user *user, struct pa_cp *cp, uint32_t flags) {
+	struct pa_store *store = container_of(user, struct pa_store, data_user);
 	struct pa_data *data = &container_of(user, struct pa, store.data_user)->data;
 	struct pa_sp *sp;
-	if((flags & PADF_CP_APPLIED) && !(flags & PADF_CP_TODELETE) && cp->applied && cp->iface) {
+	if((flags & (PADF_CP_APPLIED | PADF_CP_IFACE)) && !(flags & PADF_CP_TODELETE) && cp->applied && cp->iface) {
 		sp = pa_sp_get(data, cp->iface, &cp->prefix, true);
-		if(sp)
+		if(sp) {
 			pa_sp_promote(data, sp);
+			if(store->f)
+				pas_save(store);
+		}
 	}
 }
 
 void __pa_store_setfile(struct pa_store *store, FILE *f)
 {
-	if(store->f) {
-		if(store->started)
-			pas_save(store);
+	if(store->f)
 		fclose(store->f);
-	}
 	store->f = f;
 	if(store->started && store->f)
 		pas_load(store);
@@ -198,6 +202,11 @@ void __pa_store_setfile(struct pa_store *store, FILE *f)
 
 int pa_store_setfile(struct pa_store *store, const char *filepath)
 {
+	if(filepath) {
+		L_NOTICE("Opening file for stable storage %s", filepath);
+	} else {
+		L_NOTICE("Closing stable storage file");
+	}
 	__pa_store_setfile(store, fopen(filepath, "rw"));
 	return ((filepath && store->f) || (!filepath && !store->f))?0:-1;
 }
@@ -226,10 +235,22 @@ void pa_store_start(struct pa_store *store)
 	}
 }
 
+void pa_store_stop(struct pa_store *store)
+{
+	if(!store->started)
+		return;
+
+	if(store->f) {
+		FILE *f = store->f;
+		__pa_store_setfile(store, NULL);
+		store->f = f;
+	}
+	pa_data_unsubscribe(&store->data_user);
+	store->started = false;
+}
+
 void pa_store_term(struct pa_store *store)
 {
-	pa_data_unsubscribe(&store->data_user);
-	pa_store_setfile(store, NULL);
-	store->started = false;
+	pa_store_stop(store);
 }
 

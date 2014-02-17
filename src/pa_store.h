@@ -25,6 +25,7 @@ struct pa_store {
 
 void pa_store_init(struct pa_store *);
 void pa_store_start(struct pa_store *store);
+void pa_store_stop(struct pa_store *store);
 int pa_store_setfile(struct pa_store *, const char *filepath);
 void pa_store_term(struct pa_store *);
 const struct prefix *pa_store_ula_get(struct pa_store *);

@@ -26,7 +26,7 @@ static struct prefix p1_1 = {
 				0x20, 0x01, 0x20, 0x01, 0xff, 0xff, 0xff, 0x10}},
 		.plen = 60 };
 
-static struct pa_rid ridnull = {};
+static struct pa_rid ridnull = { .id = {0} };
 static struct pa_rid rid1 = { .id = {0x20} };
 static struct pa_rid rid2 = { .id = {0x30} };
 

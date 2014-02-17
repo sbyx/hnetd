@@ -85,7 +85,7 @@ target_link_libraries(test_iface ubox)
 add_test(iface test_iface)
 add_dependencies(check test_iface)
 
-add_executable(test_pa_store test/test_pa_store.c src/prefix_utils.c)
+add_executable(test_pa_store test/test_pa_store.c src/pa_data.c src/pa_store.c src/prefix_utils.c)
 target_link_libraries(test_pa_store ubox)
 add_test(pa_store test_pa_store)
 add_dependencies(check test_pa_store)
