@@ -239,7 +239,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 		c = container_of(list_first_entry(&queue, struct hncp_bfs_head, head), hncp_node_s, bfs);
 		L_WARN("Router %d", c->node_identifier_hash.buf[0]);
 
-		struct tlv_attr *a, *tlvs = c->tlv_container;
+		struct tlv_attr *a, *a2, *tlvs = c->tlv_container;
 		tlv_for_each_attr(a, tlvs) {
 			if (tlv_id(a) == HNCP_T_NODE_DATA_NEIGHBOR &&
 					tlv_len(a) == sizeof(hncp_t_node_data_neighbor_s)) {
@@ -291,22 +291,25 @@ static void hncp_routing_run(struct uloop_timeout *t)
 
 				n->bfs.hopcount = c->bfs.hopcount + 1;
 				list_add_tail(&n->bfs.head, &queue);
-			} else if (tlv_id(a) == HNCP_T_DELEGATED_PREFIX && hncp_tlv_dp_valid(a) && c != hncp->own_node) {
-				hncp_t_delegated_prefix_header dp = tlv_data(a);
+			} else if (tlv_id(a) == HNCP_T_EXTERNAL_CONNECTION && c != hncp->own_node) {
+				tlv_for_each_attr(a2, a)
+					if (tlv_id(a2) == HNCP_T_DELEGATED_PREFIX && hncp_tlv_dp_valid(a2)) {
+						hncp_t_delegated_prefix_header dp = tlv_data(a2);
 
-				struct prefix from = { .plen = dp->prefix_length_bits };
-				size_t plen = ROUND_BITS_TO_BYTES(from.plen);
-				memcpy(&from.prefix, &dp[1], plen);
+						struct prefix from = { .plen = dp->prefix_length_bits };
+						size_t plen = ROUND_BITS_TO_BYTES(from.plen);
+						memcpy(&from.prefix, &dp[1], plen);
 
-				if (!IN6_IS_ADDR_V4MAPPED(&from.prefix)) {
-					if (c->bfs.next_hop && c->bfs.ifname)
-						iface_add_default_route(c->bfs.ifname, &from, c->bfs.next_hop, c->bfs.hopcount);
-				} else {
-					if (c->bfs.next_hop4 && c->bfs.ifname && !have_v4uplink) {
-						iface_add_default_route(c->bfs.ifname, NULL, c->bfs.next_hop4, c->bfs.hopcount);
-						have_v4uplink = true;
+						if (!IN6_IS_ADDR_V4MAPPED(&from.prefix)) {
+							if (c->bfs.next_hop && c->bfs.ifname)
+								iface_add_default_route(c->bfs.ifname, &from, c->bfs.next_hop, c->bfs.hopcount);
+						} else {
+							if (c->bfs.next_hop4 && c->bfs.ifname && !have_v4uplink) {
+								iface_add_default_route(c->bfs.ifname, NULL, c->bfs.next_hop4, c->bfs.hopcount);
+								have_v4uplink = true;
+							}
+						}
 					}
-				}
 			} else if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX && hncp_tlv_ap_valid(a) && c != hncp->own_node) {
 				hncp_t_assigned_prefix_header ap = tlv_data(a);
 
