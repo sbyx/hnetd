@@ -25,6 +25,9 @@
 typedef struct pa *pa_t;
 #include "iface.h"
 
+#define PA_FLOOD_DELAY_DEFAULT     5000
+#define PA_FLOOD_DELAY_LL_DEFAULT  1000
+
 #define PA_PRIORITY_MIN              0
 #define PA_PRIORITY_AUTHORITY_MIN    4
 #define PA_PRIORITY_AUTO_MIN         6
@@ -32,72 +35,6 @@ typedef struct pa *pa_t;
 #define PA_PRIORITY_AUTO_MAX         10
 #define PA_PRIORITY_AUTHORITY_MAX    12
 #define PA_PRIORITY_MAX              15
-
-/* Callbacks for flooding protocol. */
-struct pa_flood_callbacks {
-	/* Private pointer provided by the subscriber */
-	void *priv;
-	/* Called whenever a locally assigned prefix is modified.
-	 * @param prefix The assigned prefix
-	 * @param ifname Interface on which assignment is made
-	 * @param to_delete Whether that lap needs to be deleted
-	 * @param priv Private pointer as provided by subscriber */
-	void (*updated_lap)(const struct prefix *prefix, const char *ifname,
-							bool authoritative, uint8_t priority,
-							int to_delete, void *priv);
-
-	/* Called whenever a locally delegated prefix is modified.
-	 * @param prefix The assigned prefix
-	 * @param prefix Some subprefix that must not be assigned
-	 * @param dp_ifname Delegating side interface (NULL if not delegated)
-	 * @param valid_until End of validity date or zero when the ldp should
-	 *        be deleted
-	 * @param preferred_until When the prefix will not be preferred anymore
-	 * @param dhcpv6_data Data provided by the delegating dhcpv6 server (NULL if no data)
-	 * @param dhcpv6_len The length of the dhcpv6 data (0 if not data)
-	 * @param priv Private pointer as provided by subscriber */
-	void (*updated_ldp)(const struct prefix *prefix,
-				hnetd_time_t valid_until, hnetd_time_t preferred_until,
-				const void *dhcpv6_data, size_t dhcpv6_len,
-				void *priv);
-
-	/* Called whenever a locally assigned address is modified.
-	 * @param prefix The assigned prefix
-	 * @param ifname Interface on which assignment is made
-	 * @param to_delete Whether that aap needs to be deleted
-	 * @param priv Private pointer as provided by subscriber */
-	void (*updated_laa)(const struct in6_addr *addr, const char *ifname,
-			int to_delete, void *priv);
-};
-
-struct pa_iface_callbacks {
-	/* Private pointer provided by the subscriber */
-	void *priv;
-	/* Called whenever a prefix assigned to some interface should be
-	 * modified.
-	 * @param prefix The assigned prefix
-	 * @param ifname The interface on which that prefix must be assigned
-	 * @param valid_until End of validity date or zero when the prefix should
-	 *        be deleted
-	 * @param preferred_until When the prefix will not be preferred anymore
-	 * @param dhcpv6_data Data provided by the delegating dhcpv6 server (NULL if no data)
-	 * @param dhcpv6_len The length of the dhcpv6 data (0 if not data)
-	 * @param priv Private pointer as provided by subscriber */
-	void (*update_prefix)(const struct prefix *p, const char *ifname,
-						hnetd_time_t valid_until, hnetd_time_t preferred_until,
-						const void *dhcpv6_data, size_t dhcpv6_len,
-						void *priv);
-
-	/* When interface ownership changes.
-	 * @param ifname The interface name
-	 * @param owner Whether we should do dhcp+ra
-	 * @param priv Private pointer as provided by subscriber */
-	void (*update_link_owner)(const char *ifname, bool owner, void *priv);
-
-	/* Called whenever an assigned address must be applied or unapplied. */
-	void (*update_address)(const char *ifname, const struct in6_addr *addr,
-			int to_delete, void *priv);
-};
 
 struct pa_conf {
 	/* Enables ULA use
@@ -146,35 +83,26 @@ struct pa_conf {
 	 * default = 330 * HNETD_TIME_PER_SECOND */
 	uint32_t local_update_delay;
 
-	/* Pointer to an initialized pa permanent storage structure.
-	 * May be left to NULL so that no permanent storage is used.
-	 * Default is NULL */
-	struct pa_store *storage;
-};
+	/* Maximum number of stored prefixes
+	 * default = 100 */
+	size_t max_sp;
 
-struct pa_flood {
-	bool rid_valid;
-	struct pa_rid rid;
-	hnetd_time_t flooding_delay;
-	hnetd_time_t flooding_delay_ll;
+	/* Maximum number of stored prefixes per interface
+	 * default = 10 */
+	size_t max_sp_per_if;
 };
 
 struct pa {
 	bool started;
 	struct pa_core core;                  /* Algorithm core elements */
-	struct pa_flood flood;                /* Main information from flooding */
 	struct pa_data data;                  /* PAA database */
 	struct pa_conf conf;                  /* Configuration */
 	struct pa_local local;                /* Ipv4 and ULA elements */
-	struct pa_flood_callbacks flood_cbs;  /* HCP callbacks */
-	struct pa_iface_callbacks iface_cbs;  /* Iface callbacks */
+	struct pa_store store;                /* Stable storage interface */
 	struct iface_user ifu;
 };
 
-
-/************************************/
-/********** Main interface **********/
-/************************************/
+#define pa_data(pa) (&(pa)->data)
 
 void pa_conf_set_defaults(struct pa_conf *conf);
 /* Initializes the pa structure. */
@@ -185,86 +113,5 @@ void pa_start(struct pa *pa);
 void pa_stop(struct pa *pa);
 /* Reset pa to post-init state, without modifying configuration. */
 void pa_term(struct pa *pa);
-
-
-/************************************/
-/********* Iface interface **********/
-/************************************/
-
-/* Subscribes to lap change events. */
-void pa_iface_subscribe(struct pa *pa, const struct pa_iface_callbacks *);
-
-
-/************************************/
-/********* Flood interface **********/
-/************************************/
-
-/* Sets flooder algorithm callbacks.
- * Subscribing will override previous subscription (if any).
- * The provided structure can be destroyed after function returns. */
-void pa_flood_subscribe(struct pa *pa, const struct pa_flood_callbacks *);
-
-/* Sets the router id. */
-void pa_set_rid(struct pa *pa, const struct pa_rid *rid);
-
-/* Flooding protocol must call that function whenever an assigned
- * prefix advertised by some *other* node is modified or deleted.
- * @param prefix The assigned prefix
- * @param ifname Interface name when assigned on a connected link.
- *           NULL otherwise.
- * @param do_delete Whether this eap must be deleted
- * @param rid The source router id
- * @return 0 on success. A different value on error. */
-int pa_update_ap(struct pa *pa, const struct prefix *prefix,
-				const struct pa_rid *rid, const char *ifname,
-				bool authoritative, uint8_t priority,
-				bool to_delete);
-
-/* Flooding protocol must call that function whenever a delegated
- * prefix advertised by some *other* node is modified or deleted.
- * @param prefix The delegated prefix
- * @param rid Prefix owner's router id
- * @param valid_until Time when the prefix becomes invalid (0 for deletion)
- * @param preferred_until - Time when the prefix is not preferred anymore.
- * @param dhcpv6_data Data provided by the delegating dhcpv6 server (NULL if no data)
- * @param dhcpv6_len The length of the dhcpv6 data (0 if not data)
- * @return 0 on success. A different value on error. */
-int pa_update_edp(struct pa *pa, const struct prefix *prefix,
-				const struct pa_rid *rid,
-				hnetd_time_t valid_until, hnetd_time_t preferred_until,
-				const void *dhcpv6_data, size_t dhcpv6_len);
-
-/* Flooding protocol must call that function whenever an address assigned by
- * another router is modified. */
-int pa_update_eaa(struct pa *pa, const struct in6_addr *addr,
-				const struct pa_rid *rid, bool to_delete);
-
-
-/************************************/
-/******** pa_core interface *********/
-/************************************/
-
-/* When a local element is modifed */
-void pa_updated_cp(struct pa_core *core, struct pa_cp *cp, bool to_delete, bool tell_flood, bool tell_iface);
-void pa_updated_laa(struct pa_core *core, struct pa_laa *laa, bool to_delete);
-
-/* When dodhcp value is modified */
-void pa_updated_iface(struct pa_core *core, struct pa_iface *iface);
-
-/************************************/
-/******* pa_local interface *********/
-/************************************/
-
-void pa_update_local(struct pa_core *core,
-		const struct prefix *prefix, const struct prefix *excluded,
-		hnetd_time_t valid_until, hnetd_time_t preferred_until,
-		const void *dhcp_data, size_t dhcp_len);
-
-/************************************/
-/******* pa_data interface **********/
-/************************************/
-
-void pa_cp_apply(struct pa_data *data, struct pa_cp *cp);
-void pa_laa_apply(struct pa_data *data, struct pa_laa *laa);
 
 #endif /* PA_H_ */

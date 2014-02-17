@@ -26,28 +26,12 @@ struct pa_core {
 		bool scheduled;
 		struct uloop_timeout to;
 	} aaa;
+	struct pa_data_user data_user;
 };
 
 void pa_core_init(struct pa_core *);
 void pa_core_start(struct pa_core *);
 void pa_core_stop(struct pa_core *);
 void pa_core_term(struct pa_core *);
-
-/* The prefix assignment algorithm must be scheduled anytime
- * - A dp is created or deleted
- * - An ap is created or deleted
- * - The rid is modified
- * - A link changes state (internal or externel)
- */
-void pa_core_schedule(struct pa_core *);
-
-/* Called whenever an eaa is created or deleted */
-void pa_address_schedule(struct pa_core *);
-
-/* Called whenever excluded is modified */
-void pa_core_update_excluded(struct pa_core *, struct pa_ldp *);
-
-/* Called whenever some prefix apply is modified */
-void pa_core_cp_apply_modified(struct pa_core *, struct pa_cp *);
 
 #endif /* PA_CORE_H_ */
