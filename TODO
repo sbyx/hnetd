@@ -1,28 +1,23 @@
-- IPv4 (oryon)
- - address assignment
- - prefix assignment (done?)
- - routing(?)
-
-- IPv6
- - routing (sbyx; need testing)
- - prefix class support (sbyx; both odhcpd + here)
-
-- prefix assignment
- - there seems to be issues; with random prefixes, lots of lap's wind
-   up floating around when dp disappears and appears again; without
-   random prefixes, problem is hopefully concealed..
-
-- service discovery
- - think if we should publish non-browseable record for _every_
-   <linkname>.<router>.<home> but include them in browse path if and
-   only if they're the owner of the prefix(es) on that link..
+Done, but not tested
+--------------------
 
 - L2 up/down detection on Linux; that is, we should ignore interfaces
-  that aren't up
- - l2 down == no SD DDZ, no PA prefixes on link
+  that aren't up (test that this happens; code should work now)
 
 - 'generic Linux' case needs to be tested thoroughly at some point
  - made it work within ttin too
+
+Short-term things
+-----------------
+
+- IPv4 (oryon)
+ - address assignment
+ - prefix assignment (platform side done)
+ - routing(done?)
+
+- prefix assignment (oryon)
+ - wait for new version, make sure it works (and hopefully has better
+   delays than old)
 
 - draft compliance
  - make sure implementations are in sync with what's in drafts
@@ -33,6 +28,9 @@
    - border discovery/PA
    - routing
    - SD
+
+Eventually nice to have
+-----------------------
 
 - get PCP in somehow?
  - it would be nice for IPv4 use for various cases; is it a priority though? hmm.
