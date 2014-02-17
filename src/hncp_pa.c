@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Fri Feb 14 11:22:41 2014 mstenber
- * Edit time:     296 min
+ * Last modified: Mon Feb 17 15:46:31 2014 mstenber
+ * Edit time:     309 min
  *
  */
 
@@ -46,6 +46,7 @@
 #include "hncp_pa.h"
 #include "hncp_i.h"
 #include "prefix_utils.h"
+#include "dhcpv6.h"
 
 typedef struct {
   struct vlist_node in_dps;
@@ -403,12 +404,28 @@ static void _republish_cb(hncp_subscriber s)
   hncp_node n;
   struct tlv_attr *a, *a2;
 
+  /* add the SD domain always to search path (if present) */
+  a = hncp_get_dns_domain_tlv(o);
+  if (a)
+    {
+      uint16_t fake_header[2];
+      int l = tlv_len(a);
+
+      fake_header[0] = cpu_to_be16(DHCPV6_OPT_DNS_DOMAIN);
+      fake_header[1] = cpu_to_be16(4 + l);
+      APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
+                 &fake_header[0], 4);
+      APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
+                 tlv_data(a), l);
+    }
+
   hncp_for_each_node(o, n)
     {
-      if (n != o->own_node)
-        {
-          hncp_node_for_each_tlv_i(n, a)
-            if (tlv_id(a) == HNCP_T_EXTERNAL_CONNECTION)
+      hncp_node_for_each_tlv_i(n, a)
+        switch (tlv_id(a))
+          {
+          case HNCP_T_EXTERNAL_CONNECTION:
+            if (n != o->own_node)
               {
                 tlv_for_each_attr(a2, a)
                   if (tlv_id(a2) == HNCP_T_DHCPV6_OPTIONS)
@@ -417,7 +434,25 @@ static void _republish_cb(hncp_subscriber s)
                                  tlv_data(a2), tlv_len(a2));
                     }
               }
-        }
+            break;
+          case HNCP_T_DNS_DELEGATED_ZONE:
+            {
+              hncp_t_dns_delegated_zone ddz = tlv_data(a);
+              if (ddz->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_SEARCH)
+                {
+                  uint16_t fake_header[2];
+                  int l = tlv_len(a) - sizeof(*ddz);
+
+                  fake_header[0] = cpu_to_be16(DHCPV6_OPT_DNS_DOMAIN);
+                  fake_header[1] = cpu_to_be16(4 + l);
+                  APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
+                             &fake_header[0], 4);
+                  APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
+                             ddz->ll, l);
+                }
+            }
+            break;
+          }
     }
 
   hncp_link l;

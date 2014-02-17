@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Wed Feb 12 22:27:26 2014 mstenber
- * Edit time:     105 min
+ * Last modified: Mon Feb 17 15:08:58 2014 mstenber
+ * Edit time:     106 min
  *
  */
 
@@ -134,6 +134,8 @@ hncp_node hncp_get_first_node(hncp o);
  * tlv_attr_equal's it).
  */
 struct tlv_attr *hncp_add_tlv(hncp o, struct tlv_attr *tlv);
+struct tlv_attr *hncp_add_tlv_raw(hncp o,
+                                  uint16_t type, void *data, uint16_t len);
 
 /**
  * Remove a single TLV.

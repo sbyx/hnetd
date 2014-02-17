@@ -184,8 +184,8 @@ int main(__unused int argc, char* const argv[])
 	 * perhaps? */
 	if (dnsmasq_script && ohp_script && dnsmasq_bonus_file) {
 		if (!hncp_sd_create(h,
-						   dnsmasq_script, dnsmasq_bonus_file,
-						   ohp_script, router_name)) {
+							dnsmasq_script, dnsmasq_bonus_file,
+							ohp_script, router_name, NULL)) {
 			L_ERR("unable to initialize rd, exiting");
 			return 71;
 		}

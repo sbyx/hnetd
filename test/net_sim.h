@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Fri Feb 14 10:41:00 2014 mstenber
+ * Last modified: Mon Feb 17 15:23:29 2014 mstenber
  * Edit time:     33 min
  *
  */
@@ -190,7 +190,7 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
                                  "/bin/yes",
                                  "/tmp/dnsmasq.conf",
                                  "/bin/no",
-                                 NULL)))
+                                 NULL, NULL)))
       return NULL;
   return &n->n;
 }

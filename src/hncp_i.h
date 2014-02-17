@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Feb 12 22:28:32 2014 mstenber
+ * Last modified: Mon Feb 17 15:45:38 2014 mstenber
  * Edit time:     125 min
  *
  */
@@ -282,7 +282,7 @@ void hncp_tlv_ap_update(hncp o,
                         bool authoritative,
                         unsigned int preference,
                         bool add);
-
+struct tlv_attr *hncp_get_dns_domain_tlv(hncp o);
 
 /* Inlined utilities. */
 static inline hnetd_time_t hncp_time(hncp o)

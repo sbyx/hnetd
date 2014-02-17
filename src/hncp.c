@@ -7,7 +7,7 @@
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
  * Last_neighast modified: Thu Dec  5 10:34:22 2013 mstenber
- * Edit time:     391 min
+ * Edit time:     393 min
  *
  */
 
@@ -340,6 +340,20 @@ struct tlv_attr *hncp_add_tlv(hncp o, struct tlv_attr *tlv)
     }
   return NULL;
 }
+
+struct tlv_attr *hncp_add_tlv_raw(hncp o,
+                                  uint16_t type, void *data, uint16_t len)
+{
+  struct tlv_attr *a = alloca(TLV_SIZE + len);
+
+  if (!a)
+    return NULL;
+  tlv_init(a, type, len + TLV_SIZE);
+  memcpy(tlv_data(a), data, len);
+  tlv_fill_pad(a);
+  return hncp_add_tlv(o, a);
+}
+
 
 bool hncp_remove_tlv(hncp o, struct tlv_attr *tlv)
 {

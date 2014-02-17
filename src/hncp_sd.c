@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Wed Feb 12 22:29:01 2014 mstenber
- * Edit time:     352 min
+ * Last modified: Mon Feb 17 15:44:18 2014 mstenber
+ * Edit time:     373 min
  *
  */
 
@@ -43,6 +43,7 @@
 #define UPDATE_FLAG_DNSMASQ 1
 #define UPDATE_FLAG_OHP 2
 #define UPDATE_FLAG_DDZ 4
+#define UPDATE_FLAG_ALL 7
 
 /* How long a timeout we schedule for the actual update (that occurs
  * in a timeout). This effectively sets an upper bound on how
@@ -178,7 +179,6 @@ static void _publish_ddzs(hncp_sd sd)
           unsigned char buf[sizeof(struct tlv_attr) +
                             sizeof(*dh) +
                             DNS_MAX_ESCAPED_LEN];
-          struct tlv_attr *na;
           int r, flen;
           char tbuf[DNS_MAX_ESCAPED_LEN];
           struct in6_addr our_addr;
@@ -208,18 +208,15 @@ static void _publish_ddzs(hncp_sd sd)
               return;
             }
 
-          na = (struct tlv_attr *)buf;
-          dh = tlv_data(na);
+          dh = (void *)buf;
           memset(dh, 0, sizeof(*dh));
           memcpy(dh->address, &our_addr, 16);
           r = escaped2ll(tbuf, dh->ll, DNS_MAX_ESCAPED_LEN);
           if (r < 0)
             continue;
-          flen = TLV_SIZE + sizeof(*dh) + r;
+          flen = sizeof(*dh) + r;
           dh->flags = HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE;
-          tlv_init(na, HNCP_T_DNS_DELEGATED_ZONE, flen);
-          tlv_fill_pad(na);
-          hncp_add_tlv(sd->hncp, na);
+          hncp_add_tlv_raw(sd->hncp, HNCP_T_DNS_DELEGATED_ZONE, dh, flen);
 
           /* Reverse DDZ handling */
           /* (no BROWSE flag, .ip6.arpa. or .in-addr.arpa.). */
@@ -229,11 +226,9 @@ static void _publish_ddzs(hncp_sd sd)
           r = _push_reverse_ll(&p, dh->ll, DNS_MAX_ESCAPED_LEN);
           if (r < 0)
             continue;
-          flen = TLV_SIZE + sizeof(*dh) + r;
+          flen = sizeof(*dh) + r;
           dh->flags = 0;
-          tlv_init(na, HNCP_T_DNS_DELEGATED_ZONE, flen);
-          tlv_fill_pad(na);
-          hncp_add_tlv(sd->hncp, na);
+          hncp_add_tlv_raw(sd->hncp, HNCP_T_DNS_DELEGATED_ZONE, dh, flen);
         }
     }
 }
@@ -542,6 +537,31 @@ static void _force_republish_cb(hncp_subscriber s)
   _should_update(sd, UPDATE_FLAG_DDZ);
 }
 
+struct tlv_attr *hncp_get_dns_domain_tlv(hncp o)
+{
+  hncp_node n;
+  struct tlv_attr *a, *best = NULL;
+
+  hncp_for_each_node(o, n)
+    {
+      hncp_node_for_each_tlv_i(n, a)
+        {
+          if (tlv_id(a) == HNCP_T_DNS_DOMAIN_NAME)
+            best = a;
+        }
+    }
+  return best;
+}
+
+static void _get_dns_domain(hncp o, char *dest, int dest_len)
+{
+  struct tlv_attr *a = hncp_get_dns_domain_tlv(o);
+
+  if (a && ll2escaped(tlv_data(a), tlv_len(a), dest, dest_len) > 0)
+    return;
+  *dest = 0;
+}
+
 static void _tlv_cb(hncp_subscriber s,
                     hncp_node n, struct tlv_attr *tlv, bool add)
 {
@@ -575,6 +595,17 @@ static void _tlv_cb(hncp_subscriber s,
 
       _should_update(sd, UPDATE_FLAG_DNSMASQ);
     }
+
+  if (tlv_id(tlv) == HNCP_T_DNS_DOMAIN_NAME)
+    {
+      char new_domain[DNS_MAX_ESCAPED_LEN];
+      _get_dns_domain(o, new_domain, sizeof(new_domain));
+      if (strcmp(new_domain, sd->domain))
+        {
+          strcpy(sd->domain, new_domain);
+          _should_update(sd, UPDATE_FLAG_ALL);
+        }
+    }
 }
 
 static void _timeout_cb(struct uloop_timeout *t)
@@ -601,7 +632,8 @@ hncp_sd hncp_sd_create(hncp h,
                        const char *dnsmasq_script,
                        const char *dnsmasq_bonus_file,
                        const char *ohp_script,
-                       const char *router_name)
+                       const char *router_name,
+                       const char *domain_name)
 {
   hncp_sd sd = calloc(1, sizeof(*sd));
 
@@ -612,19 +644,35 @@ hncp_sd hncp_sd_create(hncp h,
       || !(sd->dnsmasq_bonus_file = strdup(dnsmasq_bonus_file))
       || !(sd->ohp_script = strdup(ohp_script)))
     abort();
+
+  /* Handle domain name */
+  if (!domain_name)
+    domain_name = "home.";
+  uint8_t ll[DNS_MAX_LL_LEN];
+  int len;
+  len = escaped2ll(domain_name, ll, sizeof(ll));
+  if (len<0)
+    {
+      L_ERR("invalid domain:%s", domain_name);
+      abort();
+    }
+  hncp_add_tlv_raw(h, HNCP_T_DNS_DOMAIN_NAME, ll, len);
+
+  /* Handle router name */
   if (router_name)
     strcpy(sd->router_name_base, router_name);
   else
     strcpy(sd->router_name_base, "r");
   strcpy(sd->router_name, sd->router_name_base);
-  /* XXX - handle domain TLV for this. */
-  strcpy(sd->domain, "home.");
   _set_router_name(sd, true);
+
+  /* Set up the hncp subscriber */
   sd->subscriber.local_tlv_change_callback = _local_tlv_cb;
   sd->subscriber.tlv_change_callback = _tlv_cb;
   sd->subscriber.republish_callback = _republish_cb;
   sd->subscriber.link_ipv6_address_change_callback = _force_republish_cb;
   hncp_subscribe(h, &sd->subscriber);
+
   return sd;
 }
 
