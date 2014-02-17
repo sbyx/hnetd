@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Mon Feb 17 17:31:59 2014 mstenber
- * Edit time:     312 min
+ * Last modified: Mon Feb 17 17:39:40 2014 mstenber
+ * Edit time:     314 min
  *
  */
 
@@ -412,7 +412,7 @@ static void _republish_cb(hncp_subscriber s)
       int l = tlv_len(a);
 
       fake_header[0] = cpu_to_be16(DHCPV6_OPT_DNS_DOMAIN);
-      fake_header[1] = cpu_to_be16(4 + l);
+      fake_header[1] = cpu_to_be16(l);
       APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
                  &fake_header[0], 4);
       APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
@@ -444,7 +444,7 @@ static void _republish_cb(hncp_subscriber s)
                   int l = tlv_len(a) - sizeof(*ddz);
 
                   fake_header[0] = cpu_to_be16(DHCPV6_OPT_DNS_DOMAIN);
-                  fake_header[1] = cpu_to_be16(4 + l);
+                  fake_header[1] = cpu_to_be16(l);
                   APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
                              &fake_header[0], 4);
                   APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
