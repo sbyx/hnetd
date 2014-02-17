@@ -31,7 +31,7 @@ set(HNCP_NIO_BASE src/hncp.c src/hncp_notify.c src/hncp_proto.c src/hncp_timeout
 set(HNCP_NIO ${HNCP_NIO_BASE} src/hncp_pa.c src/hncp_sd.c)
 set(HNCP ${HNCP_NIO} src/hncp_io.c)
 add_executable(hnetd ${HNCP} src/hncp_routing.c src/hnetd.c src/iface.c src/pa.c src/pa_store.c ${BACKEND_SOURCE})
-target_link_libraries(hnetd ubox blobmsg_json ${BACKEND_LINK})
+target_link_libraries(hnetd ubox blobmsg_json resolv ${BACKEND_LINK})
 
 # Unit test stuff
 

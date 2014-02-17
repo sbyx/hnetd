@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <resolv.h>
 
 #include <sys/un.h>
 #include <sys/socket.h>
@@ -324,9 +325,10 @@ static void platform_commit(struct uloop_timeout *t)
 
 	// DNS options
 	const size_t dns_max = 4;
-	size_t dns_cnt = 0, dns4_cnt = 0;
+	size_t dns_cnt = 0, dns4_cnt = 0, domain_cnt = 0;
 	struct in6_addr dns[dns_max];
 	struct in_addr dns4[dns_max];
+	char domains[dns_max][256];
 
 	// Add per interface DHCPv6 options
 	uint8_t *oend = ((uint8_t*)c->dhcpv6_data_out) + c->dhcpv6_len_out, *odata;
@@ -339,6 +341,17 @@ static void platform_commit(struct uloop_timeout *t)
 
 			memcpy(&dns[dns_cnt], odata, cnt * sizeof(*dns));
 			dns_cnt += cnt;
+		} else if (otype == DHCPV6_OPT_DNS_DOMAIN) {
+			uint8_t *oend = &odata[olen];
+			while (odata < oend && domain_cnt < dns_max) {
+				int l = dn_expand(odata, oend, odata, domains[domain_cnt], sizeof(*domains));
+				if (l > 0) {
+					++domain_cnt;
+					odata += l;
+				} else {
+					break;
+				}
+			}
 		}
 	}
 
@@ -372,6 +385,15 @@ static void platform_commit(struct uloop_timeout *t)
 			blobmsg_add_string_buffer(&b);
 			L_DEBUG("	DNS: %s", buf);
 		}
+
+		blobmsg_close_array(&b, k);
+	}
+
+	if (domain_cnt) {
+		k = blobmsg_open_array(&b, "dns_search");
+
+		for (size_t i = 0; i < domain_cnt; ++i)
+			blobmsg_add_string(&b, NULL, domains[i]);
 
 		blobmsg_close_array(&b, k);
 	}

@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <arpa/inet.h>
+#include <resolv.h>
 
 #include "dhcpv6.h"
 #include "dhcp.h"
@@ -165,6 +166,11 @@ void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t l
 	size_t dns_cnt = 0;
 	struct in6_addr dns[dns_max];
 
+	const size_t domainbuf_size = 8 + dns_max * 256;
+	char domainbuf[domainbuf_size];
+	strcpy(domainbuf, "SEARCH= ");
+	size_t domainbuf_len = strlen(domainbuf);
+
 	// Add per interface DHCPv6 options
 	uint8_t *oend = ((uint8_t*)dhcpv6_data) + len, *odata;
 	uint16_t olen, otype;
@@ -176,8 +182,21 @@ void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t l
 
 			memcpy(&dns[dns_cnt], odata, cnt * sizeof(*dns));
 			dns_cnt += cnt;
+		} else if (otype == DHCPV6_OPT_DNS_DOMAIN) {
+			uint8_t *oend = &odata[olen];
+			while (odata < oend) {
+				int l = dn_expand(odata, oend, odata, &domainbuf[domainbuf_len],
+						domainbuf_size - domainbuf_len);
+				if (l > 0) {
+					domainbuf_len = strlen(domainbuf);
+					domainbuf[domainbuf_len++] = ' ';
+				} else {
+					break;
+				}
+			}
 		}
 	}
+	domainbuf[domainbuf_len - 1] = '\0';
 
 	// DNS options
 	size_t dns4_cnt = 0;
@@ -208,6 +227,7 @@ void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t l
 		for (size_t i = 0; i < dns4_cnt; ++i)
 			inet_ntop(AF_INET, &dns4[i], dnsbuf + strlen(dnsbuf), INET_ADDRSTRLEN);
 		putenv(dnsbuf);
+		putenv(domainbuf);
 
 		execv(argv[0], argv);
 		_exit(128);
