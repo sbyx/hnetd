@@ -152,10 +152,12 @@ void hncp_bfs_one(void)
 	ap.prefix.s6_addr[7] = 2;
 	tlv_put(&b, HNCP_T_ASSIGNED_PREFIX, &ap, sizeof(ap));
 
+	void *cookie = tlv_nest_start(&b, HNCP_T_EXTERNAL_CONNECTION, 0);
 	dp.hdr.ms_preferred_at_origination = 7200000;
 	dp.hdr.ms_valid_at_origination = 7200000;
 	dp.hdr.prefix_length_bits = 48;
 	tlv_put(&b, HNCP_T_DELEGATED_PREFIX, &dp, sizeof(dp));
+	tlv_nest_end(&b, cookie);
 
 	n2->tlv_container = tlv_memdup(b.head);
 
@@ -184,7 +186,9 @@ void hncp_bfs_one(void)
 	dp.hdr.ms_valid_at_origination = 7200000;
 	dp.hdr.prefix_length_bits = 48;
 	dp.prefix.s6_addr[5] = 1;
+	cookie = tlv_nest_start(&b, HNCP_T_EXTERNAL_CONNECTION, 0);
 	tlv_put(&b, HNCP_T_DELEGATED_PREFIX, &dp, sizeof(dp));
+	tlv_nest_end(&b, cookie);
 
 	n3->tlv_container = tlv_memdup(b.head);
 
