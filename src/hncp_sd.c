@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Feb 17 15:44:18 2014 mstenber
- * Edit time:     373 min
+ * Last modified: Mon Feb 17 17:00:58 2014 mstenber
+ * Edit time:     414 min
  *
  */
 
@@ -158,11 +158,46 @@ static int _push_reverse_ll(struct prefix *p, uint8_t *buf, int buf_len)
   return buf - obuf;
 }
 
+static void _publish_ddz(hncp_sd sd, hncp_link l,
+                         int flags_forward,
+                         struct prefix *assigned_prefix)
+{
+  hncp_t_dns_delegated_zone dh;
+  unsigned char buf[sizeof(struct tlv_attr) +
+                    sizeof(*dh) +
+                    DNS_MAX_ESCAPED_LEN];
+  char tbuf[DNS_MAX_ESCAPED_LEN];
+
+  dh = (void *)buf;
+  memset(dh, 0, sizeof(*dh));
+  if (!hncp_get_ipv6_address(sd->hncp, l->ifname,
+                             (struct in6_addr *)&dh->address))
+    return;
+  sprintf(tbuf, "%s.%s.%s", l->ifname, sd->router_name, sd->domain);
+  int r = escaped2ll(tbuf, dh->ll, DNS_MAX_ESCAPED_LEN);
+  if (r < 0)
+    return;
+  int flen = sizeof(*dh) + r;
+  dh->flags = flags_forward;
+  hncp_add_tlv_raw(sd->hncp, HNCP_T_DNS_DELEGATED_ZONE, dh, flen);
+
+  if (assigned_prefix)
+    {
+      r = _push_reverse_ll(assigned_prefix, dh->ll, DNS_MAX_ESCAPED_LEN);
+      if (r < 0)
+        return;
+      flen = sizeof(*dh) + r;
+      dh->flags = 0;
+      hncp_add_tlv_raw(sd->hncp, HNCP_T_DNS_DELEGATED_ZONE, dh, flen);
+    }
+}
+
 static void _publish_ddzs(hncp_sd sd)
 {
   struct tlv_attr *a;
   hncp_tlv t;
   hncp_t_assigned_prefix_header ah;
+  hncp_link l;
 
   if (!(sd->should_update & UPDATE_FLAG_DDZ))
     return;
@@ -174,62 +209,57 @@ static void _publish_ddzs(hncp_sd sd)
       a = &t->tlv;
       if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX)
         {
-          /* Forward DDZ handling */
-          hncp_t_dns_delegated_zone dh;
-          unsigned char buf[sizeof(struct tlv_attr) +
-                            sizeof(*dh) +
-                            DNS_MAX_ESCAPED_LEN];
-          int r, flen;
-          char tbuf[DNS_MAX_ESCAPED_LEN];
-          struct in6_addr our_addr;
-
+          /* Forward DDZ handling (note: duplication doesn't matter here yet) */
           if (!hncp_tlv_ap_valid(a))
             {
               L_ERR("invalid ap _published by us: %s", TLV_REPR(a));
-              continue;
+              return;
             }
 
           ah = tlv_data(a);
-          /* Should publish DDZ entry. */
           uint32_t link_id = be32_to_cpu(ah->link_id);
 
-          hncp_link l = hncp_find_link_by_id(sd->hncp, link_id);
+          l = hncp_find_link_by_id(sd->hncp, link_id);
           if (!l)
             {
               L_ERR("unable to find hncp link by id #%d", link_id);
               continue;
             }
-          sprintf(tbuf, "%s.%s.%s", l->ifname, sd->router_name, sd->domain);
-
-          if (!hncp_get_ipv6_address(sd->hncp, l->ifname, &our_addr))
-            {
-              L_ERR("unable to get ipv6 address");
-              /* _should_update(sd, UPDATE_FLAG_DDZ); */
-              return;
-            }
-
-          dh = (void *)buf;
-          memset(dh, 0, sizeof(*dh));
-          memcpy(dh->address, &our_addr, 16);
-          r = escaped2ll(tbuf, dh->ll, DNS_MAX_ESCAPED_LEN);
-          if (r < 0)
-            continue;
-          flen = sizeof(*dh) + r;
-          dh->flags = HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE;
-          hncp_add_tlv_raw(sd->hncp, HNCP_T_DNS_DELEGATED_ZONE, dh, flen);
 
           /* Reverse DDZ handling */
           /* (no BROWSE flag, .ip6.arpa. or .in-addr.arpa.). */
           struct prefix p;
           p.plen = ah->prefix_length_bits;
           memcpy(&p.prefix, ah->prefix_data, ROUND_BITS_TO_BYTES(p.plen));
-          r = _push_reverse_ll(&p, dh->ll, DNS_MAX_ESCAPED_LEN);
-          if (r < 0)
-            continue;
-          flen = sizeof(*dh) + r;
-          dh->flags = 0;
-          hncp_add_tlv_raw(sd->hncp, HNCP_T_DNS_DELEGATED_ZONE, dh, flen);
+
+          _publish_ddz(sd, l, HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE, &p);
         }
+    }
+
+  /* Second stage: publish DDZs ALSO for any other interface, but if
+   * and only if there is no corresponding DDZ already (which has
+   * browse flag set -> duplicate detection would not work). */
+  vlist_for_each_element(&sd->hncp->links, l, in_links)
+    {
+      bool found = false;
+      vlist_for_each_element(&sd->hncp->tlvs, t, in_tlvs)
+        {
+          a = &t->tlv;
+          if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX)
+            {
+              ah = tlv_data(a);
+              uint32_t link_id = be32_to_cpu(ah->link_id);
+              if (link_id == l->iid)
+                {
+                  found = true;
+                  break;
+                }
+            }
+        }
+      if (found)
+        continue;
+      /* Not found -> produce forward DDZ only. */
+      _publish_ddz(sd, l, 0, NULL);
     }
 }
 
@@ -333,15 +363,12 @@ bool hncp_sd_restart_dnsmasq(hncp_sd sd)
 
 bool hncp_sd_reconfigure_ohp(hncp_sd sd)
 {
+  hncp_link l;
   char buf[OHP_ARGS_MAX_LEN];
   char *c = buf;
   char *args[OHP_ARGS_MAX_COUNT];
   int narg = 0;
-  uint32_t dumped_link_id = 0;
-  hncp_t_assigned_prefix_header ah;
   char tbuf[DNS_MAX_ESCAPED_LEN];
-
-  struct tlv_attr *a;
   bool first = true;
   md5_ctx_t ctx;
 
@@ -353,43 +380,31 @@ bool hncp_sd_reconfigure_ohp(hncp_sd sd)
   md5_begin(&ctx);
   PUSH_ARG(sd->ohp_script);
 
-  /* We're responsible only for those interfaces that we have assigned
-   * prefix for. */
-  hncp_node_for_each_tlv_i(sd->hncp->own_node, a)
-    if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX)
-      {
-        ah = tlv_data(a);
-        /* If we already dumped this link, no need to do it
-         * again. (Data structure is sorted by link id -> we will get
-         * them in order). */
-        if (dumped_link_id == ah->link_id)
-          continue;
-        dumped_link_id = ah->link_id;
-        uint32_t link_id = be32_to_cpu(dumped_link_id);
-        hncp_link l = hncp_find_link_by_id(sd->hncp, link_id);
+  /* ohp can _always_ listen to all interfaces that have been
+   * configured. Less flapping of the binary, and it hurts nobody if
+   * it is active on few more interfaces (well, fine, slight overhead
+   * from mdnsresponder, but who cares). */
 
-        if (!l)
-          {
-            L_ERR("unable to find link by index %u", link_id);
-            continue;
-          }
-        /* XXX - what sort of naming scheme should we use for links? */
-        sprintf(tbuf, "%s=%s.%s.%s",
-                l->ifname, l->ifname, sd->router_name, sd->domain);
-        md5_hash(tbuf, strlen(tbuf), &ctx);
-        if (first)
-          {
-            char port[6];
-            PUSH_ARG("start");
-            PUSH_ARG("-a");
-            PUSH_ARG(LOCAL_OHP_ADDRESS);
-            PUSH_ARG("-p");
-            sprintf(port, "%d", LOCAL_OHP_PORT);
-            PUSH_ARG(port);
-            first = false;
-          }
-        PUSH_ARG(tbuf);
-      }
+  vlist_for_each_element(&sd->hncp->links, l, in_links)
+    {
+      /* XXX - what sort of naming scheme should we use for links? */
+      sprintf(tbuf, "%s=%s.%s.%s",
+              l->ifname, l->ifname, sd->router_name, sd->domain);
+      md5_hash(tbuf, strlen(tbuf), &ctx);
+      if (first)
+        {
+          char port[6];
+          PUSH_ARG("start");
+          PUSH_ARG("-a");
+          PUSH_ARG(LOCAL_OHP_ADDRESS);
+          PUSH_ARG("-p");
+          sprintf(port, "%d", LOCAL_OHP_PORT);
+          PUSH_ARG(port);
+          first = false;
+        }
+      PUSH_ARG(tbuf);
+    }
+
   if (first)
     {
       PUSH_ARG("stop");
@@ -511,15 +526,7 @@ static void _local_tlv_cb(hncp_subscriber s,
    * some point. OHP configuration may also change at this point. */
   if (tlv_id(tlv) == HNCP_T_ASSIGNED_PREFIX)
     {
-      _should_update(sd, UPDATE_FLAG_DDZ | UPDATE_FLAG_OHP);
-    }
-  /* Local DDZ change may also mean that OHP configuration is
-   * invalid. The OHP code is 'smart' and does not unneccessarily
-   * really prod ohp unless things really change so doing this
-   * spuriously is ok too. */
-  if (tlv_id(tlv) == HNCP_T_DNS_DELEGATED_ZONE)
-    {
-      _should_update(sd, UPDATE_FLAG_OHP);
+      _should_update(sd, UPDATE_FLAG_DDZ);
     }
 }
 
@@ -534,7 +541,7 @@ static void _force_republish_cb(hncp_subscriber s)
 {
   hncp_sd sd = container_of(s, hncp_sd_s, subscriber);
 
-  _should_update(sd, UPDATE_FLAG_DDZ);
+  _should_update(sd, UPDATE_FLAG_ALL);
 }
 
 struct tlv_attr *hncp_get_dns_domain_tlv(hncp o)
@@ -608,11 +615,9 @@ static void _tlv_cb(hncp_subscriber s,
     }
 }
 
-static void _timeout_cb(struct uloop_timeout *t)
+void hncp_sd_update(hncp_sd sd)
 {
-  hncp_sd sd = container_of(t, hncp_sd_s, timeout);
-
-  L_DEBUG("hncp_sd/timeout:%d", sd->should_update);
+  L_DEBUG("hncp_sd_update:%d", sd->should_update);
   _publish_ddzs(sd);
   if (sd->should_update & UPDATE_FLAG_DNSMASQ)
     {
@@ -625,6 +630,13 @@ static void _timeout_cb(struct uloop_timeout *t)
       sd->should_update &= ~UPDATE_FLAG_OHP;
       hncp_sd_reconfigure_ohp(sd);
     }
+}
+
+static void _timeout_cb(struct uloop_timeout *t)
+{
+  hncp_sd sd = container_of(t, hncp_sd_s, timeout);
+
+  hncp_sd_update(sd);
 }
 
 
@@ -670,7 +682,7 @@ hncp_sd hncp_sd_create(hncp h,
   sd->subscriber.local_tlv_change_callback = _local_tlv_cb;
   sd->subscriber.tlv_change_callback = _tlv_cb;
   sd->subscriber.republish_callback = _republish_cb;
-  sd->subscriber.link_ipv6_address_change_callback = _force_republish_cb;
+  sd->subscriber.link_change_callback = _force_republish_cb;
   hncp_subscribe(h, &sd->subscriber);
 
   return sd;
@@ -685,3 +697,4 @@ void hncp_sd_destroy(hncp_sd sd)
   free(sd->ohp_script);
   free(sd);
 }
+

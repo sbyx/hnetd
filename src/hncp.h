@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Mon Feb 17 15:08:58 2014 mstenber
- * Edit time:     106 min
+ * Last modified: Mon Feb 17 15:59:09 2014 mstenber
+ * Edit time:     111 min
  *
  */
 
@@ -95,13 +95,14 @@ struct hncp_subscriber_struct {
   void (*node_change_callback)(hncp_subscriber s, hncp_node n, bool add);
 
   /**
-   * Link IPv6 address changed notification.
+   * Some link-specific information changed.
    *
-   * This is called whenever a link's preferred IPv6 address changes.
-   * (Link omitted because it's assumed this is just general
-   * reconfiguration signal).
+   * This is called whenever a link's preferred address changes, or
+   * set of links itself changes.  (Link omitted because it's assumed
+   * this is just general reconfiguration signal. name or index is
+   * trivial to add later on if needed, though).
    */
-  void (*link_ipv6_address_change_callback)(hncp_subscriber s);
+  void (*link_change_callback)(hncp_subscriber s);
 };
 
 /************************************************ API for whole hncp instance */

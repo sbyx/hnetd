@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Fri Feb  7 12:32:37 2014 mstenber
- * Edit time:     45 min
+ * Last modified: Mon Feb 17 17:03:23 2014 mstenber
+ * Edit time:     47 min
  *
  */
 #define L_LEVEL 7
@@ -120,6 +120,7 @@ void test_hncp_sd(void)
   smock_push("execv_arg", "127.0.0.2");
   smock_push("execv_arg", "-p");
   smock_push("execv_arg", "54");
+  smock_push("execv_arg", "eth1=eth1.r1.home.");
   smock_push("execv_arg", "eth2=eth2.r1.home.");
   rv = hncp_sd_reconfigure_ohp(node2->sd);
   sput_fail_unless(rv, "reconfigure ohp works");

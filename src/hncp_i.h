@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Feb 17 15:45:38 2014 mstenber
- * Edit time:     125 min
+ * Last modified: Mon Feb 17 16:53:06 2014 mstenber
+ * Edit time:     127 min
  *
  */
 
@@ -252,7 +252,7 @@ void hncp_notify_subscribers_about_to_republish_tlvs(hncp_node n);
 void hncp_notify_subscribers_local_tlv_changed(hncp o,
                                                struct tlv_attr *a,
                                                bool add);
-void hncp_notify_subscribers_link_ipv6_address_changed(hncp_link l);
+void hncp_notify_subscribers_link_changed(hncp_link l);
 
 /* Low-level interface module stuff. */
 

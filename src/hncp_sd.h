@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 20:09:23 2014 mstenber
- * Last modified: Mon Feb 17 15:17:21 2014 mstenber
+ * Last modified: Mon Feb 17 17:00:35 2014 mstenber
  * Edit time:     1 min
  *
  */
@@ -26,6 +26,5 @@ hncp_sd hncp_sd_create(hncp h,
                        const char *domain_name);
 
 void hncp_sd_destroy(hncp_sd sd);
-
 
 #endif /* HNCP_SD_H */

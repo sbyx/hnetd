@@ -7,7 +7,7 @@
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
  * Last_neighast modified: Thu Dec  5 10:34:22 2013 mstenber
- * Edit time:     393 min
+ * Edit time:     398 min
  *
  */
 
@@ -420,20 +420,24 @@ hncp_link hncp_find_link_by_id(hncp o, uint32_t link_id)
 
 bool hncp_set_link_enabled(hncp o, const char *ifname, bool enabled)
 {
-  hncp_link old = hncp_find_link_by_name(o, ifname, false);
+  hncp_link l = hncp_find_link_by_name(o, ifname, false);
 
   L_DEBUG("hncp_set_link_enabled %s %s",
           ifname, enabled ? "enabled" : "disabled");
   if (!enabled)
     {
-      if (!old)
+      if (!l)
         return false;
-      vlist_delete(&o->links, &old->in_links);
+      hncp_notify_subscribers_link_changed(l);
+      vlist_delete(&o->links, &l->in_links);
       return true;
     }
-  if (old)
+  if (l)
     return false;
-  return hncp_find_link_by_name(o, ifname, true) != NULL;
+  l = hncp_find_link_by_name(o, ifname, true);
+  if (l)
+    hncp_notify_subscribers_link_changed(l);
+  return l != NULL;
 }
 
 
@@ -620,7 +624,7 @@ hncp_link_set_ipv6_address(hncp_link l, const struct in6_addr *addr)
   l->has_ipv6_address = addr != NULL;
   if (addr)
     l->ipv6_address = *addr;
-  hncp_notify_subscribers_link_ipv6_address_changed(l);
+  hncp_notify_subscribers_link_changed(l);
 }
 
 void
