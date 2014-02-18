@@ -4,9 +4,6 @@ Done, but not tested
 - L2 up/down detection on Linux; that is, we should ignore interfaces
   that aren't up (test that this happens; code should work now)
 
-- 'generic Linux' case needs to be tested thoroughly at some point
- - made it work within ttin too
-
 Short-term things
 -----------------
 
@@ -31,6 +28,9 @@ Short-term things
 
 Eventually nice to have
 -----------------------
+
+- 'generic linux' case could support SD (=local dnsmasq configuration
+  etc. just like on openwrt)
 
 - get PCP in somehow?
  - it would be nice for IPv4 use for various cases; is it a priority though? hmm.
