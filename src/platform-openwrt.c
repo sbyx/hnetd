@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <resolv.h>
 
 #include <sys/un.h>
 #include <sys/socket.h>
@@ -13,6 +14,7 @@
 #include <libubus.h>
 
 #include "dhcpv6.h"
+#include "dhcp.h"
 #include "platform.h"
 #include "iface.h"
 
@@ -154,7 +156,8 @@ void platform_set_owner(struct iface *c,
 
 
 void platform_set_dhcpv6_send(struct iface *c,
-		__unused const void *dhcpv6_data, __unused size_t len)
+		__unused const void *dhcpv6_data, __unused size_t len,
+		__unused const void *dhcp_data, __unused size_t len4)
 {
 	platform_set_internal(c, false);
 }
@@ -188,10 +191,10 @@ static void platform_commit(struct uloop_timeout *t)
 		inet_ntop(AF_INET, &a->prefix.prefix.s6_addr[12], buf, INET_ADDRSTRLEN);
 		blobmsg_add_string_buffer(&b);
 
-		L_DEBUG("	%s/%u", buf, a->prefix.plen);
+		L_DEBUG("	%s/%u", buf, prefix_af_length(&a->prefix));
 
 		buf = blobmsg_alloc_string_buffer(&b, "mask", 4);
-		snprintf(buf, 4, "%u", a->prefix.plen);
+		snprintf(buf, 4, "%u", prefix_af_length(&a->prefix));
 		blobmsg_add_string_buffer(&b);
 
 		blobmsg_close_table(&b, l);
@@ -201,8 +204,8 @@ static void platform_commit(struct uloop_timeout *t)
 	hnetd_time_t now = hnetd_time();
 	k = blobmsg_open_array(&b, "ip6addr");
 	vlist_for_each_element(&c->assigned, a, node) {
-		hnetd_time_t preferred = a->preferred_until - now;
-		hnetd_time_t valid = a->valid_until - now;
+		hnetd_time_t preferred = (a->preferred_until - now) / HNETD_TIME_PER_SECOND;
+		hnetd_time_t valid = (a->valid_until - now) / HNETD_TIME_PER_SECOND;
 		if (IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix) || valid < 0)
 			continue;
 
@@ -220,11 +223,11 @@ static void platform_commit(struct uloop_timeout *t)
 		inet_ntop(AF_INET6, &a->prefix.prefix, buf, INET6_ADDRSTRLEN);
 		blobmsg_add_string_buffer(&b);
 
-		L_DEBUG("	%s/%u (%lld/%lld)", buf, a->prefix.plen,
+		L_DEBUG("	%s/%u (%lld/%lld)", buf, prefix_af_length(&a->prefix),
 				(long long)preferred, (long long)valid);
 
 		buf = blobmsg_alloc_string_buffer(&b, "mask", 4);
-		snprintf(buf, 4, "%u", a->prefix.plen);
+		snprintf(buf, 4, "%u", prefix_af_length(&a->prefix));
 		blobmsg_add_string_buffer(&b);
 
 		blobmsg_add_u32(&b, "preferred", preferred);
@@ -249,6 +252,36 @@ static void platform_commit(struct uloop_timeout *t)
 
 	k = blobmsg_open_array(&b, "routes");
 	vlist_for_each_element(&c->routes, r, node) {
+		if (!IN6_IS_ADDR_V4MAPPED(&r->to.prefix))
+			continue;
+
+		l = blobmsg_open_table(&b, NULL);
+
+		char *buf = blobmsg_alloc_string_buffer(&b, "target", INET_ADDRSTRLEN);
+		inet_ntop(AF_INET, &r->to.prefix.s6_addr[12], buf, INET_ADDRSTRLEN);
+		blobmsg_add_string_buffer(&b);
+
+		char *buf2 = blobmsg_alloc_string_buffer(&b, "netmask", 4);
+		snprintf(buf2, 4, "%u", prefix_af_length(&r->to));
+		blobmsg_add_string_buffer(&b);
+
+		char *buf3 = blobmsg_alloc_string_buffer(&b, "gateway", INET_ADDRSTRLEN);
+		inet_ntop(AF_INET, &r->via.s6_addr[12], buf3, INET_ADDRSTRLEN);
+		blobmsg_add_string_buffer(&b);
+
+		blobmsg_add_u32(&b, "metric", r->metric);
+
+		L_DEBUG("	to %s/%s via %s", buf, buf2, buf3);
+
+		blobmsg_close_table(&b, l);
+	}
+	blobmsg_close_array(&b, k);
+
+	k = blobmsg_open_array(&b, "routes6");
+	vlist_for_each_element(&c->routes, r, node) {
+		if (IN6_IS_ADDR_V4MAPPED(&r->to.prefix))
+			continue;
+
 		l = blobmsg_open_table(&b, NULL);
 
 		char *buf = blobmsg_alloc_string_buffer(&b, "target", INET6_ADDRSTRLEN);
@@ -256,7 +289,7 @@ static void platform_commit(struct uloop_timeout *t)
 		blobmsg_add_string_buffer(&b);
 
 		char *buf2 = blobmsg_alloc_string_buffer(&b, "netmask", 4);
-		snprintf(buf2, 4, "%u", r->to.plen);
+		snprintf(buf2, 4, "%u", prefix_af_length(&r->to));
 		blobmsg_add_string_buffer(&b);
 
 		char *buf3 = blobmsg_alloc_string_buffer(&b, "gateway", INET6_ADDRSTRLEN);
@@ -267,11 +300,80 @@ static void platform_commit(struct uloop_timeout *t)
 		prefix_ntop(buf4, PREFIX_MAXBUFFLEN, &r->from, true);
 		blobmsg_add_string_buffer(&b);
 
+		blobmsg_add_u32(&b, "metric", r->metric);
+
 		L_DEBUG("	from %s to %s/%s via %s", buf4, buf, buf2, buf3);
 
 		blobmsg_close_table(&b, l);
 	}
 	blobmsg_close_array(&b, k);
+
+
+	// DNS options
+	const size_t dns_max = 4;
+	size_t dns_cnt = 0, dns4_cnt = 0, domain_cnt = 0;
+	struct in6_addr dns[dns_max];
+	struct in_addr dns4[dns_max];
+	char domains[dns_max][256];
+
+	// Add per interface DHCPv6 options
+	uint8_t *oend = ((uint8_t*)c->dhcpv6_data_out) + c->dhcpv6_len_out, *odata;
+	uint16_t olen, otype;
+	dhcpv6_for_each_option(c->dhcpv6_data_out, oend, otype, olen, odata) {
+		if (otype == DHCPV6_OPT_DNS_SERVERS) {
+			size_t cnt = olen / sizeof(*dns);
+			if (cnt + dns_cnt > dns_max)
+				cnt = dns_max - dns_cnt;
+
+			memcpy(&dns[dns_cnt], odata, cnt * sizeof(*dns));
+			dns_cnt += cnt;
+		} else if (otype == DHCPV6_OPT_DNS_DOMAIN) {
+			uint8_t *oend = &odata[olen];
+			while (odata < oend && domain_cnt < dns_max) {
+				int l = dn_expand(odata, oend, odata, domains[domain_cnt], sizeof(*domains));
+				if (l > 0) {
+					++domain_cnt;
+					odata += l;
+				} else {
+					break;
+				}
+			}
+		}
+	}
+
+	// Add per interface DHCP options
+	uint8_t *o4end = ((uint8_t*)c->dhcp_data_out) + c->dhcp_len_out;
+	struct dhcpv4_option *opt;
+	dhcpv4_for_each_option(c->dhcp_data_out, o4end, opt) {
+		if (opt->type == DHCPV4_OPT_DNSSERVER) {
+			size_t cnt = opt->len / sizeof(*dns4);
+			if (cnt + dns4_cnt > dns_max)
+				cnt = dns_max - dns_cnt;
+
+			memcpy(&dns4[dns4_cnt], opt->data, cnt * sizeof(*dns4));
+			dns4_cnt += cnt;
+		}
+	}
+
+	if (dns_cnt || dns4_cnt) {
+		k = blobmsg_open_array(&b, "dns");
+
+		for (size_t i = 0; i < dns_cnt; ++i) {
+			char *buf = blobmsg_alloc_string_buffer(&b, NULL, INET6_ADDRSTRLEN);
+			inet_ntop(AF_INET6, &dns[i], buf, INET6_ADDRSTRLEN);
+			blobmsg_add_string_buffer(&b);
+			L_DEBUG("	DNS: %s", buf);
+		}
+
+		for (size_t i = 0; i < dns4_cnt; ++i) {
+			char *buf = blobmsg_alloc_string_buffer(&b, NULL, INET_ADDRSTRLEN);
+			inet_ntop(AF_INET, &dns4[i], buf, INET_ADDRSTRLEN);
+			blobmsg_add_string_buffer(&b);
+			L_DEBUG("	DNS: %s", buf);
+		}
+
+		blobmsg_close_array(&b, k);
+	}
 
 	k = blobmsg_open_table(&b, "data");
 
@@ -285,40 +387,16 @@ static void platform_commit(struct uloop_timeout *t)
 
 	L_DEBUG("	RA/DHCP/DHCPv6: %s, Zone: %s", service, zone);
 
+	if (domain_cnt && c->internal && c->linkowner) {
+		l = blobmsg_open_array(&b, "domain");
+
+		for (size_t i = 0; i < domain_cnt; ++i)
+			blobmsg_add_string(&b, NULL, domains[i]);
+
+		blobmsg_close_array(&b, l);
+	}
+
 	blobmsg_close_table(&b, k);
-
-
-	// DNS options
-	const size_t dns_max = 4;
-	size_t dns_cnt = 0;
-	struct in6_addr dns[dns_max];
-
-	// Add per interface DHCPv6 options
-	uint8_t *oend = ((uint8_t*)c->dhcpv6_data_out) + c->dhcpv6_len_out, *odata;
-	uint16_t olen, otype;
-	dhcpv6_for_each_option(c->dhcpv6_data_out, oend, otype, olen, odata) {
-		if (otype == DHCPV6_OPT_DNS_SERVERS) {
-			size_t cnt = olen / sizeof(*dns);
-			if (cnt + dns_cnt > dns_max)
-				cnt = dns_max - dns_cnt;
-
-			memcpy(&dns[dns_cnt], odata, cnt * sizeof(*dns));
-			dns_cnt += cnt;
-		}
-	}
-
-	if (dns_cnt) {
-		k = blobmsg_open_array(&b, "dns");
-
-		for (size_t i = 0; i < dns_cnt; ++i) {
-			char *buf = blobmsg_alloc_string_buffer(&b, NULL, INET6_ADDRSTRLEN);
-			inet_ntop(AF_INET6, &dns[i], buf, INET6_ADDRSTRLEN);
-			blobmsg_add_string_buffer(&b);
-			L_DEBUG("	DNS: %s", buf);
-		}
-
-		blobmsg_close_array(&b, k);
-	}
 
 	L_DEBUG("platform: *** end interface update %s (%s)", iface->handle, c->ifname);
 
@@ -440,12 +518,17 @@ static void update_delegated(struct iface *c, struct blob_attr *tb[IFACE_ATTR_MA
 
 
 	const size_t dns_max = 4;
-	size_t dns_cnt = 0;
+	size_t dns_cnt = 0, dns4_cnt = 0;
 	struct {
 		uint16_t type;
 		uint16_t len;
 		struct in6_addr addr[dns_max];
 	} dns;
+	struct {
+		uint8_t type;
+		uint8_t len;
+		struct in_addr addr[dns_max];
+	} dns4;
 
 	if (tb[IFACE_ATTR_DNS]) {
 		struct blob_attr *k;
@@ -453,8 +536,13 @@ static void update_delegated(struct iface *c, struct blob_attr *tb[IFACE_ATTR_MA
 
 		blobmsg_for_each_attr(k, tb[IFACE_ATTR_DNS], rem) {
 			if (dns_cnt >= dns_max || blobmsg_type(k) != BLOBMSG_TYPE_STRING ||
-					inet_pton(AF_INET6, blobmsg_data(k), &dns.addr[dns_cnt]) < 1)
+					inet_pton(AF_INET6, blobmsg_data(k), &dns.addr[dns_cnt]) < 1) {
+				if (dns4_cnt >= dns_max ||
+						inet_pton(AF_INET, blobmsg_data(k), &dns4.addr[dns4_cnt]) < 1)
+					continue;
+				++dns4_cnt;
 				continue;
+			}
 
 			++dns_cnt;
 		}
@@ -463,9 +551,9 @@ static void update_delegated(struct iface *c, struct blob_attr *tb[IFACE_ATTR_MA
 	if (dns_cnt) {
 		dns.type = htons(DHCPV6_OPT_DNS_SERVERS);
 		dns.len = htons(dns_cnt * sizeof(struct in6_addr));
-		iface_set_dhcpv6_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns));
+		iface_set_dhcpv6_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns), NULL);
 	} else {
-		iface_set_dhcpv6_received(c, NULL, 0);
+		iface_set_dhcpv6_received(c, NULL);
 	}
 }
 
@@ -508,7 +596,7 @@ static void platform_update(void *data, size_t len)
 					v4leased = true;
 			}
 
-			iface_set_v4leased(c, v4leased);
+			iface_set_dhcp_received(c, v4leased, NULL, 0);
 		} else if (!strcmp(proto, "hnet")) {
 			if ((a = tb[IFACE_ATTR_UP]) && !blobmsg_get_bool(a))
 				iface_remove(c);
@@ -520,7 +608,8 @@ static void platform_update(void *data, size_t len)
 		if ((a = tb[IFACE_ATTR_DELEGATION]) && blobmsg_get_bool(a))
 			tb[IFACE_ATTR_PREFIX] = NULL;
 
-		bool empty = !(a = tb[IFACE_ATTR_PREFIX]) || blobmsg_data_len(a) <= 0;
+		bool empty = (!(a = tb[IFACE_ATTR_PREFIX]) || blobmsg_data_len(a) <= 0) &&
+				(!(a = tb[IFACE_ATTR_V4ADDR]) || blobmsg_data_len(a));
 
 		// If we don't know this interface yet but it has a PD for us create it
 		if (!c && !empty)

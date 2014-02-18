@@ -1,6 +1,6 @@
 #!/bin/sh
 [ -z "$2" ] && echo "Error: should be run by odhcpc6c" && exit 1
-
+PROTO=72
 update_resolv() {
 	local device="$1"
 	local dns="$2"
@@ -48,6 +48,7 @@ setup_interface () {
                 entry="${entry#*,}"
                 local valid="${entry%%,*}"
                 entry="${entry#*,}"
+		[ "$entry" = "$valid" ] && entry=
 
 		local class=""
 		local excluded=""
@@ -57,6 +58,7 @@ setup_interface () {
                 	entry="${entry#*=}"
 			local val="${entry%%,*}"
                 	entry="${entry#*,}"
+			[ "$entry" = "$val" ] && entry=
 
 			if [ "$key" = "class" ]; then
 				class=", \"class\": $val"
@@ -74,12 +76,12 @@ setup_interface () {
 		fi
 
 		# TODO: delete this somehow when the prefix disappears
-		ip -6 route add unreachable "$addr"
+		ip -6 route add unreachable "$addr" proto $PROTO
 	done
 	hnet-call "{\"command\": \"set_prefixes\", \"ifname\": \"$device\", \"prefix\": [$prefixpart]}"
 
-	ip -6 route flush dev "$device"
-	ip -6 address flush dev "$device"
+	ip -6 route flush dev "$device" proto $PROTO
+	ip -6 address flush dev "$device" scope global
 
 	# Merge addresses
 	for entry in $RA_ADDRESSES; do
@@ -111,18 +113,23 @@ setup_interface () {
 		entry="${entry#*,}"
 		local metric="${entry%%,*}"
 
-		ip -6 route add "$addr" via "$gw" metric "$metric" dev "$device" from "::/128"
+		if [ -n "$gw" ]; then
+			ip -6 route add "$addr" via "$gw" metric "$metric" dev "$device" from "::/128" proto $PROTO
+		else
+			ip -6 route add "$addr" metric "$metric" dev "$device" proto $PROTO
+		fi
+
 		for prefix in $PREFIXES; do
 			local paddr="${prefix%%,*}"
-			ip -6 route add "$addr" via "$gw" metric "$metric" dev "$device" from "$paddr"
+			[ -n "$gw" ] && ip -6 route add "$addr" via "$gw" metric "$metric" dev "$device" from "$paddr" proto $PROTO
 		done
 	done
 }
 
 teardown_interface() {
 	local device="$1"
-	ip -6 route flush dev "$device"
-	ip -6 address flush dev "$device"
+	ip -6 route flush dev "$device" proto $PROTO
+	ip -6 address flush dev "$device" scope global
 	hnet-call "{\"command\": \"set_dhcpv6_data\", \"ifname\": \"$device\"}"
 	hnet-call "{\"command\": \"set_prefixes\", \"ifname\": \"$device\", \"prefix\": []}"
 	update_resolv "$device" ""

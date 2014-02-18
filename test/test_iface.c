@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <stdbool.h>
+#include <unistd.h>
 
 #include "prefix_utils.c"
 #include "iface.c"
@@ -16,12 +17,14 @@ void platform_set_route(__unused struct iface *c, __unused struct iface_route *a
 void platform_iface_free(__unused struct iface *c) {}
 void platform_set_internal(__unused struct iface *c, __unused bool internal) {}
 void platform_iface_new(__unused struct iface *c, __unused const char *handle) { c->platform = (void*)1; }
-void platform_set_dhcpv6_send(__unused struct iface *c, __unused const void *dhcpv6_data, __unused size_t len) {}
+void platform_set_dhcpv6_send(__unused struct iface *c, __unused const void *dhcpv6_data, __unused size_t len,
+		__unused const void *dhcp_data, __unused size_t len4) {}
 
 
 void intiface_mock(__unused struct iface_user *u, __unused const char *ifname, bool enabled)
 {
 	smock_push_bool(ifname, enabled);
+	uloop_end();
 }
 
 void extdata_mock(__unused struct iface_user *u, __unused const char *ifname, __unused const void *dhcpv6_data, size_t dhcpv6_len)
@@ -80,8 +83,15 @@ void iface_test_new_managed(void)
 	struct prefix p = {IN6ADDR_LOOPBACK_INIT, 0};
 	char test[] = "test";
 
+	struct iface *iface00 = iface_create("test00", "test00");
+	iface_set_dhcp_received(iface00, true, NULL, 0);
+	smock_pull_bool_is("test00", false);
+
 	struct iface *iface = iface_create("test0", "test0");
-	sput_fail_unless(!!iface, "alloc unmanaged");
+	iface->carrier = true;
+	iface_discover_border(iface);
+
+	sput_fail_unless(!!iface, "alloc managed");
 
 	struct iface *iface2 = iface_get("test0");
 	sput_fail_unless(iface == iface2, "get after create");
@@ -89,12 +99,18 @@ void iface_test_new_managed(void)
 	struct iface *iface3 = iface_create("test0", "test0");
 	sput_fail_unless(iface == iface3, "create after create");
 
-	smock_pull_bool_is("test0", true);
-
-	iface_set_v4leased(iface, true);
 	smock_pull_bool_is("test0", false);
 
-	iface_set_v4leased(iface, false);
+	uloop_cancelled = false;
+	uloop_run();
+	smock_pull_bool_is("test0", true);
+
+	iface_set_dhcp_received(iface, true, NULL, 0);
+	smock_pull_bool_is("test0", false);
+
+	iface_set_dhcp_received(iface, false, NULL, 0);
+	uloop_cancelled = false;
+	uloop_run();
 	smock_pull_bool_is("test0", true);
 
 	iface_update_delegated(iface);
@@ -108,16 +124,18 @@ void iface_test_new_managed(void)
 	sput_fail_unless(!strcmp(smock_pull("dhcpv6_data"), "test"), "dhcpv6_data");
 	smock_pull_int_is("dhcpv6_len", sizeof(test));
 
-	iface_set_v4leased(iface, true);
+	iface_set_dhcp_received(iface, true, NULL, 0);
 	iface_update_delegated(iface);
 	iface_commit_delegated(iface);
 	smock_pull_bool_is("prefix_remove", true);
-	iface_set_v4leased(iface, false);
+	iface_set_dhcp_received(iface, false, NULL, 0);
+
+	uloop_cancelled = false;
+	uloop_run();
 	smock_pull_bool_is("test0", true);
 
 	iface_remove(iface);
 	sput_fail_unless(!iface_get("test0"), "delete");
-
 	smock_pull_bool_is("test0", false);
 	smock_is_empty();
 	iface_unregister_user(&user_mock);

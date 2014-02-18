@@ -2,11 +2,11 @@
 
 case "$1" in
 dhcpv4client)
-	exec udhcpc -f -t 0 -i "$2" -H "$(hostname)" -x "0x7d:000076fe020100" -s /usr/share/hnetd/dhcp.script
+	exec udhcpc -f -t 0 -i "$2" -H "$(hostname)" -x "0x4d:07484f4d454e4554" -s /usr/share/hnetd/dhcp.script
 	;;
 	
 dhcpv6client)
-	exec odhcp6c -P0 -F -s /usr/share/hnetd/dhcpv6.script "$2"
+	exec odhcp6c -P0 -F -s /usr/share/hnetd/dhcpv6.script -u HOMENET "$2"
 	;;
 	
 setfilter|unsetfilter)
@@ -27,12 +27,17 @@ newaddr|deladdr)
 
 newroute|delroute)
 	[ "$1" = "newroute" ] && act="replace" || act="del"
-	ip -6 route "$act" "$3" from "$5" via "$4" dev "$2"
+	if [ -n "$6" ]; then
+		ip -6 route "$act" "$3" from "$6" via "$4" dev "$2" metric "$5"
+	else
+		ip route "$act" "$3" via "$4" dev "$2" metric "$5"
+	fi
 	;;
 
 startdhcp)
 	uci batch <<-EOF
 	set dhcp.$2=dhcp
+	set dhcp.$2.ifname=$2
 	set dhcp.$2.dhcpv6=server
 	set dhcp.$2.dhcpv4=server
 	set dhcp.$2.ra=server
@@ -53,7 +58,8 @@ setdhcpv6)
 	[ -z "$DNS" ] && exit 0
 	uci batch <<-EOF
 	set dhcp.$2=dhcp
-	set dhcp.$2.dns=$DNS
+	set dhcp.$2.dns="$DNS"
+	set dhcp.$2.domain="$SEARCH"
 	commit dhcp
 EOF
 	killall -SIGHUP odhcpd

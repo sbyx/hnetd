@@ -3,7 +3,25 @@
 #include <net/if.h>
 #include <assert.h>
 #include <ifaddrs.h>
+#include <stdarg.h>
 #include <arpa/inet.h>
+
+#include <sys/socket.h>
+#ifdef __linux__
+#include <linux/rtnetlink.h>
+#endif /* __linux__ */
+
+#ifndef SOL_NETLINK
+#define SOL_NETLINK 270
+#endif
+
+#ifndef NETLINK_ADD_MEMBERSHIP
+#define NETLINK_ADD_MEMBERSHIP 1
+#endif
+
+#ifndef IFF_LOWER_UP
+#define IFF_LOWER_UP 0x10000
+#endif
 
 #include "iface.h"
 #include "platform.h"
@@ -14,6 +32,7 @@ static void iface_update_prefix(const struct prefix *p, const char *ifname,
 		const void *dhcpv6_data, size_t dhcpv6_len,
 		__unused void *priv);
 static void iface_update_link_owner(const char *ifname, bool owner, void *priv);
+static void iface_discover_border(struct iface *c);
 
 static struct list_head interfaces = LIST_HEAD_INIT(interfaces);
 static struct list_head users = LIST_HEAD_INIT(users);
@@ -21,7 +40,6 @@ static struct pa_iface_callbacks pa_cb = {
 	.update_prefix = iface_update_prefix,
 	.update_link_owner = iface_update_link_owner
 };
-
 
 static void iface_update_prefix(const struct prefix *p, const char *ifname,
 		hnetd_time_t valid_until, hnetd_time_t preferred_until,
@@ -74,16 +92,77 @@ static void iface_notify_data_state(struct iface *c, bool enabled)
 {
 	void *data = (enabled) ? c->dhcpv6_data_in : NULL;
 	size_t len = (enabled) ? c->dhcpv6_len_in : 0;
+	void *data4 = (enabled) ? c->dhcp_data_in : NULL;
+	size_t len4 = (enabled) ? c->dhcp_len_in : 0;
 
 	struct iface_user *u;
-	list_for_each_entry(u, &users, head)
+	list_for_each_entry(u, &users, head) {
 		if (u->cb_extdata)
 			u->cb_extdata(u, c->ifname, data, len);
+		if (u->ipv4_update)
+			u->ipv4_update(u, c->ifname, data4, len4);
+	}
+
+
 }
 
+#ifdef __linux__
+
+static void iface_link_event(struct uloop_fd *fd, __unused unsigned events)
+{
+	struct {
+		struct nlmsghdr hdr;
+		struct ifinfomsg msg;
+		uint8_t pad[4000];
+	} resp;
+
+	ssize_t read;
+	do {
+		read = recv(fd->fd, &resp, sizeof(resp), MSG_DONTWAIT);
+		if (read < 0 || !NLMSG_OK(&resp.hdr, (size_t)read) ||
+				(resp.hdr.nlmsg_type != RTM_NEWLINK &&
+						resp.hdr.nlmsg_type != RTM_DELLINK))
+			continue;
+
+		char namebuf[IF_NAMESIZE];
+		if (!if_indextoname(resp.msg.ifi_index, namebuf))
+			continue;
+
+		struct iface *c = iface_get(namebuf);
+		if (!c)
+			continue;
+
+		bool up = resp.hdr.nlmsg_type == RTM_NEWLINK && (resp.msg.ifi_flags & IFF_LOWER_UP);
+		if (c->carrier != up) {
+			c->carrier = up;
+			syslog(LOG_NOTICE, "carrier => %i event on %s", (int)up, namebuf);
+			iface_discover_border(c);
+		}
+	} while (read > 0);
+}
+
+static struct uloop_fd rtnl_fd = { .fd = -1 };
+
+#endif /* __linux__ */
 
 int iface_init(pa_t pa)
 {
+#ifdef __linux__
+	rtnl_fd.fd = socket(AF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, NETLINK_ROUTE);
+	if (rtnl_fd.fd < 0)
+		return -1;
+
+	struct sockaddr_nl rtnl_kernel = { .nl_family = AF_NETLINK };
+	if (connect(rtnl_fd.fd, (const struct sockaddr*)&rtnl_kernel, sizeof(rtnl_kernel)) < 0)
+		return -1;
+
+	int val = RTNLGRP_LINK;
+	setsockopt(rtnl_fd.fd, SOL_NETLINK, NETLINK_ADD_MEMBERSHIP, &val, sizeof(val));
+
+	rtnl_fd.cb = iface_link_event;
+	uloop_fd_add(&rtnl_fd, ULOOP_READ | ULOOP_EDGE_TRIGGER);
+#endif /* __linux__ */
+
 	pa_iface_subscribe(pa, &pa_cb);
 	return platform_init();
 }
@@ -101,15 +180,25 @@ void iface_unregister_user(struct iface_user *user)
 }
 
 
-void iface_set_dhcpv6_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len)
+void iface_set_dhcpv6_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len, const void *dhcp_data, size_t dhcp_len)
 {
 	struct iface *c = iface_get(ifname);
-	if (c && (c->dhcpv6_len_out != dhcpv6_len || memcmp(c->dhcpv6_data_out, dhcpv6_data, dhcpv6_len))) {
-		c->dhcpv6_data_out = realloc(c->dhcpv6_data_out, dhcpv6_len);
-		memcpy(c->dhcpv6_data_out, dhcpv6_data, dhcpv6_len);
-		c->dhcpv6_len_out = dhcpv6_len;
-		platform_set_dhcpv6_send(c, c->dhcpv6_data_out, c->dhcpv6_len_out);
-	}
+
+	if (!c)
+		return;
+	if (c->dhcp_len_out == dhcp_len && (!dhcp_len || memcmp(c->dhcp_data_out, dhcp_data, dhcp_len) == 0) && 
+	    c->dhcpv6_len_out == dhcpv6_len && (!dhcpv6_len || memcmp(c->dhcpv6_data_out, dhcpv6_data, dhcpv6_len) == 0))
+		return;
+
+	c->dhcpv6_data_out = realloc(c->dhcpv6_data_out, dhcpv6_len);
+	memcpy(c->dhcpv6_data_out, dhcpv6_data, dhcpv6_len);
+	c->dhcpv6_len_out = dhcpv6_len;
+
+	c->dhcp_data_out = realloc(c->dhcp_data_out, dhcp_len);
+	memcpy(c->dhcp_data_out, dhcp_data, dhcp_len);
+	c->dhcp_len_out = dhcp_len;
+
+	platform_set_dhcpv6_send(c, c->dhcpv6_data_out, c->dhcpv6_len_out, c->dhcp_data_out, c->dhcp_len_out);
 }
 
 // Begin route update cycle
@@ -121,46 +210,42 @@ void iface_update_routes(void)
 }
 
 // Add new routes
-void iface_add_default_route(const char *ifname, const struct prefix *from, const struct in6_addr *via)
+void iface_add_default_route(const char *ifname, const struct prefix *from, const struct in6_addr *via, unsigned hopcount)
 {
 	struct iface *c = iface_get(ifname);
 	if (c) {
 		struct iface_route *r = calloc(1, sizeof(*r));
-		r->from = *from;
+		if (!IN6_IS_ADDR_V4MAPPED(via)) {
+			r->from = *from;
+		} else {
+			r->to.plen = 96;
+			r->to.prefix.s6_addr[10] = 0xff;
+			r->to.prefix.s6_addr[11] = 0xff;
+		}
+
 		r->via = *via;
+		r->metric = hopcount + 10000;
 		vlist_add(&c->routes, &r->node, r);
 
-		r = calloc(1, sizeof(*r));
-		r->from.plen = 128;
-		r->via = *via;
-		vlist_add(&c->routes, &r->node, r);
+		if (!IN6_IS_ADDR_V4MAPPED(via)) {
+			r = calloc(1, sizeof(*r));
+			r->from.plen = 128;
+			r->via = *via;
+			r->metric = hopcount + 10000;
+			vlist_add(&c->routes, &r->node, r);
+		}
 	}
 }
 
 // Add new routes
-void iface_add_internal_route(const char *ifname, const struct prefix *to, const struct in6_addr *via)
+void iface_add_internal_route(const char *ifname, const struct prefix *to, const struct in6_addr *via, unsigned hopcount)
 {
 	struct iface *c = iface_get(ifname);
 	if (c) {
-		struct iface_route *r = calloc(1, sizeof(*r)), *k;
+		struct iface_route *r = calloc(1, sizeof(*r));
 		r->to = *to;
 		r->via = *via;
-
-		// Infer source restrictions from default routes already added
-		vlist_for_each_element(&c->routes, k, node)
-			if (k->to.plen == 0 && k->node.version == c->routes.version &&
-					prefix_contains(&k->from, &r->to))
-				r->from = k->from;
-
-		if (r->from.plen > 0)
-			vlist_add(&c->routes, &r->node, r);
-		else
-			free(r);
-
-		r = calloc(1, sizeof(*r));
-		r->to = *to;
-		r->via = *via;
-		r->from.plen = 128;
+		r->metric = hopcount + 10000;
 		vlist_add(&c->routes, &r->node, r);
 	}
 }
@@ -185,6 +270,9 @@ static int compare_routes(const void *a, const void *b, void *ptr __attribute__(
 
 	if (!c)
 		c = memcmp(&r1->via, &r2->via, sizeof(r1->via));
+
+	if (!c)
+		c = r2->metric - r1->metric;
 
 	return c;
 }
@@ -228,8 +316,8 @@ static void update_addr(struct vlist_tree *t, struct vlist_node *node_new, struc
 	struct iface_addr *a_old = container_of(node_old, struct iface_addr, node);
 
 	struct iface *c = container_of(t, struct iface, assigned);
-
 	bool enable = !!node_new;
+
 	if (!enable && !IN6_IS_ADDR_V4MAPPED(&a_old->prefix.prefix)) {
 		// Don't actually remove addresses, but deprecate them so the change is announced
 		enable = true;
@@ -238,6 +326,12 @@ static void update_addr(struct vlist_tree *t, struct vlist_node *node_new, struc
 		hnetd_time_t bound = hnetd_time() + (7200 * HNETD_TIME_PER_SECOND);
 		if (a_old->valid_until > bound)
 			a_old->valid_until = bound;
+
+		// Reinsert deprecated if not flushing all
+		if (t->version != -1) {
+			vlist_add(t, &a_old->node, &a_old->prefix);
+			node_old = NULL;
+		}
 	}
 
 	platform_set_address(c, (node_new) ? a_new : a_old, enable);
@@ -250,6 +344,8 @@ static void update_addr(struct vlist_tree *t, struct vlist_node *node_new, struc
 
 	if (node_old)
 		free(a_old);
+
+	uloop_timeout_set(&c->preferred, 100);
 }
 
 // Update address if necessary (node_new: addr that will be present, node_old: addr that was present)
@@ -314,6 +410,15 @@ void iface_remove(struct iface *c)
 
 	free(c->dhcpv6_data_in);
 	free(c->dhcpv6_data_out);
+	free(c->dhcp_data_in);
+	free(c->dhcp_data_out);
+
+	uloop_timeout_cancel(&c->transition);
+	uloop_timeout_cancel(&c->preferred);
+
+	if (c->internal)
+		c->preferred.cb(&c->preferred);
+
 	free(c);
 }
 
@@ -325,6 +430,41 @@ void iface_update_init(struct iface *c)
 }
 
 
+static void iface_announce_border(struct uloop_timeout *t)
+{
+	struct iface *c = container_of(t, struct iface, transition);
+	iface_notify_data_state(c, c->internal);
+	iface_notify_internal_state(c, c->internal);
+	platform_set_internal(c, c->internal);
+
+	if (!c->internal)
+		uloop_timeout_set(&c->preferred, 100);
+}
+
+
+static void iface_announce_preferred(struct uloop_timeout *t)
+{
+	struct iface *c = container_of(t, struct iface, preferred);
+	hnetd_time_t now = hnetd_time();
+
+	struct iface_addr *a, *pref6 = NULL, *pref4 = NULL;
+	vlist_for_each_element(&c->assigned, a, node) {
+		if (!IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix)) {
+			if (a->preferred_until > now &&
+					(!pref6 || a->preferred_until > pref6->preferred_until))
+				pref6 = a;
+		} else if (!pref4) {
+			pref4 = a;
+		}
+	}
+
+	struct iface_user *u;
+	list_for_each_entry(u, &users, head)
+		if (u->cb_intaddr)
+			u->cb_intaddr(u, c->ifname, pref6 ? &pref6->prefix : NULL, pref4 ? &pref4->prefix: NULL);
+}
+
+
 static void iface_discover_border(struct iface *c)
 {
 	if (!c->platform) // No border discovery on unmanaged interfaces
@@ -332,14 +472,19 @@ static void iface_discover_border(struct iface *c)
 
 	// Perform border-discovery (border on DHCPv4 assignment or DHCPv6-PD)
 	bool internal = avl_is_empty(&c->delegated.avl) &&
-			!c->v4leased && !c->dhcpv6_len_in;
+			!c->v4leased && !c->dhcpv6_len_in && c->carrier;
 	if (c->internal != internal) {
 		L_INFO("iface: %s border discovery detected state %s",
 				c->ifname, (internal) ? "internal" : "external");
+
 		c->internal = internal;
-		iface_notify_data_state(c, internal);
-		iface_notify_internal_state(c, internal);
-		platform_set_internal(c, internal);
+
+		if (c->transition.pending)
+			uloop_timeout_cancel(&c->transition); // Flapped back to original state
+		else if (internal)
+			uloop_timeout_set(&c->transition, 5000);
+		else
+			iface_announce_border(&c->transition);
 	}
 }
 
@@ -373,12 +518,26 @@ struct iface* iface_create(const char *ifname, const char *handle)
 		vlist_init(&c->assigned, compare_addrs, update_addr);
 		vlist_init(&c->delegated, compare_addrs, update_prefix);
 		vlist_init(&c->routes, compare_routes, update_route);
+		c->transition.cb = iface_announce_border;
+		c->preferred.cb = iface_announce_preferred;
+
+#ifdef __linux__
+		struct {
+			struct nlmsghdr hdr;
+			struct ifinfomsg ifi;
+		} req = {
+			.hdr = {sizeof(req), RTM_GETLINK, NLM_F_REQUEST, 1, 0},
+			.ifi = {.ifi_index = if_nametoindex(ifname)}
+		};
+		send(rtnl_fd.fd, &req, sizeof(req), 0);
+#endif /* __linux__ */
 
 		list_add(&c->head, &interfaces);
 	}
 
 	if (!c->platform && handle) {
 		platform_iface_new(c, handle);
+		iface_announce_border(&c->transition);
 		iface_discover_border(c);
 	}
 
@@ -393,11 +552,56 @@ void iface_flush(void)
 }
 
 
-void iface_set_v4leased(struct iface *c, bool v4leased)
+void iface_set_dhcp_received(struct iface *c, bool leased, ...)
 {
-	if (c->v4leased != v4leased) {
-		c->v4leased = v4leased;
+	if (c->v4leased != leased) {
+		c->v4leased = leased;
 		iface_discover_border(c);
+	}
+
+	bool equal = true;
+	size_t offset = 0;
+	va_list ap;
+
+	va_start(ap, leased);
+	for (;;) {
+		void *data = va_arg(ap, void*);
+		if (!data)
+			break;
+
+		size_t len = va_arg(ap, size_t);
+		if (!equal || offset + len > c->dhcp_len_in ||
+				memcmp(((uint8_t*)c->dhcp_data_in) + offset, data, len))
+			equal = false;
+
+		offset += len;
+	}
+	va_end(ap);
+
+	if (equal && offset != c->dhcp_len_in)
+		equal = false;
+
+	if (!equal) {
+		c->dhcp_data_in = realloc(c->dhcp_data_in, offset);
+		c->dhcp_len_in = offset;
+
+		offset = 0;
+
+		va_start(ap, leased);
+		for (;;) {
+			void *data = va_arg(ap, void*);
+			if (!data)
+				break;
+
+			size_t len = va_arg(ap, size_t);
+			memcpy(((uint8_t*)c->dhcp_data_in) + offset, data, len);
+
+			offset += len;
+		}
+		va_end(ap);
+
+		if (!c->internal)
+			iface_notify_data_state(c, true);
 	}
 }
 
@@ -432,12 +636,48 @@ void iface_commit_delegated(struct iface *c)
 }
 
 
-void iface_set_dhcpv6_received(struct iface *c, const void *dhcpv6_data, size_t dhcpv6_len)
+void iface_set_dhcpv6_received(struct iface *c, ...)
 {
-	if (c->dhcpv6_len_in != dhcpv6_len || memcmp(c->dhcpv6_data_in, dhcpv6_data, dhcpv6_len)) {
-		c->dhcpv6_data_in = realloc(c->dhcpv6_data_in, dhcpv6_len);
-		memcpy(c->dhcpv6_data_in, dhcpv6_data, dhcpv6_len);
-		c->dhcpv6_len_in = dhcpv6_len;
+	bool equal = true;
+	size_t offset = 0;
+	va_list ap;
+
+	va_start(ap, c);
+	for (;;) {
+		void *data = va_arg(ap, void*);
+		if (!data)
+			break;
+
+		size_t len = va_arg(ap, size_t);
+		if (!equal || offset + len > c->dhcpv6_len_in ||
+				memcmp(((uint8_t*)c->dhcpv6_data_in) + offset, data, len))
+			equal = false;
+
+		offset += len;
+	}
+	va_end(ap);
+
+	if (equal && offset != c->dhcp_len_in)
+		equal = false;
+
+	if (!equal) {
+		c->dhcpv6_data_in = realloc(c->dhcpv6_data_in, offset);
+		c->dhcpv6_len_in = offset;
+
+		offset = 0;
+
+		va_start(ap, c);
+		for (;;) {
+			void *data = va_arg(ap, void*);
+			if (!data)
+				break;
+
+			size_t len = va_arg(ap, size_t);
+			memcpy(((uint8_t*)c->dhcpv6_data_in) + offset, data, len);
+
+			offset += len;
+		}
+		va_end(ap);
 
 		if (!c->internal)
 			iface_notify_data_state(c, true);

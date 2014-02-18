@@ -154,6 +154,7 @@ static void __pa_ifu_pd(struct iface_user *u, const char *ifname,
 	struct pa *pa = container_of(u, struct pa, ifu);
 	struct pa_ldp *ldp;
 	struct pa_iface *iface = NULL;
+
 	if(!(ldp = pa_ldp_get(&pa->data, prefix, valid_until)))
 		return;
 
@@ -190,5 +191,3 @@ static void __pa_ifu_ipv4(struct iface_user *u, char *ifname,
 	pa_ipv4_set_uplink(&pa->data, iface);
 	pa_ipv4_notify(&pa->data);
 }
-
-

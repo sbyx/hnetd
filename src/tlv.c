@@ -163,10 +163,10 @@ tlv_put(struct tlv_buf *buf, int id, const void *ptr, int len)
 }
 
 void *
-tlv_nest_start(struct tlv_buf *buf, int id)
+tlv_nest_start(struct tlv_buf *buf, int id, int len)
 {
 	unsigned long offset = attr_to_offset(buf, buf->head);
-	buf->head = tlv_new(buf, id, 0);
+	buf->head = tlv_add(buf, tlv_next(buf->head), id, len);
 	return (void *) offset;
 }
 
@@ -174,79 +174,8 @@ void
 tlv_nest_end(struct tlv_buf *buf, void *cookie)
 {
 	struct tlv_attr *attr = offset_to_attr(buf, (unsigned long) cookie);
-	tlv_set_raw_len(attr, tlv_pad_len(attr) + tlv_len(buf->head));
+	tlv_set_raw_len(attr, tlv_pad_len(attr) + tlv_raw_len(buf->head));
 	buf->head = attr;
-}
-
-static const int tlv_type_minlen[TLV_ATTR_LAST] = {
-	[TLV_ATTR_STRING] = 1,
-	[TLV_ATTR_INT8] = sizeof(uint8_t),
-	[TLV_ATTR_INT16] = sizeof(uint16_t),
-	[TLV_ATTR_INT32] = sizeof(uint32_t),
-	[TLV_ATTR_INT64] = sizeof(uint64_t),
-};
-
-bool
-tlv_check_type(const void *ptr, int len, int type)
-{
-	const char *data = ptr;
-
-	if (type >= TLV_ATTR_LAST)
-		return false;
-
-	if (type >= TLV_ATTR_INT8 && type <= TLV_ATTR_INT64) {
-		if (len != tlv_type_minlen[type])
-			return false;
-	} else {
-		if (len < tlv_type_minlen[type])
-			return false;
-	}
-
-	if (type == TLV_ATTR_STRING && data[len - 1] != 0)
-		return false;
-
-	return true;
-}
-
-int
-tlv_parse(struct tlv_attr *attr, struct tlv_attr **data, const struct tlv_attr_info *info, int max)
-{
-	struct tlv_attr *pos;
-	int found = 0;
-	unsigned int rem;
-
-	memset(data, 0, sizeof(struct tlv_attr *) * max);
-	tlv_for_each_attr(pos, attr, rem) {
-		int id = tlv_id(pos);
-		unsigned int len = tlv_len(pos);
-
-		if (id >= max)
-			continue;
-
-		if (info) {
-			int type = info[id].type;
-
-			if (type < TLV_ATTR_LAST) {
-				if (!tlv_check_type(tlv_data(pos), len, type))
-					continue;
-			}
-
-			if (info[id].minlen && len < info[id].minlen)
-				continue;
-
-			if (info[id].maxlen && len > info[id].maxlen)
-				continue;
-
-			if (info[id].validate && !info[id].validate(&info[id], attr))
-				continue;
-		}
-
-		if (!data[id])
-			found++;
-
-		data[id] = pos;
-	}
-	return found;
 }
 
 bool
@@ -298,4 +227,42 @@ tlv_memdup(struct tlv_attr *attr)
 
 	memcpy(ret, attr, size);
 	return ret;
+}
+
+static int
+_qsort_tlv_cmp(const void *t1, const void *t2)
+{
+	const struct tlv_attr **aa1 = (void *)t1, **aa2 = (void *)t2;
+	return tlv_attr_cmp(*aa1, *aa2);
+}
+
+bool tlv_sort(void *data, int len)
+{
+	void *tmp = malloc(len), *t = tmp;
+	struct tlv_attr *a, **al;
+	int c = 0, i;
+
+	if (!tmp)
+		return false;
+	tlv_for_each_in_buf(a, data, len)
+		c++;
+	if (c <= 1)
+		return true;
+	al = alloca(sizeof(struct tlv_attr *) * c);
+	if (!al)
+		return false;
+	c = 0;
+	tlv_for_each_in_buf(a, data, len)
+		al[c++] = a;
+	qsort(al, c, sizeof(struct tlv_attr *), _qsort_tlv_cmp);
+	for (i = 0 ; i < c ; i++) {
+		int l = tlv_pad_len(al[i]);
+		memcpy(t, al[i], l);
+		t += l;
+	}
+	if (t != (tmp + len))
+		return false;
+	memcpy(data, tmp, len);
+	free(tmp);
+	return true;
 }

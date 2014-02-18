@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 11:53:11 2013 mstenber
- * Last modified: Wed Dec  4 13:03:50 2013 mstenber
- * Edit time:     15 min
+ * Last modified: Wed Feb 12 22:38:00 2014 mstenber
+ * Edit time:     46 min
  *
  */
 
@@ -26,7 +26,6 @@ void tlv_iter(void)
   struct tlv_buf tb;
   struct tlv_attr *a, *a1, *a2, *a3;
   int c;
-  unsigned int rem;
   void *tmp;
 
   /* Initialize test structure. */
@@ -39,14 +38,14 @@ void tlv_iter(void)
 
   /* Make sure iteration is sane. */
   c = 0;
-  tlv_for_each_attr(a, tb.head, rem)
+  tlv_for_each_attr(a, tb.head)
     c++;
   sput_fail_unless(c == 3, "right iter result 1");
 
   /* remove 3 bytes -> a3 header complete but not body. */
   tlv_init(tb.head, 0, tlv_raw_len(tb.head) - 3);
   c = 0;
-  tlv_for_each_attr(a, tb.head, rem)
+  tlv_for_each_attr(a, tb.head)
     c++;
   sput_fail_unless(c == 2, "right iter result 2");
 
@@ -55,7 +54,7 @@ void tlv_iter(void)
   c = 0;
   tmp = malloc(tlv_raw_len(tb.head));
   memcpy(tmp, tb.head, tlv_raw_len(tb.head));
-  tlv_for_each_attr(a, tmp, rem)
+  tlv_for_each_attr(a, tmp)
     c++;
   sput_fail_unless(c == 2, "right iter result 3");
   free(tmp);
@@ -132,14 +131,103 @@ void tlv_cmp(void)
       }
 }
 
+void tlv_nest()
+{
+  struct tlv_buf tb;
+  void *cookie;
+  int c, d;
+  struct tlv_attr *a, *a2;
+  int cs = 0;
+  int ds = 0;
+
+  memset(&tb, 0, sizeof(tb));
+  /* Produce test data - one 'container' TLV, with fixed
+   * TLV_ATTR_ALIGN sized header, and then two sub-TLVs. */
+  tlv_buf_init(&tb, 0);
+  cookie = tlv_nest_start(&tb, 33, TLV_ATTR_ALIGN * 2);
+  memset(tlv_data(tb.head), 42, TLV_ATTR_ALIGN * 2);
+  tlv_new(&tb, 34, 0);
+  a = tlv_new(&tb, 35, 1);
+  *((unsigned char*)tlv_data(a)) = 0x42;
+  tlv_nest_end(&tb, cookie);
+  cookie = tlv_nest_start(&tb, 36, TLV_ATTR_ALIGN);
+  memset(tlv_data(tb.head), 66, TLV_ATTR_ALIGN);
+  tlv_new(&tb, 37, 0);
+  tlv_nest_end(&tb, cookie);
+
+  /* Make sure what we produced looks sane. */
+  c = 0;
+  tlv_for_each_attr(a, tb.head)
+    c++;
+  L_DEBUG("# of root attrs:%d", c);
+  sput_fail_unless(c == 2, "should be just 2 root attr");
+
+  c = 0;
+  d = 0;
+  tlv_for_each_attr(a, tb.head)
+    {
+      cs += tlv_id(a);
+      void *base = tlv_data(a);
+      base += (2 - c) * TLV_ATTR_ALIGN;
+      void *end = tlv_data(a) + tlv_len(a);
+      c++;
+      tlv_for_each_in_buf(a2, base, end-base)
+        {
+          ds += tlv_id(a2);
+          d++;
+        }
+    }
+  sput_fail_unless(cs == 33 + 36, "cs correct");
+  sput_fail_unless(ds == 34 + 35 + 37, "ds correct");
+  sput_fail_unless(d == 3, "should be 3 nested attrs");
+
+  L_DEBUG("nested tlv:%s", TLV_REPR(tb.head));
+  sput_fail_unless(tlv_len(tb.head) ==
+                   4 * TLV_ATTR_ALIGN +
+                   5 * sizeof(struct tlv_attr) , "right nested whole size");
+
+}
+
+
+void test_tlv_sort()
+{
+  struct tlv_buf tb;
+  struct tlv_attr *a;
+
+  memset(&tb, 0, sizeof(tb));
+  tlv_buf_init(&tb, 0);
+  tlv_new(&tb, 2, 0);
+  tlv_new(&tb, 3, 0);
+  tlv_new(&tb, 1, 0);
+  tlv_new(&tb, 42, 0);
+
+  /* Sort the TLVs */
+  tlv_sort(tlv_data(tb.head), tlv_len(tb.head));
+
+  /* Make sure they come out in ascending order. */
+  int last = -1;
+  int c = 0;
+  tlv_for_each_attr(a, tb.head)
+    {
+      int nid = tlv_id(a);
+      L_DEBUG("last:%d id:%d", last, nid);
+      sput_fail_unless(last < nid, "last < id");
+      last = nid;
+      c++;
+    }
+  sput_fail_unless(c == 4, "should be 4 attrs");
+}
+
 int main(__unused int argc, __unused char **argv)
 {
   setbuf(stdout, NULL); /* so that it's in sync with stderr when redirected */
-  openlog("test_hcp", LOG_CONS | LOG_PERROR, LOG_DAEMON);
+  openlog("test_tlv", LOG_CONS | LOG_PERROR, LOG_DAEMON);
   sput_start_testing();
   sput_enter_suite("tlv"); /* optional */
   sput_run_test(tlv_iter);
   sput_run_test(tlv_cmp);
+  sput_run_test(tlv_nest);
+  sput_run_test(test_tlv_sort);
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();

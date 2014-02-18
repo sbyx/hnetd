@@ -1,0 +1,33 @@
+#!/bin/sh
+[ -z "$2" ] && echo "Error: should be run by hnetd" && exit 1
+
+action="$1"
+proto="$2"
+
+BABEL_EXE=/usr/sbin/babeld
+BABEL_PID=/var/run/babeld-hnetd.pid
+
+case "$action" in
+	enumerate)
+		## echo PROTOCOL-ID PREFERENCE
+		## example for babel:
+		[ -x "$BABEL_EXE" ] && echo 1 128
+	;;
+	enable|reconfigure|disable)
+		case "$proto" in
+			1)
+				start-stop-daemon -K -o -x $BABEL_EXE -p $BABEL_PID
+				rm -f $BABEL_PID
+				
+				shift 2
+				if [ "$action" != "disable" -a -n "$1" ]; then
+					start-stop-daemon -S -x $BABEL_EXE -p $BABEL_PID -- -D -I $BABEL_PID $*
+				fi 
+			;;
+			*)
+				exit 1;
+			;;
+		esac
+		exit 0;
+	;;
+esac

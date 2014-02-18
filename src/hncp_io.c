@@ -1,22 +1,22 @@
 /*
- * $Id: hcp_io.c $
+ * $Id: hncp_io.c $
  *
  * Author: Markus Stenberg <mstenber@cisco.com>
  *
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Wed Jan 15 13:36:51 2014 mstenber
- * Edit time:     212 min
+ * Last modified: Tue Feb 11 12:01:19 2014 mstenber
+ * Edit time:     237 min
  *
  */
 
-/* This module implements I/O needs of hcp. Notably, it has both
+/* This module implements I/O needs of hncp. Notably, it has both
  * functionality that deals with sockets, and bit more abstract ones
  * that just deal with buffers for input and output (thereby
  * facilitating unit testing without using real sockets). */
 
-#include "hcp_i.h"
+#include "hncp_i.h"
 #undef __unused
 /* In linux, fcntl.h includes something with __unused. Argh. */
 #include <fcntl.h>
@@ -38,42 +38,8 @@
 #endif /* __linux__ */
 
 
-bool
-hcp_io_get_ipv6(struct in6_addr *addr, char *prefer_ifname)
-{
-  struct ifaddrs *ia, *p;
-  int r = getifaddrs(&ia);
-  bool found = false;
-
-  if (r)
-    return false;
-  for (p = ia ; p ; p = p->ifa_next)
-    if (p->ifa_addr && p->ifa_addr->sa_family == AF_INET6)
-    {
-      struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)p->ifa_addr;
-
-      /* Is it global or ULA? */
-      if (!(
-            ((sin6->sin6_addr.s6_addr[0] & 0xe0) == 0x20)
-            || ((sin6->sin6_addr.s6_addr[0] & 0xfe) == 0xfc)))
-        continue;
-      /* Handle 'preferred' address first. */
-      if (prefer_ifname && strcmp(p->ifa_name, prefer_ifname)==0)
-        {
-          *addr = sin6->sin6_addr;
-          return true;
-        }
-      if (!found || memcmp(addr, &sin6->sin6_addr, sizeof(*addr)) > 0)
-        {
-          found = true;
-          *addr = sin6->sin6_addr;
-        }
-    }
-  return found;
-}
-
 int
-hcp_io_get_hwaddrs(unsigned char *buf, int buf_left)
+hncp_io_get_hwaddrs(unsigned char *buf, int buf_left)
 {
   struct ifaddrs *ia, *p;
   int r = getifaddrs(&ia);
@@ -88,25 +54,25 @@ hcp_io_get_hwaddrs(unsigned char *buf, int buf_left)
     return 0;
   for (p = ia ; p ; p = p->ifa_next)
     if (p->ifa_addr && p->ifa_addr->sa_family == AF_LINK)
-    {
-      void *a = &p->ifa_addr->sa_data[0];
+      {
+        void *a = &p->ifa_addr->sa_data[0];
 #ifdef __linux__
-      struct sockaddr_ll *sll = (struct sockaddr_ll *) p->ifa_addr;
-      a = sll->sll_addr;
+        struct sockaddr_ll *sll = (struct sockaddr_ll *) p->ifa_addr;
+        a = sll->sll_addr;
 #endif /* __linux__ */
-      if (memcmp(a, zeroed_addr, sizeof(zeroed_addr)) == 0)
-        continue;
-      if (!addrs || memcmp(a1, a, ETHER_ADDR_LEN) < 0)
-        memcpy(a1, a, ETHER_ADDR_LEN);
-      if (!addrs || memcmp(a2, a, ETHER_ADDR_LEN) > 0)
-        memcpy(a2, a, ETHER_ADDR_LEN);
-      addrs++;
-    }
-  L_INFO("hcp_io_get_hwaddrs => %s", HEX_REPR(buf, ETHER_ADDR_LEN * 2));
+        if (memcmp(a, zeroed_addr, sizeof(zeroed_addr)) == 0)
+          continue;
+        if (!addrs || memcmp(a1, a, ETHER_ADDR_LEN) < 0)
+          memcpy(a1, a, ETHER_ADDR_LEN);
+        if (!addrs || memcmp(a2, a, ETHER_ADDR_LEN) > 0)
+          memcpy(a2, a, ETHER_ADDR_LEN);
+        addrs++;
+      }
+  L_INFO("hncp_io_get_hwaddrs => %s", HEX_REPR(buf, ETHER_ADDR_LEN * 2));
   freeifaddrs(ia);
   if (!addrs)
     {
-      L_ERR("hcp_io_get_hwaddrs failed - no AF_LINK addresses");
+      L_ERR("hncp_io_get_hwaddrs failed - no AF_LINK addresses");
       return 0;
     }
   return ETHER_ADDR_LEN * 2;
@@ -114,17 +80,17 @@ hcp_io_get_hwaddrs(unsigned char *buf, int buf_left)
 
 static void _timeout(struct uloop_timeout *t)
 {
-  hcp o = container_of(t, hcp_s, timeout);
-  hcp_run(o);
+  hncp o = container_of(t, hncp_s, timeout);
+  hncp_run(o);
 }
 
 static void _fd_callback(struct uloop_fd *u, unsigned int events __unused)
 {
-  hcp o = container_of(u, hcp_s, ufd);
-  hcp_poll(o);
+  hncp o = container_of(u, hncp_s, ufd);
+  hncp_poll(o);
 }
 
-bool hcp_io_init(hcp o)
+bool hncp_io_init(hncp o)
 {
   int s;
   int on = 1;
@@ -135,7 +101,7 @@ bool hcp_io_init(hcp o)
    * set up. Too bad. */
   char buf[6];
 
-  sprintf(buf, "%d", HCP_PORT);
+  sprintf(buf, "%d", HNCP_PORT);
   s = usock(USOCK_IPV6ONLY|USOCK_UDP|USOCK_SERVER|USOCK_NONBLOCK, NULL, buf);
   if (s < 0)
     return false;
@@ -143,14 +109,20 @@ bool hcp_io_init(hcp o)
   struct sockaddr_in6 addr;
 
   s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-  if (s<0)
+  if (s<0) {
+    L_ERR("unable to create IPv6 UDP socket");
     return false;
+  }
   fcntl(s, F_SETFL, O_NONBLOCK);
   memset(&addr, 0, sizeof(addr));
   addr.sin6_family = AF_INET6;
-  addr.sin6_port = htons(HCP_PORT);
-  if (bind(s, (struct sockaddr *)&addr, sizeof(addr))<0)
+  addr.sin6_port = htons(HNCP_PORT);
+  const int one = 1;
+  setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+  if (bind(s, (struct sockaddr *)&addr, sizeof(addr))<0) {
+    L_ERR("unable to bind to port %d", HNCP_PORT);
     return false;
+  }
 #endif
   if (setsockopt(s, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) < 0)
     {
@@ -172,7 +144,7 @@ bool hcp_io_init(hcp o)
   return true;
 }
 
-void hcp_io_uninit(hcp o)
+void hncp_io_uninit(hncp o)
 {
   close(o->udp_socket);
   /* clear the timer from uloop. */
@@ -181,14 +153,14 @@ void hcp_io_uninit(hcp o)
   (void)uloop_fd_delete(&o->ufd);
 }
 
-bool hcp_io_set_ifname_enabled(hcp o,
-                               const char *ifname,
-                               bool enabled)
+bool hncp_io_set_ifname_enabled(hncp o,
+                                const char *ifname,
+                                bool enabled)
 {
   struct ipv6_mreq val;
 
   val.ipv6mr_multiaddr = o->multicast_address;
-  L_DEBUG("hcp_io_set_ifname_enabled %s %s",
+  L_DEBUG("hncp_io_set_ifname_enabled %s %s",
           ifname, enabled ? "enabled" : "disabled");
   if (!(val.ipv6mr_interface = if_nametoindex(ifname)))
     {
@@ -211,15 +183,15 @@ bool hcp_io_set_ifname_enabled(hcp o,
   return false;
 }
 
-void hcp_io_schedule(hcp o, int msecs)
+void hncp_io_schedule(hncp o, int msecs)
 {
   uloop_timeout_set(&o->timeout, msecs);
 }
 
-ssize_t hcp_io_recvfrom(hcp o, void *buf, size_t len,
-                        char *ifname,
-                        struct in6_addr *src,
-                        struct in6_addr *dst)
+ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
+                         char *ifname,
+                         struct in6_addr *src,
+                         struct in6_addr *dst)
 {
   struct sockaddr_in6 srcsa;
   struct iovec iov = {buf, len};
@@ -266,9 +238,9 @@ ssize_t hcp_io_recvfrom(hcp o, void *buf, size_t len,
   return l;
 }
 
-ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
-                      const char *ifname,
-                      const struct in6_addr *to)
+ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
+                       const char *ifname,
+                       const struct in6_addr *to)
 {
   int flags = 0;
   struct sockaddr_in6 dst;
@@ -282,18 +254,21 @@ ssize_t hcp_io_sendto(hcp o, void *buf, size_t len,
       return -1;
     }
   dst.sin6_family = AF_INET6;
-  dst.sin6_port = htons(HCP_PORT);
+  dst.sin6_port = htons(HNCP_PORT);
   dst.sin6_addr = *to;
   r = sendto(o->udp_socket, buf, len, flags,
              (struct sockaddr *)&dst, sizeof(dst));
   if (r < 0)
     {
-      L_ERR("unable to send on %s - sendto:%s", ifname, strerror(errno));
+      char buf[128];
+      const char *c = inet_ntop(AF_INET6, to, buf, sizeof(buf));
+      L_ERR("unable to send to %s%%%s - sendto:%s",
+            c ? c : "?", ifname, strerror(errno));
     }
   return r;
 }
 
-hnetd_time_t hcp_io_time(hcp o __unused)
+hnetd_time_t hncp_io_time(hncp o __unused)
 {
   return hnetd_time();
 }

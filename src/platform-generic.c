@@ -9,8 +9,10 @@
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <arpa/inet.h>
+#include <resolv.h>
 
 #include "dhcpv6.h"
+#include "dhcp.h"
 #include "platform.h"
 #include "iface.h"
 #include "prefix_utils.h"
@@ -127,13 +129,25 @@ void platform_set_route(struct iface *c, struct iface_route *route, bool enable)
 	char from[PREFIX_MAXBUFFLEN];
 	char to[PREFIX_MAXBUFFLEN];
 	char via[INET6_ADDRSTRLEN];
+	char metric[10];
 
-	prefix_ntop(from, sizeof(from), &route->from, true);
 	prefix_ntop(to, sizeof(to), &route->to, true);
-	inet_ntop(AF_INET6, &route->via, via, sizeof(via));
+
+	if (!IN6_IS_ADDR_V4MAPPED(&route->to.prefix))
+		inet_ntop(AF_INET6, &route->via, via, sizeof(via));
+	else
+		inet_ntop(AF_INET, &route->via.s6_addr[12], via, sizeof(via));
+
+	if (!IN6_IS_ADDR_V4MAPPED(&route->to.prefix))
+		prefix_ntop(from, sizeof(from), &route->from, true);
+	else
+		from[0] = 0;
+
+	snprintf(metric, sizeof(metric), "%u", route->metric);
 
 	char *argv[] = {backend, (enable) ? "newroute" : "delroute",
-			c->ifname, to, via, from, NULL};
+			c->ifname, to, via, metric,
+			(from[0]) ? from : NULL, NULL};
 	platform_call(argv);
 }
 
@@ -145,12 +159,18 @@ void platform_set_owner(struct iface *c, bool enable)
 }
 
 
-void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t len)
+void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t len, const void *dhcp_data, size_t len4)
 {
 	// DNS options
 	const size_t dns_max = 4;
 	size_t dns_cnt = 0;
 	struct in6_addr dns[dns_max];
+
+	const size_t domainbuf_size = 8 + dns_max * 256;
+	char domainbuf[domainbuf_size];
+	strcpy(domainbuf, "SEARCH=");
+	size_t domainbuf_len = strlen(domainbuf);
+	bool have_domain = false;
 
 	// Add per interface DHCPv6 options
 	uint8_t *oend = ((uint8_t*)dhcpv6_data) + len, *odata;
@@ -163,6 +183,40 @@ void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t l
 
 			memcpy(&dns[dns_cnt], odata, cnt * sizeof(*dns));
 			dns_cnt += cnt;
+		} else if (otype == DHCPV6_OPT_DNS_DOMAIN) {
+			uint8_t *oend = &odata[olen];
+			while (odata < oend) {
+				int l = dn_expand(odata, oend, odata, &domainbuf[domainbuf_len],
+						domainbuf_size - domainbuf_len);
+				if (l > 0) {
+					domainbuf_len = strlen(domainbuf);
+					domainbuf[domainbuf_len++] = ' ';
+					have_domain = true;
+				} else {
+					break;
+				}
+			}
+		}
+	}
+
+	if (have_domain)
+		domainbuf[domainbuf_len - 1] = '\0';
+
+	// DNS options
+	size_t dns4_cnt = 0;
+	struct in_addr dns4[dns_max];
+
+	// Add per interface DHCPv6 options
+	uint8_t *o4end = ((uint8_t*)dhcp_data) + len4;
+	struct dhcpv4_option *opt;
+	dhcpv4_for_each_option(dhcp_data, o4end, opt) {
+		if (opt->type == DHCPV4_OPT_DNSSERVER) {
+			size_t cnt = opt->len / sizeof(*dns4);
+			if (cnt + dns4_cnt > dns_max)
+				cnt = dns_max - dns_cnt;
+
+			memcpy(&dns4[dns4_cnt], opt->data, cnt * sizeof(*dns4));
+			dns4_cnt += cnt;
 		}
 	}
 
@@ -170,11 +224,27 @@ void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t l
 	if (pid == 0) {
 		char *argv[] = {backend, "setdhcpv6", c->ifname, NULL};
 
-		char *dnsbuf = malloc(dns_cnt * INET6_ADDRSTRLEN + 5);
+		char *dnsbuf = malloc((dns_cnt + dns4_cnt) * INET6_ADDRSTRLEN + 5);
 		strcpy(dnsbuf, "DNS=");
-		for (size_t i = 0; i < dns_cnt; ++i)
-			inet_ntop(AF_INET6, &dns[i], dnsbuf + strlen(dnsbuf), INET6_ADDRSTRLEN);
+		size_t dnsbuflen = strlen(dnsbuf);
+
+		for (size_t i = 0; i < dns_cnt; ++i) {
+			inet_ntop(AF_INET6, &dns[i], &dnsbuf[dnsbuflen], INET6_ADDRSTRLEN);
+			dnsbuflen = strlen(dnsbuf);
+			dnsbuf[dnsbuflen++] = ' ';
+		}
+
+		for (size_t i = 0; i < dns4_cnt; ++i) {
+			inet_ntop(AF_INET, &dns4[i], &dnsbuf[dnsbuflen], INET_ADDRSTRLEN);
+			dnsbuflen = strlen(dnsbuf);
+			dnsbuf[dnsbuflen++] = ' ';
+		}
+
+		if (dns_cnt || dns4_cnt)
+			dnsbuf[dnsbuflen - 1] = 0;
+
 		putenv(dnsbuf);
+		putenv(domainbuf);
 
 		execv(argv[0], argv);
 		_exit(128);

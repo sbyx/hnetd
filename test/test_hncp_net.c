@@ -1,5 +1,5 @@
 /*
- * $Id: test_hcp_net.c $
+ * $Id: test_hncp_net.c $
  *
  * Author: Markus Stenberg <mstenber@cisco.com>
  *
@@ -66,20 +66,20 @@ struct prefix p2 = {
       0x20, 0x02, 0x00, 0x01}},
   .plen = 54 };
 
-void hcp_two(void)
+void hncp_two(void)
 {
   net_sim_s s;
-  hcp n1;
-  hcp n2;
-  hcp_link l1;
-  hcp_link l2;
+  hncp n1;
+  hncp n2;
+  hncp_link l1;
+  hncp_link l2;
   net_node node1, node2;
 
   net_sim_init(&s);
-  n1 = net_sim_find_hcp(&s, "n1");
-  n2 = net_sim_find_hcp(&s, "n2");
-  l1 = net_sim_hcp_find_link_by_name(n1, "eth0");
-  l2 = net_sim_hcp_find_link_by_name(n2, "eth1");
+  n1 = net_sim_find_hncp(&s, "n1");
+  n2 = net_sim_find_hncp(&s, "n2");
+  l1 = net_sim_hncp_find_link_by_name(n1, "eth0");
+  l2 = net_sim_hncp_find_link_by_name(n2, "eth1");
   sput_fail_unless(avl_is_empty(&l1->neighbors.avl), "no l1 neighbors");
   sput_fail_unless(avl_is_empty(&l2->neighbors.avl), "no l2 neighbors");
 
@@ -124,7 +124,7 @@ void hcp_two(void)
   /* n1 will keep getting stuff from n2, so it's sometimes alive,
    * sometimes not.. However, network hashes should be again
    * different. */
-  sput_fail_unless(memcmp(&n1->network_hash, &n2->network_hash, HCP_HASH_LEN),
+  sput_fail_unless(memcmp(&n1->network_hash, &n2->network_hash, HNCP_HASH_LEN),
                    "hashes different");
 
   /* Should also have done the necessary purging of nodes due to lack
@@ -171,10 +171,10 @@ static void handle_connections(net_sim s,
 
   for (i = 0 ; i < n_conns ; i++)
     {
-      hcp n1 = net_sim_find_hcp(s, nodenames[c->src]);
-      hcp_link l1 = net_sim_hcp_find_link_by_name(n1, c->srclink);
-      hcp n2 = net_sim_find_hcp(s, nodenames[c->dst]);
-      hcp_link l2 = net_sim_hcp_find_link_by_name(n2, c->dstlink);
+      hncp n1 = net_sim_find_hncp(s, nodenames[c->src]);
+      hncp_link l1 = net_sim_hncp_find_link_by_name(n1, c->srclink);
+      hncp n2 = net_sim_find_hncp(s, nodenames[c->dst]);
+      hncp_link l2 = net_sim_hncp_find_link_by_name(n2, c->dstlink);
 
       net_sim_set_connected(l1, l2, true);
       net_sim_set_connected(l2, l1, true);
@@ -190,7 +190,7 @@ static void raw_bird14(net_sim s)
 
   SIM_WHILE(s, 10000, !net_sim_is_converged(s));
 
-  sput_fail_unless(net_sim_find_hcp(s, "b10")->nodes.avl.count == 11,
+  sput_fail_unless(net_sim_find_hncp(s, "b10")->nodes.avl.count == 11,
                    "b10 enough nodes");
 
   sput_fail_unless(s->now - s->start < 10 * HNETD_TIME_PER_SECOND,
@@ -203,7 +203,7 @@ static void raw_bird14(net_sim s)
   net_sim_remove_node_by_name(s, nodenames[0]);
 
   /* Re-add the node */
-  (void)net_sim_find_hcp(s, nodenames[0]);
+  (void)net_sim_find_hncp(s, nodenames[0]);
 
   handle_connections(s, &nodeconnections[0], 2); /* Two first ones are needed */
 
@@ -230,7 +230,7 @@ static void raw_bird14(net_sim s)
                    "converged count rising");
 }
 
-void hcp_bird14()
+void hncp_bird14()
 {
   net_sim_s s;
 
@@ -239,7 +239,7 @@ void hcp_bird14()
   net_sim_uninit(&s);
 }
 
-void hcp_bird14_bidir()
+void hncp_bird14_bidir()
 {
   net_sim_s s;
 
@@ -249,7 +249,7 @@ void hcp_bird14_bidir()
   net_sim_uninit(&s);
 }
 
-static void raw_hcp_tube(unsigned int num_nodes)
+static void raw_hncp_tube(unsigned int num_nodes)
 {
   /* A LOT of routers connected in a tube (R1 R2 R3 .. RN). */
   unsigned int i;
@@ -262,45 +262,45 @@ static void raw_hcp_tube(unsigned int num_nodes)
       char buf[128];
 
       sprintf(buf, "node%d", i);
-      hcp n1 = net_sim_find_hcp(&s, buf);
+      hncp n1 = net_sim_find_hncp(&s, buf);
 
       sprintf(buf, "node%d", i+1);
-      hcp n2 = net_sim_find_hcp(&s, buf);
+      hncp n2 = net_sim_find_hncp(&s, buf);
 
-      hcp_link l1 = net_sim_hcp_find_link_by_name(n1, "down");
-      hcp_link l2 = net_sim_hcp_find_link_by_name(n2, "up");
+      hncp_link l1 = net_sim_hncp_find_link_by_name(n1, "down");
+      hncp_link l2 = net_sim_hncp_find_link_by_name(n2, "up");
       net_sim_set_connected(l1, l2, true);
       net_sim_set_connected(l2, l1, true);
     }
   SIM_WHILE(&s, 10000, !net_sim_is_converged(&s));
 
-  sput_fail_unless(net_sim_find_hcp(&s, "node0")->nodes.avl.count == num_nodes,
+  sput_fail_unless(net_sim_find_hncp(&s, "node0")->nodes.avl.count == num_nodes,
                    "enough nodes");
 
   net_sim_uninit(&s);
 }
 
-void hcp_tube_small(void)
+void hncp_tube_small(void)
 {
-  raw_hcp_tube(5);
+  raw_hncp_tube(5);
 }
 
-void hcp_tube_beyond_multicast(void)
+void hncp_tube_beyond_multicast(void)
 {
-  raw_hcp_tube(1400 / (HCP_HASH_LEN * 2 + TLV_SIZE));
+  raw_hncp_tube(1400 / (HNCP_HASH_LEN * 2 + TLV_SIZE));
 }
 
 int main(__unused int argc, __unused char **argv)
 {
   setbuf(stdout, NULL); /* so that it's in sync with stderr when redirected */
-  openlog("test_hcp_net", LOG_CONS | LOG_PERROR, LOG_DAEMON);
+  openlog("test_hncp_net", LOG_CONS | LOG_PERROR, LOG_DAEMON);
   sput_start_testing();
-  sput_enter_suite("hcp_net"); /* optional */
-  sput_run_test(hcp_two);
-  sput_run_test(hcp_bird14);
-  sput_run_test(hcp_bird14_bidir);
-  sput_run_test(hcp_tube_small);
-  sput_run_test(hcp_tube_beyond_multicast);
+  sput_enter_suite("hncp_net"); /* optional */
+  sput_run_test(hncp_two);
+  sput_run_test(hncp_bird14);
+  sput_run_test(hncp_bird14_bidir);
+  sput_run_test(hncp_tube_small);
+  sput_run_test(hncp_tube_beyond_multicast);
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();

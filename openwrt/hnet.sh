@@ -26,12 +26,10 @@ proto_hnet_setup() {
     json_add_string name "${interface}_4"
     json_add_string ifname "@${interface}"
 
-    # vendor specific option (125)
-    # 4b - Steven Barth's enterprise number (30462)
-    # data-len1 (2)
-    # subopt-code (1)
-    # subopt-len (0)
-    json_add_string sendopts "0x7d:000076fe020100"
+    # User Class (77)
+    # UCLEN (7)
+    # Class ("HOMENET")
+    json_add_string sendopts "0x4d:07484f4d454e4554"
 
     json_add_string proto dhcp
     json_close_object
@@ -44,6 +42,9 @@ proto_hnet_setup() {
 
     # Require PD, not only NA/SLAAC
     json_add_string forceprefix 1
+
+    # Class
+    json_add_string userclass HOMENET
 
     # Disable automatic netifd-level prefix delegation for this interface
     json_add_boolean delegate 0

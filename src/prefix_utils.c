@@ -172,7 +172,7 @@ void prefix_canonical(struct prefix *dst, const struct prefix *src)
 	struct in6_addr zero;
 	memset(&zero, 0, sizeof(zero));
 	if(src != dst)
-		memcpy(dst, src, sizeof(struct prefix));
+		*dst = *src;
 	bmemcpy(&dst->prefix, &zero, dst->plen, 128 - dst->plen);
 }
 
@@ -189,7 +189,7 @@ int prefix_random(const struct prefix *p, struct prefix *dst,
 		rand.s6_addr[i] = random();
 
 	dst->plen = plen;
-	memcpy(&dst->prefix, &p->prefix, sizeof(struct in6_addr));
+	dst->prefix = p->prefix;
 	bmemcpy(&dst->prefix, &rand, p->plen, plen - p->plen);
 	return 0;
 }
@@ -206,7 +206,10 @@ int prefix_increment(struct prefix *dst, const struct prefix *p, uint8_t protect
 	current = ntohl(current);
 	current += step;
 	current = htonl(current);
-	memcpy(dst, p, sizeof(struct prefix));
+
+	if (dst != p)
+		memcpy(dst, p, sizeof(struct prefix));
+
 	bmemcpy_shift(&dst->prefix, protected_len, &current, 0, blen);
 
 	return (current)?0:1;
@@ -281,9 +284,6 @@ int prefix_pton(const char *addr, struct prefix *p)
 				return 0;
 		}
 		parsed_len = atoi(slash + 1);
-		if(parsed_len > 128)
-			return 0;
-
 		addrlen = slash - addr;
 	} else {
 		addrlen = strlen(addr);
@@ -295,20 +295,21 @@ int prefix_pton(const char *addr, struct prefix *p)
 	memcpy(buf, addr, addrlen);
 	buf[addrlen] = 0;
 
+	if(!slash)
+		p->plen = 128;
+
 	if(inet_pton(AF_INET6, buf, &p->prefix) == 1) {
-		if(slash)
+		if(slash) {
+			if(parsed_len > 128)
+				return 0;
 			p->plen = parsed_len;
-		else
-			p->plen = 128;
+		}
 	} else if(inet_pton(AF_INET, buf, &p->prefix.s6_addr[12]) == 1) {
-		if(parsed_len > 32)
-			return 0;
-
-		if(slash)
+		if(slash) {
+			if(parsed_len > 32)
+				return 0;
 			p->plen = parsed_len + 96;
-		else
-			p->plen = 128;
-
+		}
 		memset(&p->prefix, 0, 10);
 		p->prefix.s6_addr[10] = 0xff;
 		p->prefix.s6_addr[11] = 0xff;

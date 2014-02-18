@@ -5,12 +5,13 @@
 #include "prefix_utils.h"
 
 #include <libubox/list.h>
+#include <libubox/uloop.h>
 #include <libubox/vlist.h>
 #include <netinet/in.h>
 #include <time.h>
 
 
-// API for PA / HCP & friends
+// API for PA / HNCP & friends
 
 struct iface_user {
 	// We will just add this struct to our linked-list so please keep it around by yourself ;)
@@ -32,6 +33,10 @@ struct iface_user {
 	/* Callback for IPv4 connectivity state */
 	void (*ipv4_update)(struct iface_user *u, char *ifname,
 			const void *dhcp_data, size_t dhcp_len);
+
+	/* Callback for internal addresses */
+	void (*cb_intaddr)(struct iface_user *u, const char *ifname,
+			const struct prefix *addr6, const struct prefix *addr4);
 };
 
 // Register user for interface events (callbacks with NULL-values are ignored)
@@ -41,15 +46,15 @@ void iface_register_user(struct iface_user *user);
 void iface_unregister_user(struct iface_user *user);
 
 // Update DHCPv6 out data
-void iface_set_dhcpv6_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len);
+void iface_set_dhcpv6_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len, const void *dhcp_data, size_t dhcp_len);
 
 
 // Begin route update cycle
 void iface_update_routes(void);
 
 // Add new routes
-void iface_add_default_route(const char *ifname, const struct prefix *from, const struct in6_addr *via);
-void iface_add_internal_route(const char *ifname, const struct prefix *to, const struct in6_addr *via);
+void iface_add_default_route(const char *ifname, const struct prefix *from, const struct in6_addr *via, unsigned hopcount);
+void iface_add_internal_route(const char *ifname, const struct prefix *to, const struct in6_addr *via, unsigned hopcount);
 
 // Flush and commit routes to synthesize events
 void iface_commit_routes(void);
@@ -72,6 +77,7 @@ struct iface_route {
 	struct prefix from;
 	struct prefix to;
 	struct in6_addr via;
+	unsigned metric;
 };
 
 struct iface {
@@ -84,6 +90,7 @@ struct iface {
 	bool linkowner;
 	bool internal;
 	bool v4leased;
+	bool carrier;
 
 	// LL-address
 	struct in6_addr eui64_addr;
@@ -98,6 +105,16 @@ struct iface {
 	void *dhcpv6_data_out;
 	size_t dhcpv6_len_in;
 	size_t dhcpv6_len_out;
+
+	// DHCP data
+	void *dhcp_data_in;
+	void *dhcp_data_out;
+	size_t dhcp_len_in;
+	size_t dhcp_len_out;
+
+	// Internal transition timeout
+	struct uloop_timeout transition;
+	struct uloop_timeout preferred;
 
 	// Interface name
 	char ifname[];
@@ -133,11 +150,11 @@ void iface_commit_delegated(struct iface *c);
 
 
 // Set DHCPv4 leased flag and rerun border discovery
-void iface_set_v4leased(struct iface *c, bool v4leased);
+void iface_set_dhcp_received(struct iface *c, bool leased, ...);
 
 
 // Set DHCPv6 data received
-void iface_set_dhcpv6_received(struct iface *c, const void *dhcpv6_data, size_t dhcpv6_len);
+void iface_set_dhcpv6_received(struct iface *c, ...);
 
 // Flush all interfaces
 void iface_flush(void);

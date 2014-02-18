@@ -384,6 +384,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 	openlog("hnetd_test_pa", LOG_PERROR | LOG_PID, LOG_DAEMON);
 
 	sput_start_testing();
+
 	sput_enter_suite("Prefix assignment tests"); /* optional */
 	sput_run_test(test_pa_initial);
 	sput_run_test(test_pa_ipv4);

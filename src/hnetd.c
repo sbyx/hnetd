@@ -25,9 +25,9 @@
 
 #include <libubox/uloop.h>
 
-#include "hcp_pa.h"
-#include "hcp_sd.h"
-#include "hcp_bfs.h"
+#include "hncp_pa.h"
+#include "hncp_sd.h"
+#include "hncp_routing.h"
 #include "ipc.h"
 #include "platform.h"
 
@@ -35,24 +35,50 @@
 
 typedef struct {
 	struct iface_user iu;
-	hcp hcp;
-} hcp_iface_user_s, *hcp_iface_user;
+	hncp hncp;
+	hncp_glue glue;
+} hncp_iface_user_s, *hncp_iface_user;
 
 
-void hcp_iface_intiface_callback(struct iface_user *u,
-				 const char *ifname, bool enabled)
+void hncp_iface_intaddr_callback(struct iface_user *u, const char *ifname,
+								 const struct prefix *addr6,
+								 const struct prefix *addr4 __unused)
 {
-	hcp_iface_user hiu = container_of(u, hcp_iface_user_s, iu);
+	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
 
-	hcp_set_link_enabled(hiu->hcp, ifname, enabled);
+	hncp_set_ipv6_address(hiu->hncp, ifname, addr6 ? &addr6->prefix : NULL);
 }
 
-void hcp_iface_glue(hcp_iface_user hiu, hcp h)
+
+void hncp_iface_intiface_callback(struct iface_user *u,
+								  const char *ifname, bool enabled)
+{
+	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
+
+	hncp_set_link_enabled(hiu->hncp, ifname, enabled);
+}
+
+
+void hncp_iface_extdata_callback(struct iface_user *u,
+								 const char *ifname __unused,
+								 const void *dhcpv6_data __unused,
+								 size_t dhcpv6_len __unused)
+{
+	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
+
+	hncp_pa_set_dhcpv6_data_in_dirty(hiu->glue);
+}
+
+
+void hncp_iface_glue(hncp_iface_user hiu, hncp h, hncp_glue g)
 {
 	/* Initialize hiu appropriately */
 	memset(hiu, 0, sizeof(*hiu));
-	hiu->iu.cb_intiface = hcp_iface_intiface_callback;
-	hiu->hcp = h;
+	hiu->iu.cb_intiface = hncp_iface_intiface_callback;
+	hiu->iu.cb_intaddr = hncp_iface_intaddr_callback;
+	hiu->iu.cb_extdata = hncp_iface_extdata_callback;
+	hiu->hncp = h;
+	hiu->glue = g;
 
 	/* We don't care about other callbacks for now. */
 	iface_register_user(&hiu->iu);
@@ -60,16 +86,19 @@ void hcp_iface_glue(hcp_iface_user hiu, hcp h)
 
 int main(__unused int argc, char* const argv[])
 {
-	hcp h;
+	hncp h;
 	struct pa_conf pa_conf;
 	pa_t pa;
 	int c;
-	hcp_iface_user_s hiu;
+	hncp_iface_user_s hiu;
+	hncp_glue hg;
 
+#ifdef WITH_IPC
 	if (strstr(argv[0], "hnet-call"))
 		return ipc_client(argv[1]);
 	else if ((strstr(argv[0], "hnet-ifup") || strstr(argv[0], "hnet-ifdown")) && argc >= 2)
 		return ipc_ifupdown(argv[0], argv[1], argv[2]);
+#endif
 
 	openlog("hnetd", LOG_PERROR | LOG_PID, LOG_DAEMON);
 	uloop_init();
@@ -79,10 +108,12 @@ int main(__unused int argc, char* const argv[])
 		return 2;
 	}
 
+#ifdef WITH_IPC
 	if (ipc_init()) {
 		L_ERR("Failed to init IPC: %s", strerror(errno));
 		return 5;
 	}
+#endif
 
 	int urandom_fd;
 	if ((urandom_fd = open("/dev/urandom", O_CLOEXEC | O_RDONLY)) >= 0) {
@@ -92,35 +123,15 @@ int main(__unused int argc, char* const argv[])
 		srandom(seed);
 	}
 
-	pa_conf_default(&pa_conf);
-	pa_conf.flooding_delay = FLOODING_DELAY;
-	pa = pa_create(&pa_conf);
-	if (!pa) {
-		L_ERR("Unable to initialize PA");
-		return 13;
-	}
-
-	h = hcp_create();
-	if (!h) {
-		L_ERR("Unable to initialize HCP");
-		return 42;
-	}
-
-	if (!hcp_pa_glue_create(h, pa)) {
-		L_ERR("Unable to connect hcp and pa");
-		return 17;
-	}
-
+	const char *routing_script = NULL;
 	const char *dnsmasq_script = NULL;
 	const char *dnsmasq_bonus_file = NULL;
 	const char *ohp_script = NULL;
 	const char *router_name = NULL;
+	const char *pa_store_file = NULL;
 
-	while ((c = getopt(argc, argv, "bd:f:o:n:")) != -1) {
+	while ((c = getopt(argc, argv, "d:f:o:n:r:s:")) != -1) {
 		switch (c) {
-		case 'b':
-		  hcp_bfs_create(h);
-		  break;
 		case 'd':
 			dnsmasq_script = optarg;
 			break;
@@ -133,26 +144,61 @@ int main(__unused int argc, char* const argv[])
 		case 'n':
 			router_name = optarg;
 			break;
+		case 'r':
+			routing_script = optarg;
+			break;
+		case 's':
+			pa_store_file = optarg;
+			break;
 		}
+	}
+
+	pa_conf_default(&pa_conf);
+	pa_conf.flooding_delay = FLOODING_DELAY;
+	if (pa_store_file) {
+		static struct pa_store_conf store_conf;
+		store_conf.max_px = 100;
+		store_conf.max_px_per_if = 10;
+		pa_conf.storage = pa_store_create(&store_conf, pa_store_file);
+	}
+
+	pa = pa_create(&pa_conf);
+	if (!pa) {
+		L_ERR("Unable to initialize PA");
+		return 13;
+	}
+	
+	h = hncp_create();
+	if (!h) {
+		L_ERR("Unable to initialize HNCP");
+		return 42;
+	}
+
+	if (!(hg=hncp_pa_glue_create(h, pa))) {
+		L_ERR("Unable to connect hncp and pa");
+		return 17;
 	}
 
 	/* At some point should think of subset of these options is
 	 * meaningful; if not, should combine them to single option,
 	 * perhaps? */
 	if (dnsmasq_script && ohp_script && dnsmasq_bonus_file) {
-		if (!hcp_sd_create(h,
-						   dnsmasq_script, dnsmasq_bonus_file,
-						   ohp_script, router_name)) {
+		if (!hncp_sd_create(h,
+							dnsmasq_script, dnsmasq_bonus_file,
+							ohp_script, router_name, NULL)) {
 			L_ERR("unable to initialize rd, exiting");
 			return 71;
 		}
 	}
 
+	if (routing_script)
+		hncp_routing_create(h, routing_script);
+
 	/* Init ipc */
 	iface_init(pa);
 
-	/* Glue together HCP and iface */
-	hcp_iface_glue(&hiu, h);
+	/* Glue together HNCP, PA-glue and and iface */
+	hncp_iface_glue(&hiu, h, hg);
 
 	/* Fire up the prefix assignment code. */
 	pa_start(pa);

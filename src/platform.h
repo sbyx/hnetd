@@ -23,7 +23,7 @@ void platform_set_route(struct iface *c, struct iface_route *route, bool enable)
 void platform_set_owner(struct iface *c, bool enable);
 
 // Set DHCPv6 data
-void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t len);
+void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t len, const void *dhcp_data, size_t len4);
 
 // Create local interface
 void platform_iface_new(struct iface *c, const char *handle);
