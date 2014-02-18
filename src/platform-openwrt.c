@@ -308,20 +308,6 @@ static void platform_commit(struct uloop_timeout *t)
 	}
 	blobmsg_close_array(&b, k);
 
-	k = blobmsg_open_table(&b, "data");
-
-	const char *service = (c->internal && c->linkowner) ? "server" : "disabled";
-	blobmsg_add_string(&b, "ra", service);
-	blobmsg_add_string(&b, "dhcpv4", service);
-	blobmsg_add_string(&b, "dhcpv6", service);
-
-	const char *zone = (c->internal) ? "lan" : "wan";
-	blobmsg_add_string(&b, "zone", zone);
-
-	L_DEBUG("	RA/DHCP/DHCPv6: %s, Zone: %s", service, zone);
-
-	blobmsg_close_table(&b, k);
-
 
 	// DNS options
 	const size_t dns_max = 4;
@@ -389,14 +375,28 @@ static void platform_commit(struct uloop_timeout *t)
 		blobmsg_close_array(&b, k);
 	}
 
-	if (domain_cnt) {
-		k = blobmsg_open_array(&b, "dns_search");
+	k = blobmsg_open_table(&b, "data");
+
+	const char *service = (c->internal && c->linkowner) ? "server" : "disabled";
+	blobmsg_add_string(&b, "ra", service);
+	blobmsg_add_string(&b, "dhcpv4", service);
+	blobmsg_add_string(&b, "dhcpv6", service);
+
+	const char *zone = (c->internal) ? "lan" : "wan";
+	blobmsg_add_string(&b, "zone", zone);
+
+	L_DEBUG("	RA/DHCP/DHCPv6: %s, Zone: %s", service, zone);
+
+	if (domain_cnt && c->internal && c->linkowner) {
+		l = blobmsg_open_array(&b, "domain");
 
 		for (size_t i = 0; i < domain_cnt; ++i)
 			blobmsg_add_string(&b, NULL, domains[i]);
 
-		blobmsg_close_array(&b, k);
+		blobmsg_close_array(&b, l);
 	}
+
+	blobmsg_close_table(&b, k);
 
 	L_DEBUG("platform: *** end interface update %s (%s)", iface->handle, c->ifname);
 
