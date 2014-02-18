@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Feb 17 17:00:58 2014 mstenber
- * Edit time:     414 min
+ * Last modified: Tue Feb 18 20:34:46 2014 mstenber
+ * Edit time:     423 min
  *
  */
 
@@ -158,6 +158,27 @@ static int _push_reverse_ll(struct prefix *p, uint8_t *buf, int buf_len)
   return buf - obuf;
 }
 
+const char *_rewrite_ifname(const char *src, char *dst)
+{
+  if (!dst)
+    return NULL;
+  const char *s = src;
+  char *d = dst;
+  while (true)
+    {
+      char c = *s++;
+      if (c && !(isalpha(c) || (s != (src + 1) && isalnum(c))))
+        c = '_';
+      *d++ = c;
+      if (!c)
+        break;
+    }
+  return dst;
+}
+
+#define REWRITE_IFNAME(ifname) \
+  _rewrite_ifname(ifname, alloca(strlen(ifname)+1))
+
 static void _publish_ddz(hncp_sd sd, hncp_link l,
                          int flags_forward,
                          struct prefix *assigned_prefix)
@@ -173,7 +194,7 @@ static void _publish_ddz(hncp_sd sd, hncp_link l,
   if (!hncp_get_ipv6_address(sd->hncp, l->ifname,
                              (struct in6_addr *)&dh->address))
     return;
-  sprintf(tbuf, "%s.%s.%s", l->ifname, sd->router_name, sd->domain);
+  sprintf(tbuf, "%s.%s.%s", REWRITE_IFNAME(l->ifname), sd->router_name, sd->domain);
   int r = escaped2ll(tbuf, dh->ll, DNS_MAX_ESCAPED_LEN);
   if (r < 0)
     return;
@@ -389,7 +410,7 @@ bool hncp_sd_reconfigure_ohp(hncp_sd sd)
     {
       /* XXX - what sort of naming scheme should we use for links? */
       sprintf(tbuf, "%s=%s.%s.%s",
-              l->ifname, l->ifname, sd->router_name, sd->domain);
+              l->ifname, REWRITE_IFNAME(l->ifname), sd->router_name, sd->domain);
       md5_hash(tbuf, strlen(tbuf), &ctx);
       if (first)
         {
