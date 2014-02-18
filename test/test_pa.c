@@ -3,6 +3,7 @@
 #include "smock.h"
 
 #include "iface.h"
+#include "pa.h"
 
 /**************************************************** Tested structures */
 struct pa pa;
