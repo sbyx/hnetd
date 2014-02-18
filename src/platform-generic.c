@@ -168,8 +168,9 @@ void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t l
 
 	const size_t domainbuf_size = 8 + dns_max * 256;
 	char domainbuf[domainbuf_size];
-	strcpy(domainbuf, "SEARCH= ");
+	strcpy(domainbuf, "SEARCH=");
 	size_t domainbuf_len = strlen(domainbuf);
+	bool have_domain = false;
 
 	// Add per interface DHCPv6 options
 	uint8_t *oend = ((uint8_t*)dhcpv6_data) + len, *odata;
@@ -190,13 +191,16 @@ void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t l
 				if (l > 0) {
 					domainbuf_len = strlen(domainbuf);
 					domainbuf[domainbuf_len++] = ' ';
+					have_domain = true;
 				} else {
 					break;
 				}
 			}
 		}
 	}
-	domainbuf[domainbuf_len - 1] = '\0';
+
+	if (have_domain)
+		domainbuf[domainbuf_len - 1] = '\0';
 
 	// DNS options
 	size_t dns4_cnt = 0;
@@ -222,10 +226,23 @@ void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t l
 
 		char *dnsbuf = malloc((dns_cnt + dns4_cnt) * INET6_ADDRSTRLEN + 5);
 		strcpy(dnsbuf, "DNS=");
-		for (size_t i = 0; i < dns_cnt; ++i)
-			inet_ntop(AF_INET6, &dns[i], dnsbuf + strlen(dnsbuf), INET6_ADDRSTRLEN);
-		for (size_t i = 0; i < dns4_cnt; ++i)
-			inet_ntop(AF_INET, &dns4[i], dnsbuf + strlen(dnsbuf), INET_ADDRSTRLEN);
+		size_t dnsbuflen = strlen(dnsbuf);
+
+		for (size_t i = 0; i < dns_cnt; ++i) {
+			inet_ntop(AF_INET6, &dns[i], &dnsbuf[dnsbuflen], INET6_ADDRSTRLEN);
+			dnsbuflen = strlen(dnsbuf);
+			dnsbuf[dnsbuflen++] = ' ';
+		}
+
+		for (size_t i = 0; i < dns4_cnt; ++i) {
+			inet_ntop(AF_INET, &dns4[i], &dnsbuf[dnsbuflen], INET_ADDRSTRLEN);
+			dnsbuflen = strlen(dnsbuf);
+			dnsbuf[dnsbuflen++] = ' ';
+		}
+
+		if (dns_cnt || dns4_cnt)
+			dnsbuf[dnsbuflen - 1] = 0;
+
 		putenv(dnsbuf);
 		putenv(domainbuf);
 

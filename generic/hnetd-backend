@@ -37,6 +37,7 @@ newroute|delroute)
 startdhcp)
 	uci batch <<-EOF
 	set dhcp.$2=dhcp
+	set dhcp.$2.ifname=$2
 	set dhcp.$2.dhcpv6=server
 	set dhcp.$2.dhcpv4=server
 	set dhcp.$2.ra=server
