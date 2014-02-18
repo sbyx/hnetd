@@ -30,6 +30,7 @@
 #include "hncp_routing.h"
 #include "ipc.h"
 #include "platform.h"
+#include "pa.h"
 
 #define FLOODING_DELAY 2 * HNETD_TIME_PER_SECOND
 
@@ -87,8 +88,7 @@ void hncp_iface_glue(hncp_iface_user hiu, hncp h, hncp_glue g)
 int main(__unused int argc, char* const argv[])
 {
 	hncp h;
-	struct pa_conf pa_conf;
-	pa_t pa;
+	struct pa pa;
 	int c;
 	hncp_iface_user_s hiu;
 	hncp_glue hg;
@@ -153,28 +153,17 @@ int main(__unused int argc, char* const argv[])
 		}
 	}
 
-	pa_conf_default(&pa_conf);
-	pa_conf.flooding_delay = FLOODING_DELAY;
-	if (pa_store_file) {
-		static struct pa_store_conf store_conf;
-		store_conf.max_px = 100;
-		store_conf.max_px_per_if = 10;
-		pa_conf.storage = pa_store_create(&store_conf, pa_store_file);
-	}
+	pa_init(&pa, NULL);
+	if(pa_store_file)
+		pa_store_setfile(&pa.store, pa_store_file);
 
-	pa = pa_create(&pa_conf);
-	if (!pa) {
-		L_ERR("Unable to initialize PA");
-		return 13;
-	}
-	
 	h = hncp_create();
 	if (!h) {
 		L_ERR("Unable to initialize HNCP");
 		return 42;
 	}
 
-	if (!(hg=hncp_pa_glue_create(h, pa))) {
+	if (!(hg=hncp_pa_glue_create(h, &pa.data))) {
 		L_ERR("Unable to connect hncp and pa");
 		return 17;
 	}
@@ -195,13 +184,13 @@ int main(__unused int argc, char* const argv[])
 		hncp_routing_create(h, routing_script);
 
 	/* Init ipc */
-	iface_init(pa);
+	iface_init(&pa.data);
 
 	/* Glue together HNCP, PA-glue and and iface */
 	hncp_iface_glue(&hiu, h, hg);
 
 	/* Fire up the prefix assignment code. */
-	pa_start(pa);
+	pa_start(&pa);
 
 	uloop_run();
 	return 0;

@@ -22,7 +22,6 @@
 
 #include "hnetd.h"
 
-typedef struct pa *pa_t;
 #include "iface.h"
 
 #define PA_FLOOD_DELAY_DEFAULT     5000

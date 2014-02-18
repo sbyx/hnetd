@@ -15,7 +15,10 @@
 #define HNCP_PA_H
 
 #include "hncp.h"
-#include "pa.h"
+#include "pa_data.h"
+
+#define HNCP_DELAY    3000
+#define HNCP_DELAY_LL 500
 
 typedef struct hncp_glue_struct hncp_glue_s, *hncp_glue;
 
@@ -24,7 +27,7 @@ typedef struct hncp_glue_struct hncp_glue_s, *hncp_glue;
  *
  * @return the context that was created
  */
-hncp_glue hncp_pa_glue_create(hncp o, pa_t pa);
+hncp_glue hncp_pa_glue_create(hncp o, struct pa_data *data);
 
 void hncp_pa_glue_destroy(hncp_glue glue);
 

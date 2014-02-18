@@ -3,6 +3,7 @@
 
 #include "hnetd.h"
 #include "prefix_utils.h"
+#include "pa_data.h"
 
 #include <libubox/list.h>
 #include <libubox/uloop.h>
@@ -120,11 +121,8 @@ struct iface {
 	char ifname[];
 };
 
-
-#include "pa.h"
-
 // Generic initializer to be called by main()
-int iface_init(pa_t pa);
+int iface_init(struct pa_data *pa_data);
 
 // Get an interface by name
 struct iface* iface_get(const char *ifname);

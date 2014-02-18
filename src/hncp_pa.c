@@ -47,6 +47,8 @@
 #include "hncp_i.h"
 #include "prefix_utils.h"
 #include "dhcpv6.h"
+#include "iface.h"
+#include "pa_data.h"
 
 typedef struct {
   struct vlist_node in_dps;
@@ -69,7 +71,8 @@ struct hncp_glue_struct {
 
   /* What are we gluing together anyway? */
   hncp hncp;
-  pa_t pa;
+  struct pa_data *pa_data;
+  struct pa_data_user data_user;
 };
 
 static int compare_dps(const void *a, const void *b, void *ptr __unused)
@@ -162,10 +165,23 @@ static void _update_a_tlv(hncp_glue g, hncp_node n,
   plen = ROUND_BITS_TO_BYTES(p.plen);
   memcpy(&p, tlv_data(tlv) + sizeof(*ah), plen);
   l = _find_local_link(n, ah->link_id);
-  (void)pa_update_eap(g->pa, &p,
-                      (struct pa_rid *)&n->node_identifier_hash,
-                      l ? l->ifname : NULL,
-                      !add);
+
+  struct pa_ap *ap = pa_ap_get(g->pa_data, &p, (struct pa_rid *)&n->node_identifier_hash, add);
+  if(!ap)
+	  return;
+
+  struct pa_iface *iface = NULL;
+  if(l)
+	  iface = pa_iface_get(g->pa_data, l->ifname, add);
+
+  if(!add) {
+	  pa_ap_todelete(ap);
+  } else {
+	  pa_ap_set_iface(ap, iface);
+	  //todo: set authoritative and priority
+  }
+
+  pa_ap_notify(g->pa_data, ap);
   return;
 }
 
@@ -247,14 +263,19 @@ static void _update_d_tlv(hncp_glue g, hncp_node n,
         }
     }
 
-  (void)pa_update_edp(g->pa,
-                      &p,
-                      (struct pa_rid *)&n->node_identifier_hash,
-                      NULL, /* TBD excluded - ignoring for now */
-                      valid, preferred,
-                      dhcpv6_data, dhcpv6_len);
+  struct pa_edp *edp = pa_edp_get(g->pa_data, &p, (struct pa_rid *)&n->node_identifier_hash, !!valid);
+  if(!edp)
+	  return;
 
+  if(valid) {
+	  pa_dp_set_lifetime(&edp->dp, preferred, valid);
+	  pa_dp_set_dhcp(&edp->dp, dhcpv6_data, dhcpv6_len);
+  } else {
+	  pa_dp_todelete(&edp->dp);
+  }
 
+  pa_dp_notify(g->pa_data, &edp->dp);
+  return;
 }
 
 static void _tlv_cb(hncp_subscriber s,
@@ -470,23 +491,12 @@ static void _republish_cb(hncp_subscriber s)
     free(dhcpv6_options);
 }
 
-static void _updated_lap(const struct prefix *prefix, const char *ifname,
-                         int to_delete, void *priv)
-{
-  hncp_glue g = priv;
-  hncp o = g->hncp;
-
-  return hncp_tlv_ap_update(o, prefix, ifname, false, 0, !to_delete);
-}
-
-static void _updated_ldp(const struct prefix *prefix,
-                         const struct prefix *excluded __unused,
+static void _updated_ldp(hncp_glue g,
+                         const struct prefix *prefix,
                          const char *dp_ifname,
                          hnetd_time_t valid_until, hnetd_time_t preferred_until,
-                         const void *dhcpv6_data, size_t dhcpv6_len,
-                         void *priv)
+                         const void *dhcpv6_data, size_t dhcpv6_len)
 {
-  hncp_glue g = priv;
   hncp o = g->hncp;
   bool add = valid_until != 0;
   hncp_dp dp = _find_or_create_dp(g, prefix, add);
@@ -535,16 +545,30 @@ static void _updated_ldp(const struct prefix *prefix,
   hncp_schedule(o);
 }
 
+static void hncp_pa_cps(struct pa_data_user *user, struct pa_cp *cp, uint32_t flags)
+{
+	hncp_glue g = container_of(user, struct hncp_glue_struct, data_user);
+	if((flags & (PADF_CP_ADVERTISE | PADF_CP_TODELETE | PADF_CP_DP | PADF_CP_IFACE))) {
+		hncp_tlv_ap_update(g->hncp, &cp->prefix, cp->iface?cp->iface->ifname:NULL,
+				cp->authoritative, cp->priority, !(flags & PADF_CP_TODELETE) && cp->advertised);
+	}
+}
 
-hncp_glue hncp_pa_glue_create(hncp o, pa_t pa)
+static void hncp_pa_dps(struct pa_data_user *user, struct pa_dp *dp, uint32_t flags)
+{
+	hncp_glue g = container_of(user, struct hncp_glue_struct, data_user);
+	bool todelete = (flags & PADF_DP_TODELETE)?true:false;
+	if(dp->local && flags) {
+		struct pa_ldp *ldp = container_of(dp, struct pa_ldp, dp);
+		_updated_ldp(g, &dp->prefix, ldp->iface?ldp->iface->ifname:NULL, todelete?0:dp->valid_until, todelete?0:dp->preferred_until,
+				dp->dhcp_data, dp->dhcp_len);
+	}
+}
+
+hncp_glue hncp_pa_glue_create(hncp o, struct pa_data *pa_data)
 {
   struct pa_rid *rid = (struct pa_rid *)&o->own_node->node_identifier_hash;
   hncp_glue g = calloc(1, sizeof(*g));
-  struct pa_flood_callbacks pa_cbs = {
-    .priv = g,
-    .updated_lap = _updated_lap,
-    .updated_ldp = _updated_ldp,
-  };
   if (!g)
     return false;
 
@@ -552,15 +576,19 @@ hncp_glue hncp_pa_glue_create(hncp o, pa_t pa)
   g->subscriber.tlv_change_callback = _tlv_cb;
   /* g->subscriber.node_change_callback = _node_cb; */
   g->subscriber.republish_callback = _republish_cb;
-  g->pa = pa;
+  g->pa_data = pa_data;
   g->hncp = o;
+  memset(&g->data_user, 0, sizeof(g->data_user));
+  g->data_user.cps = hncp_pa_cps;
+  g->data_user.dps = hncp_pa_dps;
 
   /* Set the rid */
-  pa_set_rid(pa, rid);
+  pa_flood_set_rid(pa_data, rid);
+  pa_flood_set_flooddelays(pa_data, HNCP_DELAY, HNCP_DELAY_LL);
 
   /* And let the floodgates open. pa SHOULD NOT call anything yet, as
    * it isn't started. hncp, on the other hand, most likely will. */
-  pa_flood_subscribe(pa, &pa_cbs);
+  pa_data_subscribe(pa_data, &g->data_user);
   hncp_subscribe(o, &g->subscriber);
 
   return g;

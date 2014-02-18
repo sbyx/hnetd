@@ -25,59 +25,109 @@
 
 #include "iface.h"
 #include "platform.h"
-#include "pa.h"
+#include "pa_data.h"
 
-static void iface_update_prefix(const struct prefix *p, const char *ifname,
-		hnetd_time_t valid_until, hnetd_time_t preferred_until,
-		const void *dhcpv6_data, size_t dhcpv6_len,
-		__unused void *priv);
-static void iface_update_link_owner(const char *ifname, bool owner, void *priv);
+void iface_pa_ifs(struct pa_data_user *, struct pa_iface *, uint32_t flags);
+void iface_pa_cps(struct pa_data_user *, struct pa_cp *, uint32_t flags);
+void iface_pa_aas(struct pa_data_user *, struct pa_aa *, uint32_t flags);
+
 static void iface_discover_border(struct iface *c);
 
 static struct list_head interfaces = LIST_HEAD_INIT(interfaces);
 static struct list_head users = LIST_HEAD_INIT(users);
-static struct pa_iface_callbacks pa_cb = {
-	.update_prefix = iface_update_prefix,
-	.update_link_owner = iface_update_link_owner
+static struct pa_data_user pa_data_cb = {
+	.cps = iface_pa_cps,
+	.aas = iface_pa_aas,
+	.ifs = iface_pa_ifs
 };
 
-static void iface_update_prefix(const struct prefix *p, const char *ifname,
-		hnetd_time_t valid_until, hnetd_time_t preferred_until,
-		const void *dhcpv6_data, size_t dhcpv6_len,
-		__unused void *priv)
+void iface_pa_ifs(__attribute__((unused))struct pa_data_user *user,
+		struct pa_iface *iface, uint32_t flags)
 {
-	struct iface *c = iface_get(ifname);
-	assert(c != NULL && c->platform != NULL);
+	if(flags & (PADF_IF_DODHCP | PADF_IF_TODELETE)) {
+		struct iface *c = iface_get(iface->ifname);
+		bool owner = (flags & PADF_IF_TODELETE)?false:iface->do_dhcp;
+		assert(c != NULL && c->platform != NULL);
 
-	if (valid_until < hnetd_time()) { // Delete action
-		struct iface_addr *a = vlist_find(&c->assigned, p, a, node);
-		if (a)
-			vlist_delete(&c->assigned, &a->node);
-	} else { // Create / update action
-		struct iface_addr *a = calloc(1, sizeof(*a) + dhcpv6_len);
-		a->prefix = *p;
-		if (!IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix))
-			memcpy(&a->prefix.prefix.s6_addr[8], &c->eui64_addr.s6_addr[8], 8);
-		a->valid_until = valid_until;
-		a->preferred_until = preferred_until;
-		a->dhcpv6_len = dhcpv6_len;
-		memcpy(a->dhcpv6_data, dhcpv6_data, dhcpv6_len);
-		vlist_add(&c->assigned, &a->node, &a->prefix);
+		if (owner != c->linkowner) {
+			c->linkowner = owner;
+			platform_set_owner(c, owner);
+		}
 	}
 }
 
+/* todo: Te new pa algorithm also selects the chosen address. But this address
+ * is provided asynchronously with the prefix. As a trick for fast integration,
+ * a prefix is installed if and only if the prefix is applied and the address is
+ * applied.
+ * This could cause unnecessary flaps in prefixes configuration. iface.c should manage that
+ * asynchronously as well.
+ */
 
-static void iface_update_link_owner(const char *ifname, bool owner, __unused void *priv)
+static inline void iface_pa_prefix_update(struct pa_cp *cp)
 {
-	struct iface *c = iface_get(ifname);
+	struct iface *c = iface_get(cp->iface->ifname);
 	assert(c != NULL && c->platform != NULL);
+	struct iface_addr *a = calloc(1, sizeof(*a) + cp->dp->dhcp_len);
+	memcpy(&a->prefix.prefix, &cp->laa->aa.address, sizeof(struct in6_addr));
+	a->prefix.plen = cp->prefix.plen;
+	a->valid_until = cp->dp->valid_until;
+	a->preferred_until = cp->dp->preferred_until;
+	a->dhcpv6_len = cp->dp->dhcp_len;
+	memcpy(a->dhcpv6_data, cp->dp->dhcp_data, cp->dp->dhcp_len);
+	vlist_add(&c->assigned, &a->node, &a->prefix);
+}
 
-	if (owner != c->linkowner) {
-		c->linkowner = owner;
-		platform_set_owner(c, owner);
+static inline void iface_pa_prefix_delete(struct pa_cp *cp)
+{
+	struct iface *c = iface_get(cp->iface->ifname);
+	assert(c != NULL && c->platform != NULL);
+	struct iface_addr *a = vlist_find(&c->assigned, &cp->prefix, a, node);
+	if (a)
+		vlist_delete(&c->assigned, &a->node);
+	//todo: why no free of a here ?
+}
+
+void iface_pa_cps(__attribute__((unused))struct pa_data_user *user,
+		struct pa_cp *cp, uint32_t flags)
+{
+	if((flags & (PADF_CP_TODELETE | PADF_CP_DP | PADF_CP_IFACE)) && cp->laa && cp->laa->applied && cp->applied) {
+		/* Changed while applied */
+		if(flags & PADF_CP_TODELETE) {
+			iface_pa_prefix_delete(cp);
+		} else {
+			iface_pa_prefix_update(cp);
+		}
+	} else if((flags & PADF_CP_APPLIED) && cp->laa && cp->laa->applied) {
+		/* Changing apply state */
+		if(cp->applied) {
+			iface_pa_prefix_update(cp);
+		} else {
+			iface_pa_prefix_delete(cp);
+		}
 	}
 }
 
+void iface_pa_aas(__attribute__((unused))struct pa_data_user *user,
+		struct pa_aa *aa, uint32_t flags)
+{
+	if(!aa->local)
+		return;
+
+	struct pa_laa *laa = container_of(aa, struct pa_laa, aa);
+	if(!laa->cp)
+		return;
+
+	if((flags & (PADF_AA_TODELETE)) && laa->cp->applied && laa->applied) {
+		iface_pa_prefix_delete(laa->cp);
+	} else if((flags & PADF_LAA_APPLIED) && laa->cp->applied) {
+		if(laa->cp->applied) {
+			iface_pa_prefix_update(laa->cp);
+		} else {
+			iface_pa_prefix_delete(laa->cp);
+		}
+	}
+}
 
 static void iface_notify_internal_state(struct iface *c, bool enabled)
 {
@@ -145,7 +195,7 @@ static struct uloop_fd rtnl_fd = { .fd = -1 };
 
 #endif /* __linux__ */
 
-int iface_init(pa_t pa)
+int iface_init(struct pa_data *pa_data)
 {
 #ifdef __linux__
 	rtnl_fd.fd = socket(AF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, NETLINK_ROUTE);
@@ -163,7 +213,7 @@ int iface_init(pa_t pa)
 	uloop_fd_add(&rtnl_fd, ULOOP_READ | ULOOP_EDGE_TRIGGER);
 #endif /* __linux__ */
 
-	pa_iface_subscribe(pa, &pa_cb);
+	pa_data_subscribe(pa_data, &pa_data_cb);
 	return platform_init();
 }
 

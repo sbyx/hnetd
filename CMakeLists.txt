@@ -27,10 +27,11 @@ else(${BACKEND} MATCHES "openwrt")
 endif(${BACKEND} MATCHES "openwrt")
 
 # TODO: split platform logic
+set(PA src/pa.c src/pa_data.c src/pa_store.c src/pa_local.c src/pa_core.c)
 set(HNCP_NIO_BASE src/hncp.c src/hncp_notify.c src/hncp_proto.c src/hncp_timeout.c src/prefix_utils.c src/tlv.c)
 set(HNCP_NIO ${HNCP_NIO_BASE} src/hncp_pa.c src/hncp_sd.c)
 set(HNCP ${HNCP_NIO} src/hncp_io.c)
-add_executable(hnetd ${HNCP} src/hncp_routing.c src/hnetd.c src/iface.c src/pa.c src/pa_store.c ${BACKEND_SOURCE})
+add_executable(hnetd ${HNCP} src/hncp_routing.c src/hnetd.c src/iface.c ${PA} src/pa_store.c ${BACKEND_SOURCE})
 target_link_libraries(hnetd ubox blobmsg_json resolv ${BACKEND_LINK})
 
 # Unit test stuff
