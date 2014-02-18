@@ -30,7 +30,7 @@ struct iface_user {
 			const void *dhcpv6_data, size_t dhcpv6_len);
 
 	/* Callback for IPv4 connectivity state */
-	void (*ipv4_update)(struct iface_user *u, bool available,
+	void (*ipv4_update)(struct iface_user *u, char *ifname,
 			const void *dhcp_data, size_t dhcp_len);
 };
 

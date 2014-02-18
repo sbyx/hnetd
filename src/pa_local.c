@@ -106,10 +106,8 @@ static void pa_local_ula_create(struct pa_local *local, struct pa_local_elem *el
 		}
 	}
 
-	if(!p)
-		return;
-
-	elem->ldp = pa_ldp_get(local_p(local, data), p, true);
+	if(p)
+		elem->ldp = pa_ldp_get(local_p(local, data), p, true);
 }
 
 static hnetd_time_t pa_local_generic_update(struct pa_local *local, struct pa_local_elem *elem, hnetd_time_t now)
@@ -202,14 +200,15 @@ static void pa_local_schedule(struct pa_local *local, hnetd_time_t when, hnetd_t
 	if(delay > INT32_MAX)
 		delay = INT32_MAX;
 
-	local->current_timeout = now + delay;
-	uloop_timeout_set(&local->timeout, (int) delay);
-
-
+	if(!local->current_timeout || local->current_timeout > now + delay) {
+		local->current_timeout = now + delay;
+		uloop_timeout_set(&local->timeout, (int) delay);
+	}
 }
 
 static void __pa_local_do(struct pa_local *local)
 {
+	L_INFO("Executing spontaneous prefix generation algorithm");
 	hnetd_time_t now = hnetd_time();
 	local->current_timeout = 0;
 	pa_local_algo(local, &local->ula, now);
@@ -254,7 +253,7 @@ static void __pa_local_dps_cb(struct pa_data_user *user, struct pa_dp *dp, uint3
 {
 	struct pa_local *local = container_of(user, struct pa_local, data_user);
 	if((flags & (PADF_DP_CREATED | PADF_DP_TODELETE)) && (!local->ipv4.ldp || &local->ipv4.ldp->dp != dp) &&
-			(!local->ipv4.ldp || &local->ipv4.ldp->dp == dp)) {
+			(!local->ula.ldp || &local->ula.ldp->dp != dp)) {
 		hnetd_time_t now = hnetd_time();
 		pa_local_schedule(local, now, now);
 	}
@@ -294,11 +293,13 @@ void pa_local_start(struct pa_local *local)
 		return;
 
 	local->start_time = hnetd_time();
-	if(local->current_timeout) {
+	/*if(local->current_timeout) {
 		hnetd_time_t to = local->current_timeout;
 		local->current_timeout = 0;
 		pa_local_schedule(local, to, local->start_time);
-	}
+	}*/
+	local->current_timeout = 0;
+	pa_local_schedule(local, local->start_time, local->start_time);
 
 	pa_data_subscribe(local_p(local, data), &local->data_user);
 }

@@ -10,6 +10,12 @@
 
 #include "pa.h"
 
+static struct prefix PA_CONF_DFLT_V4_PREFIX = {
+		.prefix = { .s6_addr = {
+				0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00,
+				0x00,0x00, 0xff,0xff,  0x0a }},
+		.plen = 104 };
+
 /************************************/
 /********** Main interface **********/
 /************************************/
@@ -39,6 +45,8 @@ void pa_conf_set_defaults(struct pa_conf *conf)
 	conf->use_random_ula = PA_CONF_DFLT_USE_RDM_ULA;
 	conf->random_ula_plen = PA_CONF_DFLT_ULA_RDM_PLEN;
 
+	prefix_cpy(&conf->v4_prefix, &PA_CONF_DFLT_V4_PREFIX);
+
 	conf->local_valid_lifetime = PA_CONF_DFLT_LOCAL_VALID;
 	conf->local_preferred_lifetime = PA_CONF_DFLT_LOCAL_PREFERRED;
 	conf->local_update_delay = PA_CONF_DFLT_LOCAL_UPDATE;
@@ -65,15 +73,16 @@ void pa_init(struct pa *pa, const struct pa_conf *conf)
 
 	pa->started = false;
 
-	/* Init data structures */
-	pa_data_init(&pa->data);
-	pa_core_init(&pa->core);
-	pa_local_init(&pa->local);
-
 	if(conf)
 		memcpy(&pa->conf, conf, sizeof(struct pa_conf));
 	else
 		pa_conf_set_defaults(&pa->conf);
+
+	/* Init data structures */
+	pa_data_init(&pa->data);
+	pa_store_init(&pa->store);
+	pa_core_init(&pa->core);
+	pa_local_init(&pa->local);
 
 	pa->ifu.cb_intiface = __pa_ifu_intiface;
 	pa->ifu.cb_prefix = __pa_ifu_pd;
@@ -83,10 +92,11 @@ void pa_init(struct pa *pa, const struct pa_conf *conf)
 
 void pa_start(struct pa *pa)
 {
-	L_NOTICE("Starting prefix assignment");
-
 	if(!pa->started) {
+		L_NOTICE("Starting prefix assignment");
 		pa->started = true;
+
+		pa_store_start(&pa->store);
 		pa_core_start(&pa->core);
 		pa_local_start(&pa->local);
 		iface_register_user(&pa->ifu);
@@ -95,12 +105,12 @@ void pa_start(struct pa *pa)
 
 void pa_stop(struct pa *pa)
 {
-	L_NOTICE("Stopping prefix assignment");
-
 	if(pa->started) {
+		L_NOTICE("Stopping prefix assignment");
 		iface_unregister_user(&pa->ifu);
 		pa_local_stop(&pa->local);
 		pa_core_stop(&pa->core);
+		pa_store_stop(&pa->store);
 		pa->started = false;
 	}
 }
@@ -112,6 +122,7 @@ void pa_term(struct pa *pa)
 	pa_stop(pa);
 	pa_local_term(&pa->local);
 	pa_core_term(&pa->core);
+	pa_store_term(&pa->store);
 	pa_data_term(&pa->data);
 }
 
@@ -146,16 +157,21 @@ static void __pa_ifu_pd(struct iface_user *u, const char *ifname,
 	if(!(ldp = pa_ldp_get(&pa->data, prefix, valid_until)))
 		return;
 
-	pa_ldp_set_excluded(ldp, excluded);
-	pa_dp_set_lifetime(&ldp->dp, preferred_until, valid_until);
-	pa_dp_set_dhcp(&ldp->dp, dhcp_data, dhcp_len);
+	if(valid_until >= hnetd_time()) {
 
-	if(ifname)
-		iface = pa_iface_get(&pa->data, ifname, true);
-	pa_ldp_set_iface(ldp, iface);
+		pa_ldp_set_excluded(ldp, excluded);
+		pa_dp_set_lifetime(&ldp->dp, preferred_until, valid_until);
+		pa_dp_set_dhcp(&ldp->dp, dhcp_data, dhcp_len);
 
-	if(iface)
-		pa_iface_notify(&pa->data, ldp);
+		if(ifname)
+			iface = pa_iface_get(&pa->data, ifname, true);
+		pa_ldp_set_iface(ldp, iface);
+
+		if(iface)
+			pa_iface_notify(&pa->data, iface);
+	} else {
+		pa_dp_todelete(&ldp->dp);
+	}
 
 	pa_dp_notify(&pa->data, &ldp->dp);
 }
