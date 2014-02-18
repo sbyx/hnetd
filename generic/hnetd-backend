@@ -58,8 +58,8 @@ setdhcpv6)
 	[ -z "$DNS" ] && exit 0
 	uci batch <<-EOF
 	set dhcp.$2=dhcp
-	set dhcp.$2.dns=$DNS
-	set dhcp.$2.domain=$SEARCH
+	set dhcp.$2.dns="$DNS"
+	set dhcp.$2.domain="$SEARCH"
 	commit dhcp
 EOF
 	killall -SIGHUP odhcpd
