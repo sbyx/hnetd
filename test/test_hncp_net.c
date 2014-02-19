@@ -48,6 +48,11 @@ int pa_update_edp(net_node node, const struct prefix *prefix,
   return 0;
 }
 
+int pa_update_eaa(net_node node, const struct in6_addr *addr,
+					const struct pa_rid *rid,
+					const char *ifname, bool to_delete)
+{return 0;}
+
 /**************************************************************** Test cases */
 
 struct prefix p1 = {

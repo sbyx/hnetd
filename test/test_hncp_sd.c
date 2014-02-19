@@ -52,6 +52,11 @@ int pa_update_edp(net_node node, const struct prefix *prefix,
                   const void *dhcpv6_data, size_t dhcpv6_len)
 { return 0; }
 
+int pa_update_eaa(net_node node, const struct in6_addr *addr,
+					const struct pa_rid *rid,
+					const char *ifname, bool to_delete)
+{return 0;}
+
 /*
  * This is minimalist piece of test code that just exercises the
  * hncp_sd module _and_ makes sure appropriate calls are called (And

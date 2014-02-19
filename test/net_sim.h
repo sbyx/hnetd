@@ -97,6 +97,10 @@ int pa_update_eap(net_node node, const struct prefix *prefix,
                   const struct pa_rid *rid,
                   const char *ifname, bool to_delete);
 
+int pa_update_eaa(net_node node, const struct in6_addr *addr,
+					const struct pa_rid *rid,
+					const char *ifname, bool to_delete);
+
 int pa_update_edp(net_node node, const struct prefix *prefix,
                   const struct pa_rid *rid,
                   hnetd_time_t valid_until, hnetd_time_t preferred_until,
@@ -119,6 +123,16 @@ void net_sim_pa_aps(struct pa_data_user *user, struct pa_ap *ap, uint32_t flags)
 	if(flags) {
 		pa_update_eap(container_of(user, net_node_s, pa_data_user),
 				&ap->prefix, &ap->rid, ap->iface?ap->iface->ifname:NULL, todelete);
+	}
+}
+
+void net_sim_pa_aas(struct pa_data_user *user, struct pa_aa *aa, uint32_t flags)
+{
+	bool todelete = !!(flags & PADF_DP_TODELETE);
+	if(flags && !aa->local) {
+		struct pa_eaa *eaa = container_of(aa, struct pa_eaa, aa);
+		pa_update_eaa(container_of(user, net_node_s, pa_data_user), &aa->address,
+				&eaa->rid, eaa->iface?eaa->iface->ifname:NULL, todelete);
 	}
 }
 
@@ -210,6 +224,7 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
   memset(&n->pa_data_user, 0, sizeof(struct pa_data_user));
   n->pa_data_user.dps = net_sim_pa_dps;
   n->pa_data_user.aps = net_sim_pa_aps;
+  n->pa_data_user.aas = net_sim_pa_aas;
   pa_data_init(&n->pa_data, NULL);
   pa_data_subscribe(&n->pa_data, &n->pa_data_user);
   /* Glue it to pa */
@@ -629,6 +644,34 @@ void pa_update_lap(struct pa_data *data, const struct prefix *prefix, const char
 		pa_cp_todelete(cp);
 	}
 	pa_cp_notify(cp);
+}
+
+/* An laa can only be set for a valid chosen prefix */
+void pa_update_laa(struct pa_data *data, const struct prefix *cp_prefix,
+		const struct in6_addr *addr, const char *ifname,
+		int to_delete)
+{
+	struct pa_cp *cp = pa_cp_get(data, cp_prefix, !to_delete);
+	struct pa_iface *iface = NULL;
+	struct pa_laa *laa = NULL;
+	if(!cp)
+		return;
+
+
+	if(to_delete) {
+		if(cp->laa)
+			pa_aa_todelete(&cp->laa->aa);
+	} else {
+		iface = ifname?pa_iface_get(data, ifname, true):NULL;
+		pa_cp_set_iface(cp, iface);
+		laa = pa_laa_create(addr, cp);
+	}
+
+	pa_cp_notify(cp);
+	if(laa)
+		pa_aa_notify(data, &cp->laa->aa);
+	if(iface)
+		pa_iface_notify(data, iface);
 }
 
 

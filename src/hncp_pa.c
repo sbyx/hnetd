@@ -178,11 +178,32 @@ static void _update_a_tlv(hncp_glue g, hncp_node n,
 	  pa_ap_todelete(ap);
   } else {
 	  pa_ap_set_iface(ap, iface);
-	  //todo: set authoritative and priority
+	  //todo idli
+	  /* set authoritative and priority
+	   * pa_ap_set_priority() pa_ap_set_authoritative() */
   }
 
   pa_ap_notify(g->pa_data, ap);
   return;
+}
+
+static void _update_pa_eaa(struct pa_data *data, const struct in6_addr *addr,
+		const struct pa_rid *rid,
+		const char *ifname, bool to_delete)
+{
+	//todo idli
+	/* This is a function to update external address assignments */
+	struct pa_eaa *eaa = pa_eaa_get(data, addr, rid, !to_delete);
+	if(!eaa)
+		return;
+
+	if(to_delete) {
+		pa_aa_todelete(&eaa->aa);
+	} else {
+		struct pa_iface *iface = ifname?pa_iface_get(data, ifname, true):NULL;
+		pa_eaa_set_iface(eaa, iface);
+	}
+	pa_aa_notify(data, &eaa->aa);
 }
 
 hnetd_time_t _remote_rel_to_local_abs(hnetd_time_t base, uint32_t netvalue)
@@ -565,6 +586,20 @@ static void hncp_pa_dps(struct pa_data_user *user, struct pa_dp *dp, uint32_t fl
 	}
 }
 
+static void hncp_pa_aas(struct pa_data_user *user, struct pa_aa *aa, uint32_t flags)
+{
+	hncp_glue g = container_of(user, struct hncp_glue_struct, data_user);
+	if(aa->local && (flags & (PADF_AA_TODELETE | PADF_AA_CREATED))) {
+		struct pa_laa *laa = container_of(aa, struct pa_laa, aa);
+		if(!laa->cp || !laa->cp->iface)
+			return;
+		//todo for idli
+		/* Go here when a local address advertisement is created or deleted.
+		 * If created (flags & PADF_AA_CREATED), aa->address must be advertised on 'laa->cp->iface->ifname' interface.
+		 * If about to be deleted (flags & PADF_AA_TODELETE), aa->address must not be advertised anymore on 'laa->cp->iface->ifname' */
+	}
+}
+
 hncp_glue hncp_pa_glue_create(hncp o, struct pa_data *pa_data)
 {
   struct pa_rid *rid = (struct pa_rid *)&o->own_node->node_identifier_hash;
@@ -581,6 +616,7 @@ hncp_glue hncp_pa_glue_create(hncp o, struct pa_data *pa_data)
   memset(&g->data_user, 0, sizeof(g->data_user));
   g->data_user.cps = hncp_pa_cps;
   g->data_user.dps = hncp_pa_dps;
+  g->data_user.aas = hncp_pa_aas;
 
   /* Set the rid */
   pa_flood_set_rid(pa_data, rid);
