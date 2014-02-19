@@ -61,7 +61,7 @@ static void test_pa_file_reset() {
 }
 
 static void test_pa_store_init() {
-	pa_data_init(&pa.data);
+	pa_data_init(&pa.data, NULL);
 	pa_store_init(store);
 	pa_store_start(store);
 
@@ -85,11 +85,11 @@ static void test_pa_store_term() {
 static void test_pa_store_sps() {
 	struct pa_cp *cp1_20, *cp2_20, *cp1_21, *cp1, *cp2;
 	struct pa_sp *sp;
-	pa.conf.max_sp = 3;
-	pa.conf.max_sp_per_if = 2;
 
 	test_pa_file_reset();
 	test_pa_store_init();
+	pa.data.conf.max_sp = 3;
+	pa.data.conf.max_sp_per_if = 2;
 	pa_store_setfile(store, TEST_PAS_FILE);
 
 	cp1_20 = pa_cp_get(&pa.data, &p1_20, true);
@@ -123,7 +123,7 @@ static void test_pa_store_sps() {
 			sput_fail_unless(sp->iface == if1, "Correct iface");
 		}
 	}
-	sput_fail_unless(pa.data.sp_count == 2, "sp_count equals 1");
+	sput_fail_unless(pa.data.sp_count == 2, "sp_count equals 2");
 	sput_fail_unless(if1->sp_count == 2, "One sp for if1");
 	sput_fail_unless(if2->sp_count == 0, "Zero sp for if2");
 
@@ -143,18 +143,18 @@ static void test_pa_store_sps() {
 			sput_fail_unless(sp->iface == if1, "Correct iface");
 		}
 	}
-	sput_fail_unless(pa.data.sp_count == 2, "sp_count equals 1");
-	sput_fail_unless(if1->sp_count == 2, "One sp for if1");
-	sput_fail_unless(if2->sp_count == 0, "Zero sp for if2");
+	sput_fail_unless(pa.data.sp_count == 2, "sp_count equals 2");
+	sput_fail_unless(if1->sp_count == 2, "2 sp for if1");
+	sput_fail_unless(if2->sp_count == 0, "0 sp for if2");
 
 	cp1 = pa_cp_get(&pa.data, &p1, true);
 	pa_cp_set_iface(cp1, if2);
 	pa_cp_set_applied(cp1, true);
 	pa_cp_notify(cp1);
 
-	sput_fail_unless(pa.data.sp_count == 3, "sp_count equals 1");
-	sput_fail_unless(if1->sp_count == 2, "One sp for if1");
-	sput_fail_unless(if2->sp_count == 1, "Zero sp for if2");
+	sput_fail_unless(pa.data.sp_count == 3, "sp_count equals 3");
+	sput_fail_unless(if1->sp_count == 2, "Two sp for if1");
+	sput_fail_unless(if2->sp_count == 1, "1 sp for if2");
 
 	cp2 = pa_cp_get(&pa.data, &p2, true);
 	pa_cp_set_iface(cp2, if2);
@@ -175,9 +175,9 @@ static void test_pa_store_sps() {
 	}
 	pa_for_each_sp_in_iface(sp, if1)
 		sput_fail_unless(!prefix_cmp(&sp->prefix, &p1_21), "Correct prefix");
-	sput_fail_unless(pa.data.sp_count == 3, "sp_count equals 1");
+	sput_fail_unless(pa.data.sp_count == 3, "sp_count equals 3");
 	sput_fail_unless(if1->sp_count == 1, "One sp for if1");
-	sput_fail_unless(if2->sp_count == 2, "Zero sp for if2");
+	sput_fail_unless(if2->sp_count == 2, "Two sp for if2");
 
 	test_pa_store_term();
 
