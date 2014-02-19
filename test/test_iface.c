@@ -9,7 +9,7 @@
 #include "prefix_utils.c"
 #include "iface.c"
 
-void pa_iface_subscribe(__unused pa_t pa, __unused const struct pa_iface_callbacks *cb) {}
+void pa_data_subscribe(__unused struct pa_data *data, __unused struct pa_data_user *user) {}
 void platform_set_owner(__unused struct iface *c, __unused bool enable) {}
 int platform_init(void) { return 0; }
 void platform_set_address(__unused struct iface *c, __unused struct iface_addr *addr, __unused bool enable) {}
