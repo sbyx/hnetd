@@ -10,8 +10,6 @@
 #define L_PREFIX "pa_data - "
 
 #include "pa_data.h"
-#include "pa_core.h"
-#include "pa.h"
 
 #include <stdio.h>
 
@@ -262,7 +260,7 @@ struct pa_ap *pa_ap_get(struct pa_data *data, const struct prefix *p,
 
 	PA_P_ALLOC(ap);
 	ap->authoritative = false;
-	ap->priority = PA_PRIORITY_DEFAULT;
+	ap->priority = PAD_PRIORITY_DEFAULT;
 	ap->iface = NULL;
 	prefix_cpy(&ap->prefix, p);
 	PA_RIDCPY(&ap->rid, rid);
@@ -374,7 +372,7 @@ struct pa_cp *pa_cp_get(struct pa_data *data, const struct prefix *prefix, bool 
 	cp->advertised = false;
 	cp->applied = false;
 	cp->authoritative = false;
-	cp->priority = PA_PRIORITY_DEFAULT;
+	cp->priority = PAD_PRIORITY_DEFAULT;
 	cp->iface = NULL;
 	cp->invalid = false;
 	list_add(&cp->le, &data->cps);
@@ -509,8 +507,7 @@ struct pa_sp *pa_sp_get(struct pa_data *data, struct pa_iface *iface, const stru
 	if((sp = __pa_sp_get(iface, p)) || !goc)
 		return sp;
 
-	struct pa_conf *conf = &container_of(data, struct pa, data)->conf;
-	if(!conf->max_sp || !conf->max_sp_per_if)
+	if(!data->conf.max_sp || !data->conf.max_sp_per_if)
 		return NULL;
 
 	PA_P_ALLOC(sp);
@@ -524,10 +521,10 @@ struct pa_sp *pa_sp_get(struct pa_data *data, struct pa_iface *iface, const stru
 
 	/* remove last if too many sps */
 	struct pa_sp *last;
-	if(conf->max_sp_per_if < iface->sp_count) {
+	if(data->conf.max_sp_per_if < iface->sp_count) {
 		last = list_last_entry(&iface->sps, struct pa_sp, if_le);
 		pa_sp_destroy(data, last);
-	} else if (conf->max_sp < data->sp_count) {
+	} else if (data->conf.max_sp < data->sp_count) {
 		last = list_last_entry(&data->sps, struct pa_sp, le);
 		pa_sp_destroy(data, last);
 	}
@@ -683,9 +680,20 @@ void pa_data_unsubscribe(struct pa_data_user *user)
 	list_remove(&user->le);
 }
 
-void pa_data_init(struct pa_data *data)
+void pa_data_conf_defaults(struct pa_data_conf *conf)
+{
+	conf->max_sp = PAD_CONF_DFLT_MAX_SP;
+	conf->max_sp_per_if = PAD_CONF_DFLT_MAX_SP_P_IF;
+}
+
+void pa_data_init(struct pa_data *data, const struct pa_data_conf *conf)
 {
 	L_NOTICE("Initializing data structure.");
+
+	if(conf)
+		memcpy(&data->conf, conf, sizeof(struct pa_data_conf));
+	else
+		pa_data_conf_defaults(&data->conf);
 
 	avl_init(&data->aps, pa_data_avl_prefix_cmp, true, NULL);
 	INIT_LIST_HEAD(&data->ifs);
@@ -695,8 +703,8 @@ void pa_data_init(struct pa_data *data)
 	INIT_LIST_HEAD(&data->sps);
 	INIT_LIST_HEAD(&data->users);
 
-	data->flood.flooding_delay = PA_FLOOD_DELAY_DEFAULT;
-	data->flood.flooding_delay_ll = PA_FLOOD_DELAY_LL_DEFAULT;
+	data->flood.flooding_delay = PAD_FLOOD_DELAY_DEFAULT;
+	data->flood.flooding_delay_ll = PAD_FLOOD_DELAY_LL_DEFAULT;
 	memset(&data->flood.rid, 0, sizeof(struct pa_rid));
 	data->flood.__flags = 0;
 

@@ -12,10 +12,9 @@
 #include "sput.h"
 #include "smock.h"
 #include "pa_data.h"
-#include "pa.h"
 
-static struct pa pa;
-#define data (&pa.data)
+static struct pa_data _data;
+#define data (&_data)
 
 static struct prefix p1 = {
 		.prefix = { .s6_addr = {
@@ -407,20 +406,20 @@ void pa_data_test_ap()
 
 	pa_ap_notify(data, ap);
 	padt_check_cb(PADT_CB_APS, PADF_AP_CREATED | PADF_AP_IFACE);
-	padt_check_ap(ap, &p1, &rid1, 0, PA_PRIORITY_DEFAULT, iface);
+	padt_check_ap(ap, &p1, &rid1, 0, PAD_PRIORITY_DEFAULT, iface);
 
 	pa_ap_notify(data, ap2);
 	padt_check_cb(PADT_CB_APS, PADF_AP_CREATED);
-	padt_check_ap(ap2, &p1, &rid2, 0,  PA_PRIORITY_DEFAULT, NULL);
+	padt_check_ap(ap2, &p1, &rid2, 0,  PAD_PRIORITY_DEFAULT, NULL);
 
 	pa_ap_set_authoritative(ap, false);
-	pa_ap_set_priority(ap, PA_PRIORITY_DEFAULT);
+	pa_ap_set_priority(ap, PAD_PRIORITY_DEFAULT);
 	pa_ap_notify(data, ap);
 
 	pa_ap_set_authoritative(ap, true);
 	pa_ap_notify(data, ap);
 	padt_check_cb(PADT_CB_APS, PADF_AP_AUTHORITY);
-	padt_check_ap(ap, &p1, &rid1, true, PA_PRIORITY_DEFAULT, iface);
+	padt_check_ap(ap, &p1, &rid1, true, PAD_PRIORITY_DEFAULT, iface);
 
 	pa_ap_set_priority(ap, 1);
 	pa_ap_notify(data, ap);
@@ -487,7 +486,7 @@ void pa_data_test_cp()
 	padt_check_cb(PADT_CB_CPS, PADF_CP_CREATED);
 	pa_cp_notify(cp2);
 	padt_check_cb(PADT_CB_CPS, PADF_CP_CREATED);
-	padt_check_cp(cp, &p1, false, false, false, PA_PRIORITY_DEFAULT, NULL, NULL, data, NULL);
+	padt_check_cp(cp, &p1, false, false, false, PAD_PRIORITY_DEFAULT, NULL, NULL, data, NULL);
 
 	pa_cp_set_advertised(cp, true);
 	pa_cp_set_iface(cp, iface);
@@ -515,8 +514,8 @@ void pa_data_test_cp()
 	pa_for_each_cp_in_dp(cp_i, &ldp->dp)
 		sput_fail_unless(cp_i == cp2, "Cp in dp");
 
-	padt_check_cp(cp, &p1, true, false, false, PA_PRIORITY_DEFAULT, iface, NULL, data, NULL);
-	padt_check_cp(cp2, &p1_1, false, false, false, PA_PRIORITY_DEFAULT, NULL, &ldp->dp, data, NULL);
+	padt_check_cp(cp, &p1, true, false, false, PAD_PRIORITY_DEFAULT, iface, NULL, data, NULL);
+	padt_check_cp(cp2, &p1_1, false, false, false, PAD_PRIORITY_DEFAULT, NULL, &ldp->dp, data, NULL);
 
 	pa_dp_todelete(&ldp->dp);
 	pa_dp_notify(data, &ldp->dp);
@@ -645,26 +644,27 @@ void pa_data_test_flood()
 
 int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 {
-  openlog("test_pa_data", LOG_CONS | LOG_PERROR, LOG_DAEMON);
-  sput_start_testing();
-  sput_enter_suite("test_pa_data");
-  pa.conf.max_sp = 2;
-  pa.conf.max_sp_per_if = 1;
-  pa_data_init(data);
-  pa_data_subscribe(data, &data_user);
-  sput_run_test(pa_data_test_iface);
-  sput_run_test(pa_data_test_dp);
-  sput_run_test(pa_data_test_ap);
-  sput_run_test(pa_data_test_cp);
-  sput_run_test(pa_data_test_aa);
-  sput_run_test(pa_data_test_sp);
-  sput_run_test(pa_data_test_ipv4);
-  sput_run_test(pa_data_test_flood);
-  pa_data_unsubscribe(&data_user);
-  pa_data_term(data);
-  sput_leave_suite();
-  sput_finish_testing();
-  return sput_get_return_value();
+	struct pa_data_conf conf;
+	openlog("test_pa_data", LOG_CONS | LOG_PERROR, LOG_DAEMON);
+	sput_start_testing();
+	sput_enter_suite("test_pa_data");
+	conf.max_sp = 2;
+	conf.max_sp_per_if = 1;
+	pa_data_init(data, &conf);
+	pa_data_subscribe(data, &data_user);
+	sput_run_test(pa_data_test_iface);
+	sput_run_test(pa_data_test_dp);
+	sput_run_test(pa_data_test_ap);
+	sput_run_test(pa_data_test_cp);
+	sput_run_test(pa_data_test_aa);
+	sput_run_test(pa_data_test_sp);
+	sput_run_test(pa_data_test_ipv4);
+	sput_run_test(pa_data_test_flood);
+	pa_data_unsubscribe(&data_user);
+	pa_data_term(data);
+	sput_leave_suite();
+	sput_finish_testing();
+	return sput_get_return_value();
 }
 
 

@@ -10,12 +10,6 @@
 
 #include "pa.h"
 
-static struct prefix PA_CONF_DFLT_V4_PREFIX = {
-		.prefix = { .s6_addr = {
-				0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00,
-				0x00,0x00, 0xff,0xff,  0x0a }},
-		.plen = 104 };
-
 /************************************/
 /********** Main interface **********/
 /************************************/
@@ -24,35 +18,8 @@ void pa_conf_set_defaults(struct pa_conf *conf)
 {
 	L_DEBUG("Setting configuration options to default");
 
-#define PA_CONF_DFLT_USE_ULA             1
-#define PA_CONF_DFLT_NO_ULA_IF_V6        1
-#define PA_CONF_DFLT_USE_V4              1
-#define PA_CONF_DFLT_NO_V4_IF_V6         0
-#define PA_CONF_DFLT_USE_RDM_ULA         1
-#define PA_CONF_DFLT_ULA_RDM_PLEN        48
-
-#define PA_CONF_DFLT_LOCAL_VALID       600 * HNETD_TIME_PER_SECOND
-#define PA_CONF_DFLT_LOCAL_PREFERRED   300 * HNETD_TIME_PER_SECOND
-#define PA_CONF_DFLT_LOCAL_UPDATE      330 * HNETD_TIME_PER_SECOND
-
-#define PA_CONF_DFLT_MAX_SP      100
-#define PA_CONF_DFLT_MAX_SP_P_IF 10
-
-	conf->use_ula = PA_CONF_DFLT_USE_ULA;
-	conf->no_ula_if_glb_ipv6 = PA_CONF_DFLT_NO_ULA_IF_V6;
-	conf->use_ipv4 = PA_CONF_DFLT_USE_V4;
-	conf->no_ipv4_if_glb_ipv6 = PA_CONF_DFLT_NO_V4_IF_V6;
-	conf->use_random_ula = PA_CONF_DFLT_USE_RDM_ULA;
-	conf->random_ula_plen = PA_CONF_DFLT_ULA_RDM_PLEN;
-
-	prefix_cpy(&conf->v4_prefix, &PA_CONF_DFLT_V4_PREFIX);
-
-	conf->local_valid_lifetime = PA_CONF_DFLT_LOCAL_VALID;
-	conf->local_preferred_lifetime = PA_CONF_DFLT_LOCAL_PREFERRED;
-	conf->local_update_delay = PA_CONF_DFLT_LOCAL_UPDATE;
-
-	conf->max_sp = PA_CONF_DFLT_MAX_SP;
-	conf->max_sp_per_if = PA_CONF_DFLT_MAX_SP_P_IF;
+	pa_data_conf_defaults(&conf->data_conf);
+	pa_local_conf_defaults(&conf->local_conf);
 }
 
 static void __pa_ifu_intiface(struct iface_user *u, const char *ifname, bool enabled);
@@ -73,16 +40,11 @@ void pa_init(struct pa *pa, const struct pa_conf *conf)
 
 	pa->started = false;
 
-	if(conf)
-		memcpy(&pa->conf, conf, sizeof(struct pa_conf));
-	else
-		pa_conf_set_defaults(&pa->conf);
-
 	/* Init data structures */
-	pa_data_init(&pa->data);
+	pa_data_init(&pa->data, conf?&conf->data_conf:NULL);
 	pa_store_init(&pa->store);
 	pa_core_init(&pa->core);
-	pa_local_init(&pa->local);
+	pa_local_init(&pa->local, conf?&conf->local_conf:NULL);
 
 	pa->ifu.cb_intiface = __pa_ifu_intiface;
 	pa->ifu.cb_prefix = __pa_ifu_pd;

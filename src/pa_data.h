@@ -34,6 +34,14 @@
 #include "hnetd.h"
 #include "prefix_utils.h"
 
+#define PAD_FLOOD_DELAY_DEFAULT     5000
+#define PAD_FLOOD_DELAY_LL_DEFAULT  1000
+
+#define PAD_CONF_DFLT_MAX_SP      100
+#define PAD_CONF_DFLT_MAX_SP_P_IF 10
+
+#define PAD_PRIORITY_DEFAULT 8
+
 /* Modification flags */
 #define PADF_ALL_CREATED  0x0001
 #define PADF_ALL_TODELETE 0x0002
@@ -254,7 +262,19 @@ struct pa_sp {
 #define PA_SP_LA(sp)    PREFIX_REPR(&(sp)->prefix), PA_IFNAME_LA((sp)->iface)
 };
 
+struct pa_data_conf {
+	/* Maximum number of stored prefixes
+	 * default = 100 */
+	size_t max_sp;
+
+	/* Maximum number of stored prefixes per interface
+	 * default = 10 */
+	size_t max_sp_per_if;
+};
+
 struct pa_data {
+	struct pa_data_conf conf; /* pa_data configuration */
+
 	struct pa_flood  flood; /* Information from flooding */
 	struct pa_ipv4   ipv4;  /* IPv4 global connectivity */
 	struct list_head ifs;   /* Ifaces */
@@ -280,7 +300,8 @@ struct pa_data_user {
 	void (*aas)(struct pa_data_user *, struct pa_aa *, uint32_t flags);
 };
 
-void pa_data_init(struct pa_data *);
+void pa_data_conf_defaults(struct pa_data_conf *);
+void pa_data_init(struct pa_data *, const struct pa_data_conf *);
 void pa_data_term(struct pa_data *);
 
 void pa_flood_set_rid(struct pa_data *, const struct pa_rid *rid);

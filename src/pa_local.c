@@ -10,6 +10,23 @@
 #define PA_LOCAL_CAN_CREATE 0x01
 #define PA_LOCAL_CAN_KEEP	0x02
 
+#define PAL_CONF_DFLT_USE_ULA             1
+#define PAL_CONF_DFLT_NO_ULA_IF_V6        1
+#define PAL_CONF_DFLT_USE_V4              1
+#define PAL_CONF_DFLT_NO_V4_IF_V6         0
+#define PAL_CONF_DFLT_USE_RDM_ULA         1
+#define PAL_CONF_DFLT_ULA_RDM_PLEN        48
+
+#define PAL_CONF_DFLT_LOCAL_VALID       600 * HNETD_TIME_PER_SECOND
+#define PAL_CONF_DFLT_LOCAL_PREFERRED   300 * HNETD_TIME_PER_SECOND
+#define PAL_CONF_DFLT_LOCAL_UPDATE      330 * HNETD_TIME_PER_SECOND
+
+static struct prefix PAL_CONF_DFLT_V4_PREFIX = {
+		.prefix = { .s6_addr = {
+				0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00,
+				0x00,0x00, 0xff,0xff,  0x0a }},
+		.plen = 104 };
+
 static bool __pa_has_globalv6(struct pa_local *local)
 {
 	struct pa_dp *dp;
@@ -83,8 +100,8 @@ static bool pa_local_ula_prefix_filter(const struct prefix *p)
 
 static uint8_t pa_local_ula_get_status(struct pa_local *local, struct pa_local_elem *elem)
 {
-	if(!local_p(local, conf)->use_ula
-			|| (local_p(local, conf)->no_ula_if_glb_ipv6 && __pa_has_globalv6(local)))
+	if(!local->conf.use_ula
+			|| (local->conf.no_ula_if_glb_ipv6 && __pa_has_globalv6(local)))
 		return 0;
 
 	return pa_local_generic_get_status(local, elem, pa_local_ula_prefix_filter);
@@ -98,11 +115,11 @@ static void pa_local_ula_create(struct pa_local *local, struct pa_local_elem *el
 	p = pa_store_ula_get(local_p(local, store));
 
 	if(!p) {
-		if(local_p(local, conf)->use_random_ula) {
-			if(!prefix_random(&ipv6_ula_prefix, &pr, local_p(local, conf)->random_ula_plen))
+		if(local->conf.use_random_ula) {
+			if(!prefix_random(&ipv6_ula_prefix, &pr, local->conf.random_ula_plen))
 				p = &pr;
 		} else {
-			p = &local_p(local, conf)->ula_prefix;
+			p = &local->conf.ula_prefix;
 		}
 	}
 
@@ -116,11 +133,11 @@ static hnetd_time_t pa_local_generic_update(struct pa_local *local, struct pa_lo
 		return 0;
 
 	pa_dp_set_lifetime(&elem->ldp->dp,
-			now + local_p(local, conf)->local_preferred_lifetime,
-			now + local_p(local, conf)->local_valid_lifetime);
+			now + local->conf.local_preferred_lifetime,
+			now + local->conf.local_valid_lifetime);
 	pa_dp_notify(local_p(local, data), &elem->ldp->dp);
 
-	return elem->ldp->dp.valid_until - local_p(local, conf)->local_update_delay;
+	return elem->ldp->dp.valid_until - local->conf.local_update_delay;
 }
 
 static bool pa_local_ipv4_prefix_filter(const struct prefix *p)
@@ -130,9 +147,9 @@ static bool pa_local_ipv4_prefix_filter(const struct prefix *p)
 
 static uint8_t pa_local_ipv4_get_status(struct pa_local *local, struct pa_local_elem *elem)
 {
-	if(!local_p(local, conf)->use_ipv4 ||
+	if(!local->conf.use_ipv4 ||
 			!local_p(local, data.ipv4)->iface ||
-			(local_p(local, conf)->no_ipv4_if_glb_ipv6 && __pa_has_globalv6(local)))
+			(local->conf.no_ipv4_if_glb_ipv6 && __pa_has_globalv6(local)))
 		return 0;
 
 	return pa_local_generic_get_status(local, elem, pa_local_ipv4_prefix_filter);
@@ -140,7 +157,7 @@ static uint8_t pa_local_ipv4_get_status(struct pa_local *local, struct pa_local_
 
 static void pa_local_ipv4_create(struct pa_local *local, struct pa_local_elem *elem)
 {
-	elem->ldp = pa_ldp_get(local_p(local, data), &local_p(local, conf)->v4_prefix, true);
+	elem->ldp = pa_ldp_get(local_p(local, data), &local->conf.v4_prefix, true);
 }
 
 /* Generic function for IPv4 and ULA generation */
@@ -259,8 +276,29 @@ static void __pa_local_dps_cb(struct pa_data_user *user, struct pa_dp *dp, uint3
 	}
 }
 
-void pa_local_init(struct pa_local *local)
+void pa_local_conf_defaults(struct pa_local_conf *conf)
 {
+	conf->use_ula = PAL_CONF_DFLT_USE_ULA;
+	conf->no_ula_if_glb_ipv6 = PAL_CONF_DFLT_NO_ULA_IF_V6;
+	conf->use_ipv4 = PAL_CONF_DFLT_USE_V4;
+	conf->no_ipv4_if_glb_ipv6 = PAL_CONF_DFLT_NO_V4_IF_V6;
+	conf->use_random_ula = PAL_CONF_DFLT_USE_RDM_ULA;
+	conf->random_ula_plen = PAL_CONF_DFLT_ULA_RDM_PLEN;
+
+	prefix_cpy(&conf->v4_prefix, &PAL_CONF_DFLT_V4_PREFIX);
+
+	conf->local_valid_lifetime = PAL_CONF_DFLT_LOCAL_VALID;
+	conf->local_preferred_lifetime = PAL_CONF_DFLT_LOCAL_PREFERRED;
+	conf->local_update_delay = PAL_CONF_DFLT_LOCAL_UPDATE;
+}
+
+void pa_local_init(struct pa_local *local, const struct pa_local_conf *conf)
+{
+	if(conf)
+		memcpy(&local->conf, conf, sizeof(struct pa_data_conf));
+	else
+		pa_local_conf_defaults(&local->conf);
+
 	local->start_time = 0;
 	local->current_timeout = 0;
 	local->timeout.pending = false;

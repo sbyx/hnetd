@@ -24,9 +24,6 @@
 
 #include "iface.h"
 
-#define PA_FLOOD_DELAY_DEFAULT     5000
-#define PA_FLOOD_DELAY_LL_DEFAULT  1000
-
 #define PA_PRIORITY_MIN              0
 #define PA_PRIORITY_AUTHORITY_MIN    4
 #define PA_PRIORITY_AUTO_MIN         6
@@ -36,59 +33,8 @@
 #define PA_PRIORITY_MAX              15
 
 struct pa_conf {
-	/* Enables ULA use
-	 * default = 1 */
-	char use_ula;
-
-	/* Disable ULA when an ipv6 prefix is available
-	 * default = 1 */
-	char no_ula_if_glb_ipv6;
-
-	/* Generates a random ula, and store it in stable storage.
-	 * default = 1 */
-	char use_random_ula;
-
-	/* Sets the prefix length of randomly generated ula prefixes.
-	 * default = 48 */
-	char random_ula_plen;
-
-	/* If not random, use that ULA prefix (must be ULA)
-	 * default = undef */
-	struct prefix ula_prefix;
-
-	/* Enable IPv4 use
-	 * default = 1 */
-	char use_ipv4;
-
-	/* Disable IPv4 when there is global ipv6 available
-	 * default = 0 */
-	char no_ipv4_if_glb_ipv6;
-
-	/* When needed, use that v4 prefix
-	 * default = ::ffff:10.0.0.0/104 */
-	struct prefix v4_prefix;
-
-	/* Valid lifetime for local prefixes (ula + ipv4)
-	 * default = 600 * HNETD_TIME_PER_SECOND */
-	uint32_t local_valid_lifetime;
-
-	/* Preferred lifetime for local prefixes
-	 * default = 300 * HNETD_TIME_PER_SECOND */
-	uint32_t local_preferred_lifetime;
-
-	/* A local prefix lifetime is update when
-	 * prefix.valid - local_update_delay <= now
-	 * This should be more than valid_lifetime - preferred_lifetime.
-	 * default = 330 * HNETD_TIME_PER_SECOND */
-	uint32_t local_update_delay;
-
-	/* Maximum number of stored prefixes
-	 * default = 100 */
-	size_t max_sp;
-
-	/* Maximum number of stored prefixes per interface
-	 * default = 10 */
-	size_t max_sp_per_if;
+	struct pa_data_conf data_conf;
+	struct pa_local_conf local_conf;
 };
 
 struct pa {

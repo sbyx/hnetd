@@ -214,8 +214,8 @@ void test_pa_initial()
 	mask_random = true;
 
 	pa_init(&pa, NULL);
-	pa.conf.use_ipv4 = false;
-	pa.conf.use_ula = false;
+	pa.local.conf.use_ipv4 = false;
+	pa.local.conf.use_ula = false;
 	sput_fail_unless(iface.user == NULL, "No iface registered");
 
 	/* Setting flood info */
@@ -320,8 +320,8 @@ void test_pa_ipv4()
 	mask_random = true;
 
 	pa_init(&pa, NULL);
-	pa.conf.use_ipv4 = true;
-	pa.conf.use_ula = false;
+	pa.local.conf.use_ipv4 = true;
+	pa.local.conf.use_ula = false;
 
 	pa_flood_set_flooddelays(&pa.data, PA_TEST_FLOOD, PA_TEST_FLOOD_LL);
 	pa_flood_set_rid(&pa.data, &rid);
@@ -343,7 +343,7 @@ void test_pa_ipv4()
 
 	ldp = pa.local.ipv4.ldp;
 	sput_fail_unless(ldp, "Generated ipv4 prefix");
-	sput_fail_unless(!prefix_cmp(&ldp->dp.prefix, &pa.conf.v4_prefix), "Correct v4 prefix");
+	sput_fail_unless(!prefix_cmp(&ldp->dp.prefix, &pa.local.conf.v4_prefix), "Correct v4 prefix");
 
 	test_pa_random_push_prefix(&pv4_1);
 	test_pa_call_paa();
