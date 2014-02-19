@@ -17,8 +17,9 @@
 #include "hncp_i.h"
 #include "hncp_pa.h"
 #include "hncp_sd.h"
-#include "pa.h"
 #include "sput.h"
+
+#include "pa_data.c"
 
 /* Lots of stubs here, rather not put __unused all over the place. */
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -28,10 +29,6 @@
  * laziness. Moved from test_hncp_net (as test_hncp_pa needs similar
  * code but it has to be separate test binary due to different
  * interests in stubbed interfaces) */
-
-struct pa {
-  struct pa_flood_callbacks cbs;
-};
 
 #ifndef MAXIMUM_PROPAGATION_DELAY
 #define MAXIMUM_PROPAGATION_DELAY 100
@@ -65,7 +62,7 @@ typedef struct {
   struct net_sim_t *s;
   char *name;
   hncp_s n;
-  struct pa pa;
+  struct pa_data pa_data;
 #ifndef DISABLE_HNCP_PA
   hncp_glue g;
 #endif /* !DISABLE_HNCP_PA */
@@ -180,8 +177,9 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
     return NULL;
   list_add(&n->h, &s->nodes);
 #ifndef DISABLE_HNCP_PA
+  pa_data_init(&n->pa_data, NULL);
   /* Glue it to pa */
-  if (!(n->g = hncp_pa_glue_create(&n->n, &n->pa)))
+  if (!(n->g = hncp_pa_glue_create(&n->n, &n->pa_data)))
     return NULL;
 #endif /* !DISABLE_HNCP_PA */
   /* Add SD support */
@@ -583,22 +581,49 @@ hnetd_time_t hncp_io_time(hncp o)
 
 /**************************************** (Partially mocked) interface - pa  */
 
-void pa_flood_subscribe(pa_t pa, const struct pa_flood_callbacks *cbs)
+void pa_update_lap(struct pa_data *data, const struct prefix *prefix, const char *ifname,
+		int to_delete)
 {
-  pa->cbs = *cbs;
-  sput_fail_unless(pa->cbs.priv, "priv set");
+	struct pa_cp *cp = pa_cp_get(data, prefix, !to_delete);
+	if(!cp)
+		return;
+	if(!to_delete) {
+		struct pa_iface *iface = ifname?pa_iface_get(data, ifname, true):NULL;
+		pa_cp_set_iface(cp, iface);
+	} else {
+		pa_cp_todelete(cp);
+	}
+	pa_cp_notify(cp);
 }
 
-void pa_set_rid(pa_t pa, const struct pa_rid *rid)
+
+void pa_update_ldp(struct pa_data *data, const struct prefix *prefix,
+		const char *ifname,
+		hnetd_time_t valid_until, hnetd_time_t preferred_until,
+		const void *dhcp_data, size_t dhcp_len)
 {
-  net_node node = container_of(pa, net_node_s, pa);
-  hncp o = &node->n;
+	struct pa_ldp *ldp;
+	struct pa_iface *iface = NULL;
 
-  sput_fail_unless(memcmp(rid,
-                          &o->own_node->node_identifier_hash,
-                          HNCP_HASH_LEN) == 0,
-                   "rid same");
+	if(!(ldp = pa_ldp_get(data, prefix, !!valid_until)))
+		return;
 
+	if(valid_until) {
+
+		pa_dp_set_lifetime(&ldp->dp, preferred_until, valid_until);
+		pa_dp_set_dhcp(&ldp->dp, dhcp_data, dhcp_len);
+
+		if(ifname)
+			iface = pa_iface_get(data, ifname, true);
+		pa_ldp_set_iface(ldp, iface);
+
+		if(iface)
+			pa_iface_notify(data, iface);
+	} else {
+		pa_dp_todelete(&ldp->dp);
+	}
+
+	pa_dp_notify(data, &ldp->dp);
 }
 
 /********************************************************************* iface */

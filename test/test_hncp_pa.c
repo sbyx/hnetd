@@ -37,6 +37,7 @@
 */
 
 /* 1 is always built-in. */
+#define L_LEVEL7
 #define MAXIMUM_PROPAGATION_DELAY 0
 
 #include "net_sim.h"
@@ -90,7 +91,7 @@ void _zap_rp(void *e)
   list_del(&rp->lh);
   free(e);
 }
-
+/*
 int pa_update_eap(pa_t pa, const struct prefix *prefix,
                   const struct pa_rid *rid,
                   const char *ifname, bool to_delete)
@@ -176,7 +177,7 @@ int pa_update_edp(pa_t pa, const struct prefix *prefix,
     }
   e->updated = node->s->now;
   return 0;
-}
+}*/
 
 struct prefix p1 = {
   .prefix = { .s6_addr = {
@@ -244,27 +245,27 @@ void hncp_pa_two(void)
   /* First, fake delegated prefixes */
   hnetd_time_t p1_valid = s.start;
   hnetd_time_t p1_preferred = s.start + 4200;
-  node1->pa.cbs.updated_ldp(&p1, NULL,
+  pa_update_ldp(&node1->pa_data, &p1,
                             "eth0", p1_valid, p1_preferred,
-                            NULL, 0, node1->g);
+                            NULL, 0);
 
   hnetd_time_t p2_valid = s.start + 12345;
   hnetd_time_t p2_preferred = s.start;
-  node1->pa.cbs.updated_ldp(&p2, NULL,
+  pa_update_ldp(&node1->pa_data, &p2,
                             NULL, p2_valid, p2_preferred,
-                            "foo", 4, node1->g);
+                            "foo", 4);
 
   hnetd_time_t p3_valid = s.start + 123456;
   hnetd_time_t p3_preferred = s.start + 1200;
-  node1->pa.cbs.updated_ldp(&p3, NULL,
+  pa_update_ldp(&node1->pa_data, &p3,
                             NULL, p3_valid, p3_preferred,
-                            "bar", 4, node1->g);
+                            "bar", 4);
 
   hnetd_time_t p4_valid = HNETD_TIME_MAX;
   hnetd_time_t p4_preferred = HNETD_TIME_MAX;
-  node1->pa.cbs.updated_ldp(&p4, NULL,
+  pa_update_ldp(&node1->pa_data, &p4,
                             NULL, p4_valid, p4_preferred,
-                            "baz", 4, node1->g);
+                            "baz", 4);
 
   SIM_WHILE(&s, 1000, node2->updated_edp != 4);
   node2->updated_edp = 0;
@@ -376,13 +377,13 @@ void hncp_pa_two(void)
   sput_fail_unless(ed->rp.lh.next == &edps, "edps had 4");
 
   /* Make sure delete works too */
-  node1->pa.cbs.updated_ldp(&p2, NULL,
+  pa_update_ldp(&node1->pa_data, &p2,
                             NULL, 0, 0,
-                            NULL, 0, node1->g);
+                            NULL, 0);
 
-  node1->pa.cbs.updated_ldp(&p4, NULL,
+  pa_update_ldp(&node1->pa_data, &p4,
                             NULL, 0, 0,
-                            NULL, 0, node1->g);
+                            NULL, 0);
 
   L_DEBUG("waiting for delete effects");
   /* should get 2 updates + 2 deletes */
@@ -401,8 +402,8 @@ void hncp_pa_two(void)
   /* Then fake prefix assignment */
   p1.plen = 64;
   p2.plen = 64;
-  node1->pa.cbs.updated_lap(&p1, NULL, false, node1->g);
-  node1->pa.cbs.updated_lap(&p2, "eth0", false, node1->g);
+  pa_update_lap(&node1->pa_data, &p1, NULL, false);
+  pa_update_lap(&node1->pa_data, &p2, "eth0", false);
   SIM_WHILE(&s, 1000,
             node2->updated_eap != 2);
 

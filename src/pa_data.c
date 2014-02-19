@@ -114,8 +114,9 @@ void pa_dp_init(struct pa_data *data, struct pa_dp *dp, const struct prefix *p)
 
 void pa_dp_set_dhcp(struct pa_dp *dp, const void *dhcp_data, size_t dhcp_len)
 {
-	if(__pa_set_dhcp(&dp->dhcp_data, &dp->dhcp_len, dhcp_data, dhcp_len, &dp->__flags))
+	if(__pa_set_dhcp(&dp->dhcp_data, &dp->dhcp_len, dhcp_data, dhcp_len, &dp->__flags)) {
 		L_DEBUG("Changing "PA_DP_L" dhcp (length %lu)", PA_DP_LA(dp), dhcp_len);
+	}
 }
 
 void pa_dp_set_lifetime(struct pa_dp *dp, hnetd_time_t preferred, hnetd_time_t valid)

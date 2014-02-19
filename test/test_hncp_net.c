@@ -26,7 +26,7 @@
 #include "sput.h"
 
 /********************************************************* Mocked interfaces */
-
+/*
 int pa_update_eap(pa_t pa, const struct prefix *prefix,
                   const struct pa_rid *rid,
                   const char *ifname, bool to_delete)
@@ -53,7 +53,7 @@ int pa_update_edp(pa_t pa, const struct prefix *prefix,
   node->updated_edp++;
   return 0;
 }
-
+*/
 /**************************************************************** Test cases */
 
 struct prefix p1 = {
@@ -97,12 +97,8 @@ void hncp_two(void)
   node2 = container_of(n2, net_node_s, n);
 
   /* First, fake delegated prefixes */
-  node1->pa.cbs.updated_ldp(&p1, NULL,
-                            "eth0", s.now + 123, s.now + 1,
-                            NULL, 0, node1->g);
-  node1->pa.cbs.updated_ldp(&p2, NULL,
-                            NULL, s.now + 123, s.now + 1,
-                            NULL, 0, node1->g);
+  pa_update_ldp(&node1->pa_data, &p1, "eth0", s.now + 123, s.now + 1, NULL, 0);
+  pa_update_ldp(&node1->pa_data, &p2, NULL, s.now + 123, s.now + 1, NULL, 0);
 
   SIM_WHILE(&s, 1000,
             node2->updated_edp != 2);
@@ -110,8 +106,8 @@ void hncp_two(void)
   /* Then fake prefix assignment */
   p1.plen = 64;
   p2.plen = 64;
-  node1->pa.cbs.updated_lap(&p1, "eth0", false, node1->g);
-  node1->pa.cbs.updated_lap(&p2, NULL, false, node1->g);
+  pa_update_lap(&node1->pa_data, &p1, "eth0", false);
+  pa_update_lap(&node1->pa_data, &p2, NULL, false);
   SIM_WHILE(&s, 1000,
             node2->updated_eap != 2);
 
