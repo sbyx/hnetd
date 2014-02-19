@@ -37,7 +37,6 @@
 */
 
 /* 1 is always built-in. */
-#define L_LEVEL7
 #define MAXIMUM_PROPAGATION_DELAY 0
 
 #include "net_sim.h"
@@ -66,6 +65,7 @@ typedef struct {
 
 struct list_head eaps;
 struct list_head edps;
+struct pa_data_user data_user;
 
 void *_find_rp(const struct prefix *prefix, struct list_head *lh,
                size_t create_size)
@@ -91,12 +91,11 @@ void _zap_rp(void *e)
   list_del(&rp->lh);
   free(e);
 }
-/*
-int pa_update_eap(pa_t pa, const struct prefix *prefix,
+
+int pa_update_eap(net_node node, const struct prefix *prefix,
                   const struct pa_rid *rid,
                   const char *ifname, bool to_delete)
 {
-  net_node node = container_of(pa, net_node_s, pa);
   eap e;
 
   node->updated_eap++;
@@ -126,13 +125,11 @@ int pa_update_eap(pa_t pa, const struct prefix *prefix,
   return 0;
 }
 
-int pa_update_edp(pa_t pa, const struct prefix *prefix,
+int pa_update_edp(net_node node, const struct prefix *prefix,
                   const struct pa_rid *rid,
-                  const struct prefix *excluded,
                   hnetd_time_t valid_until, hnetd_time_t preferred_until,
                   const void *dhcpv6_data, size_t dhcpv6_len)
 {
-  net_node node = container_of(pa, net_node_s, pa);
   edp e;
 
   node->updated_edp++;
@@ -145,7 +142,6 @@ int pa_update_edp(pa_t pa, const struct prefix *prefix,
            (long long)node->s->now);
   sput_fail_unless(prefix, "prefix set");
   sput_fail_unless(rid, "rid set");
-  sput_fail_unless(!excluded, "excluded not set");
   e = _find_rp(prefix, &edps, valid_until == 0? 0 : sizeof(*e));
   if (!e)
     return 0;
@@ -177,7 +173,7 @@ int pa_update_edp(pa_t pa, const struct prefix *prefix,
     }
   e->updated = node->s->now;
   return 0;
-}*/
+}
 
 struct prefix p1 = {
   .prefix = { .s6_addr = {

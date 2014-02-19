@@ -53,7 +53,7 @@ target_link_libraries(test_tlv ubox ubus blobmsg_json)
 add_test(tlv test_tlv)
 add_dependencies(check test_tlv)
 
-add_executable(test_hncp ${HNCP} src/pa.c src/pa_store.c src/prefix_utils.c src/tlv.c test/test_hncp.c)
+add_executable(test_hncp ${HNCP} ${PA} src/prefix_utils.c src/tlv.c test/test_hncp.c)
 target_link_libraries(test_hncp ubox ubus blobmsg_json)
 add_test(hncp test_hncp)
 add_dependencies(check test_hncp)

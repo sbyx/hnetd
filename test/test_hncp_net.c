@@ -26,34 +26,28 @@
 #include "sput.h"
 
 /********************************************************* Mocked interfaces */
-/*
-int pa_update_eap(pa_t pa, const struct prefix *prefix,
+
+int pa_update_eap(net_node node, const struct prefix *prefix,
                   const struct pa_rid *rid,
                   const char *ifname, bool to_delete)
 {
-  net_node node = container_of(pa, net_node_s, pa);
-
   sput_fail_unless(prefix, "prefix set");
   sput_fail_unless(rid, "rid set");
   node->updated_eap++;
   return 0;
 }
 
-int pa_update_edp(pa_t pa, const struct prefix *prefix,
+int pa_update_edp(net_node node, const struct prefix *prefix,
                   const struct pa_rid *rid,
-                  const struct prefix *excluded,
                   hnetd_time_t valid_until, hnetd_time_t preferred_until,
                   const void *dhcpv6_data, size_t dhcpv6_len)
 {
-  net_node node = container_of(pa, net_node_s, pa);
-
   sput_fail_unless(prefix, "prefix set");
   sput_fail_unless(rid, "rid set");
-  sput_fail_unless(!excluded, "excluded not set");
   node->updated_edp++;
   return 0;
 }
-*/
+
 /**************************************************************** Test cases */
 
 struct prefix p1 = {

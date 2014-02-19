@@ -63,6 +63,7 @@ typedef struct {
   char *name;
   hncp_s n;
   struct pa_data pa_data;
+  struct pa_data_user pa_data_user;
 #ifndef DISABLE_HNCP_PA
   hncp_glue g;
 #endif /* !DISABLE_HNCP_PA */
@@ -91,6 +92,35 @@ typedef struct net_sim_t {
   int converged_count;
   int not_converged_count;
 } net_sim_s, *net_sim;
+
+int pa_update_eap(net_node node, const struct prefix *prefix,
+                  const struct pa_rid *rid,
+                  const char *ifname, bool to_delete);
+
+int pa_update_edp(net_node node, const struct prefix *prefix,
+                  const struct pa_rid *rid,
+                  hnetd_time_t valid_until, hnetd_time_t preferred_until,
+                  const void *dhcpv6_data, size_t dhcpv6_len);
+
+void net_sim_pa_dps(struct pa_data_user *user, struct pa_dp *dp, uint32_t flags)
+{
+	bool todelete = !!(flags & PADF_DP_TODELETE);
+	if(!dp->local && flags) {
+		struct pa_edp *edp = container_of(dp, struct pa_edp, dp);
+		pa_update_edp(container_of(user, net_node_s, pa_data_user), &dp->prefix,
+				&edp->rid, todelete?0:dp->valid_until, todelete?0:dp->preferred_until,
+						dp->dhcp_data, dp->dhcp_len);
+	}
+}
+
+void net_sim_pa_aps(struct pa_data_user *user, struct pa_ap *ap, uint32_t flags)
+{
+	bool todelete = !!(flags & PADF_DP_TODELETE);
+	if(flags) {
+		pa_update_eap(container_of(user, net_node_s, pa_data_user),
+				&ap->prefix, &ap->rid, ap->iface?ap->iface->ifname:NULL, todelete);
+	}
+}
 
 void net_sim_init(net_sim s)
 {
@@ -177,7 +207,11 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
     return NULL;
   list_add(&n->h, &s->nodes);
 #ifndef DISABLE_HNCP_PA
+  memset(&n->pa_data_user, 0, sizeof(struct pa_data_user));
+  n->pa_data_user.dps = net_sim_pa_dps;
+  n->pa_data_user.aps = net_sim_pa_aps;
   pa_data_init(&n->pa_data, NULL);
+  pa_data_subscribe(&n->pa_data, &n->pa_data_user);
   /* Glue it to pa */
   if (!(n->g = hncp_pa_glue_create(&n->n, &n->pa_data)))
     return NULL;
@@ -590,6 +624,7 @@ void pa_update_lap(struct pa_data *data, const struct prefix *prefix, const char
 	if(!to_delete) {
 		struct pa_iface *iface = ifname?pa_iface_get(data, ifname, true):NULL;
 		pa_cp_set_iface(cp, iface);
+		pa_cp_set_advertised(cp, true);
 	} else {
 		pa_cp_todelete(cp);
 	}

@@ -40,6 +40,18 @@
 
 #include "hncp_sd.c"
 
+
+int pa_update_eap(net_node node, const struct prefix *prefix,
+                  const struct pa_rid *rid,
+                  const char *ifname, bool to_delete)
+{ return 0; }
+
+int pa_update_edp(net_node node, const struct prefix *prefix,
+                  const struct pa_rid *rid,
+                  hnetd_time_t valid_until, hnetd_time_t preferred_until,
+                  const void *dhcpv6_data, size_t dhcpv6_len)
+{ return 0; }
+
 /*
  * This is minimalist piece of test code that just exercises the
  * hncp_sd module _and_ makes sure appropriate calls are called (And
