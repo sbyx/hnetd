@@ -1,3 +1,9 @@
+/*
+ * Author: Steven Barth <steven@midlink.org>
+ *
+ * Copyright (c) 2014 cisco Systems, Inc.
+ */
+
 #include <string.h>
 #include <stdlib.h>
 #include <net/if.h>
