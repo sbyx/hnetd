@@ -189,6 +189,7 @@ void pa_ldp_set_excluded(struct pa_ldp *ldp, const struct prefix *excluded)
 			(excluded && ldp->excluded.valid && !prefix_cmp(excluded, &ldp->excluded.excluded)))
 			return;
 
+	L_DEBUG("Changing excluded prefix of "PA_DP_L" to %s", PA_DP_LA(&ldp->dp), excluded?PREFIX_REPR(excluded):"null");
 	if(excluded) {
 		prefix_cpy(&ldp->excluded.excluded, excluded);
 		ldp->excluded.valid = true;

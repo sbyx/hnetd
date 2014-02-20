@@ -148,6 +148,9 @@ static void __pa_ifu_ipv4(struct iface_user *u, char *ifname,
 	if(ifname)
 		iface = pa_iface_get(&pa->data, ifname, true);
 
+	if(iface)
+		pa_iface_notify(&pa->data, iface);
+
 	L_INFO("Iface callback for IPv4 connectivity (iface = "PA_IFNAME_L")", PA_IFNAME_LA(iface));
 	pa_ipv4_set_dhcp(&pa->data, dhcp_data, dhcp_len);
 	pa_ipv4_set_uplink(&pa->data, iface);

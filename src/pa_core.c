@@ -29,6 +29,8 @@
 		delay = UINT32_MAX; \
 	} while(0)
 
+static void __pa_aaa_schedule(struct pa_core *core);
+static void __pa_paa_schedule(struct pa_core *core);
 
 bool __pa_compute_dodhcp(struct pa_iface *iface)
 {
@@ -53,6 +55,7 @@ void __pa_update_dodhcp(struct pa_core *core, struct pa_iface *iface)
 void __pa_cp_apply_cb(struct uloop_timeout *to)
 {
 	struct pa_cp *cp = container_of(to, struct pa_cp, apply_to);
+	L_DEBUG("Apply callback for "PA_CP_L, PA_CP_LA(cp));
 	pa_cp_set_applied(cp, true);
 	pa_cp_notify(cp);
 	if(cp->iface)
@@ -62,6 +65,7 @@ void __pa_cp_apply_cb(struct uloop_timeout *to)
 void __pa_laa_apply_cb(struct uloop_timeout *to)
 {
 	struct pa_laa *laa = container_of(to, struct pa_laa, apply_to);
+	L_DEBUG("Apply callback for "PA_AA_L, PA_AA_LA(&laa->aa));
 	pa_laa_set_applied(laa, true);
 	pa_aa_notify(laa->cp->pa_data, &laa->aa);
 }
@@ -278,16 +282,21 @@ static bool pa_core_iface_is_designated(struct pa_core *core, struct pa_iface *i
 	pa_for_each_cp_in_iface(cp, iface) {
 		if(!best_cp
 				|| best_cp->authoritative > cp->authoritative
-				|| best_cp->priority > cp->priority)
+				|| ((best_cp->authoritative == cp->authoritative) && best_cp->priority > cp->priority))
 			best_cp = cp;
 	}
 
 	/* Compare with all aps on that iface */
 	pa_for_each_ap_in_iface(ap, iface) {
-		if(ap->authoritative < best_cp->authoritative
-				|| ap->priority < best_cp->priority
-				|| ((ap->priority == best_cp->priority) && (PA_RIDCMP(core_p(core, data.flood.rid), &ap->rid) < 0) ))
+		if(ap->authoritative < best_cp->authoritative) {
 			return false;
+		} else if(ap->authoritative == best_cp->authoritative) {
+			if(ap->priority < best_cp->priority) {
+				return false;
+			} else if (ap->priority == best_cp->priority && (PA_RIDCMP(core_p(core, data.flood.rid), &ap->rid) < 0) ) {
+				return false;
+			}
+		}
 	}
 
 	return true;
@@ -396,6 +405,7 @@ static inline void pa_core_case2(struct pa_core *core, struct pa_iface *iface, s
 static inline void pa_core_case3(struct pa_core *core, struct pa_iface *iface, struct pa_dp *dp, struct pa_cp *cp)
 {
 	if(pa_core_cp_check_global_validity(core, cp)) {
+		pa_cp_set_advertised(cp, true);
 		cp->invalid = false;
 	} else {
 		pa_core_destroy_cp(core, cp);
@@ -429,7 +439,7 @@ void paa_algo_do(struct pa_core *core)
 
 	/* Mark all prefixes as invalid */
 	pa_for_each_cp(cp, data)
-			cp->invalid = !cp->authoritative;
+		cp->invalid = !cp->authoritative;
 
 	/* Compute designated */
 	pa_for_each_iface(iface, data)
@@ -471,6 +481,12 @@ void paa_algo_do(struct pa_core *core)
 		if(cp->invalid)
 			pa_core_destroy_cp(core, cp);
 	}
+
+	/* Evaluate dodhcp ofr all iface */
+	pa_for_each_iface(iface, data)
+		__pa_update_dodhcp(core, iface);
+
+	L_INFO("End of prefix assignment algorithm");
 }
 
 static bool __aaa_addr_available(struct pa_core *core, struct in6_addr *addr)
@@ -573,13 +589,13 @@ static void aaa_algo_do(struct pa_core *core)
 
 	pa_for_each_cp(cp, data) {
 		/* Delete if invalid */
-		if(cp->laa && !__aaa_valid(core, &cp->laa->aa.address)) {
+		if(cp->laa && (!__aaa_valid(core, &cp->laa->aa.address) || !cp->iface)) {
 			pa_aa_todelete(&cp->laa->aa);
 			pa_aa_notify(data, &cp->laa->aa);
 		}
 
 		/* Create new if no assigned */
-		if(!cp->laa) {
+		if(!cp->laa && cp->iface) {
 			if(!__aaa_do_slaac(cp, &addr) || !__aaa_find_random(core, cp, &addr)) {
 				laa = pa_laa_create(&addr, cp);
 				if(laa) {
@@ -603,7 +619,7 @@ static void aaa_algo_do(struct pa_core *core)
 
 void pa_core_update_excluded(struct pa_core *core, struct pa_ldp *ldp)
 {
-	struct pa_cp *cp;
+	struct pa_cp *cp, *cp2;
 
 	if(ldp->excluded.cp) {
 		/* Destroying previous cp */
@@ -613,15 +629,16 @@ void pa_core_update_excluded(struct pa_core *core, struct pa_ldp *ldp)
 
 	if(ldp->excluded.valid) {
 		/* Invalidate all contained cps */
-		pa_for_each_cp(cp, core_p(core, data)) {
+		pa_for_each_cp_safe(cp, cp2, core_p(core, data)) {
 			if(!cp->authoritative &&
 					(prefix_contains(&cp->prefix, &ldp->excluded.excluded) ||
 							prefix_contains(&ldp->excluded.excluded, &cp->prefix))) {
 				pa_cp_todelete(cp);
 				pa_cp_notify(cp); /* No loop... Hopefully */
+				__pa_paa_schedule(core);
 			}
 		}
-
+		//todo: When no cp is deleted, we don't need to execute paa, but in case of scarcity, it may be usefull
 		/* Creating new cp */
 		ldp->excluded.cp = pa_cp_get(core_p(core, data), &ldp->excluded.excluded, true);
 		pa_cp_set_authoritative(ldp->excluded.cp, true);
@@ -660,6 +677,7 @@ static void __pa_paa_schedule(struct pa_core *core)
 		delay = core->start_time + flood - now;
 
 	PA_CORE_CHECK_DELAY(delay);
+	L_DEBUG("Scheduling prefix assignment algorithm in %d ms", (int) delay);
 	uloop_timeout_set(&core->paa.to, (int) delay);
 }
 
@@ -669,11 +687,12 @@ static void __pa_aaa_schedule(struct pa_core *core)
 		return;
 
 	core->aaa.scheduled = true;
-	if(!core->start_time || core->paa.to.pending)
+	if(!core->start_time || core->aaa.to.pending)
 		return;
 
 	hnetd_time_t delay = core_p(core, data)->flood.flooding_delay_ll / PA_CORE_DELAY_FACTOR;
 	PA_CORE_CHECK_DELAY(delay);
+	L_DEBUG("Scheduling address assignment algorithm in %d ms", (int) delay);
 	uloop_timeout_set(&core->aaa.to, (int) delay);
 }
 
@@ -735,10 +754,11 @@ static void __pad_cb_aas(struct pa_data_user *user, struct pa_aa *aa, uint32_t f
 }
 
 static void __pad_cb_cps(struct pa_data_user *user,
-		__attribute__((unused))struct pa_cp *cp, uint32_t flags)
+		struct pa_cp *cp, uint32_t flags)
 {
 	struct pa_core *core = container_of(user, struct pa_core, data_user);
-	if(!(flags & PADF_CP_TODELETE) && (flags & PADF_CP_CREATED))
+	if(!(flags & PADF_CP_TODELETE) && (flags & PADF_CP_CREATED) &&
+			(cp->iface || (!cp->iface && (flags & PADF_CP_IFACE))))
 		__pa_aaa_schedule(core);
 }
 

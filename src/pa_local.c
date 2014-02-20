@@ -219,6 +219,7 @@ static void pa_local_schedule(struct pa_local *local, hnetd_time_t when, hnetd_t
 
 	if(!local->current_timeout || local->current_timeout > now + delay) {
 		local->current_timeout = now + delay;
+		L_DEBUG("Scheduling spontaneous prefix generation algorithm in %d ms", (int) delay);
 		uloop_timeout_set(&local->timeout, (int) delay);
 	}
 }

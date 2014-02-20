@@ -351,6 +351,7 @@ void pa_ap_notify(struct pa_data *data, struct pa_ap *ap);
 
 
 #define pa_for_each_cp(pa_cp, pa_data) list_for_each_entry(pa_cp, &(pa_data)->cps, le)
+#define pa_for_each_cp_safe(pa_cp, cp2, pa_data) list_for_each_entry_safe(pa_cp, cp2, &(pa_data)->cps, le)
 #define pa_for_each_cp_in_iface(pa_cp, pa_iface) list_for_each_entry(pa_cp, &(pa_iface)->cps, if_le)
 #define pa_for_each_cp_in_dp(pa_cp, pa_dp) list_for_each_entry(pa_cp, &(pa_dp)->cps, dp_le)
 struct pa_cp *pa_cp_get(struct pa_data *, const struct prefix *, bool goc);
