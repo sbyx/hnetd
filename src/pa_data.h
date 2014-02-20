@@ -70,7 +70,6 @@ struct pa_iface {
 
 	bool internal;         /* Whether the iface is internal */
 	bool do_dhcp;          /* Whether router should do dhcp on that iface. */
-	bool is_ipv4_uplink;   /* Whether this iface is the ipv4 uplink */
 
 	struct list_head aps;   /* assigned prefixes on that iface */
 	struct list_head cps;   /* chosen prefixes on that iface */
@@ -81,6 +80,7 @@ struct pa_iface {
 	struct list_head sps;   /* stored prefixes for that iface */
 
 	bool designated;        /* Used by paa. */
+	bool ipv4_uplink;       /* Whether this iface is the ipv4 uplink - used by pa.c */
 
 #define PADF_IF_CREATED  PADF_ALL_CREATED
 #define PADF_IF_TODELETE PADF_ALL_TODELETE

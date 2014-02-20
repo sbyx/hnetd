@@ -140,19 +140,35 @@ static void __pa_ifu_pd(struct iface_user *u, const char *ifname,
 }
 
 static void __pa_ifu_ipv4(struct iface_user *u, char *ifname,
-		const void *dhcp_data, size_t dhcp_len)
+		const void *dhcp_data, __unused size_t dhcp_len)
 {
-	//TODO: Change iface.h callback type
 	struct pa *pa = container_of(u, struct pa, ifu);
 	struct pa_iface *iface = NULL;
 	if(ifname)
 		iface = pa_iface_get(&pa->data, ifname, true);
 
-	if(iface)
-		pa_iface_notify(&pa->data, iface);
+	if(!iface)
+		return;
 
-	L_INFO("Iface callback for IPv4 connectivity (iface = "PA_IFNAME_L")", PA_IFNAME_LA(iface));
-	pa_ipv4_set_dhcp(&pa->data, dhcp_data, dhcp_len);
-	pa_ipv4_set_uplink(&pa->data, iface);
-	pa_ipv4_notify(&pa->data);
+	pa_iface_notify(&pa->data, iface);
+	iface->ipv4_uplink = dhcp_data?true:false;
+
+	if((pa->data.ipv4.iface == iface && !iface->ipv4_uplink) ||
+			(!pa->data.ipv4.iface && iface->ipv4_uplink)) {
+		iface = NULL;
+		bool found = false;
+		pa_for_each_iface(iface, &pa->data) {
+			if(iface->ipv4_uplink) {
+				found = true;
+				break;
+			}
+		}
+		if(!found)
+			iface = NULL;
+
+		L_INFO("Changing IPv4 uplink to iface = "PA_IFNAME_L"", PA_IFNAME_LA(iface));
+		pa_ipv4_set_dhcp(&pa->data, NULL, 0);
+		pa_ipv4_set_uplink(&pa->data, iface);
+		pa_ipv4_notify(&pa->data);
+	}
 }

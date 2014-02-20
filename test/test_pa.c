@@ -386,8 +386,9 @@ void test_pa_ipv4()
 	/* Renew ipv4 dp validity */
 	sput_fail_unless(to_getfirst() == &pa.local.timeout && !to_run(1), "Renew");
 
-	iface.user->ipv4_update(iface.user, NULL, NULL, 0);
-	sput_fail_unless(!to_run(2) && !to_getfirst(), "Remove IPv4 connectivity");
+	iface.user->ipv4_update(iface.user, IFNAME2, NULL, 0);
+	res = to_run(2);
+	sput_fail_unless(!res && !to_getfirst(), "Remove IPv4 connectivity");
 
 	pa_stop(&pa);
 	pa_term(&pa);

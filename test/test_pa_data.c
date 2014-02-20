@@ -122,12 +122,11 @@ static void padt_check_cb(uint8_t callback, uint32_t flags)
 			sput_fail_unless(test,  #object" check "#value)
 
 void padt_check_iface(struct pa_iface *iface, const char *ifname,
-		bool internal, bool do_dhcp, bool is_ipv4_uplink, size_t sp_count)
+		bool internal, bool do_dhcp, size_t sp_count)
 {
 	padt_check_other(!strcmp(iface->ifname, ifname), iface, ifname);
 	padt_check_scalar(iface, internal);
 	padt_check_scalar(iface, do_dhcp);
-	padt_check_scalar(iface, is_ipv4_uplink);
 	padt_check_scalar(iface, sp_count);
 }
 
@@ -247,7 +246,7 @@ void pa_data_test_iface()
 	iface = pa_iface_get(data, IFNAME1, true);
 	pa_iface_notify(data, iface);
 	pa_iface_notify(data, iface); /* Should not notify */
-	padt_check_iface(iface, IFNAME1, false, false, false, 0);
+	padt_check_iface(iface, IFNAME1, false, false, 0);
 	padt_check_cb(PADT_CB_IFS, PADF_IF_CREATED);
 
 	pa_iface_set_dodhcp(iface, false);
@@ -256,7 +255,7 @@ void pa_data_test_iface()
 	pa_iface_set_dodhcp(iface, true);
 	pa_iface_notify(data, iface);
 	padt_check_cb(PADT_CB_IFS, PADF_IF_DODHCP);
-	padt_check_iface(iface, IFNAME1, false, true, false, 0);
+	padt_check_iface(iface, IFNAME1, false, true, 0);
 
 	pa_iface_set_internal(iface, false);
 	pa_iface_notify(data, iface);
@@ -264,7 +263,7 @@ void pa_data_test_iface()
 	pa_iface_set_internal(iface, true);
 	pa_iface_notify(data, iface);
 	padt_check_cb(PADT_CB_IFS, PADF_IF_INTERNAL);
-	padt_check_iface(iface, IFNAME1, true, true, false, 0);
+	padt_check_iface(iface, IFNAME1, true, true, 0);
 
 	iface2 = pa_iface_get(data, IFNAMETOOLONG, true);
 	sput_fail_if(iface2, "Ifname too long");
@@ -274,7 +273,7 @@ void pa_data_test_iface()
 	iface2 = pa_iface_get(data, IFNAME2, false);
 	sput_fail_if(iface2, "Do not create");
 	iface2 = pa_iface_get(data, IFNAME2, true);
-	padt_check_iface(iface2, IFNAME2, false, false, false, 0);
+	padt_check_iface(iface2, IFNAME2, false, false, 0);
 	pa_iface_notify(data, iface2);
 	padt_check_cb(PADT_CB_IFS, PADF_IF_CREATED);
 	bool first = true;

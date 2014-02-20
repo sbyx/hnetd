@@ -571,7 +571,7 @@ struct pa_iface *pa_iface_get(struct pa_data *data, const char *ifname, bool goc
 	iface->designated = false;
 	iface->do_dhcp = false;
 	iface->internal = false;
-	iface->is_ipv4_uplink = false;
+	iface->ipv4_uplink = false;
 	list_add(&iface->le, &data->ifs);
 	iface->__flags = PADF_IF_CREATED;
 	iface->sp_count = 0;
@@ -593,7 +593,7 @@ void pa_iface_destroy(struct pa_data *data, struct pa_iface *iface)
 {
 	L_INFO("Destroying "PA_IF_L, PA_IF_LA(iface));
 
-	if(iface->is_ipv4_uplink)
+	if(data->ipv4.iface == iface)
 		data->ipv4.iface = NULL;
 
 	while(!list_empty(&iface->aps))
@@ -653,8 +653,6 @@ void pa_ipv4_set_uplink(struct pa_data *data, struct pa_iface *iface)
 
 	L_INFO("Setting IPv4 uplink interface "PA_IF_L, PA_IF_LA(iface));
 	data->ipv4.iface = iface;
-	if(iface)
-		iface->is_ipv4_uplink = true;
 	data->ipv4.__flags |= PADF_IPV4_IFACE;
 }
 
