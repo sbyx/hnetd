@@ -1,3 +1,13 @@
+#ifdef L_LEVEL
+#undef L_LEVEL
+#endif
+#define L_LEVEL 7
+
+#ifdef L_PREFIX
+#undef L_PREFIX
+#endif
+#define L_PREFIX "pa_local - "
+
 #include "pa_local.h"
 #include "pa.h"
 
