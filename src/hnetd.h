@@ -1,3 +1,11 @@
+/*
+ * Author: Markus Stenberg <markus stenberg@iki.fi>
+ * Author: Steven Barth <steven@midlink.org>
+ * Author: Pierre Pfister
+ *
+ * Copyright (c) 2014 cisco Systems, Inc.
+ */
+
 #ifndef HNETD_H
 #define HNETD_H
 

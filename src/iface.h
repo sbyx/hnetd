@@ -1,3 +1,9 @@
+/*
+ * Author: Steven Barth <steven@midlink.org>
+ *
+ * Copyright (c) 2014 cisco Systems, Inc.
+ */
+
 #ifndef _IFACE_H
 #define _IFACE_H
 

@@ -1,3 +1,9 @@
+/*
+ * Author: Steven Barth <steven@midlink.org>
+ *
+ * Copyright (c) 2014 cisco Systems, Inc.
+ */
+
 #ifndef HNCP_ROUTING_H_
 #define HNCP_ROUTING_H_
 

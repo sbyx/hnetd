@@ -1,3 +1,9 @@
+/*
+ * Author: Steven Barth <steven@midlink.org>
+ *
+ * Copyright (c) 2014 cisco Systems, Inc.
+ */
+
 #pragma once
 #include "hnetd.h"
 
