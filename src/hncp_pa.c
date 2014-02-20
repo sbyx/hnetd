@@ -47,6 +47,8 @@
 #include "hncp_i.h"
 #include "prefix_utils.h"
 #include "dhcpv6.h"
+#include "dhcp.h"
+#include "dns_util.h"
 
 typedef struct {
   struct vlist_node in_dps;
@@ -342,8 +344,8 @@ static void _republish_cb(hncp_subscriber s)
   struct tlv_attr *st;
   hncp_t_delegated_prefix_header dph;
   struct tlv_buf tb;
-  char *dhcpv6_options = NULL;
-  int dhcpv6_options_len = 0;
+  char *dhcpv6_options = NULL, *dhcp_options = NULL;
+  int dhcpv6_options_len = 0, dhcp_options_len = 0;
 
   hncp_remove_tlvs_by_type(o, HNCP_T_EXTERNAL_CONNECTION);
   /* This is very brute force. Oh well. (O(N^2) to # of delegated
@@ -398,6 +400,13 @@ static void _republish_cb(hncp_subscriber s)
           APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
                      tlv_data(st), tlv_len(st));
         }
+      if (ifo && ifo->dhcp_data_in && ifo->dhcp_len_in)
+        {
+          st = tlv_new(&tb, HNCP_T_DHCP_OPTIONS, ifo->dhcp_len_in);
+          memcpy(tlv_data(st), ifo->dhcp_data_in, ifo->dhcp_len_in);
+          APPEND_BUF(dhcp_options, dhcp_options_len,
+                     tlv_data(st), tlv_len(st));
+        }
       hncp_add_tlv(o, tb.head);
       tlv_buf_free(&tb);
     }
@@ -408,15 +417,24 @@ static void _republish_cb(hncp_subscriber s)
   a = hncp_get_dns_domain_tlv(o);
   if (a)
     {
+      char domainbuf[256];
       uint16_t fake_header[2];
+      uint8_t fake4_header[2];
+      uint8_t *data = tlv_data(a);
       int l = tlv_len(a);
 
       fake_header[0] = cpu_to_be16(DHCPV6_OPT_DNS_DOMAIN);
       fake_header[1] = cpu_to_be16(l);
       APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
                  &fake_header[0], 4);
-      APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
-                 tlv_data(a), l);
+      APPEND_BUF(dhcpv6_options, dhcpv6_options_len, data, l);
+
+      if (ll2escaped(data, l, domainbuf, sizeof(domainbuf)) >= 0) {
+        fake4_header[0] = DHCPV4_OPT_DOMAIN;
+        fake4_header[1] = strlen(domainbuf);
+        APPEND_BUF(dhcp_options, dhcp_options_len, fake4_header, 2);
+        APPEND_BUF(dhcp_options, dhcp_options_len, domainbuf, fake4_header[1]);
+      }
     }
 
   hncp_for_each_node(o, n)
@@ -433,6 +451,11 @@ static void _republish_cb(hncp_subscriber s)
                       APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
                                  tlv_data(a2), tlv_len(a2));
                     }
+                  else if (tlv_id(a2) == HNCP_T_DHCP_OPTIONS)
+                    {
+                      APPEND_BUF(dhcp_options, dhcp_options_len,
+                                 tlv_data(a2), tlv_len(a2));
+                    }
               }
             break;
           case HNCP_T_DNS_DELEGATED_ZONE:
@@ -440,7 +463,10 @@ static void _republish_cb(hncp_subscriber s)
               hncp_t_dns_delegated_zone ddz = tlv_data(a);
               if (ddz->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_SEARCH)
                 {
+                  char domainbuf[256];
                   uint16_t fake_header[2];
+                  uint8_t fake4_header[2];
+                  uint8_t *data = tlv_data(a);
                   int l = tlv_len(a) - sizeof(*ddz);
 
                   fake_header[0] = cpu_to_be16(DHCPV6_OPT_DNS_DOMAIN);
@@ -449,6 +475,13 @@ static void _republish_cb(hncp_subscriber s)
                              &fake_header[0], 4);
                   APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
                              ddz->ll, l);
+
+                  if (ll2escaped(data, l, domainbuf, sizeof(domainbuf)) >= 0) {
+                    fake4_header[0] = DHCPV4_OPT_DOMAIN;
+                    fake4_header[1] = strlen(domainbuf);
+                    APPEND_BUF(dhcp_options, dhcp_options_len, fake4_header, 2);
+                    APPEND_BUF(dhcp_options, dhcp_options_len, domainbuf, fake4_header[1]);
+                  }
                 }
             }
             break;
@@ -462,12 +495,14 @@ static void _republish_cb(hncp_subscriber s)
       c++;
       iface_set_dhcp_send(l->ifname,
                             dhcpv6_options, dhcpv6_options_len,
-                            NULL, 0);
+                            dhcp_options, dhcp_options_len);
     }
   L_DEBUG("set %d bytes of DHCPv6 options on %d internal link(s): %s",
           dhcpv6_options_len, c, HEX_REPR(dhcpv6_options, dhcpv6_options_len));
   if (dhcpv6_options)
     free(dhcpv6_options);
+  if (dhcp_options)
+    free(dhcp_options);
 }
 
 static void _updated_lap(const struct prefix *prefix, const char *ifname,
