@@ -105,8 +105,8 @@ static void iface_notify_data_state(struct iface *c, bool enabled)
 	list_for_each_entry(u, &users, head) {
 		if (u->cb_extdata)
 			u->cb_extdata(u, c->ifname, data, len);
-		if (u->ipv4_update)
-			u->ipv4_update(u, c->ifname, data4, len4);
+		if (u->cb_ext4data)
+			u->cb_ext4data(u, c->ifname, data4, len4);
 	}
 
 
@@ -186,7 +186,7 @@ void iface_unregister_user(struct iface_user *user)
 }
 
 
-void iface_set_dhcpv6_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len, const void *dhcp_data, size_t dhcp_len)
+void iface_set_dhcp_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len, const void *dhcp_data, size_t dhcp_len)
 {
 	struct iface *c = iface_get(ifname);
 
@@ -414,10 +414,17 @@ void iface_remove(struct iface *c)
 	if (c->platform)
 		platform_iface_free(c);
 
-	free(c->dhcpv6_data_in);
-	free(c->dhcpv6_data_out);
-	free(c->dhcp_data_in);
-	free(c->dhcp_data_out);
+	if (c->dhcpv6_len_in)
+		free(c->dhcpv6_data_in);
+
+	if (c->dhcpv6_len_out)
+		free(c->dhcpv6_data_out);
+
+	if (c->dhcp_len_in)
+		free(c->dhcp_data_in);
+
+	if (c->dhcp_len_out)
+		free(c->dhcp_data_out);
 
 	uloop_timeout_cancel(&c->transition);
 	uloop_timeout_cancel(&c->preferred);
@@ -439,7 +446,7 @@ void iface_update_init(struct iface *c)
 static void iface_announce_border(struct uloop_timeout *t)
 {
 	struct iface *c = container_of(t, struct iface, transition);
-	iface_notify_data_state(c, c->internal);
+	iface_notify_data_state(c, !c->internal);
 	iface_notify_internal_state(c, c->internal);
 	platform_set_internal(c, c->internal);
 
@@ -588,7 +595,11 @@ void iface_set_dhcp_received(struct iface *c, bool leased, ...)
 		equal = false;
 
 	if (!equal) {
-		c->dhcp_data_in = realloc(c->dhcp_data_in, offset);
+		if (c->dhcp_len_in)
+			c->dhcp_data_in = realloc(c->dhcp_data_in, offset);
+		else
+			c->dhcp_data_in = malloc(offset);
+
 		c->dhcp_len_in = offset;
 
 		offset = 0;
@@ -609,6 +620,9 @@ void iface_set_dhcp_received(struct iface *c, bool leased, ...)
 		if (!c->internal)
 			iface_notify_data_state(c, true);
 	}
+
+	if (c->dhcp_len_in == 0)
+		c->dhcp_data_in = (void*)1;
 }
 
 
@@ -667,7 +681,11 @@ void iface_set_dhcpv6_received(struct iface *c, ...)
 		equal = false;
 
 	if (!equal) {
-		c->dhcpv6_data_in = realloc(c->dhcpv6_data_in, offset);
+		if (c->dhcpv6_len_in)
+			c->dhcpv6_data_in = realloc(c->dhcpv6_data_in, offset);
+		else
+			c->dhcpv6_data_in = malloc(offset);
+
 		c->dhcpv6_len_in = offset;
 
 		offset = 0;
@@ -688,4 +706,7 @@ void iface_set_dhcpv6_received(struct iface *c, ...)
 		if (!c->internal)
 			iface_notify_data_state(c, true);
 	}
+
+	if (c->dhcpv6_len_in == 0)
+		c->dhcpv6_data_in = (void*)1;
 }

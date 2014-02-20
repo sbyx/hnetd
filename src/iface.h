@@ -37,7 +37,7 @@ struct iface_user {
 			const void *dhcpv6_data, size_t dhcpv6_len);
 
 	/* Callback for IPv4 connectivity state */
-	void (*ipv4_update)(struct iface_user *u, bool available,
+	void (*cb_ext4data)(struct iface_user *u, const char *ifname,
 			const void *dhcp_data, size_t dhcp_len);
 
 	/* Callback for internal addresses */
@@ -52,7 +52,7 @@ void iface_register_user(struct iface_user *user);
 void iface_unregister_user(struct iface_user *user);
 
 // Update DHCPv6 out data
-void iface_set_dhcpv6_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len, const void *dhcp_data, size_t dhcp_len);
+void iface_set_dhcp_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len, const void *dhcp_data, size_t dhcp_len);
 
 
 // Begin route update cycle

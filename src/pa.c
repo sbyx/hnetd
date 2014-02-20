@@ -1886,7 +1886,7 @@ int pa_update_edp(pa_t pa, const struct prefix *prefix,
 /********************* iface callbacks ************************/
 /**************************************************************/
 
-static void pa_ifu_ipv4(struct iface_user *u, bool available,
+static void pa_ifu_ipv4(struct iface_user *u, const char *available,
 		const void *dhcp_data, size_t dhcp_len)
 {
 	/* Tells when IPv4 connectivity is available. */
@@ -2008,7 +2008,7 @@ pa_t pa_create(const struct pa_conf *conf)
 	pa->ifu.cb_intiface = pa_ifu_intiface;
 	pa->ifu.cb_prefix = pa_ifu_pd;
 	pa->ifu.cb_extdata = NULL; //TODO ?
-	pa->ifu.ipv4_update = pa_ifu_ipv4;
+	pa->ifu.cb_ext4data = pa_ifu_ipv4;
 
 	pa->pa_short_timeout = (struct uloop_timeout) { .cb = pa_do_uloop };
 	pa->pa_dp_when = 0;

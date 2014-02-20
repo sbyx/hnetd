@@ -460,7 +460,7 @@ static void _republish_cb(hncp_subscriber s)
   vlist_for_each_element(&o->links, l, in_links)
     {
       c++;
-      iface_set_dhcpv6_send(l->ifname,
+      iface_set_dhcp_send(l->ifname,
                             dhcpv6_options, dhcpv6_options_len,
                             NULL, 0);
     }
