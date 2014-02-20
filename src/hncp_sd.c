@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Tue Feb 18 20:34:46 2014 mstenber
+ * Last modified: Thu Feb 20 10:23:55 2014 mstenber
  * Edit time:     423 min
  *
  */
@@ -352,6 +352,9 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
             fprintf(f, "server=/%s/%s#%d\n", buf, server, port);
           }
     }
+  /* Default is 150. Given 0.5 second lifetime on service queries,
+   * that's not much. */
+  fprintf(f, "dns-forward-max=12345\n");
   fclose(f);
   return _sh_changed(&ctx, &sd->dnsmasq_state);
 }
