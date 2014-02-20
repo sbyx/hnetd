@@ -165,6 +165,15 @@ void platform_set_owner(struct iface *c, bool enable)
 }
 
 
+void platform_set_prefix_route(const struct prefix *p, bool enable)
+{
+	char buf[PREFIX_MAXBUFFLEN];
+	prefix_ntop(buf, sizeof(buf), p, true);
+	char *argv[] = {backend, (enable) ? "newprefixroute" : "delprefixroute", buf, NULL};
+	platform_call(argv);
+}
+
+
 void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t len, const void *dhcp_data, size_t len4)
 {
 	// DNS options

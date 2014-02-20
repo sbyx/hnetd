@@ -169,6 +169,12 @@ void platform_set_dhcpv6_send(struct iface *c,
 }
 
 
+void platform_set_prefix_route(const struct prefix *p, bool enable)
+{
+	iface_set_unreachable_route(p, enable);
+}
+
+
 // Commit platform changes to netifd
 static void platform_commit(struct uloop_timeout *t)
 {

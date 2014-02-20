@@ -54,7 +54,6 @@ void iface_unregister_user(struct iface_user *user);
 // Update DHCPv6 out data
 void iface_set_dhcp_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len, const void *dhcp_data, size_t dhcp_len);
 
-
 // Begin route update cycle
 void iface_update_routes(void);
 
@@ -162,7 +161,15 @@ void iface_set_dhcp_received(struct iface *c, bool leased, ...);
 // Set DHCPv6 data received
 void iface_set_dhcpv6_received(struct iface *c, ...);
 
+// Enable prefix route
+void iface_set_prefix_route(const struct prefix *p, bool enable);
+
 // Flush all interfaces
 void iface_flush(void);
+
+
+#ifdef __linux__
+void iface_set_unreachable_route(const struct prefix *p, bool enable);
+#endif
 
 #endif

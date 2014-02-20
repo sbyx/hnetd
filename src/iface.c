@@ -149,6 +149,34 @@ static void iface_link_event(struct uloop_fd *fd, __unused unsigned events)
 
 static struct uloop_fd rtnl_fd = { .fd = -1 };
 
+void iface_set_unreachable_route(const struct prefix *p, bool enable)
+{
+	struct {
+		struct nlmsghdr nhm;
+		struct rtmsg rtm;
+		struct rtattr rta_addr;
+		struct in6_addr addr;
+		struct rtattr rta_prio;
+		uint32_t prio;
+	} req = {
+		.nhm = {sizeof(req), RTM_DELROUTE, NLM_F_REQUEST, 1, 0},
+		.rtm = {AF_INET6, p->plen, 0, 0, RT_TABLE_MAIN, RTPROT_STATIC, RT_SCOPE_NOWHERE, 0, 0},
+		.rta_addr = {sizeof(req.rta_addr) + sizeof(req.addr), RTA_DST},
+		.addr = p->prefix,
+		.rta_prio = {sizeof(req.rta_prio) + sizeof(req.prio), RTA_PRIORITY},
+		.prio = 1000000000
+	};
+
+	if (enable) {
+		req.nhm.nlmsg_type = RTM_NEWROUTE;
+		req.nhm.nlmsg_flags |= NLM_F_CREATE | NLM_F_REPLACE;
+		req.rtm.rtm_scope = RT_SCOPE_UNIVERSE;
+		req.rtm.rtm_type = RTN_UNREACHABLE;
+	}
+
+	send(rtnl_fd.fd, &req, sizeof(req), 0);
+}
+
 #endif /* __linux__ */
 
 int iface_init(pa_t pa)
@@ -262,6 +290,13 @@ void iface_commit_routes(void)
 	struct iface *c;
 	list_for_each_entry(c, &interfaces, head)
 		vlist_flush(&c->routes);
+}
+
+
+// Set prefix route
+void iface_set_prefix_route(const struct prefix *p, bool enable)
+{
+	platform_set_prefix_route(p, enable);
 }
 
 
