@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Mon Feb 17 17:39:40 2014 mstenber
- * Edit time:     314 min
+ * Last modified: Thu Feb 20 17:09:36 2014 mstenber
+ * Edit time:     316 min
  *
  */
 
@@ -535,6 +535,22 @@ static void _updated_ldp(const struct prefix *prefix,
   hncp_schedule(o);
 }
 
+static void _node_change_cb(hncp_subscriber s, hncp_node n, bool add)
+{
+  hncp_glue g = container_of(s, hncp_glue_s, subscriber);
+  hncp o = g->hncp;
+
+  /* We're only interested about own node change. That's same as
+   * router ID changing, and notable thing then is that own_node is
+   * NULL and operation of interest is add.. */
+  if (o->own_node || !add)
+    return;
+  struct pa_rid *rid = (struct pa_rid *)&n->node_identifier_hash;
+
+  /* Set the rid */
+  pa_set_rid(g->pa, rid);
+}
+
 
 hncp_glue hncp_pa_glue_create(hncp o, pa_t pa)
 {
@@ -552,6 +568,7 @@ hncp_glue hncp_pa_glue_create(hncp o, pa_t pa)
   g->subscriber.tlv_change_callback = _tlv_cb;
   /* g->subscriber.node_change_callback = _node_cb; */
   g->subscriber.republish_callback = _republish_cb;
+  g->subscriber.node_change_callback = _node_change_cb;
   g->pa = pa;
   g->hncp = o;
 

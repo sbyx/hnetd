@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Feb 20 10:31:36 2014 mstenber
- * Edit time:     398 min
+ * Last modified: Thu Feb 20 17:02:29 2014 mstenber
+ * Edit time:     405 min
  *
  */
 
@@ -225,7 +225,6 @@ hncp_node hncp_find_node_by_hash(hncp o, hncp_hash h, bool create)
 
 bool hncp_init(hncp o, const void *node_identifier, int len)
 {
-  hncp_node n;
   hncp_hash_s h;
 
   memset(o, 0, sizeof(*o));
@@ -239,14 +238,26 @@ bool hncp_init(hncp o, const void *node_identifier, int len)
     L_ERR("unable to inet_pton multicast group address");
     return false;
   }
-  n = hncp_find_node_by_hash(o, &h, true);
-  if (!n) {
-    L_ERR("unable to create own node");
-    return false;
-  }
+  o->first_free_iid = 1;
+  return hncp_set_own_hash(o, &h);
+}
+
+bool hncp_set_own_hash(hncp o, hncp_hash h)
+{
+  if (o->own_node)
+    {
+      vlist_delete(&o->nodes, &o->own_node->in_nodes);
+      o->own_node = NULL;
+    }
+  hncp_node n = hncp_find_node_by_hash(o, h, true);
+  if (!n)
+    {
+      L_ERR("unable to create own node");
+      return false;
+    }
   o->own_node = n;
   o->tlvs_dirty = true; /* by default, they are, even if no neighbors yet. */
-  o->first_free_iid = 1;
+  hncp_schedule(o);
   return true;
 }
 

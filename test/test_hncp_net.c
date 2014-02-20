@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Jan 15 15:39:43 2014 mstenber
- * Edit time:     319 min
+ * Last modified: Thu Feb 20 17:16:59 2014 mstenber
+ * Edit time:     327 min
  *
  */
 
@@ -254,6 +254,11 @@ static void raw_hncp_tube(unsigned int num_nodes)
   /* A LOT of routers connected in a tube (R1 R2 R3 .. RN). */
   unsigned int i;
   net_sim_s s;
+  hncp_hash_s h1;
+  hncp_hash_s h2;
+
+  memset(&h1, 0, sizeof(h1));
+  memset(&h2, 1, sizeof(h2));
 
   net_sim_init(&s);
   s.disable_sd = true;
@@ -263,6 +268,11 @@ static void raw_hncp_tube(unsigned int num_nodes)
 
       sprintf(buf, "node%d", i);
       hncp n1 = net_sim_find_hncp(&s, buf);
+      /* Add intentional router ID collisions at nodes 0, 1,3 and 2 and 4 */
+      if (i == 0 || i == 1 || i == 3)
+        hncp_set_own_hash(n1, &h1);
+      else if (i == 2 || i == 4)
+        hncp_set_own_hash(n1, &h2);
 
       sprintf(buf, "node%d", i+1);
       hncp n2 = net_sim_find_hncp(&s, buf);
@@ -282,7 +292,7 @@ static void raw_hncp_tube(unsigned int num_nodes)
 
 void hncp_tube_small(void)
 {
-  raw_hncp_tube(5);
+  raw_hncp_tube(6);
 }
 
 void hncp_tube_beyond_multicast(void)

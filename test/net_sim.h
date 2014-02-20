@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Mon Feb 17 15:23:29 2014 mstenber
- * Edit time:     33 min
+ * Last modified: Thu Feb 20 17:12:15 2014 mstenber
+ * Edit time:     35 min
  *
  */
 
@@ -594,9 +594,11 @@ void pa_set_rid(pa_t pa, const struct pa_rid *rid)
   net_node node = container_of(pa, net_node_s, pa);
   hncp o = &node->n;
 
-  sput_fail_unless(memcmp(rid,
-                          &o->own_node->node_identifier_hash,
-                          HNCP_HASH_LEN) == 0,
+  /* We're not checking new updates. */
+  sput_fail_unless(!o->own_node
+                   || memcmp(rid,
+                             &o->own_node->node_identifier_hash,
+                             HNCP_HASH_LEN) == 0,
                    "rid same");
 
 }

@@ -21,7 +21,7 @@ Short-term things
   - generic PA
   - generic SD
   - hncp
-   - core
+   + core (all known issues taken care of?)
    - border discovery/PA
    - routing
    - SD

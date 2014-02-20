@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Feb 17 16:53:06 2014 mstenber
- * Edit time:     127 min
+ * Last modified: Thu Feb 20 16:46:03 2014 mstenber
+ * Edit time:     128 min
  *
  */
 
@@ -25,12 +25,18 @@
  * packets going through.. */
 #define HNCP_MAXIMUM_MULTICAST_SIZE 1280
 
+#define HNCP_UPDATE_COLLISIONS_IN_N 3
+
+/* in hnetd_time */
+#define HNCP_UPDATE_COLLISION_N 60000
+
 #include <libubox/vlist.h>
 
 /* IFNAMSIZ */
 #include <net/if.h>
 
 typedef uint32_t iid_t;
+
 
 struct hncp_struct {
   /* Can we assume bidirectional reachability? */
@@ -98,6 +104,10 @@ struct hncp_struct {
 
   /* List of subscribers to change notifications. */
   struct list_head subscribers;
+
+  /* Collision tracking - when to rename. */
+  int last_collision;
+  hnetd_time_t collisions[HNCP_UPDATE_COLLISIONS_IN_N];
 };
 
 typedef struct hncp_link_struct hncp_link_s, *hncp_link;
@@ -213,6 +223,9 @@ struct hncp_tlv_struct {
  * dynamic allocations (and some of the steps omitted too). */
 bool hncp_init(hncp o, const void *node_identifier, int len);
 void hncp_uninit(hncp o);
+
+/* Utility to change local node identifier - use with care */
+bool hncp_set_own_hash(hncp o, hncp_hash h);
 
 hncp_link hncp_find_link_by_name(hncp o, const char *ifname, bool create);
 hncp_link hncp_find_link_by_id(hncp o, uint32_t link_id);
