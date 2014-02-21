@@ -252,7 +252,7 @@ static bool pa_core_dp_ignore(struct pa_core *core, struct pa_dp *dp)
 {
 	struct pa_data *data = core_p(core, data);
 	struct pa_dp *dp2;
-	bool seen;
+	bool seen = false;
 	pa_for_each_dp(dp2, data) {
 		if(dp2 == dp) {
 			seen = true;

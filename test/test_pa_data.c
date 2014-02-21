@@ -554,7 +554,7 @@ void pa_data_test_aa()
 	sput_fail_unless(eaa == pa_eaa_get(data, &p1.prefix, &rid1, false), "No duplicate");
 	pa_aa_notify(data, &eaa->aa);
 	padt_check_cb(PADT_CB_AAS,  PADF_AA_CREATED);
-	padt_check_aa(&laa->aa, &p1.prefix, false);
+	padt_check_aa(&eaa->aa, &p1.prefix, false);
 	padt_check_eaa(eaa, &rid1, NULL);
 
 	pa_for_each_eaa(eaa_i, data) {

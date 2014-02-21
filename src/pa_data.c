@@ -721,6 +721,12 @@ void pa_data_term(struct pa_data *data)
 {
 	L_NOTICE("Terminating database structure.");
 
+	if(data->ipv4.dhcp_data) {
+		free(data->ipv4.dhcp_data);
+		data->ipv4.dhcp_data = NULL;
+		data->ipv4.dhcp_len = 0;
+	}
+
 	struct pa_ap *ap;
 	while(!avl_is_empty(&data->aps))
 		pa_ap_destroy(data, avl_first_element(&data->aps, ap, avl_node));
