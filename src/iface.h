@@ -159,9 +159,6 @@ void iface_set_dhcp_received(struct iface *c, bool leased, ...);
 // Set DHCPv6 data received
 void iface_set_dhcpv6_received(struct iface *c, ...);
 
-// Enable prefix route
-void iface_set_prefix_route(const struct prefix *p, bool enable);
-
 // Flush all interfaces
 void iface_flush(void);
 

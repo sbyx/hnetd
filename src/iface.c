@@ -36,6 +36,7 @@
 void iface_pa_ifs(struct pa_data_user *, struct pa_iface *, uint32_t flags);
 void iface_pa_cps(struct pa_data_user *, struct pa_cp *, uint32_t flags);
 void iface_pa_aas(struct pa_data_user *, struct pa_aa *, uint32_t flags);
+void iface_pa_dps(struct pa_data_user *, struct pa_dp *, uint32_t flags);
 
 static void iface_discover_border(struct iface *c);
 
@@ -44,8 +45,24 @@ static struct list_head users = LIST_HEAD_INIT(users);
 static struct pa_data_user pa_data_cb = {
 	.cps = iface_pa_cps,
 	.aas = iface_pa_aas,
-	.ifs = iface_pa_ifs
+	.ifs = iface_pa_ifs,
+	.dps = iface_pa_dps
 };
+
+void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
+		struct pa_dp *dp, uint32_t flags)
+{
+	if(prefix_is_ipv4(&dp->prefix))
+		return;
+
+	if(flags & PADF_DP_CREATED) {
+		L_DEBUG("Pushing to platform "PA_DP_L, PA_DP_LA(dp));
+		platform_set_prefix_route(&dp->prefix, true);
+	} else if(flags & PADF_DP_TODELETE) {
+		L_DEBUG("Removing from platform "PA_DP_L, PA_DP_LA(dp));
+		platform_set_prefix_route(&dp->prefix, false);
+	}
+}
 
 void iface_pa_ifs(__attribute__((unused))struct pa_data_user *user,
 		struct pa_iface *iface, uint32_t flags)
@@ -353,14 +370,6 @@ void iface_commit_routes(void)
 	list_for_each_entry(c, &interfaces, head)
 		vlist_flush(&c->routes);
 }
-
-
-// Set prefix route
-void iface_set_prefix_route(const struct prefix *p, bool enable)
-{
-	platform_set_prefix_route(p, enable);
-}
-
 
 // Compare if two addresses are identical
 static int compare_routes(const void *a, const void *b, void *ptr __attribute__((unused)))
