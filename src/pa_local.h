@@ -66,17 +66,17 @@ struct pa_local_conf
 
 		/* Valid lifetime for local prefixes (ula + ipv4)
 		 * default = 600 * HNETD_TIME_PER_SECOND */
-		uint32_t local_valid_lifetime;
+		hnetd_time_t local_valid_lifetime;
 
 		/* Preferred lifetime for local prefixes
 		 * default = 300 * HNETD_TIME_PER_SECOND */
-		uint32_t local_preferred_lifetime;
+		hnetd_time_t local_preferred_lifetime;
 
 		/* A local prefix lifetime is update when
 		 * prefix.valid - local_update_delay <= now
 		 * This should be more than valid_lifetime - preferred_lifetime.
 		 * default = 330 * HNETD_TIME_PER_SECOND */
-		uint32_t local_update_delay;
+		hnetd_time_t local_update_delay;
 };
 
 struct pa_local {

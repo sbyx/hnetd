@@ -12,6 +12,7 @@
 #include "pa_data.h"
 
 #include <stdio.h>
+#include <inttypes.h>
 
 #define PA_P_ALLOC(pa_struct) \
 	do { \
@@ -125,7 +126,7 @@ void pa_dp_set_lifetime(struct pa_dp *dp, hnetd_time_t preferred, hnetd_time_t v
 			dp->valid_until == valid)
 		return;
 
-	L_DEBUG("Changing "PA_DP_L " lifetimes (%ld, %ld)", PA_DP_LA(dp), preferred, valid);
+	L_DEBUG("Changing "PA_DP_L" lifetimes (%"PRId64", %"PRId64")", PA_DP_LA(dp), (int64_t)preferred, (int64_t)valid);
 
 	dp->preferred_until = preferred;
 	dp->valid_until = valid;

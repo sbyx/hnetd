@@ -116,7 +116,7 @@ struct pa_dp {
 	uint32_t __flags;
 
 #define PA_DP_L			"dp %s(local=%d)"
-#define PA_DP_LA(dp)	PREFIX_REPR(&(dp)->prefix), (dp)->local
+#define PA_DP_LA(dp)	PREFIX_REPR(&(dp)->prefix), (int)(dp)->local
 };
 
 /* Delegated prefix advertised by somebody else */
