@@ -46,9 +46,9 @@ void pa_init(struct pa *pa, const struct pa_conf *conf)
 	pa_core_init(&pa->core);
 	pa_local_init(&pa->local, conf?&conf->local_conf:NULL);
 
+	memset(&pa->ifu, 0, sizeof(struct iface_user));
 	pa->ifu.cb_intiface = __pa_ifu_intiface;
 	pa->ifu.cb_prefix = __pa_ifu_pd;
-	pa->ifu.cb_extdata = NULL; //TODO ?
 	pa->ifu.ipv4_update = __pa_ifu_ipv4;
 }
 

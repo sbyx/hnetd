@@ -72,9 +72,9 @@ static void __pa_local_elem_term(struct pa_local *local, struct pa_local_elem *e
 		pa_dp_todelete(&ldp->dp);
 		pa_dp_notify(local_p(local, data), &ldp->dp);
 		elem->ldp = NULL;
-		elem->create_start = 0;
-		elem->timeout = 0;
 	}
+	elem->create_start = 0;
+	elem->timeout = 0;
 }
 
 static uint8_t pa_local_generic_get_status(struct pa_local *local,
@@ -326,8 +326,8 @@ void pa_local_init(struct pa_local *local, const struct pa_local_conf *conf)
 	local->ipv4.create = pa_local_ipv4_create;
 	local->ipv4.get_status = pa_local_ipv4_get_status;
 	local->ipv4.update = pa_local_generic_update;
-	local->ula.timeout = 0;
-	local->ula.create_start = 0;
+	local->ipv4.timeout = 0;
+	local->ipv4.create_start = 0;
 
 	memset(&local->data_user, 0, sizeof(struct pa_data_user));
 	local->data_user.flood = __pa_local_flood_cb;

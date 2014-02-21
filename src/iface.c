@@ -52,9 +52,11 @@ void iface_pa_ifs(__attribute__((unused))struct pa_data_user *user,
 {
 	if(flags & (PADF_IF_DODHCP | PADF_IF_TODELETE)) {
 		struct iface *c = iface_get(iface->ifname);
-		bool owner = (flags & PADF_IF_TODELETE)?false:iface->do_dhcp;
-		assert(c != NULL && c->platform != NULL);
+		if(!c)
+			return;
+		assert(c->platform != NULL);
 
+		bool owner = (flags & PADF_IF_TODELETE)?false:iface->do_dhcp;
 		if (owner != c->linkowner) {
 			c->linkowner = owner;
 			platform_set_owner(c, owner);
@@ -73,7 +75,9 @@ void iface_pa_ifs(__attribute__((unused))struct pa_data_user *user,
 static inline void iface_pa_prefix_update(struct pa_cp *cp)
 {
 	struct iface *c = iface_get(cp->iface->ifname);
-	assert(c != NULL && c->platform != NULL);
+	if(!c)
+		return;
+	assert(c->platform != NULL);
 	struct iface_addr *a = calloc(1, sizeof(*a) + cp->dp->dhcp_len);
 	memcpy(&a->prefix.prefix, &cp->laa->aa.address, sizeof(struct in6_addr));
 	a->prefix.plen = cp->prefix.plen;
@@ -87,7 +91,9 @@ static inline void iface_pa_prefix_update(struct pa_cp *cp)
 static inline void iface_pa_prefix_delete(struct pa_cp *cp)
 {
 	struct iface *c = iface_get(cp->iface->ifname);
-	assert(c != NULL && c->platform != NULL);
+	if(!c)
+		return;
+	assert(c->platform != NULL);
 	struct iface_addr *a = vlist_find(&c->assigned, &cp->prefix, a, node);
 	if (a)
 		vlist_delete(&c->assigned, &a->node);
@@ -97,16 +103,18 @@ static inline void iface_pa_prefix_delete(struct pa_cp *cp)
 void iface_pa_cps(__attribute__((unused))struct pa_data_user *user,
 		struct pa_cp *cp, uint32_t flags)
 {
-	if((flags & (PADF_CP_TODELETE | PADF_CP_DP | PADF_CP_IFACE)) && cp->laa && cp->laa->applied && cp->applied) {
-		/* Changed while applied */
-		if(flags & PADF_CP_TODELETE) {
-			iface_pa_prefix_delete(cp);
-		} else {
-			iface_pa_prefix_update(cp);
-		}
-	} else if((flags & PADF_CP_APPLIED) && cp->laa && cp->laa->applied) {
-		/* Changing apply state */
-		if(cp->applied) {
+	if(!cp->laa || !cp->laa->applied) /* This prefix is not known here */
+			return;
+
+	bool applied = cp->applied;
+	if((flags & PADF_CP_TODELETE) && applied) {
+		flags |= PADF_CP_APPLIED;
+		applied = false;
+	}
+
+	if(flags & (PADF_CP_APPLIED | PADF_CP_DP | PADF_CP_IFACE)) {
+		/* Changed application */
+		if(applied) {
 			iface_pa_prefix_update(cp);
 		} else {
 			iface_pa_prefix_delete(cp);
@@ -121,13 +129,17 @@ void iface_pa_aas(__attribute__((unused))struct pa_data_user *user,
 		return;
 
 	struct pa_laa *laa = container_of(aa, struct pa_laa, aa);
-	if(!laa->cp)
+	if(!laa->cp || !laa->cp->applied)
 		return;
 
-	if((flags & (PADF_AA_TODELETE)) && laa->cp->applied && laa->applied) {
-		iface_pa_prefix_delete(laa->cp);
-	} else if((flags & PADF_LAA_APPLIED) && laa->cp->applied) {
-		if(laa->cp->applied) {
+	bool applied = laa->applied;
+	if((flags & PADF_CP_TODELETE) && applied) {
+		flags |= PADF_CP_APPLIED;
+		applied = false;
+	}
+
+	if(flags & (PADF_LAA_APPLIED)) {
+		if(applied) {
 			iface_pa_prefix_update(laa->cp);
 		} else {
 			iface_pa_prefix_delete(laa->cp);
