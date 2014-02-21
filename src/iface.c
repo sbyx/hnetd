@@ -61,6 +61,11 @@ void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 	} else if(flags & PADF_DP_TODELETE) {
 		L_DEBUG("Removing from platform "PA_DP_L, PA_DP_LA(dp));
 		platform_set_prefix_route(&dp->prefix, false);
+	} else if(flags & (PADF_DP_DHCP | PADF_DP_LIFETIME)) {
+		struct pa_cp *cp;
+		pa_for_each_cp_in_dp(cp, dp) {
+			iface_pa_cps(user, cp, PADF_CP_DP); /* A bit hacky, but should work */
+		}
 	}
 }
 
@@ -120,6 +125,9 @@ static inline void iface_pa_prefix_delete(struct pa_cp *cp)
 void iface_pa_cps(__attribute__((unused))struct pa_data_user *user,
 		struct pa_cp *cp, uint32_t flags)
 {
+	/* This function is also called by iface_pa_dps when lifetime or dhcp data is modified.
+	 * The flags is then PADF_CP_DP. */
+
 	if(!cp->laa || !cp->laa->applied) /* This prefix is not known here */
 			return;
 

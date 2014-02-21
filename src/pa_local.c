@@ -77,13 +77,15 @@ static void __pa_local_elem_term(struct pa_local *local, struct pa_local_elem *e
 	elem->timeout = 0;
 }
 
-static uint8_t pa_local_generic_get_status(struct pa_local *local,
-		struct pa_local_elem *elem,
-		bool (*prefix_filter)(const struct prefix *))
+static uint8_t pa_local_ula_get_status(struct pa_local *local, struct pa_local_elem *elem)
 {
+	if(!local->conf.use_ula
+			|| (local->conf.no_ula_if_glb_ipv6 && __pa_has_globalv6(local)))
+		return 0;
+
 	struct pa_dp *dp;
 	pa_for_each_dp(dp, local_p(local, data)) {
-		if(!prefix_filter(&dp->prefix))
+		if(!prefix_is_ipv6_ula(&dp->prefix))
 			continue;
 
 		if(dp->local) {
@@ -101,20 +103,6 @@ static uint8_t pa_local_generic_get_status(struct pa_local *local,
 		status |= PA_LOCAL_CAN_CREATE;
 
 	return status;
-}
-
-static bool pa_local_ula_prefix_filter(const struct prefix *p)
-{
-	return prefix_is_ipv6_ula(p);
-}
-
-static uint8_t pa_local_ula_get_status(struct pa_local *local, struct pa_local_elem *elem)
-{
-	if(!local->conf.use_ula
-			|| (local->conf.no_ula_if_glb_ipv6 && __pa_has_globalv6(local)))
-		return 0;
-
-	return pa_local_generic_get_status(local, elem, pa_local_ula_prefix_filter);
 }
 
 static void pa_local_ula_create(struct pa_local *local, struct pa_local_elem *elem)
@@ -150,11 +138,6 @@ static hnetd_time_t pa_local_generic_update(struct pa_local *local, struct pa_lo
 	return elem->ldp->dp.valid_until - local->conf.local_update_delay;
 }
 
-static bool pa_local_ipv4_prefix_filter(const struct prefix *p)
-{
-	return prefix_is_ipv4(p);
-}
-
 static uint8_t pa_local_ipv4_get_status(struct pa_local *local, struct pa_local_elem *elem)
 {
 	if(!local->conf.use_ipv4 ||
@@ -162,7 +145,22 @@ static uint8_t pa_local_ipv4_get_status(struct pa_local *local, struct pa_local_
 			(local->conf.no_ipv4_if_glb_ipv6 && __pa_has_globalv6(local)))
 		return 0;
 
-	return pa_local_generic_get_status(local, elem, pa_local_ipv4_prefix_filter);
+	struct pa_dp *dp;
+	pa_for_each_dp(dp, local_p(local, data)) {
+		if(!prefix_is_ipv4(&dp->prefix))
+			continue;
+
+		if(dp->local) {
+			if(dp != &elem->ldp->dp)
+				return 0;
+		} else {
+			struct pa_edp *edp = container_of(dp, struct pa_edp, dp);
+			if(PA_RIDCMP(&edp->rid, &local_p(local, data.flood)->rid) > 0)
+				return 0;
+		}
+	}
+
+	return PA_LOCAL_CAN_KEEP | PA_LOCAL_CAN_CREATE;
 }
 
 static void pa_local_ipv4_create(struct pa_local *local, struct pa_local_elem *elem)
@@ -174,7 +172,6 @@ static void pa_local_ipv4_create(struct pa_local *local, struct pa_local_elem *e
 static void pa_local_algo(struct pa_local *local, struct pa_local_elem *elem, hnetd_time_t now)
 {
 	uint8_t status = elem->get_status(local, elem);
-
 	if(!status)
 		goto destroy;
 
