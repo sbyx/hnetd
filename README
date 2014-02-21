@@ -49,9 +49,27 @@ hnetd uses the following auxiliary tools (replacable):
 * udhcpc (DHCP client): http://busybox.net
 
 hnetd uses cmake:
-* To prepare a Makefile use:  "cmake ." 
+* To prepare a Makefile use:  "cmake . -DCMAKE_INSTALL_PREFIX=/usr" 
 * To build / install use: "make" / "make install" afterwards.
 * To build DEB or RPM packages use: "make package" afterwards.
+
+
+** OpenWrt Firmware Integration **
+
+hnetd and ohybridproxy can be built from the openwrt-routing feed.
+Use:
+	./scripts/feeds update
+	./scripts/feeds install hnetd ohybridproxy
+
+and select both packets in "make menuconfig".
+Snapshot builds might be avialable in the OpenWrt daily builds folder.
+
+To use hnetd on an interface set its proto-option in /etc/config/network, e.g.
+
+config interface lan
+	option ifname eth0
+	option proto hnet
+
 
 
 ** Generic Firmware Integration **
@@ -60,3 +78,11 @@ hnetd can be integrated into generic Linux router firmwares with recent 3.10.x
 or later kernels. The scripts that need to be adapted for the integration can
 be found in the folder "generic".
 
+Copy the scripts hnet-backend and hnetd-routing to /usr/sbin/ and adapt
+them if needed.
+
+Copy the scripts dhcp.script and dhcpv6.script to /usr/share/hnetd and
+adapt them if needed. 
+
+If you are using odhcpd as DHCP/DHCPv6/RA server start it as a daemon.
+Afterwards run hnetd with appropriate parameters.
