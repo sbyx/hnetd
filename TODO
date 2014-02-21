@@ -29,6 +29,10 @@ Short-term things
 Eventually nice to have
 -----------------------
 
+- uloop mock feature for unit tests (e.g. iface test takes too long
+  currently, and doing painful uloop simulation like net_sim does
+  isn't sensible)
+
 - 'generic linux' case could support SD (=local dnsmasq configuration
   etc. just like on openwrt)
 
