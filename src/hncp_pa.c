@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Mon Feb 17 17:39:40 2014 mstenber
- * Edit time:     314 min
+ * Last modified: Fri Feb 21 12:25:56 2014 mstenber
+ * Edit time:     317 min
  *
  */
 
@@ -178,9 +178,8 @@ static void _update_a_tlv(hncp_glue g, hncp_node n,
 	  pa_ap_todelete(ap);
   } else {
 	  pa_ap_set_iface(ap, iface);
-	  //todo idli
-	  /* set authoritative and priority
-	   * pa_ap_set_priority() pa_ap_set_authoritative() */
+          pa_ap_set_priority(ap, ah->preference);
+          pa_ap_set_authoritative(ap, ah->authoritative);
   }
 
   pa_ap_notify(g->pa_data, ap);
@@ -593,10 +592,12 @@ static void hncp_pa_aas(struct pa_data_user *user, struct pa_aa *aa, uint32_t fl
 		struct pa_laa *laa = container_of(aa, struct pa_laa, aa);
 		if(!laa->cp || !laa->cp->iface)
 			return;
-		//todo for idli
-		/* Go here when a local address advertisement is created or deleted.
-		 * If created (flags & PADF_AA_CREATED), aa->address must be advertised on 'laa->cp->iface->ifname' interface.
-		 * If about to be deleted (flags & PADF_AA_TODELETE), aa->address must not be advertised anymore on 'laa->cp->iface->ifname' */
+                if (flags & PADF_AA_CREATED)
+                  hncp_add_tlv_raw(g->hncp, HNCP_T_ROUTER_ADDRESS,
+                                   &aa->address, sizeof(aa->address));
+                else
+                  hncp_remove_tlv_raw(g->hncp, HNCP_T_ROUTER_ADDRESS,
+                                      &aa->address, sizeof(aa->address));
 	}
 }
 
