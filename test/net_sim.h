@@ -350,8 +350,8 @@ void net_sim_remove_node(net_sim s, net_node node)
 #ifndef DISABLE_HNCP_PA
   /* Kill glue (has to be done _after_ hncp_uninit). */
   hncp_pa_glue_destroy(node->g);
+  pa_data_term(&node->pa_data);
 #endif /* !DISABLE_HNCP_PA */
-
   free(node);
 }
 
