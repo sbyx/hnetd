@@ -31,6 +31,13 @@
 #define IPV6_ADD_MEMBERSHIP IPV6_JOIN_GROUP
 #define IPV6_DROP_MEMBERSHIP IPV6_LEAVE_GROUP
 
+/* LIST_HEAD macro in sys/queue.h, argh.. */
+
+#include <sys/queue.h>
+#ifdef LIST_HEAD
+#undef LIST_HEAD
+#endif /* LIST_HEAD */
+
 #endif /* __APPLE__ */
 
 #include <stddef.h>
