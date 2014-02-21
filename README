@@ -79,10 +79,19 @@ or later kernels. The scripts that need to be adapted for the integration can
 be found in the folder "generic".
 
 Copy the scripts hnet-backend and hnetd-routing to /usr/sbin/ and adapt
-them if needed.
+them if needed. The symlinks hnet-client, hnet-ifup and hnet-ifdown should be
+preserved as well.
 
 Copy the scripts dhcp.script and dhcpv6.script to /usr/share/hnetd and
 adapt them if needed. 
 
 If you are using odhcpd as DHCP/DHCPv6/RA server start it as a daemon.
 Afterwards run hnetd with appropriate parameters.
+
+Once both services are running, you can use hnet-ifup and hnet-ifdown:
+
+hnet-ifup <interfacename> [external] adds an interface to hnet.
+<interfacename> is the name of the network interface (e.g. eth0).
+[external] is an optional parameter indicating the interface is fixed-external.
+
+hnet-ifdown <interfacename> removes an interface from hnet again.
