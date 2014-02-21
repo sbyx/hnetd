@@ -167,8 +167,8 @@ static void iface_notify_data_state(struct iface *c, bool enabled)
 	list_for_each_entry(u, &users, head) {
 		if (u->cb_extdata)
 			u->cb_extdata(u, c->ifname, data, len);
-		if (u->ipv4_update)
-			u->ipv4_update(u, c->ifname, data4, len4);
+		if (u->cb_ext4data)
+			u->cb_ext4data(u, c->ifname, data4, len4);
 	}
 
 
@@ -211,6 +211,34 @@ static void iface_link_event(struct uloop_fd *fd, __unused unsigned events)
 
 static struct uloop_fd rtnl_fd = { .fd = -1 };
 
+void iface_set_unreachable_route(const struct prefix *p, bool enable)
+{
+	struct {
+		struct nlmsghdr nhm;
+		struct rtmsg rtm;
+		struct rtattr rta_addr;
+		struct in6_addr addr;
+		struct rtattr rta_prio;
+		uint32_t prio;
+	} req = {
+		.nhm = {sizeof(req), RTM_DELROUTE, NLM_F_REQUEST, 1, 0},
+		.rtm = {AF_INET6, p->plen, 0, 0, RT_TABLE_MAIN, RTPROT_STATIC, RT_SCOPE_NOWHERE, 0, 0},
+		.rta_addr = {sizeof(req.rta_addr) + sizeof(req.addr), RTA_DST},
+		.addr = p->prefix,
+		.rta_prio = {sizeof(req.rta_prio) + sizeof(req.prio), RTA_PRIORITY},
+		.prio = 1000000000
+	};
+
+	if (enable) {
+		req.nhm.nlmsg_type = RTM_NEWROUTE;
+		req.nhm.nlmsg_flags |= NLM_F_CREATE | NLM_F_REPLACE;
+		req.rtm.rtm_scope = RT_SCOPE_UNIVERSE;
+		req.rtm.rtm_type = RTN_UNREACHABLE;
+	}
+
+	send(rtnl_fd.fd, &req, sizeof(req), 0);
+}
+
 #endif /* __linux__ */
 
 int iface_init(struct pa_data *pa_data)
@@ -248,7 +276,7 @@ void iface_unregister_user(struct iface_user *user)
 }
 
 
-void iface_set_dhcpv6_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len, const void *dhcp_data, size_t dhcp_len)
+void iface_set_dhcp_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len, const void *dhcp_data, size_t dhcp_len)
 {
 	struct iface *c = iface_get(ifname);
 
@@ -324,6 +352,13 @@ void iface_commit_routes(void)
 	struct iface *c;
 	list_for_each_entry(c, &interfaces, head)
 		vlist_flush(&c->routes);
+}
+
+
+// Set prefix route
+void iface_set_prefix_route(const struct prefix *p, bool enable)
+{
+	platform_set_prefix_route(p, enable);
 }
 
 
@@ -476,10 +511,17 @@ void iface_remove(struct iface *c)
 	if (c->platform)
 		platform_iface_free(c);
 
-	free(c->dhcpv6_data_in);
-	free(c->dhcpv6_data_out);
-	free(c->dhcp_data_in);
-	free(c->dhcp_data_out);
+	if (c->dhcpv6_len_in)
+		free(c->dhcpv6_data_in);
+
+	if (c->dhcpv6_len_out)
+		free(c->dhcpv6_data_out);
+
+	if (c->dhcp_len_in)
+		free(c->dhcp_data_in);
+
+	if (c->dhcp_len_out)
+		free(c->dhcp_data_out);
 
 	uloop_timeout_cancel(&c->transition);
 	uloop_timeout_cancel(&c->preferred);
@@ -501,7 +543,7 @@ void iface_update_init(struct iface *c)
 static void iface_announce_border(struct uloop_timeout *t)
 {
 	struct iface *c = container_of(t, struct iface, transition);
-	iface_notify_data_state(c, c->internal);
+	iface_notify_data_state(c, !c->internal);
 	iface_notify_internal_state(c, c->internal);
 	platform_set_internal(c, c->internal);
 
@@ -650,7 +692,11 @@ void iface_set_dhcp_received(struct iface *c, bool leased, ...)
 		equal = false;
 
 	if (!equal) {
-		c->dhcp_data_in = realloc(c->dhcp_data_in, offset);
+		if (c->dhcp_len_in)
+			c->dhcp_data_in = realloc(c->dhcp_data_in, offset);
+		else
+			c->dhcp_data_in = malloc(offset);
+
 		c->dhcp_len_in = offset;
 
 		offset = 0;
@@ -671,6 +717,9 @@ void iface_set_dhcp_received(struct iface *c, bool leased, ...)
 		if (!c->internal)
 			iface_notify_data_state(c, true);
 	}
+
+	if (c->dhcp_len_in == 0)
+		c->dhcp_data_in = (void*)1;
 }
 
 
@@ -729,7 +778,11 @@ void iface_set_dhcpv6_received(struct iface *c, ...)
 		equal = false;
 
 	if (!equal) {
-		c->dhcpv6_data_in = realloc(c->dhcpv6_data_in, offset);
+		if (c->dhcpv6_len_in)
+			c->dhcpv6_data_in = realloc(c->dhcpv6_data_in, offset);
+		else
+			c->dhcpv6_data_in = malloc(offset);
+
 		c->dhcpv6_len_in = offset;
 
 		offset = 0;
@@ -750,4 +803,7 @@ void iface_set_dhcpv6_received(struct iface *c, ...)
 		if (!c->internal)
 			iface_notify_data_state(c, true);
 	}
+
+	if (c->dhcpv6_len_in == 0)
+		c->dhcpv6_data_in = (void*)1;
 }

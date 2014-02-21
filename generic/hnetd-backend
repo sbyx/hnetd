@@ -33,6 +33,11 @@ newroute|delroute)
 		ip route "$act" "$3" via "$4" dev "$2" metric "$5"
 	fi
 	;;
+	
+newprefixroute|delprefixroute)
+	[ "$1" = "newprefixroute" ] && act="replace" || act="del"
+	ip -6 route "$act" unreachable "$2"
+	;;
 
 startdhcp)
 	uci batch <<-EOF

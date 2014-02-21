@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue Feb  4 18:22:05 2014 mstenber
- * Edit time:     252 min
+ * Last modified: Thu Feb 20 17:28:52 2014 mstenber
+ * Edit time:     280 min
  *
  */
 
@@ -228,6 +228,35 @@ _heard(hncp_link l, hncp_t_link_id lid, struct in6_addr *src)
   return n;
 }
 
+static bool
+_handle_collision(hncp o)
+{
+  /* XXX - consider also case where security is enabled; for now,
+   * we just handle collisions insecurely. */
+  int delta = hncp_io_time(o) - o->collisions[o->last_collision];
+  if (delta < HNCP_UPDATE_COLLISION_N)
+    {
+      L_ERR("%d hash conflicts encountered in %.3fs - changing own id",
+            HNCP_UPDATE_COLLISIONS_IN_N,
+            1.0 * delta / HNETD_TIME_PER_SECOND);
+      hncp_hash_s h;
+      int i;
+
+      for (i = 0 ; i < HNCP_HASH_LEN ; i++)
+        h.buf[i] = rand() % 256;
+      hncp_set_own_hash(o, &h);
+      return true;
+    }
+  else
+    {
+      int c = o->last_collision;
+      o->collisions[c] = hncp_io_time(o);
+      c = (c + 1) % HNCP_UPDATE_COLLISIONS_IN_N;
+      o->last_collision = c;
+    }
+  return false;
+}
+
 /* Handle a single received message. */
 static void
 handle_message(hncp_link l,
@@ -262,13 +291,6 @@ handle_message(hncp_link l,
         if (tlv_len(a) == sizeof(hncp_t_link_id_s))
           {
             lid = tlv_data(a);
-            if (memcmp(&lid->node_identifier_hash,
-                       &l->hncp->own_node->node_identifier_hash,
-                       HNCP_HASH_LEN) == 0)
-              {
-                L_DEBUG("received looped message from self - ignoring");
-                return;
-              }
           }
         else
           {
@@ -283,10 +305,14 @@ handle_message(hncp_link l,
       return;
     }
 
-  ne = _heard(l, lid, src);
-
-  if (!ne)
-    return;
+  if (memcmp(&lid->node_identifier_hash,
+             &l->hncp->own_node->node_identifier_hash,
+             HNCP_HASH_LEN) != 0)
+    {
+      ne = _heard(l, lid, src);
+      if (!ne)
+        return;
+    }
 
   /* Estimates what's in the payload + handles the few
    * request messages we support. */
@@ -336,7 +362,7 @@ handle_message(hncp_link l,
      - network hash + node states
      - node state + node data
   */
-  if (!multicast)
+  if (!multicast && ne)
     {
       ne->last_response = hncp_time(l->hncp);
       ne->ping_count = 0;
@@ -366,6 +392,21 @@ handle_message(hncp_link l,
             ns = tlv_data(a);
             n = hncp_find_node_by_hash(o, &ns->node_identifier_hash, false);
             new_update_number = be32_to_cpu(ns->update_number);
+            if (n == o->own_node)
+              {
+                if (new_update_number > n->update_number
+                    || (new_update_number == n->update_number
+                        && memcmp(&n->node_data_hash,
+                                  &ns->node_data_hash,
+                                  sizeof(n->node_data_hash)) != 0))
+                  {
+                    L_ERR("detected conflicting node state update %d>=%d",
+                          new_update_number, n->update_number);
+                    _handle_collision(o);
+                    return;
+                  }
+                continue;
+              }
             if (!n || n->update_number < new_update_number)
               {
                 L_DEBUG("saw something new for %llx/%p (update number %d)",
@@ -455,6 +496,8 @@ handle_message(hncp_link l,
     {
       L_DEBUG("received %d update number from network, own %d",
               new_update_number, n->update_number);
+      if (_handle_collision(o))
+        return;
       /* Don't accept updates to 'self' from network. Instead,
        * increment own update number. */
       n->update_number = new_update_number + 1;

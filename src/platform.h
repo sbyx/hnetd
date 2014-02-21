@@ -36,3 +36,6 @@ void platform_iface_new(struct iface *c, const char *handle);
 
 // Delete local interface
 void platform_iface_free(struct iface *c);
+
+// Set prefix route
+void platform_set_prefix_route(const struct prefix *p, bool enable);

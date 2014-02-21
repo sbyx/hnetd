@@ -73,6 +73,7 @@ void hncp_iface_glue(hncp_iface_user hiu, hncp h, hncp_glue g)
 	hiu->iu.cb_intiface = hncp_iface_intiface_callback;
 	hiu->iu.cb_intaddr = hncp_iface_intaddr_callback;
 	hiu->iu.cb_extdata = hncp_iface_extdata_callback;
+	hiu->iu.cb_ext4data = hncp_iface_extdata_callback;
 	hiu->hncp = h;
 	hiu->glue = g;
 

@@ -238,7 +238,7 @@ _qsort_tlv_cmp(const void *t1, const void *t2)
 
 bool tlv_sort(void *data, int len)
 {
-	void *tmp = malloc(len), *t = tmp;
+	void *tmp = alloca(len), *t = tmp;
 	struct tlv_attr *a, **al;
 	int c = 0, i;
 
@@ -263,6 +263,5 @@ bool tlv_sort(void *data, int len)
 	if (t != (tmp + len))
 		return false;
 	memcpy(data, tmp, len);
-	free(tmp);
 	return true;
 }

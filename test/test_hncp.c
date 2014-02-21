@@ -27,7 +27,7 @@ struct iface* iface_get(const char *ifname )
   return NULL;
 }
 
-void iface_set_dhcpv6_send(const char *ifname,
+void iface_set_dhcp_send(const char *ifname,
                            const void *dhcpv6_data, size_t dhcpv6_len,
                            const void *dhcp_data, size_t dhcp_len)
 {

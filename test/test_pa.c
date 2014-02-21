@@ -348,7 +348,7 @@ void test_pa_ipv4()
 	pa_start(&pa);
 
 	iface.user->cb_intiface(iface.user, IFNAME1, true);
-	iface.user->ipv4_update(iface.user, IFNAME2, DHCP_DATA, DHCP_LEN);
+	iface.user->cb_ext4data(iface.user, IFNAME2, DHCP_DATA, DHCP_LEN);
 
 	sput_fail_unless(to_check(&pa.local.timeout, now_time + PA_TEST_FLOOD), "Correct local timeout");
 	when = now_time + PA_TEST_FLOOD + 2*PA_TEST_FLOOD;
@@ -386,7 +386,7 @@ void test_pa_ipv4()
 	/* Renew ipv4 dp validity */
 	sput_fail_unless(to_getfirst() == &pa.local.timeout && !to_run(1), "Renew");
 
-	iface.user->ipv4_update(iface.user, IFNAME2, NULL, 0);
+	iface.user->cb_ext4data(iface.user, IFNAME2, NULL, 0);
 	res = to_run(2);
 	sput_fail_unless(!res && !to_getfirst(), "Remove IPv4 connectivity");
 

@@ -44,7 +44,17 @@ setup_interface () {
 	[ -n "$msstaticroutes" ] && set_classless_routes $msstaticroutes
 
 	update_resolv "$dns"
-	hnet-call "{\"command\": \"set_v4lease\", \"ifname\": \"$interface\"}"
+	local dnspart=""
+
+	for entry in $dns; do
+		if [ -z "$dnspart" ]; then
+			dnspart="\"$entry\""
+		else
+			dnspart="$dnspart, \"$entry\""
+		fi
+	done
+
+	hnet-call "{\"command\": \"set_v4lease\", \"ifname\": \"$interface\", \"dns\": [$dnspart]}"
 }
 
 deconfig_interface() {

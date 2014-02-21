@@ -1,0 +1,97 @@
+hnetd - a home network configuration daemon
+
+
+** Abstract **
+
+hnetd is a networking daemon to automatically manage address assignment,
+routing, DNS, SD and border firewalling in home networks running it.
+It implements the Home Networking Control protocol as specified in
+http://tools.ietf.org/html/draft-stenberg-homenet-hncp
+
+hnetd is designed to run on generic Linux-based routers.
+
+
+** Features **
+
+1. State synchronization between routers
+	a) link-local multicast transmission
+	b) unicast fallback for bulk synchronization
+	c) collision and conflict detection and resolving
+
+2. Prefix distribution and allocation
+	a) IPv6 prefix delegatuin
+	b) IPv4 prefix allocation
+
+3. Routing setup
+	a) selection of a shared routing protocol
+	b) fallback mechanism to setup routes autonomously
+
+4. Dynamic border-detection for IPv4 and IPv6
+	a) on-demand firewall reconfiguration
+	b) on-demand RA/DHCP/DHCPv6 server configuration
+	c) integration of fixed external connections (e.g. PPP, 6rd, ...)
+
+5. Sharing of DNS and Service Discovery configuration
+	a) Local DNS configuration
+	b) mDNS / DNS-SD hybrid proxy configuration
+
+
+** Compiling **
+
+hnetd depends on the following libraries:
+* libubox: http://nbd.name/gitweb.cgi?p=luci2/libubox.git
+* libubus (OpenWrt only): http://nbd.name/gitweb.cgi?p=luci2/ubus.git
+
+hnetd uses the following auxiliary tools (replacable):
+* odhcp6c (DHCPv6 client): https://github.com/sbyx/odhcp6c
+* odhcpd (RA/DHCP/DHCPv6 server): https://github.com/sbyx/odhcpd
+* ohybridproxy (mDNS proxy, optional): https://github.com/sbyx/ohybridproxy
+* udhcpc (DHCP client): http://busybox.net
+
+hnetd uses cmake:
+* To prepare a Makefile use:  "cmake . -DCMAKE_INSTALL_PREFIX=/usr" 
+* To build / install use: "make" / "make install" afterwards.
+* To build DEB or RPM packages use: "make package" afterwards.
+
+
+** OpenWrt Firmware Integration **
+
+hnetd and ohybridproxy can be built from the openwrt-routing feed.
+Use:
+	./scripts/feeds update
+	./scripts/feeds install hnetd ohybridproxy
+
+and select both packets in "make menuconfig".
+Snapshot builds might be avialable in the OpenWrt daily builds folder.
+
+To use hnetd on an interface set its proto-option in /etc/config/network, e.g.
+
+config interface lan
+	option ifname eth0
+	option proto hnet
+
+
+
+** Generic Firmware Integration **
+
+hnetd can be integrated into generic Linux router firmwares with recent 3.10.x
+or later kernels. The scripts that need to be adapted for the integration can
+be found in the folder "generic".
+
+Copy the scripts hnet-backend and hnetd-routing to /usr/sbin/ and adapt
+them if needed. The symlinks hnet-client, hnet-ifup and hnet-ifdown should be
+preserved as well.
+
+Copy the scripts dhcp.script and dhcpv6.script to /usr/share/hnetd and
+adapt them if needed. 
+
+If you are using odhcpd as DHCP/DHCPv6/RA server start it as a daemon.
+Afterwards run hnetd with appropriate parameters.
+
+Once both services are running, you can use hnet-ifup and hnet-ifdown:
+
+hnet-ifup <interfacename> [external] adds an interface to hnet.
+<interfacename> is the name of the network interface (e.g. eth0).
+[external] is an optional parameter indicating the interface is fixed-external.
+
+hnet-ifdown <interfacename> removes an interface from hnet again.

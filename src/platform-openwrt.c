@@ -169,6 +169,12 @@ void platform_set_dhcpv6_send(struct iface *c,
 }
 
 
+void platform_set_prefix_route(const struct prefix *p, bool enable)
+{
+	iface_set_unreachable_route(p, enable);
+}
+
+
 // Commit platform changes to netifd
 static void platform_commit(struct uloop_timeout *t)
 {
@@ -602,7 +608,33 @@ static void platform_update(void *data, size_t len)
 					v4leased = true;
 			}
 
-			iface_set_dhcp_received(c, v4leased, NULL, 0);
+			const size_t dns_max = 4;
+			size_t dns_cnt = 0;
+			struct {
+				uint8_t type;
+				uint8_t len;
+				struct in_addr addr[dns_max];
+			} dns;
+
+			if ((a = tb[IFACE_ATTR_DNS])) {
+				struct blob_attr *k;
+				unsigned rem;
+
+				blobmsg_for_each_attr(k, a, rem) {
+					if (dns_cnt >= dns_max || blobmsg_type(k) != BLOBMSG_TYPE_STRING ||
+							inet_pton(AF_INET, blobmsg_data(k), &dns.addr[dns_cnt]) < 1)
+						continue;
+
+					++dns_cnt;
+				}
+			}
+
+			if (dns_cnt) {
+				dns.type = DHCPV4_OPT_DNSSERVER;
+				dns.len = 4 * dns_cnt;
+			}
+
+			iface_set_dhcp_received(c, v4leased, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns), NULL);
 		} else if (!strcmp(proto, "hnet")) {
 			if ((a = tb[IFACE_ATTR_UP]) && !blobmsg_get_bool(a))
 				iface_remove(c);

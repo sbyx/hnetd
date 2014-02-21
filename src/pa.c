@@ -27,7 +27,7 @@ static void __pa_ifu_pd(struct iface_user *u, __attribute__((unused))const char 
 		const struct prefix *prefix, const struct prefix *excluded,
 		hnetd_time_t valid_until, hnetd_time_t preferred_until,
 		const void *dhcp_data, size_t dhcp_len);
-static void __pa_ifu_ipv4(struct iface_user *u, char *ifname,
+static void __pa_ifu_ipv4(struct iface_user *u, const char *ifname,
 		const void *dhcp_data, size_t dhcp_len);
 
 /************************************/
@@ -49,7 +49,7 @@ void pa_init(struct pa *pa, const struct pa_conf *conf)
 	memset(&pa->ifu, 0, sizeof(struct iface_user));
 	pa->ifu.cb_intiface = __pa_ifu_intiface;
 	pa->ifu.cb_prefix = __pa_ifu_pd;
-	pa->ifu.ipv4_update = __pa_ifu_ipv4;
+	pa->ifu.cb_ext4data = __pa_ifu_ipv4;
 }
 
 void pa_start(struct pa *pa)
@@ -139,7 +139,7 @@ static void __pa_ifu_pd(struct iface_user *u, const char *ifname,
 	pa_dp_notify(&pa->data, &ldp->dp);
 }
 
-static void __pa_ifu_ipv4(struct iface_user *u, char *ifname,
+static void __pa_ifu_ipv4(struct iface_user *u, const char *ifname,
 		const void *dhcp_data, __unused size_t dhcp_len)
 {
 	struct pa *pa = container_of(u, struct pa, ifu);
