@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Mon Feb 17 15:59:09 2014 mstenber
- * Edit time:     111 min
+ * Last modified: Fri Feb 21 12:25:39 2014 mstenber
+ * Edit time:     112 min
  *
  */
 
@@ -142,6 +142,8 @@ struct tlv_attr *hncp_add_tlv_raw(hncp o,
  * Remove a single TLV.
  */
 bool hncp_remove_tlv(hncp o, struct tlv_attr *tlv);
+bool hncp_remove_tlv_raw(hncp o,
+                         uint16_t type, void *data, uint16_t len);
 
 /**
  * Remove all TLVs of particular type.

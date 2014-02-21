@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Feb 20 10:31:36 2014 mstenber
+ * Last modified: Fri Feb 21 12:24:08 2014 mstenber
  * Edit time:     398 min
  *
  */
@@ -368,6 +368,20 @@ bool hncp_remove_tlv(hncp o, struct tlv_attr *tlv)
   vlist_delete(&o->tlvs, &old->in_tlvs);
   return true;
 }
+
+bool hncp_remove_tlv_raw(hncp o,
+                         uint16_t type, void *data, uint16_t len)
+{
+  struct tlv_attr *a = alloca(TLV_SIZE + len);
+
+  if (!a)
+    return NULL;
+  tlv_init(a, type, len + TLV_SIZE);
+  memcpy(tlv_data(a), data, len);
+  tlv_fill_pad(a);
+  return hncp_remove_tlv(o, a);
+}
+
 
 int hncp_remove_tlvs_by_type(hncp o, int type)
 {
