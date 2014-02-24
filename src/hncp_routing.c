@@ -80,7 +80,7 @@ static void hncp_routing_intiface(struct iface_user *u, const char *ifname, bool
 	} else {
 		for (size_t i = 0; i < bfs->ifaces_cnt; ++i) {
 			if (!strcmp(bfs->ifaces[i], ifname)) {
-				memmove(&bfs->ifaces[i], &bfs->ifaces[i+1], --bfs->ifaces_cnt - i);
+				memmove(&bfs->ifaces[i], &bfs->ifaces[i+1], (--bfs->ifaces_cnt - i) * sizeof(char *));
 				break;
 			}
 		}
