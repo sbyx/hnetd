@@ -405,8 +405,10 @@ static inline void pa_core_case2(struct pa_core *core, struct pa_iface *iface, s
 static inline void pa_core_case3(struct pa_core *core, struct pa_iface *iface, struct pa_dp *dp, struct pa_cp *cp)
 {
 	if(pa_core_cp_check_global_validity(core, cp)) {
-		pa_cp_set_advertised(cp, true);
 		cp->invalid = false;
+		pa_cp_set_advertised(cp, true);
+		pa_cp_set_dp(cp, dp);
+		pa_cp_notify(cp);
 	} else {
 		pa_core_destroy_cp(core, cp);
 		pa_core_case1(core, iface, dp);
@@ -721,16 +723,26 @@ static void __pad_cb_ifs(struct pa_data_user *user,
 static void __pad_cb_dps(struct pa_data_user *user, struct pa_dp *dp, uint32_t flags)
 {
 	struct pa_core *core = container_of(user, struct pa_core, data_user);
+	struct pa_cp *cp;
 	if(flags & (PADF_DP_CREATED | PADF_DP_TODELETE))
 		__pa_paa_schedule(core);
 
 	if(flags & PADF_DP_TODELETE) {
 		/* Need to make assignments orphans */
-		struct pa_cp *cp;
 		while(!(list_empty(&dp->cps))) {
 			cp = list_first_entry(&dp->cps, struct pa_cp, dp_le);
 			pa_cp_set_dp(cp, NULL);
 			pa_cp_notify(cp);
+		}
+	}
+
+	if((flags & PADF_DP_CREATED) && !pa_core_dp_ignore(core, dp)) {
+		/* Remove orphans if possible */
+		pa_for_each_cp(cp, core_p(core, data)) {
+			if(!cp->dp && prefix_contains(&dp->prefix, &cp->prefix)) {
+				pa_cp_set_dp(cp, dp);
+				pa_cp_notify(cp);
+			}
 		}
 	}
 
