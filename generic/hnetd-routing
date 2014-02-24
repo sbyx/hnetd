@@ -16,7 +16,7 @@ case "$action" in
 	enable|reconfigure|disable)
 		case "$proto" in
 			1)
-				start-stop-daemon -K -o -x $BABEL_EXE -p $BABEL_PID
+				start-stop-daemon -K -x $BABEL_EXE -p $BABEL_PID
 				rm -f $BABEL_PID
 				
 				shift 2
