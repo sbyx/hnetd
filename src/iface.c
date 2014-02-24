@@ -96,6 +96,14 @@ void iface_pa_ifs(__attribute__((unused))struct pa_data_user *user,
 
 static inline void iface_pa_prefix_update(struct pa_cp *cp)
 {
+	if(!cp->iface) {
+		L_WARN("Trying to configure a prefix with no interface");
+		return;
+	}
+
+	if(!cp->dp) /* Can happen when a cp is made orphan. But it can't last long, or it will be deleted. */
+		return;
+
 	struct iface *c = iface_get(cp->iface->ifname);
 	if(!c)
 		return;
@@ -112,6 +120,11 @@ static inline void iface_pa_prefix_update(struct pa_cp *cp)
 
 static inline void iface_pa_prefix_delete(struct pa_cp *cp)
 {
+	if(!cp->iface) {
+		L_WARN("Trying to delete a prefix with no interface");
+		return;
+	}
+
 	struct iface *c = iface_get(cp->iface->ifname);
 	if(!c)
 		return;
@@ -136,7 +149,7 @@ void iface_pa_cps(__attribute__((unused))struct pa_data_user *user,
 		flags |= PADF_CP_APPLIED;
 		applied = false;
 	}
-
+	//todo: What to do if iface is set to NULL ? We don't remember the old one...
 	if(flags & (PADF_CP_APPLIED | PADF_CP_DP | PADF_CP_IFACE)) {
 		/* Changed application */
 		if(applied) {
