@@ -6,6 +6,10 @@ action="$1"
 proto="$2"
 
 BABEL_EXE=/usr/sbin/babeld
+BABEL_ARGS="-C redistribute ip 0.0.0.0/0 eq 0 proto 3 metric 128 "\
+"-C redistribute ip 0.0.0.0/0 eq 0 metric 128 "\
+"-C redistribute ip ::/0 eq 0 metric 128 "\
+"-C redistribute eq 64 "
 
 case "$action" in
 	enumerate)
@@ -24,7 +28,7 @@ case "$action" in
 				
 				shift 2
 				if [ "$action" != "disable" -a -n "$1" ]; then
-					start-stop-daemon -S -x $BABEL_EXE -- -D $*
+					start-stop-daemon -S -x $BABEL_EXE -- -D `echo $BABEL_ARGS` $*
 				fi 
 			;;
 			*)
