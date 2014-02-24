@@ -40,6 +40,7 @@
 
 #define PAD_CONF_DFLT_MAX_SP      100
 #define PAD_CONF_DFLT_MAX_SP_P_IF 10
+#define PAD_CONF_DFLT_MAX_SA      40
 
 #define PAD_PRIORITY_DEFAULT 8
 
@@ -264,14 +265,22 @@ struct pa_sp {
 #define PA_SP_LA(sp)    PREFIX_REPR(&(sp)->prefix), PA_IFNAME_LA((sp)->iface)
 };
 
-struct pa_data_conf {
-	/* Maximum number of stored prefixes
-	 * default = 100 */
-	size_t max_sp;
+/* A stored address. No notification system for that structure. */
+struct pa_sa {
+	struct list_head le;
+	struct in6_addr addr;
 
-	/* Maximum number of stored prefixes per interface
-	 * default = 10 */
+#define PA_SA_L         "sa %s"
+#define PA_SA_LA(sp)    ADDR_REPR(&(sa)->addr)
+};
+
+struct pa_data_conf {
+	/* Maximum number of stored prefixes (dflt = 100) */
+	size_t max_sp;
+	/* Maximum number of stored prefixes per interface (dflt = 10) */
 	size_t max_sp_per_if;
+	/* Maximum number of stored addresses (dflt = 20) */
+	size_t max_sa;
 };
 
 struct pa_data {
@@ -288,6 +297,9 @@ struct pa_data {
 
 	size_t sp_count;
 	struct list_head sps;   /* Stored prefixes */
+
+	size_t sa_count;
+	struct list_head sas;   /* Stored addresses */
 };
 
 /* Subscription to data events */
@@ -385,6 +397,13 @@ void pa_eaa_set_iface(struct pa_eaa *, struct pa_iface *);
 	list_for_each_entry(pa_sp, &(pa_iface)->sps, if_le)
 struct pa_sp *pa_sp_get(struct pa_data *, struct pa_iface *, const struct prefix *p, bool goc);
 void pa_sp_promote(struct pa_data *, struct pa_sp *);
+
+#define pa_for_each_sa(pa_sa, pa_data) \
+	list_for_each_entry(pa_sa, &(pa_data)->sas, le)
+#define pa_for_each_sa_reverse(pa_sa, pa_data) \
+	list_for_each_entry_reverse(pa_sa, &(pa_data)->sas, le)
+struct pa_sa *pa_sa_get(struct pa_data *, const struct in6_addr *addr, bool goc);
+void pa_sa_promote(struct pa_data *, struct pa_sa *);
 
 #endif
 

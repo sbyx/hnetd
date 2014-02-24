@@ -491,7 +491,7 @@ void paa_algo_do(struct pa_core *core)
 	L_INFO("End of prefix assignment algorithm");
 }
 
-static bool __aaa_addr_available(struct pa_core *core, struct pa_iface *iface, struct in6_addr *addr)
+static bool __aaa_addr_available(struct pa_core *core, struct pa_iface *iface, const struct in6_addr *addr)
 {
 	struct pa_eaa *eaa;
 
@@ -514,6 +514,21 @@ static bool __aaa_addr_available(struct pa_core *core, struct pa_iface *iface, s
 	}
 
 	return true;
+}
+
+static int __aaa_from_storage(struct pa_core *core, struct pa_cp *cp, struct in6_addr *addr)
+{
+	struct pa_sa *sa;
+	struct prefix p;
+	pa_for_each_sa(sa, core_p(core, data)) {
+		p.plen = 128;
+		memcpy(&p.prefix, &sa->addr, sizeof(struct in6_addr));
+		if(prefix_contains(&cp->prefix, &p) && __aaa_addr_available(core, cp->iface, &sa->addr)) {
+			memcpy(addr, &sa->addr, sizeof(struct in6_addr));
+			return 0;
+		}
+	}
+	return -1;
 }
 
 static inline int __aaa_do_slaac(struct pa_cp *cp, struct in6_addr *addr)
@@ -606,7 +621,7 @@ static void aaa_algo_do(struct pa_core *core)
 
 		/* Create new if no assigned */
 		if(!cp->laa && cp->iface) {
-			if(!__aaa_do_slaac(cp, &addr) || !__aaa_find_random(core, cp, &addr)) {
+			if(!__aaa_from_storage(core, cp, &addr) || !__aaa_do_slaac(cp, &addr) || !__aaa_find_random(core, cp, &addr)) {
 				laa = pa_laa_create(&addr, cp);
 				if(laa) {
 					pa_aa_notify(data, &laa->aa);

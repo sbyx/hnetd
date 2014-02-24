@@ -386,6 +386,26 @@ void test_pa_ipv4()
 	/* Renew ipv4 dp validity */
 	sput_fail_unless(to_getfirst() == &pa.local.timeout && !to_run(1), "Renew");
 
+	/* Test if the same address is used again */
+	iface.user->cb_intiface(iface.user, IFNAME1, false);
+	res = to_run(1);
+	sput_fail_unless(!res, "Run paa");
+	iface.user->cb_intiface(iface.user, IFNAME1, true);
+	res = to_run(2);
+	sput_fail_unless(!res, "Run paa and laa");
+
+	cp = list_first_entry(&pa.data.cps, struct pa_cp, le);
+	sput_fail_unless(cp, "One cp");
+	if(cp) {
+		sput_fail_unless(!prefix_cmp(&pv4_1, &cp->prefix), "Correct cp prefix");
+	}
+	sput_fail_unless(cp->laa, "Created laa");
+	if(cp->laa)
+		sput_fail_unless(!memcmp(&cp->laa->aa.address, &pv4_1_1.prefix, sizeof(struct in6_addr)), "Correct ipv4 laa");
+
+	res = to_run(2);
+	sput_fail_unless(!res, "Apply cp and laa");
+
 	iface.user->cb_ext4data(iface.user, IFNAME2, NULL, 0);
 	res = to_run(2);
 	sput_fail_unless(!res && !to_getfirst(), "Remove IPv4 connectivity");
@@ -612,7 +632,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 	sput_enter_suite("Prefix assignment tests"); /* optional */
 	sput_run_test(test_pa_initial);
 	sput_run_test(test_pa_ipv4);
-	sput_run_test(test_pa_network);
+	//sput_run_test(test_pa_network);
 	sput_leave_suite(); /* optional */
 	sput_finish_testing();
 	return sput_get_return_value();

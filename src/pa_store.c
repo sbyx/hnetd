@@ -11,8 +11,9 @@
 #define store_p(store, next) (&store_pa(store)->next)
 
 /* Storage format constants */
-#define PAS_TYPE_AP  0x00
+#define PAS_TYPE_SP  0x00
 #define PAS_TYPE_ULA 0x01
+#define PAS_TYPE_SA 0x02
 
 static int pas_ifname_write(char *ifname, FILE *f)
 {
@@ -38,6 +39,22 @@ static int pas_ifname_read(char *ifname, FILE *f)
 	return strlen(ifname)?0:-1;
 }
 
+static int pas_address_write(struct in6_addr *addr, FILE *f)
+{
+	L_DEBUG("Writing address %s", ADDR_REPR(addr));
+	if(fwrite(addr, sizeof(struct in6_addr), 1, f) != 1)
+				return -1;
+	return 0;
+}
+
+static int pas_address_read(struct in6_addr *addr, FILE *f)
+{
+	if(fread(addr, sizeof(struct in6_addr), 1, f) != 1)
+			return -1;
+	L_DEBUG("Read address %s", ADDR_REPR(addr));
+	return 0;
+}
+
 static int pas_prefix_write(struct prefix *p, FILE *f)
 {
 	L_DEBUG("Writing prefix %s", PREFIX_REPR(p));
@@ -49,7 +66,6 @@ static int pas_prefix_write(struct prefix *p, FILE *f)
 
 static int pas_prefix_read(struct prefix *p, FILE *f)
 {
-	L_DEBUG("Trying to read prefix");
 	if(fread(&p->prefix, sizeof(struct in6_addr), 1, f) != 1 ||
 			fread(&p->plen, 1, 1, f) != 1)
 			return -1;
@@ -75,7 +91,7 @@ static int pas_ula_save(struct pa_store *store, FILE *f)
 	return 0;
 }
 
-static int pas_ap_load(struct pa_store *store, FILE *f)
+static int pas_sp_load(struct pa_store *store, FILE *f)
 {
 	struct prefix p;
 	char ifname[IFNAMSIZ] = {0}; //Init for valgrind tests
@@ -95,11 +111,30 @@ static int pas_ap_load(struct pa_store *store, FILE *f)
 	return 0;
 }
 
-static int pas_ap_save(struct pa_sp *sp, FILE *f)
+static int pas_sp_save(struct pa_sp *sp, FILE *f)
 {
 	if(pas_prefix_write(&sp->prefix, f) || pas_ifname_write(sp->iface->ifname, f))
 		return -1;
 	return 0;
+}
+
+static int pas_sa_load(struct pa_store *store, FILE *f)
+{
+	struct in6_addr addr;
+	if(pas_address_read(&addr, f))
+		return -1;
+
+	struct pa_sa *sa = pa_sa_get(store_p(store, data), &addr, true);
+	if(!sa)
+		return -2;
+
+	pa_sa_promote(store_p(store, data), sa);
+	return 0;
+}
+
+static int pas_sa_save(struct pa_sa *sa, FILE *f)
+{
+	return pas_address_write(&sa->addr, f)?-1:0;
 }
 
 static int pas_load(struct pa_store *store)
@@ -122,11 +157,14 @@ static int pas_load(struct pa_store *store)
 			break;
 
 		switch (type) {
-			case PAS_TYPE_AP:
-				err = pas_ap_load(store, f);
+			case PAS_TYPE_SP:
+				err = pas_sp_load(store, f);
 				break;
 			case PAS_TYPE_ULA:
 				err = pas_ula_load(store, f);
+				break;
+			case PAS_TYPE_SA:
+				err = pas_sa_load(store, f);
 				break;
 			default:
 				L_DEBUG("Invalid type");
@@ -141,6 +179,7 @@ static int pas_load(struct pa_store *store)
 static int pas_save(struct pa_store *store)
 {
 	struct pa_sp *sp;
+	struct pa_sa *sa;
 	char type;
 	FILE *f;
 
@@ -157,9 +196,15 @@ static int pas_save(struct pa_store *store)
 			((fwrite(&type, 1, 1, f) != 1) || pas_ula_save(store, f) ))
 		goto err;
 
-	type = PAS_TYPE_AP;
+	type = PAS_TYPE_SP;
 	pa_for_each_sp_reverse(sp, store_p(store, data)) {
-		if((fwrite(&type, 1, 1, f) != 1) || pas_ap_save(sp, f))
+		if((fwrite(&type, 1, 1, f) != 1) || pas_sp_save(sp, f))
+			goto err;
+	}
+
+	type = PAS_TYPE_SA;
+	pa_for_each_sa_reverse(sa, store_p(store, data)) {
+		if((fwrite(&type, 1, 1, f) != 1) || pas_sa_save(sa, f))
 			goto err;
 	}
 
@@ -201,6 +246,19 @@ static void __pa_store_cps(struct pa_data_user *user, struct pa_cp *cp, uint32_t
 	}
 }
 
+static void __pa_store_aas(struct pa_data_user *user, struct pa_aa *aa, uint32_t flags) {
+	struct pa_store *store = container_of(user, struct pa_store, data_user);
+	struct pa_data *data = store_p(store, data);
+	struct pa_laa *laa;
+	if(aa->local && (flags & PADF_LAA_APPLIED) && (laa = container_of(aa, struct pa_laa, aa))->applied) {
+		struct pa_sa *sa = pa_sa_get(data, &aa->address, true);
+		if(sa) {
+			pa_sa_promote(data, sa);
+			pas_save(store);
+		}
+	}
+}
+
 int pa_store_setfile(struct pa_store *store, const char *filepath)
 {
 	if(filepath) {
@@ -215,7 +273,7 @@ int pa_store_setfile(struct pa_store *store, const char *filepath)
 	}
 
 	if(filepath) {
-		if(!(store->filename = malloc(strlen(filepath)))) {
+		if(!(store->filename = malloc(strlen(filepath) + 1))) {
 			L_WARN("Could not allocate space for file path");
 			return -1;
 		}
@@ -234,6 +292,7 @@ void pa_store_init(struct pa_store *store)
 	memset(&store->data_user, 0, sizeof(struct pa_data_user));
 	store->data_user.cps = __pa_store_cps;
 	store->data_user.dps = __pa_store_dps;
+	store->data_user.aas = __pa_store_aas;
 }
 
 void pa_store_start(struct pa_store *store)

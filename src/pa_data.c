@@ -504,6 +504,13 @@ void pa_sp_destroy(struct pa_data *data, struct pa_sp *sp)
 	free(sp);
 }
 
+void pa_sp_promote(struct pa_data *data, struct pa_sp *sp)
+{
+	L_DEBUG("Promoting "PA_SP_L, PA_SP_LA(sp));
+	list_move(&sp->if_le, &sp->iface->sps);
+	list_move(&sp->le, &data->sps);
+}
+
 struct pa_sp *pa_sp_get(struct pa_data *data, struct pa_iface *iface, const struct prefix *p, bool goc)
 {
 	struct pa_sp *sp;
@@ -535,11 +542,54 @@ struct pa_sp *pa_sp_get(struct pa_data *data, struct pa_iface *iface, const stru
 	return sp;
 }
 
-void pa_sp_promote(struct pa_data *data, struct pa_sp *sp)
+struct pa_sa *__pa_sa_get(struct pa_data *data, const struct in6_addr *addr)
 {
-	L_DEBUG("Promoting "PA_SP_L, PA_SP_LA(sp));
-	list_move(&sp->if_le, &sp->iface->sps);
-	list_move(&sp->le, &data->sps);
+	struct pa_sa *sa;
+	pa_for_each_sa_reverse(sa, data) {
+		if(!memcmp(addr, &sa->addr, sizeof(struct in6_addr)))
+			return sa;
+	}
+	return NULL;
+}
+
+void pa_sa_destroy(struct pa_data *data, struct pa_sa *sa)
+{
+	L_DEBUG("Destroying "PA_SA_L, PA_SA_LA(sa));
+	--data->sa_count;
+	list_remove(&sa->le);
+	free(sa);
+}
+
+
+struct pa_sa *pa_sa_get(struct pa_data *data, const struct in6_addr *addr, bool goc)
+{
+	struct pa_sa *sa;
+	if((sa = __pa_sa_get(data, addr)) || !goc)
+		return sa;
+
+	if(!data->conf.max_sa)
+		return NULL;
+
+	PA_P_ALLOC(sa);
+	memcpy(&sa->addr, addr, sizeof(struct in6_addr));
+	list_add(&sa->le, &data->sas);
+	data->sa_count++;
+	L_DEBUG("Created "PA_SA_L, PA_SA_LA(sa));
+
+	/* remove last if too many sps */
+	struct pa_sa *last;
+	if (data->conf.max_sa < data->sa_count) {
+		last = list_last_entry(&data->sas, struct pa_sa, le);
+		pa_sa_destroy(data, last);
+	}
+
+	return sa;
+}
+
+void pa_sa_promote(struct pa_data *data, struct pa_sa *sa)
+{
+	L_DEBUG("Promoting "PA_SA_L, PA_SA_LA(sa));
+	list_move(&sa->le, &data->sas);
 }
 
 struct pa_iface *__pa_iface_get(struct pa_data *data, const char *ifname)
@@ -685,6 +735,7 @@ void pa_data_conf_defaults(struct pa_data_conf *conf)
 {
 	conf->max_sp = PAD_CONF_DFLT_MAX_SP;
 	conf->max_sp_per_if = PAD_CONF_DFLT_MAX_SP_P_IF;
+	conf->max_sa = PAD_CONF_DFLT_MAX_SA;
 }
 
 void pa_data_init(struct pa_data *data, const struct pa_data_conf *conf)
@@ -702,6 +753,7 @@ void pa_data_init(struct pa_data *data, const struct pa_data_conf *conf)
 	INIT_LIST_HEAD(&data->dps);
 	INIT_LIST_HEAD(&data->cps);
 	INIT_LIST_HEAD(&data->sps);
+	INIT_LIST_HEAD(&data->sas);
 	INIT_LIST_HEAD(&data->users);
 
 	data->flood.flooding_delay = PAD_FLOOD_DELAY_DEFAULT;
@@ -716,6 +768,7 @@ void pa_data_init(struct pa_data *data, const struct pa_data_conf *conf)
 	data->ipv4.__flags = 0;
 
 	data->sp_count = 0;
+	data->sa_count = 0;
 }
 
 void pa_data_term(struct pa_data *data)
@@ -743,6 +796,9 @@ void pa_data_term(struct pa_data *data)
 
 	while(!list_empty(&data->sps))
 		pa_sp_destroy(data, list_first_entry(&data->sps, struct pa_sp, le));
+
+	while(!list_empty(&data->sas))
+			pa_sa_destroy(data, list_first_entry(&data->sas, struct pa_sa, le));
 
 	while(!list_is_empty(&data->ifs))
 		pa_iface_destroy(data, list_first_entry(&data->ifs, struct pa_iface, le));
