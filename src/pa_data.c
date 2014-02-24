@@ -1,8 +1,11 @@
-
+#if 0
+/* Please remove pa_data dependency from net_sim.h. This l_level
+ * redefine causes stupid warnings there.. */
 #ifdef L_LEVEL
 #undef L_LEVEL
 #endif
 #define L_LEVEL 7
+#endif /* 0 */
 
 #ifdef L_PREFIX
 #undef L_PREFIX
