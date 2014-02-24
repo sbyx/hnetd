@@ -20,7 +20,7 @@ struct pa_store {
 	bool ula_valid;
 	struct prefix ula;
 	struct pa_data_user data_user;
-	FILE *f;
+	char *filename;
 };
 
 void pa_store_init(struct pa_store *);

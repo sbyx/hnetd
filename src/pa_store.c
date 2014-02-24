@@ -57,10 +57,10 @@ static int pas_prefix_read(struct prefix *p, FILE *f)
 	return 0;
 }
 
-static int pas_ula_load(struct pa_store *store)
+static int pas_ula_load(struct pa_store *store, FILE *f)
 {
 	struct prefix p;
-	if(pas_prefix_read(&p, store->f))
+	if(pas_prefix_read(&p, f))
 		return -1;
 
 	memcpy(&store->ula, &p, sizeof(struct prefix));
@@ -68,19 +68,19 @@ static int pas_ula_load(struct pa_store *store)
 	return 0;
 }
 
-static int pas_ula_save(struct pa_store *store)
+static int pas_ula_save(struct pa_store *store, FILE *f)
 {
-	if(pas_prefix_write(&store->ula, store->f))
+	if(pas_prefix_write(&store->ula, f))
 		return -1;
 	return 0;
 }
 
-static int pas_ap_load(struct pa_store *store)
+static int pas_ap_load(struct pa_store *store, FILE *f)
 {
 	struct prefix p;
 	char ifname[IFNAMSIZ] = {0}; //Init for valgrind tests
-	if(pas_prefix_read(&p, store->f) ||
-			pas_ifname_read(ifname, store->f))
+	if(pas_prefix_read(&p, f) ||
+			pas_ifname_read(ifname, f))
 		return -1;
 
 	struct pa_iface *iface = pa_iface_get(store_p(store, data), ifname, true);
@@ -95,9 +95,9 @@ static int pas_ap_load(struct pa_store *store)
 	return 0;
 }
 
-static int pas_ap_save(struct pa_store *store, struct pa_sp *sp)
+static int pas_ap_save(struct pa_sp *sp, FILE *f)
 {
-	if(pas_prefix_write(&sp->prefix, store->f) || pas_ifname_write(sp->iface->ifname, store->f))
+	if(pas_prefix_write(&sp->prefix, f) || pas_ifname_write(sp->iface->ifname, f))
 		return -1;
 	return 0;
 }
@@ -105,31 +105,35 @@ static int pas_ap_save(struct pa_store *store, struct pa_sp *sp)
 static int pas_load(struct pa_store *store)
 {
 	uint8_t type;
+	FILE *f;
 	int err = 0;
 
-	if(!store->f)
+	if(!store->filename)
+		return 0;
+
+	if(!(f = fopen(store->filename, "r"))) {
+		L_WARN("Cannot open file %s (write mode)", store->filename);
 		return -1;
-
-	if(!freopen(NULL, "r", store->f))
-		return -2;
-
+	}
+	L_INFO("Loading prefixes and ULA");
 	while(!err) {
 		/* Get type */
-		if(fread(&type, 1, 1, store->f) != 1)
+		if(fread(&type, 1, 1, f) != 1)
 			break;
 
 		switch (type) {
 			case PAS_TYPE_AP:
-				err = pas_ap_load(store);
+				err = pas_ap_load(store, f);
 				break;
 			case PAS_TYPE_ULA:
-				err = pas_ula_load(store);
+				err = pas_ula_load(store, f);
 				break;
 			default:
 				L_DEBUG("Invalid type");
 				return -2;
 		}
 	}
+	fclose(f);
 	return err;
 }
 
@@ -138,25 +142,33 @@ static int pas_save(struct pa_store *store)
 {
 	struct pa_sp *sp;
 	char type;
+	FILE *f;
 
-	if(!store->f)
+	if(!store->filename)
+		return 0;
+
+	if(!(f = fopen(store->filename, "w"))) {
+		L_WARN("Cannot open file %s (write mode)", store->filename);
 		return -1;
-
-	if(!freopen(NULL, "w", store->f))
-		return -1;
-
+	}
+	L_INFO("Saving prefixes and ULA");
 	type = PAS_TYPE_ULA;
 	if(store->ula_valid &&
-			((fwrite(&type, 1, 1, store->f) != 1) || pas_ula_save(store) ))
-		return -2;
+			((fwrite(&type, 1, 1, f) != 1) || pas_ula_save(store, f) ))
+		goto err;
 
 	type = PAS_TYPE_AP;
 	pa_for_each_sp_reverse(sp, store_p(store, data)) {
-		if((fwrite(&type, 1, 1, store->f) != 1) || pas_ap_save(store, sp))
-			return -2;
+		if((fwrite(&type, 1, 1, f) != 1) || pas_ap_save(sp, f))
+			goto err;
 	}
 
+	fclose(f);
 	return 0;
+err:
+	L_WARN("Writing error");
+	fclose(f);
+	return -2;
 }
 
 const struct prefix *pa_store_ula_get(struct pa_store *store)
@@ -172,8 +184,7 @@ static void __pa_store_dps(struct pa_data_user *user, struct pa_dp *dp, uint32_t
 	if((flags & PADF_DP_CREATED) && dp->local && prefix_is_ipv6_ula(&dp->prefix)) {
 		prefix_cpy(&store->ula, &dp->prefix);
 		store->ula_valid = true;
-		if(store->f)
-			pas_save(store);
+		pas_save(store);
 	}
 }
 
@@ -185,36 +196,40 @@ static void __pa_store_cps(struct pa_data_user *user, struct pa_cp *cp, uint32_t
 		sp = pa_sp_get(data, cp->iface, &cp->prefix, true);
 		if(sp) {
 			pa_sp_promote(data, sp);
-			if(store->f)
-				pas_save(store);
+			pas_save(store);
 		}
 	}
-}
-
-void __pa_store_setfile(struct pa_store *store, FILE *f)
-{
-	if(store->f)
-		fclose(store->f);
-	store->f = f;
-	if(store->started && store->f)
-		pas_load(store);
 }
 
 int pa_store_setfile(struct pa_store *store, const char *filepath)
 {
 	if(filepath) {
-		L_NOTICE("Opening file for stable storage %s", filepath);
+		L_NOTICE("Setting stable storage file %s", filepath);
 	} else {
-		L_NOTICE("Closing stable storage file");
+		L_NOTICE("Removing stable storage file");
 	}
-	__pa_store_setfile(store, fopen(filepath, "rw"));
-	return ((filepath && store->f) || (!filepath && !store->f))?0:-1;
+
+	if(store->filename) {
+		free(store->filename);
+		store->filename = NULL;
+	}
+
+	if(filepath) {
+		if(!(store->filename = malloc(strlen(filepath)))) {
+			L_WARN("Could not allocate space for file path");
+			return -1;
+		}
+		strcpy(store->filename, filepath);
+		pas_load(store);
+	}
+
+	return 0;
 }
 
 void pa_store_init(struct pa_store *store)
 {
 	store->started = false;
-	store->f = NULL;
+	store->filename = NULL;
 	store->ula_valid = false;
 	memset(&store->data_user, 0, sizeof(struct pa_data_user));
 	store->data_user.cps = __pa_store_cps;
@@ -228,23 +243,14 @@ void pa_store_start(struct pa_store *store)
 
 	store->started = true;
 	pa_data_subscribe(store_p(store, data), &store->data_user);
-	if(store->f) {
-		FILE *f = store->f;
-		store->f = NULL;
-		__pa_store_setfile(store, f);
-	}
+	pas_load(store);
 }
 
 void pa_store_stop(struct pa_store *store)
 {
 	if(!store->started)
 		return;
-
-	if(store->f) {
-		FILE *f = store->f;
-		__pa_store_setfile(store, NULL);
-		store->f = f;
-	}
+	L_DEBUG("Stop");
 	pa_data_unsubscribe(&store->data_user);
 	store->started = false;
 }
