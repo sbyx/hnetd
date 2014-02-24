@@ -32,7 +32,7 @@ struct hncp_routing_struct {
 	struct iface_user iface;
 	const char *script;
 	const char **ifaces;
-	size_t ifaces_cnt;
+	int ifaces_cnt;
 };
 
 static int call_backend(hncp_bfs bfs, const char *action, int stdin)
@@ -47,7 +47,7 @@ static int call_backend(hncp_bfs bfs, const char *action, int stdin)
 	argv[0] = (char*)bfs->script;
 	argv[1] = (char*)action;
 	argv[2] = protobuf;
-	memcpy(&argv[3], bfs->ifaces, bfs->ifaces_cnt);
+	memcpy(&argv[3], bfs->ifaces, bfs->ifaces_cnt * sizeof(char*));
 	argv[3 + bfs->ifaces_cnt] = NULL;
 
 	pid_t pid = fork();
@@ -78,9 +78,9 @@ static void hncp_routing_intiface(struct iface_user *u, const char *ifname, bool
 		bfs->ifaces = realloc(bfs->ifaces, ++bfs->ifaces_cnt * sizeof(char*));
 		bfs->ifaces[bfs->ifaces_cnt - 1] = ifname;
 	} else {
-		for (size_t i = 0; i < bfs->ifaces_cnt; ++i) {
+		for (int i = 0; i < (bfs->ifaces_cnt - 1); ++i) {
 			if (!strcmp(bfs->ifaces[i], ifname)) {
-				memmove(&bfs->ifaces[i], &bfs->ifaces[i+1], (--bfs->ifaces_cnt - i) * sizeof(char *));
+				bfs->ifaces[i] = bfs->ifaces[--bfs->ifaces_cnt];
 				break;
 			}
 		}
