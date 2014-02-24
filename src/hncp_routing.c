@@ -84,6 +84,9 @@ static void hncp_routing_intiface(struct iface_user *u, const char *ifname, bool
 		bfs->ifaces[bfs->ifaces_cnt - 1] = ifname;
 	} else if (!enable && i < bfs->ifaces_cnt) {
 		bfs->ifaces[i] = bfs->ifaces[--bfs->ifaces_cnt];
+	} else {
+		/* routing setup did not change -> skip reconfigure */
+		return;
 	}
 	call_backend(bfs, "reconfigure", -1);
 }
