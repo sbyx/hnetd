@@ -217,10 +217,6 @@ static struct prefix p1_excluded = {
 		.prefix = { .s6_addr = {
 				0x20,0x01, 0x20,0x01,  0xff,0xff, 0xff,0x00}},
 		.plen = 60 };
-static struct prefix p1_excluded_incr = {
-		.prefix = { .s6_addr = {
-				0x20,0x01, 0x20,0x01,  0xff,0xff, 0xff,0x20}},
-		.plen = 64 };
 
 static struct prefix p1_1_addr = {
 		.prefix = { .s6_addr = {

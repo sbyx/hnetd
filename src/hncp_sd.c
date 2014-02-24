@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Thu Feb 20 10:23:55 2014 mstenber
- * Edit time:     423 min
+ * Last modified: Mon Feb 24 15:53:31 2014 mstenber
+ * Edit time:     424 min
  *
  */
 
@@ -154,7 +154,7 @@ static int _push_reverse_ll(struct prefix *p, uint8_t *buf, int buf_len)
       DNS_PUSH_LABEL_STRING(buf, buf_len, "ip6");
     }
   DNS_PUSH_LABEL_STRING(buf, buf_len, "arpa");
-  DNS_PUSH_LABEL(buf, buf_len, NULL, 0);
+  DNS_PUSH_LABEL(buf, buf_len, (void *)1, 0);
   return buf - obuf;
 }
 

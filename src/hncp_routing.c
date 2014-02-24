@@ -32,7 +32,7 @@ struct hncp_routing_struct {
 	struct iface_user iface;
 	const char *script;
 	const char **ifaces;
-	int ifaces_cnt;
+	size_t ifaces_cnt;
 };
 
 static int call_backend(hncp_bfs bfs, const char *action, int stdin)
@@ -74,16 +74,19 @@ static int call_backend(hncp_bfs bfs, const char *action, int stdin)
 static void hncp_routing_intiface(struct iface_user *u, const char *ifname, bool enable)
 {
 	hncp_bfs bfs = container_of(u, hncp_bfs_s, iface);
-	if (enable) {
+	size_t i;
+
+	for (i = 0; i < bfs->ifaces_cnt; ++i)
+		if (!strcmp(bfs->ifaces[i], ifname))
+			break;
+	if (enable && i == bfs->ifaces_cnt) {
 		bfs->ifaces = realloc(bfs->ifaces, ++bfs->ifaces_cnt * sizeof(char*));
 		bfs->ifaces[bfs->ifaces_cnt - 1] = ifname;
+	} else if (!enable && i < bfs->ifaces_cnt) {
+		bfs->ifaces[i] = bfs->ifaces[--bfs->ifaces_cnt];
 	} else {
-		for (int i = 0; i < (bfs->ifaces_cnt - 1); ++i) {
-			if (!strcmp(bfs->ifaces[i], ifname)) {
-				bfs->ifaces[i] = bfs->ifaces[--bfs->ifaces_cnt];
-				break;
-			}
-		}
+		/* routing setup did not change -> skip reconfigure */
+		return;
 	}
 	call_backend(bfs, "reconfigure", -1);
 }

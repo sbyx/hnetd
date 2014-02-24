@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Fri Feb 21 12:25:56 2014 mstenber
- * Edit time:     317 min
+ * Last modified: Mon Feb 24 13:09:19 2014 mstenber
+ * Edit time:     320 min
  *
  */
 
@@ -191,7 +191,6 @@ static void _update_a_tlv(hncp_glue g, hncp_node n,
 static void _update_pa_eaa(struct pa_data *data, const struct in6_addr *addr,
 		const struct pa_rid *rid, bool to_delete)
 {
-	//todo idli
 	/* This is a function to update external address assignments */
 	struct pa_eaa *eaa = pa_eaa_get(data, addr, rid, !to_delete);
 	if(!eaa)
@@ -340,6 +339,18 @@ static void _tlv_cb(hncp_subscriber s,
       break;
     case HNCP_T_ASSIGNED_PREFIX:
       _update_a_tlv(g, n, tlv, add);
+      break;
+    case HNCP_T_ROUTER_ADDRESS:
+      if (tlv_len(tlv) == sizeof(struct in6_addr))
+        {
+          _update_pa_eaa(g->pa_data, tlv_data(tlv),
+                         (struct pa_rid *)&n->node_identifier_hash,
+                         !add);
+        }
+      else
+        {
+          L_INFO("invalid sized router address tlv:%d bytes", tlv_len(tlv));
+        }
       break;
     default:
       return;

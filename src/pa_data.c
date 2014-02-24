@@ -1,8 +1,11 @@
-
+#if 0
+/* Please remove pa_data dependency from net_sim.h. This l_level
+ * redefine causes stupid warnings there.. */
 #ifdef L_LEVEL
 #undef L_LEVEL
 #endif
 #define L_LEVEL 7
+#endif /* 0 */
 
 #ifdef L_PREFIX
 #undef L_PREFIX
@@ -686,7 +689,8 @@ void pa_flood_set_flooddelays(struct pa_data *data, hnetd_time_t delay, hnetd_ti
 	if(data->flood.flooding_delay == delay && data->flood.flooding_delay_ll == ll_delay)
 		return;
 
-	L_INFO("Setting flooding delays %ld - %ld", delay, ll_delay);
+	L_INFO("Setting flooding delays %lld - %lld",
+               (long long)delay, (long long)ll_delay);
 	data->flood.flooding_delay = delay;
 	data->flood.flooding_delay_ll = ll_delay;
 	data->flood.__flags |= PADF_FLOOD_DELAY;

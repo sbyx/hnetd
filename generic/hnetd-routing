@@ -1,11 +1,15 @@
 #!/bin/sh
+
 [ -z "$2" ] && echo "Error: should be run by hnetd" && exit 1
 
 action="$1"
 proto="$2"
 
 BABEL_EXE=/usr/sbin/babeld
-BABEL_PID=/var/run/babeld-hnetd.pid
+BABEL_ARGS="-C redistribute ip 0.0.0.0/0 eq 0 proto 3 metric 128 "\
+"-C redistribute ip 0.0.0.0/0 eq 0 metric 128 "\
+"-C redistribute ip ::/0 eq 0 metric 128 "\
+"-C redistribute eq 64 "
 
 case "$action" in
 	enumerate)
@@ -16,12 +20,15 @@ case "$action" in
 	enable|reconfigure|disable)
 		case "$proto" in
 			1)
-				start-stop-daemon -K -o -x $BABEL_EXE -p $BABEL_PID
-				rm -f $BABEL_PID
+	                        while start-stop-daemon -K -q -t -x $BABEL_EXE
+                                do
+				    start-stop-daemon -K -x $BABEL_EXE
+                                    sleep 1
+                                done
 				
 				shift 2
 				if [ "$action" != "disable" -a -n "$1" ]; then
-					start-stop-daemon -S -x $BABEL_EXE -p $BABEL_PID -- -D -I $BABEL_PID $*
+					start-stop-daemon -S -x $BABEL_EXE -- -D `echo $BABEL_ARGS` $*
 				fi 
 			;;
 			*)
