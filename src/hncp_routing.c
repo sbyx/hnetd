@@ -47,7 +47,7 @@ static int call_backend(hncp_bfs bfs, const char *action, int stdin)
 	argv[0] = (char*)bfs->script;
 	argv[1] = (char*)action;
 	argv[2] = protobuf;
-	memcpy(&argv[3], bfs->ifaces, bfs->ifaces_cnt);
+	memcpy(&argv[3], bfs->ifaces, bfs->ifaces_cnt * sizeof(char*));
 	argv[3 + bfs->ifaces_cnt] = NULL;
 
 	pid_t pid = fork();
