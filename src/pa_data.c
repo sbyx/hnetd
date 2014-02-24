@@ -636,7 +636,8 @@ void pa_flood_set_flooddelays(struct pa_data *data, hnetd_time_t delay, hnetd_ti
 	if(data->flood.flooding_delay == delay && data->flood.flooding_delay_ll == ll_delay)
 		return;
 
-	L_INFO("Setting flooding delays %ld - %ld", delay, ll_delay);
+	L_INFO("Setting flooding delays %lld - %lld",
+               (long long)delay, (long long)ll_delay);
 	data->flood.flooding_delay = delay;
 	data->flood.flooding_delay_ll = ll_delay;
 	data->flood.__flags |= PADF_FLOOD_DELAY;
