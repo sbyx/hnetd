@@ -251,6 +251,7 @@ void pa_store_stop(struct pa_store *store)
 	if(!store->started)
 		return;
 	L_DEBUG("Stop");
+	pa_store_setfile(store, NULL);
 	pa_data_unsubscribe(&store->data_user);
 	store->started = false;
 }
