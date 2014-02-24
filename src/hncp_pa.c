@@ -189,8 +189,7 @@ static void _update_a_tlv(hncp_glue g, hncp_node n,
 }
 
 static void _update_pa_eaa(struct pa_data *data, const struct in6_addr *addr,
-		const struct pa_rid *rid,
-		const char *ifname, bool to_delete)
+		const struct pa_rid *rid, bool to_delete)
 {
 	//todo idli
 	/* This is a function to update external address assignments */
@@ -198,12 +197,9 @@ static void _update_pa_eaa(struct pa_data *data, const struct in6_addr *addr,
 	if(!eaa)
 		return;
 
-	if(to_delete) {
+	if(to_delete)
 		pa_aa_todelete(&eaa->aa);
-	} else {
-		struct pa_iface *iface = ifname?pa_iface_get(data, ifname, true):NULL;
-		pa_eaa_set_iface(eaa, iface);
-	}
+
 	pa_aa_notify(data, &eaa->aa);
 }
 

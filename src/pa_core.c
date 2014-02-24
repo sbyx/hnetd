@@ -491,12 +491,20 @@ void paa_algo_do(struct pa_core *core)
 	L_INFO("End of prefix assignment algorithm");
 }
 
-static bool __aaa_addr_available(struct pa_core *core, struct in6_addr *addr)
+static bool __aaa_addr_available(struct pa_core *core, struct pa_iface *iface, struct in6_addr *addr)
 {
 	struct pa_eaa *eaa;
-	pa_for_each_eaa(eaa, core_p(core, data)) {
-		if(!memcmp(&eaa->aa.address, addr, sizeof(struct in6_addr)))
-			return false;
+
+	if(core_p(core, data)->flood.aa_ll_enabled && iface) {
+		pa_for_each_eaa_in_iface(eaa, iface) {
+			if(!memcmp(&eaa->aa.address, addr, sizeof(struct in6_addr)))
+				return false;
+		}
+	} else {
+		pa_for_each_eaa(eaa, core_p(core, data)) {
+			if(!memcmp(&eaa->aa.address, addr, sizeof(struct in6_addr)))
+				return false;
+		}
 	}
 
 	struct pa_cp *cp;
@@ -553,7 +561,7 @@ static inline int __aaa_find_random(struct pa_core *core, struct pa_cp *cp, stru
 	bool looped = false;
 	prefix_random(&rpool, &result, 128);
 	for(; rounds; rounds--) {
-		if(__aaa_addr_available(core, &result.prefix)) {
+		if(__aaa_addr_available(core, cp->iface, &result.prefix)) {
 			memcpy(addr, &result.prefix, sizeof(struct in6_addr));
 			return 0;
 		}

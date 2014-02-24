@@ -36,6 +36,7 @@
 
 #define PAD_FLOOD_DELAY_DEFAULT     5000
 #define PAD_FLOOD_DELAY_LL_DEFAULT  1000
+#define PAD_FLOOD_AA_LL_ENABLED_DEFAULT false
 
 #define PAD_CONF_DFLT_MAX_SP      100
 #define PAD_CONF_DFLT_MAX_SP_P_IF 10
@@ -234,6 +235,7 @@ struct pa_flood {
 	struct pa_rid rid;
 	hnetd_time_t flooding_delay;
 	hnetd_time_t flooding_delay_ll;
+	bool aa_ll_enabled; /* Assigned addresses are flooded link locally. Default is false. */
 
 #define PADF_FLOOD_RID   0x0100
 #define PADF_FLOOD_DELAY 0x0200
@@ -372,6 +374,8 @@ void pa_laa_set_applied(struct pa_laa *, bool applied);
 
 #define pa_for_each_eaa(pa_eaa, pa_data) \
 		list_for_each_entry(pa_eaa, &(pa_data)->eaas, le)
+#define pa_for_each_eaa_in_iface(pa_eaa, pa_iface) \
+		list_for_each_entry(pa_eaa, &(pa_iface)->eaas, if_le)
 struct pa_eaa *pa_eaa_get(struct pa_data *, const struct in6_addr *, const struct pa_rid *, bool goc);
 void pa_eaa_set_iface(struct pa_eaa *, struct pa_iface *);
 

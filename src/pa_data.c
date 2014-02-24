@@ -706,6 +706,7 @@ void pa_data_init(struct pa_data *data, const struct pa_data_conf *conf)
 
 	data->flood.flooding_delay = PAD_FLOOD_DELAY_DEFAULT;
 	data->flood.flooding_delay_ll = PAD_FLOOD_DELAY_LL_DEFAULT;
+	data->flood.aa_ll_enabled = PAD_FLOOD_AA_LL_ENABLED_DEFAULT;
 	memset(&data->flood.rid, 0, sizeof(struct pa_rid));
 	data->flood.__flags = 0;
 
