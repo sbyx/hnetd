@@ -323,13 +323,15 @@ static void hncp_routing_run(struct uloop_timeout *t)
 				hncp_t_assigned_prefix_header ap = tlv_data(a);
 
 				// Skip routes for prefixes on connected links
-				hncp_neighbor_s query = {
-					.node_identifier_hash = c->node_identifier_hash,
-					.iid = be32_to_cpu(ap->link_id)
-				};
-				hncp_link link = hncp_find_link_by_name(hncp, c->bfs.ifname, false);
-				if (link && vlist_find(&link->neighbors, &query, &query, in_neighbors))
-					continue;
+				if (c->bfs.hopcount == 1) {
+					hncp_neighbor_s query = {
+						.node_identifier_hash = c->node_identifier_hash,
+						.iid = be32_to_cpu(ap->link_id)
+					};
+					hncp_link link = hncp_find_link_by_name(hncp, c->bfs.ifname, false);
+					if (link && vlist_find(&link->neighbors, &query, &query, in_neighbors))
+						continue;
+				}
 
 				struct prefix to = { .plen = ap->prefix_length_bits };
 				size_t plen = ROUND_BITS_TO_BYTES(to.plen);
