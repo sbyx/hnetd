@@ -610,7 +610,7 @@ static void platform_update(void *data, size_t len)
 
 			const size_t dns_max = 4;
 			size_t dns_cnt = 0;
-			struct {
+			struct __packed {
 				uint8_t type;
 				uint8_t len;
 				struct in_addr addr[dns_max];
