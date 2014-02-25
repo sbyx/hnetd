@@ -628,7 +628,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 	sput_enter_suite("Prefix assignment tests"); /* optional */
 	sput_run_test(test_pa_initial);
 	sput_run_test(test_pa_ipv4);
-	//sput_run_test(test_pa_network);
+	sput_run_test(test_pa_network);
 	sput_leave_suite(); /* optional */
 	sput_finish_testing();
 	return sput_get_return_value();
