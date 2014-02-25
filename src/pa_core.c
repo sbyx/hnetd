@@ -576,7 +576,12 @@ static inline int __aaa_find_random(struct pa_core *core, struct pa_cp *cp, stru
 	bool looped = false;
 	prefix_random(&rpool, &result, 128);
 	for(; rounds; rounds--) {
-		if(__aaa_addr_available(core, cp->iface, &result.prefix)) {
+
+		/* The first condition is intended to forbid the use of the network address
+		 * in the case of IPv4. */
+		if((!prefix_is_ipv4(&rpool)
+					|| memcmp(&rpool.prefix, &result.prefix, sizeof(struct in6_addr)))
+				&& __aaa_addr_available(core, cp->iface, &result.prefix)) {
 			memcpy(addr, &result.prefix, sizeof(struct in6_addr));
 			return 0;
 		}
