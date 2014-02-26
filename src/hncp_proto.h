@@ -6,13 +6,16 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Fri Jan 24 13:14:04 2014 mstenber
- * Edit time:     38 min
+ * Last modified: Wed Feb 26 17:21:52 2014 mstenber
+ * Edit time:     41 min
  *
  */
 
 #ifndef HNCP_PROTO_H
 #define HNCP_PROTO_H
+
+#include <arpa/inet.h>
+#include <netinet/in.h>
 
 /******************************** Not standardized, but hopefully one day..  */
 
@@ -126,6 +129,13 @@ typedef struct __packed {
   /* Prefix data, padded so that ends at 4 byte boundary (0s). */
   uint8_t prefix_data[];
 } hncp_t_assigned_prefix_header_s, *hncp_t_assigned_prefix_header;
+
+/* XXX - draft-00 has just address there, but we really want link id too. */
+/* HNCP_T_ROUTER_ADDRESS */
+typedef struct __packed {
+  uint32_t link_id;
+  struct in6_addr address;
+} hncp_t_router_address_s, *hncp_t_router_address;
 
 /* HNCP_T_ROUTING_PROTOCOL */
 typedef struct __packed {

@@ -281,12 +281,16 @@ static void hncp_routing_run(struct uloop_timeout *t)
 					}
 
 					struct tlv_attr *na, *ntlvs = n->tlv_container;
+					hncp_t_router_address ra;
 					tlv_for_each_attr(na, ntlvs) {
 						if (tlv_id(na) == HNCP_T_ROUTER_ADDRESS &&
-								tlv_len(na) == sizeof(struct in6_addr) &&
-							IN6_IS_ADDR_V4MAPPED((struct in6_addr *)tlv_data(na))) {
-							n->bfs.next_hop4 = tlv_data(na);
-							break;
+						    tlv_len(na) == sizeof(*ra)) {
+							ra = tlv_data(na);
+							if (ra->link_id == ne->neighbor_link_id &&
+							    IN6_IS_ADDR_V4MAPPED(&ra->address)) {
+								n->bfs.next_hop4 = tlv_data(na);
+								break;
+							}
 						}
 					}
 				} else { // Inherit next-hop from predecessor

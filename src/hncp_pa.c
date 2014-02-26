@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Mon Feb 24 13:09:19 2014 mstenber
- * Edit time:     320 min
+ * Last modified: Wed Feb 26 17:13:29 2014 mstenber
+ * Edit time:     333 min
  *
  */
 
@@ -341,9 +341,13 @@ static void _tlv_cb(hncp_subscriber s,
       _update_a_tlv(g, n, tlv, add);
       break;
     case HNCP_T_ROUTER_ADDRESS:
-      if (tlv_len(tlv) == sizeof(struct in6_addr))
+      {
+        hncp_t_router_address ra;
+
+        ra = tlv_data(tlv);
+        if (tlv_len(tlv) == sizeof(*ra))
         {
-          _update_pa_eaa(g->pa_data, tlv_data(tlv),
+          _update_pa_eaa(g->pa_data, &ra->address,
                          (struct pa_rid *)&n->node_identifier_hash,
                          !add);
         }
@@ -351,6 +355,7 @@ static void _tlv_cb(hncp_subscriber s,
         {
           L_INFO("invalid sized router address tlv:%d bytes", tlv_len(tlv));
         }
+      }
       break;
     default:
       return;
@@ -635,12 +640,15 @@ static void hncp_pa_aas(struct pa_data_user *user, struct pa_aa *aa, uint32_t fl
 		struct pa_laa *laa = container_of(aa, struct pa_laa, aa);
 		if(!laa->cp || !laa->cp->iface)
 			return;
-                if (flags & PADF_AA_CREATED)
-                  hncp_add_tlv_raw(g->hncp, HNCP_T_ROUTER_ADDRESS,
-                                   &aa->address, sizeof(aa->address));
-                else
-                  hncp_remove_tlv_raw(g->hncp, HNCP_T_ROUTER_ADDRESS,
-                                      &aa->address, sizeof(aa->address));
+                hncp_link l = hncp_find_link_by_name(g->hncp, laa->cp->iface->ifname, false);
+                if (!l)
+                  return;
+                hncp_t_router_address_s ra;
+                ra.link_id = cpu_to_be32(l->iid);
+                ra.address = aa->address;
+                hncp_update_tlv_raw(g->hncp, HNCP_T_ROUTER_ADDRESS,
+                                    &aa->address, sizeof(aa->address),
+                                    (flags & PADF_AA_CREATED));
 	}
 }
 

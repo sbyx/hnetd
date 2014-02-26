@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Feb 24 15:53:31 2014 mstenber
- * Edit time:     424 min
+ * Last modified: Wed Feb 26 17:15:41 2014 mstenber
+ * Edit time:     425 min
  *
  */
 
@@ -450,15 +450,9 @@ _set_router_name(hncp_sd sd, bool add)
   tlv_init(a, HNCP_T_DNS_ROUTER_NAME, TLV_SIZE + rlen);
   memcpy(tlv_data(a), sd->router_name, rlen);
   tlv_fill_pad(a);
-  if (add)
+  if (!hncp_update_tlv(sd->hncp, a, add))
     {
-      if (!hncp_add_tlv(sd->hncp, a))
-        L_ERR("failed to add router name TLV");
-    }
-  else
-    {
-      if (!hncp_remove_tlv(sd->hncp, a))
-        L_ERR("failed to remove router name TLV");
+      L_ERR("failed to update router name TLV");
     }
 }
 

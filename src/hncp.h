@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Fri Feb 21 12:25:39 2014 mstenber
- * Edit time:     112 min
+ * Last modified: Wed Feb 26 17:08:14 2014 mstenber
+ * Edit time:     114 min
  *
  */
 
@@ -130,20 +130,20 @@ hncp_node hncp_get_first_node(hncp o);
 /**
  * Publish a single TLV.
  *
- * @return The newly allocated TLV, which is valid until
- * hncp_remove_tlv is called for it (or a pointer to a TLV that
- * tlv_attr_equal's it).
+ * @return If add is true, the newly allocated TLV, which is valid
+ * until hncp_remove_tlv is called for it (or a pointer to a TLV that
+ * tlv_attr_equal's it). Otherwise NULL.
  */
-struct tlv_attr *hncp_add_tlv(hncp o, struct tlv_attr *tlv);
-struct tlv_attr *hncp_add_tlv_raw(hncp o,
-                                  uint16_t type, void *data, uint16_t len);
+struct tlv_attr *hncp_update_tlv(hncp o, struct tlv_attr *tlv, bool add);
+struct tlv_attr *hncp_update_tlv_raw(hncp o,
+                                     uint16_t type, void *data, uint16_t len,
+                                     bool add);
 
-/**
- * Remove a single TLV.
- */
-bool hncp_remove_tlv(hncp o, struct tlv_attr *tlv);
-bool hncp_remove_tlv_raw(hncp o,
-                         uint16_t type, void *data, uint16_t len);
+/* Backwards compatible API - get rid of this at some point*/
+#define hncp_add_tlv(o,tlv) hncp_update_tlv(o,tlv,true)
+#define hncp_add_tlv_raw(o,t,d,l) hncp_update_tlv_raw(o,t,d,l,true)
+#define hncp_remove_tlv(o,tlv) hncp_update_tlv(o,tlv,false)
+#define hncp_remove_tlv_raw(o,t,d,l) hncp_update_tlv_raw(o,t,d,l,false)
 
 /**
  * Remove all TLVs of particular type.

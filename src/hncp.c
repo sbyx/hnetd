@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Feb 20 17:02:29 2014 mstenber
- * Edit time:     405 min
+ * Last modified: Wed Feb 26 17:15:55 2014 mstenber
+ * Edit time:     407 min
  *
  */
 
@@ -339,21 +339,39 @@ static hncp_tlv _add_tlv(hncp o, struct tlv_attr *tlv)
   return t;
 }
 
-struct tlv_attr *hncp_add_tlv(hncp o, struct tlv_attr *tlv)
+struct tlv_attr *hncp_update_tlv(hncp o, struct tlv_attr *tlv, bool add)
 {
-  hncp_tlv t = _add_tlv(o, tlv);
-
-  if (t)
+  if (add)
     {
-      /* These are not expired. */
-      t->in_tlvs.version = -1;
-      return &t->tlv;
+      hncp_tlv t = _add_tlv(o, tlv);
+
+      if (t)
+        {
+          /* These are not expired. */
+          t->in_tlvs.version = -1;
+          return &t->tlv;
+        }
+    }
+  else
+    {
+      /* kids, don't do this at home, the pointer itself is invalid,
+         but it _should_ work as comparison operator only operates on
+         n->tlv. */
+      hncp_tlv t = container_of(tlv, hncp_tlv_s, tlv);
+      hncp_tlv old = vlist_find(&o->tlvs, t, t, in_tlvs);
+
+      if (old)
+        {
+          vlist_delete(&o->tlvs, &old->in_tlvs);
+          return (void *)1;
+        }
     }
   return NULL;
 }
 
-struct tlv_attr *hncp_add_tlv_raw(hncp o,
-                                  uint16_t type, void *data, uint16_t len)
+struct tlv_attr *hncp_update_tlv_raw(hncp o,
+                                     uint16_t type, void *data, uint16_t len,
+                                     bool add)
 {
   struct tlv_attr *a = alloca(TLV_SIZE + len);
 
@@ -362,35 +380,7 @@ struct tlv_attr *hncp_add_tlv_raw(hncp o,
   tlv_init(a, type, len + TLV_SIZE);
   memcpy(tlv_data(a), data, len);
   tlv_fill_pad(a);
-  return hncp_add_tlv(o, a);
-}
-
-
-bool hncp_remove_tlv(hncp o, struct tlv_attr *tlv)
-{
-  /* kids, don't do this at home, the pointer itself is invalid,
-     but it _should_ work as comparison operator only operates on
-     n->tlv. */
-  hncp_tlv t = container_of(tlv, hncp_tlv_s, tlv);
-  hncp_tlv old = vlist_find(&o->tlvs, t, t, in_tlvs);
-
-  if (!old)
-    return false;
-  vlist_delete(&o->tlvs, &old->in_tlvs);
-  return true;
-}
-
-bool hncp_remove_tlv_raw(hncp o,
-                         uint16_t type, void *data, uint16_t len)
-{
-  struct tlv_attr *a = alloca(TLV_SIZE + len);
-
-  if (!a)
-    return NULL;
-  tlv_init(a, type, len + TLV_SIZE);
-  memcpy(tlv_data(a), data, len);
-  tlv_fill_pad(a);
-  return hncp_remove_tlv(o, a);
+  return hncp_update_tlv(o, a, add);
 }
 
 

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu Feb 20 17:28:52 2014 mstenber
- * Edit time:     280 min
+ * Last modified: Wed Feb 26 17:14:18 2014 mstenber
+ * Edit time:     281 min
  *
  */
 
@@ -597,8 +597,5 @@ void hncp_tlv_ap_update(hncp o,
   ah++;
   memcpy(ah, &p, plen);
 
-  if (add)
-    hncp_add_tlv(o, (struct tlv_attr *)buf);
-  else
-    hncp_remove_tlv(o, (struct tlv_attr *)buf);
+  hncp_update_tlv(o, (struct tlv_attr *)buf, add);
 }
