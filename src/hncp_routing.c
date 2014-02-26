@@ -317,7 +317,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 							if (c->bfs.next_hop && c->bfs.ifname)
 								iface_add_default_route(c->bfs.ifname, &from, c->bfs.next_hop, c->bfs.hopcount);
 						} else {
-							if (c->bfs.next_hop4 && c->bfs.ifname && !have_v4uplink) {
+							if (c->bfs.next_hop4 && c->bfs.ifname && !have_v4uplink && iface_has_ipv4_address(c->bfs.ifname)) {
 								iface_add_default_route(c->bfs.ifname, NULL, c->bfs.next_hop4, c->bfs.hopcount);
 								have_v4uplink = true;
 							}
@@ -345,7 +345,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 					if (c->bfs.next_hop && c->bfs.ifname)
 						iface_add_internal_route(c->bfs.ifname, &to, c->bfs.next_hop, c->bfs.hopcount);
 				} else {
-					if (c->bfs.next_hop4 && c->bfs.ifname)
+					if (c->bfs.next_hop4 && c->bfs.ifname && iface_has_ipv4_address(c->bfs.ifname))
 						iface_add_internal_route(c->bfs.ifname, &to, c->bfs.next_hop4, c->bfs.hopcount);
 				}
 			}
