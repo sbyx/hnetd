@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Wed Feb 26 17:13:29 2014 mstenber
+ * Last modified: Wed Feb 26 17:29:30 2014 mstenber
  * Edit time:     333 min
  *
  */
@@ -647,7 +647,7 @@ static void hncp_pa_aas(struct pa_data_user *user, struct pa_aa *aa, uint32_t fl
                 ra.link_id = cpu_to_be32(l->iid);
                 ra.address = aa->address;
                 hncp_update_tlv_raw(g->hncp, HNCP_T_ROUTER_ADDRESS,
-                                    &aa->address, sizeof(aa->address),
+                                    &ra, sizeof(ra),
                                     (flags & PADF_AA_CREATED));
 	}
 }
