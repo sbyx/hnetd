@@ -65,6 +65,9 @@ void iface_add_internal_route(const char *ifname, const struct prefix *to, const
 // Flush and commit routes to synthesize events
 void iface_commit_routes(void);
 
+// Test if iface has IPv4 address
+bool iface_has_ipv4_address(const char *ifname);
+
 
 // Internal API to platform
 

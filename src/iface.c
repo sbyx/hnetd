@@ -436,6 +436,19 @@ static void update_route(struct vlist_tree *t, struct vlist_node *node_new, stru
 }
 
 
+bool iface_has_ipv4_address(const char *ifname)
+{
+	struct iface_addr *a;
+	struct iface *c = iface_get(ifname);
+	vlist_for_each_element(&c->assigned, a, node)
+		if (IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix))
+			return true;
+
+
+	return false;
+}
+
+
 // Compare if two addresses are identical
 static int compare_addrs(const void *a, const void *b, void *ptr __attribute__((unused)))
 {
