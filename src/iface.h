@@ -74,6 +74,8 @@ struct iface_addr {
 	hnetd_time_t preferred_until;
 	struct prefix excluded;
 	struct prefix prefix;
+	struct iface *iface;
+	struct uloop_timeout timer;
 	size_t dhcpv6_len;
 	uint8_t dhcpv6_data[];
 };

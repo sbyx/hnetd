@@ -482,6 +482,12 @@ static void update_addr(struct vlist_tree *t, struct vlist_node *node_new, struc
 	uloop_timeout_set(&c->preferred, 100);
 }
 
+static void purge_prefix(struct uloop_timeout *t)
+{
+	struct iface_addr *a = container_of(t, struct iface_addr, timer);
+	vlist_delete(&a->iface->delegated, &a->node);
+}
+
 // Update address if necessary (node_new: addr that will be present, node_old: addr that was present)
 static void update_prefix(struct vlist_tree *t, struct vlist_node *node_new, struct vlist_node *node_old)
 {
@@ -507,8 +513,16 @@ static void update_prefix(struct vlist_tree *t, struct vlist_node *node_new, str
 			(node_new) ? (node_old) ? "updated" : "added" : "removed",
 			prefix_ntop(buf, sizeof(buf), &a->prefix, false), c->ifname);
 
-	if (node_old)
+	if (node_new) {
+		a_new->timer.cb = purge_prefix;
+		a_new->iface = c;
+		uloop_timeout_set(&a_new->timer, a->valid_until - hnetd_time() + 1);
+	}
+
+	if (node_old) {
+		uloop_timeout_cancel(&a_old->timer);
 		free(a_old);
+	}
 }
 
 
