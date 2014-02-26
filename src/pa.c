@@ -117,10 +117,13 @@ static void __pa_ifu_pd(struct iface_user *u, const char *ifname,
 	struct pa_ldp *ldp;
 	struct pa_iface *iface = NULL;
 
-	if(!(ldp = pa_ldp_get(&pa->data, prefix, valid_until)))
+	if(valid_until < hnetd_time())
+		valid_until = 0;
+
+	if(!(ldp = pa_ldp_get(&pa->data, prefix, !!valid_until)))
 		return;
 
-	if(valid_until >= hnetd_time()) {
+	if(valid_until) {
 
 		pa_ldp_set_excluded(ldp, excluded);
 		pa_dp_set_lifetime(&ldp->dp, preferred_until, valid_until);
