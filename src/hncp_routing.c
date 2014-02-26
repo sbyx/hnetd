@@ -288,7 +288,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 							ra = tlv_data(na);
 							if (ra->link_id == ne->neighbor_link_id &&
 							    IN6_IS_ADDR_V4MAPPED(&ra->address)) {
-								n->bfs.next_hop4 = tlv_data(na);
+								n->bfs.next_hop4 = &ra->address;
 								break;
 							}
 						}
