@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Wed Feb 26 17:15:55 2014 mstenber
- * Edit time:     407 min
+ * Last modified: Thu Feb 27 11:39:20 2014 mstenber
+ * Edit time:     412 min
  *
  */
 
@@ -631,14 +631,24 @@ hncp_get_ipv6_address(hncp o, char *prefer_ifname, struct in6_addr *addr)
 void
 hncp_link_set_ipv6_address(hncp_link l, const struct in6_addr *addr)
 {
-  if (!addr && !l->has_ipv6_address)
-    return;
-  if (addr && l->has_ipv6_address
-      && memcmp(&l->ipv6_address, addr, sizeof(*addr) == 0))
-    return;
-  l->has_ipv6_address = addr != NULL;
-  if (addr)
-    l->ipv6_address = *addr;
+  bool has_addr = addr != NULL;
+
+  if (l->has_ipv6_address == has_addr &&
+      (!has_addr || memcmp(&l->ipv6_address, addr, sizeof(*addr) == 0)))
+    {
+      return;
+    }
+  l->has_ipv6_address = has_addr;
+  if (has_addr)
+    {
+      l->ipv6_address = *addr;
+      L_DEBUG("hncp_link_set_ipv6_address: address on %s: %s",
+              l->ifname, ADDR_REPR(addr));
+    }
+  else
+    {
+      L_DEBUG("hncp_link_set_ipv6_address: no %s any more", l->ifname);
+    }
   hncp_notify_subscribers_link_changed(l);
 }
 
