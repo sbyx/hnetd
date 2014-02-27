@@ -96,17 +96,22 @@ void iface_pa_ifs(__attribute__((unused))struct pa_data_user *user,
 
 static inline void iface_pa_prefix_update(struct pa_cp *cp)
 {
+	L_DEBUG("iface_pa_prefix_update: "PA_CP_L, PA_CP_LA(cp));
 	if(!cp->iface) {
 		L_WARN("Trying to configure a prefix with no interface");
 		return;
 	}
 
-	if(!cp->dp) /* Can happen when a cp is made orphan. But it can't last long, or it will be deleted. */
+	if(!cp->dp) { /* Can happen when a cp is made orphan. But it can't last long, or it will be deleted. */
+		L_DEBUG("iface_pa_prefix_update: Ignoring cp with no dp.");
 		return;
+	}
 
 	struct iface *c = iface_get(cp->iface->ifname);
-	if(!c)
+	if(!c) {
+		L_DEBUG("iface_pa_prefix_update: No iface found (%s).", cp->iface->ifname);
 		return;
+	}
 	assert(c->platform != NULL);
 	struct iface_addr *a = calloc(1, sizeof(*a) + cp->dp->dhcp_len);
 	memcpy(&a->prefix.prefix, &cp->laa->aa.address, sizeof(struct in6_addr));
@@ -120,18 +125,24 @@ static inline void iface_pa_prefix_update(struct pa_cp *cp)
 
 static inline void iface_pa_prefix_delete(struct pa_cp *cp)
 {
+	L_DEBUG("iface_pa_prefix_delete: "PA_CP_L, PA_CP_LA(cp));
 	if(!cp->iface) {
 		L_WARN("Trying to delete a prefix with no interface");
 		return;
 	}
 
 	struct iface *c = iface_get(cp->iface->ifname);
-	if(!c)
+	if(!c) {
+		L_DEBUG("iface_pa_prefix_delete: No iface found (%s).", cp->iface->ifname);
 		return;
+	}
 	assert(c->platform != NULL);
 	struct iface_addr *a = vlist_find(&c->assigned, &cp->prefix, a, node);
-	if (a)
+	if (a) {
 		vlist_delete(&c->assigned, &a->node);
+	} else {
+		L_DEBUG("iface_pa_prefix_delete: element not found.");
+	}
 	//todo: why no free of a here ?
 }
 
