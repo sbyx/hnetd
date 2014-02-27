@@ -467,6 +467,13 @@ static int compare_addrs(const void *a, const void *b, void *ptr __attribute__((
 	return prefix_cmp(a1, a2);
 }
 
+
+static void purge_addr(struct uloop_timeout *t)
+{
+	struct iface_addr *a = container_of(t, struct iface_addr, timer);
+	vlist_delete(&a->iface->assigned, &a->node);
+}
+
 // Update address if necessary (node_new: addr that will be present, node_old: addr that was present)
 static void update_addr(struct vlist_tree *t, struct vlist_node *node_new, struct vlist_node *node_old)
 {
@@ -475,18 +482,19 @@ static void update_addr(struct vlist_tree *t, struct vlist_node *node_new, struc
 
 	struct iface *c = container_of(t, struct iface, assigned);
 	bool enable = !!node_new;
+	hnetd_time_t now = hnetd_time();
 
 	if (!enable && !IN6_IS_ADDR_V4MAPPED(&a_old->prefix.prefix)) {
 		// Don't actually remove addresses, but deprecate them so the change is announced
 		enable = true;
 		a_old->preferred_until = 0;
 
-		hnetd_time_t bound = hnetd_time() + (7200 * HNETD_TIME_PER_SECOND);
+		hnetd_time_t bound = now + (7200 * HNETD_TIME_PER_SECOND);
 		if (a_old->valid_until > bound)
 			a_old->valid_until = bound;
 
 		// Reinsert deprecated if not flushing all
-		if (t->version != -1) {
+		if (t->version != -1 && a_old->valid_until > now) {
 			vlist_add(t, &a_old->node, &a_old->prefix);
 			node_old = NULL;
 		}
@@ -500,8 +508,16 @@ static void update_addr(struct vlist_tree *t, struct vlist_node *node_new, struc
 			prefix_ntop(buf, sizeof(buf), (node_new) ? &a_new->prefix : &a_old->prefix, false),
 			c->ifname);
 
-	if (node_old)
+	if (node_new) {
+		a_new->timer.cb = purge_addr;
+		a_new->iface = c;
+		uloop_timeout_set(&a_new->timer, a_new->valid_until - now + 1);
+	}
+
+	if (node_old) {
+		uloop_timeout_cancel(&a_old->timer);
 		free(a_old);
+	}
 
 	uloop_timeout_set(&c->preferred, 100);
 }
