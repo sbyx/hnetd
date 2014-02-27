@@ -271,7 +271,7 @@ int prefix_pton(const char *addr, struct prefix *p)
 {
 	char buf[INET6_ADDRSTRLEN];
 	char *slash = strchr(addr, '/'), *c;
-	uint8_t parsed_len;
+	uint8_t parsed_len = 128;
 	size_t addrlen;
 	if(slash) {
 		addrlen = strlen(slash + 1);
