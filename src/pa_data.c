@@ -151,6 +151,8 @@ void pa_dp_destroy(struct pa_dp *dp)
 		free(ldp);
 	} else {
 		struct pa_edp *edp = container_of(dp, struct pa_edp, dp);
+		if(edp->timeout.pending)
+			uloop_timeout_cancel(&edp->timeout);
 		free(edp);
 	}
 }
@@ -236,6 +238,9 @@ struct pa_edp *pa_edp_get(struct pa_data *data, const struct prefix *p,
 	pa_dp_init(data, &edp->dp, p);
 	PA_RIDCPY(&edp->rid, rid);
 	edp->dp.__flags = PADF_DP_CREATED;
+	edp->timeout.pending = false;
+	edp->timeout.cb = NULL;
+	edp->data = NULL;
 	return edp;
 }
 

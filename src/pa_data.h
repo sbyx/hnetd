@@ -125,6 +125,8 @@ struct pa_dp {
 struct pa_edp {
 	struct pa_dp dp;
 	struct pa_rid rid;            /* Source rid */
+	struct uloop_timeout timeout; /* Used by flooding in order to delay removal */
+	struct pa_data *data;         /* Private to the timeout user */
 };
 
 /* Delegated prefix advertised locally */

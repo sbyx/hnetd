@@ -52,6 +52,8 @@
 #include "dhcp.h"
 #include "dns_util.h"
 
+#define HNCP_PA_EDP_DELAYED_DELETE_MS 50
+
 typedef struct {
   struct vlist_node in_dps;
 
@@ -222,6 +224,13 @@ uint32_t _local_abs_to_remote_rel(hnetd_time_t now, hnetd_time_t v)
   return cpu_to_be32(delta);
 }
 
+static void _pa_dp_delayed_delete(struct uloop_timeout *to)
+{
+	struct pa_edp *edp = container_of(to, struct pa_edp, timeout);
+	pa_dp_todelete(&edp->dp);
+	pa_dp_notify(edp->data, &edp->dp);
+}
+
 static void _update_d_tlv(hncp_glue g, hncp_node n,
                           struct tlv_attr *tlv, bool add)
 {
@@ -287,8 +296,12 @@ static void _update_d_tlv(hncp_glue g, hncp_node n,
   if(valid) {
 	  pa_dp_set_lifetime(&edp->dp, preferred, valid);
 	  pa_dp_set_dhcp(&edp->dp, dhcpv6_data, dhcpv6_len);
-  } else {
-	  pa_dp_todelete(&edp->dp);
+	  if(edp->timeout.pending)
+		  uloop_timeout_cancel(&edp->timeout);
+  } else if(!edp->timeout.pending) {
+	  edp->timeout.cb = _pa_dp_delayed_delete;
+	  edp->data = g->pa_data;
+	  uloop_timeout_set(&edp->timeout, HNCP_PA_EDP_DELAYED_DELETE_MS);
   }
 
   pa_dp_notify(g->pa_data, &edp->dp);
