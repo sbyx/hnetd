@@ -218,7 +218,7 @@ static void platform_commit(struct uloop_timeout *t)
 	vlist_for_each_element(&c->assigned, a, node) {
 		hnetd_time_t preferred = (a->preferred_until - now) / HNETD_TIME_PER_SECOND;
 		hnetd_time_t valid = (a->valid_until - now) / HNETD_TIME_PER_SECOND;
-		if (IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix) || valid < 0)
+		if (IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix) || valid <= 0)
 			continue;
 
 		if (preferred < 0)
