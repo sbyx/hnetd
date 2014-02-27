@@ -95,11 +95,11 @@ static void pa_core_accept_ap(struct pa_core *core, struct pa_ap *ap, struct pa_
 
 static void pa_core_update_cp(struct pa_dp *dp, struct pa_ap *ap, struct pa_cp *cp, bool advertise)
 {
-	L_INFO("Updating "PA_CP_L" with "PA_AP_L, PA_CP_LA(cp), PA_AP_LA(ap));
-
 	pa_cp_set_dp(cp, dp);
 	pa_cp_set_priority(cp, ap->priority);
 	pa_cp_set_advertised(cp, advertise);
+	if(cp->__flags)
+		L_INFO("Updating "PA_CP_L" with "PA_AP_L, PA_CP_LA(cp), PA_AP_LA(ap));
 	pa_cp_notify(cp);
 }
 
@@ -188,7 +188,7 @@ static int pa_getprefix_random(struct pa_core *core,
 		if(prefix_contains(new_prefix, collision)) {
 			if((res = prefix_increment(new_prefix, new_prefix, dp->prefix.plen)) == -1)
 				return -1;
-		} else if(prefix_contains(collision, new_prefix)) {
+		} else { //prefix_contains(collision, new_prefix)
 			if((res = prefix_increment(new_prefix, collision, dp->prefix.plen)) == -1)
 				return -1;
 			new_prefix->plen = plen;
