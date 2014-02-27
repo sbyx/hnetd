@@ -91,6 +91,15 @@ static void hncp_routing_intiface(struct iface_user *u, const char *ifname, bool
 	call_backend(bfs, "reconfigure", -1);
 }
 
+static void hncp_routing_intaddr(struct iface_user *u, __unused const char *ifname,
+		__unused const struct prefix *addr6, const struct prefix *addr4)
+{
+	// Reschedule routing run when we have an IPv4-address on link
+	hncp_bfs bfs = container_of(u, hncp_bfs_s, iface);
+	if (bfs->active == HNCP_ROUTING_NONE && addr4)
+		uloop_timeout_set(&bfs->t, 0);
+}
+
 hncp_bfs hncp_routing_create(hncp hncp, const char *script)
 {
 	hncp_bfs bfs = calloc(1, sizeof(*bfs));
@@ -100,6 +109,7 @@ hncp_bfs hncp_routing_create(hncp hncp, const char *script)
 	bfs->active = HNCP_ROUTING_MAX;
 	bfs->script = script;
 	bfs->iface.cb_intiface = hncp_routing_intiface;
+	bfs->iface.cb_intaddr = hncp_routing_intaddr;
 	hncp_subscribe(hncp, &bfs->subscr);
 	iface_register_user(&bfs->iface);
 
