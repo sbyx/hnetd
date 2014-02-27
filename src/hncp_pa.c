@@ -616,7 +616,7 @@ static void _updated_ldp(hncp_glue g,
 static void hncp_pa_cps(struct pa_data_user *user, struct pa_cp *cp, uint32_t flags)
 {
 	hncp_glue g = container_of(user, struct hncp_glue_struct, data_user);
-	if((flags & (PADF_CP_ADVERTISE | PADF_CP_TODELETE | PADF_CP_DP | PADF_CP_IFACE))) {
+	if((flags & (PADF_CP_ADVERTISE | PADF_CP_TODELETE | PADF_CP_IFACE))) {
 		hncp_tlv_ap_update(g->hncp, &cp->prefix, cp->iface?cp->iface->ifname:NULL,
 				cp->authoritative, cp->priority, !(flags & PADF_CP_TODELETE) && cp->advertised);
 	}
