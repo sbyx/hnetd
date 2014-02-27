@@ -172,8 +172,8 @@ void iface_pa_aas(__attribute__((unused))struct pa_data_user *user,
 		return;
 
 	bool applied = laa->applied;
-	if((flags & PADF_CP_TODELETE) && applied) {
-		flags |= PADF_CP_APPLIED;
+	if((flags & PADF_AA_TODELETE) && applied) {
+		flags |= PADF_LAA_APPLIED;
 		applied = false;
 	}
 
