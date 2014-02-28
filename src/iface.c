@@ -52,15 +52,16 @@ static struct pa_data_user pa_data_cb = {
 void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 		struct pa_dp *dp, uint32_t flags)
 {
-	if(prefix_is_ipv4(&dp->prefix))
-		return;
-
 	if(flags & PADF_DP_CREATED) {
-		L_DEBUG("Pushing to platform "PA_DP_L, PA_DP_LA(dp));
-		platform_set_prefix_route(&dp->prefix, true);
+		if(!prefix_is_ipv4(&dp->prefix)) {
+			L_DEBUG("Pushing to platform "PA_DP_L, PA_DP_LA(dp));
+			platform_set_prefix_route(&dp->prefix, true);
+		}
 	} else if(flags & PADF_DP_TODELETE) {
-		L_DEBUG("Removing from platform "PA_DP_L, PA_DP_LA(dp));
-		platform_set_prefix_route(&dp->prefix, false);
+		if(!prefix_is_ipv4(&dp->prefix)) {
+			L_DEBUG("Removing from platform "PA_DP_L, PA_DP_LA(dp));
+			platform_set_prefix_route(&dp->prefix, false);
+		}
 	} else if(flags & (PADF_DP_DHCP | PADF_DP_LIFETIME)) {
 		struct pa_cp *cp;
 		pa_for_each_cp_in_dp(cp, dp) {
