@@ -27,7 +27,6 @@
 static struct ubus_context *ubus = NULL;
 static struct ubus_subscriber netifd;
 static uint32_t ubus_network_interface = 0;
-static struct blob_buf b;
 
 static int handle_update(__unused struct ubus_context *ctx,
 		__unused struct ubus_object *obj, __unused struct ubus_request_data *req,
@@ -41,6 +40,7 @@ static void platform_commit(struct uloop_timeout *t);
 struct platform_iface {
 	struct iface *iface;
 	struct uloop_timeout update;
+	struct ubus_request req;
 	char handle[];
 };
 
@@ -120,6 +120,9 @@ void platform_iface_new(struct iface *c, const char *handle)
 
 	// Have to rerun dump here as to sync up on nested interfaces
 	sync_netifd();
+
+	// reqiest
+	INIT_LIST_HEAD(&iface->req.list);
 }
 
 // Destructor for openwrt-specific interface part
@@ -175,12 +178,21 @@ void platform_set_prefix_route(const struct prefix *p, bool enable)
 }
 
 
+// Handle netifd ubus event for interfaces updates
+static void handle_complete(struct ubus_request *req, int ret)
+{
+	struct platform_iface *iface = container_of(req, struct platform_iface, req);
+	L_INFO("platform: async notify_proto for %s: %s", iface->handle, ubus_strerror(ret));
+}
+
+
 // Commit platform changes to netifd
 static void platform_commit(struct uloop_timeout *t)
 {
 	struct platform_iface *iface = container_of(t, struct platform_iface, update);
 	struct iface *c = iface->iface;
 
+	struct blob_buf b;
 	blob_buf_init(&b, 0);
 	blobmsg_add_u32(&b, "action", 0);
 	blobmsg_add_u8(&b, "link-up", 1);
@@ -415,12 +427,17 @@ static void platform_commit(struct uloop_timeout *t)
 
 	L_DEBUG("platform: *** end interface update %s (%s)", iface->handle, c->ifname);
 
-	__unused int ret;
-	ret = ubus_invoke(ubus, ubus_network_interface, "notify_proto", b.head, NULL, NULL, 1000);
-	L_INFO("platform: notify_proto for %s (%s): %s", iface->handle, c->ifname, ubus_strerror(ret));
-
-	if (ret == UBUS_STATUS_NOT_FOUND)
+	int ret;
+	ubus_abort_request(ubus, &iface->req);
+	if (!(ret = ubus_invoke_async(ubus, ubus_network_interface, "notify_proto", b.head, &iface->req))) {
+		iface->req.complete_cb = handle_complete;
+		ubus_complete_request_async(ubus, &iface->req);
+	} else {
+		L_INFO("platform: async notify_proto for %s (%s) failed: %s", iface->handle, c->ifname, ubus_strerror(ret));
 		platform_set_internal(c, false);
+	}
+
+	blob_buf_free(&b);
 }
 
 
