@@ -131,6 +131,7 @@ void platform_iface_free(struct iface *c)
 	struct platform_iface *iface = c->platform;
 	if (iface) {
 		uloop_timeout_cancel(&iface->update);
+		ubus_abort_request(ubus, &iface->req);
 		free(iface);
 		c->platform = NULL;
 	}
