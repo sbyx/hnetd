@@ -79,6 +79,8 @@ struct hncp_glue_struct {
   struct pa_data_user data_user;
 };
 
+static void _refresh_ec(hncp_glue g, bool publish);
+
 static int compare_dps(const void *a, const void *b, void *ptr __unused)
 {
   hncp_dp t1 = (hncp_dp) a, t2 = (hncp_dp) b;
@@ -342,11 +344,8 @@ static void _tlv_cb(hncp_subscriber s,
         if (!c)
           L_INFO("empty external connection TLV");
 
-        /* _Potentially_ DHCPv6 data was dirty too. So schedule us
-         * (it's NOP if nothing changes). (If we do this for own node,
-         * loop occurs). */
-        if (g->hncp->own_node != n)
-          hncp_pa_set_dhcpv6_data_in_dirty(g);
+        /* Don't republish here, only updated outgoing dhcp options */
+        _refresh_ec(g, false);
 
       }
       break;
@@ -400,9 +399,9 @@ do                                              \
     }                                           \
  } while(0)
 
-static void _republish_cb(hncp_subscriber s)
+
+static void _refresh_ec(hncp_glue g, bool publish)
 {
-  hncp_glue g = container_of(s, hncp_glue_s, subscriber);
   hncp o = g->hncp;
   hnetd_time_t now = hncp_time(o);
   hncp_dp dp, dp2;
@@ -413,7 +412,9 @@ static void _republish_cb(hncp_subscriber s)
   char *dhcpv6_options = NULL, *dhcp_options = NULL;
   int dhcpv6_options_len = 0, dhcp_options_len = 0;
 
-  hncp_remove_tlvs_by_type(o, HNCP_T_EXTERNAL_CONNECTION);
+  if (publish)
+    hncp_remove_tlvs_by_type(o, HNCP_T_EXTERNAL_CONNECTION);
+
   /* This is very brute force. Oh well. (O(N^2) to # of delegated
      prefixes. Most likely it's small enough not to matter.)*/
   vlist_for_each_element(&g->dps, dp2, in_dps)
@@ -473,7 +474,8 @@ static void _republish_cb(hncp_subscriber s)
           APPEND_BUF(dhcp_options, dhcp_options_len,
                      tlv_data(st), tlv_len(st));
         }
-      hncp_add_tlv(o, tb.head);
+      if (publish)
+	hncp_add_tlv(o, tb.head);
       tlv_buf_free(&tb);
     }
   hncp_node n;
@@ -569,6 +571,11 @@ static void _republish_cb(hncp_subscriber s)
     free(dhcpv6_options);
   if (dhcp_options)
     free(dhcp_options);
+}
+
+static void _republish_cb(hncp_subscriber s)
+{
+  _refresh_ec(container_of(s, hncp_glue_s, subscriber), true);
 }
 
 static void _updated_ldp(hncp_glue g,
