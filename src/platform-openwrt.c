@@ -192,7 +192,7 @@ static void platform_commit(struct uloop_timeout *t)
 	struct platform_iface *iface = container_of(t, struct platform_iface, update);
 	struct iface *c = iface->iface;
 
-	struct blob_buf b;
+	struct blob_buf b = {NULL, NULL, 0, NULL};
 	blob_buf_init(&b, 0);
 	blobmsg_add_u32(&b, "action", 0);
 	blobmsg_add_u8(&b, "link-up", 1);
