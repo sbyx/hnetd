@@ -1,7 +1,3 @@
-#ifdef L_LEVEL
-#undef L_LEVEL
-#endif
-#define L_LEVEL 7
 #define L_PREFIX "pa-store - "
 
 #include "pa_store.h"
@@ -41,7 +37,7 @@ static int pas_ifname_read(char *ifname, FILE *f)
 
 static int pas_address_write(struct in6_addr *addr, FILE *f)
 {
-	L_DEBUG("Writing address %s", ADDR_REPR(addr));
+	//L_DEBUG("Writing address %s", ADDR_REPR(addr));
 	if(fwrite(addr, sizeof(struct in6_addr), 1, f) != 1)
 				return -1;
 	return 0;
@@ -51,13 +47,13 @@ static int pas_address_read(struct in6_addr *addr, FILE *f)
 {
 	if(fread(addr, sizeof(struct in6_addr), 1, f) != 1)
 			return -1;
-	L_DEBUG("Read address %s", ADDR_REPR(addr));
+	//L_DEBUG("Read address %s", ADDR_REPR(addr));
 	return 0;
 }
 
 static int pas_prefix_write(struct prefix *p, FILE *f)
 {
-	L_DEBUG("Writing prefix %s", PREFIX_REPR(p));
+	//L_DEBUG("Writing prefix %s", PREFIX_REPR(p));
 	if(fwrite(&p->prefix, sizeof(struct in6_addr), 1, f) != 1 ||
 				fwrite(&p->plen, 1, 1, f) != 1)
 				return -1;
@@ -69,7 +65,7 @@ static int pas_prefix_read(struct prefix *p, FILE *f)
 	if(fread(&p->prefix, sizeof(struct in6_addr), 1, f) != 1 ||
 			fread(&p->plen, 1, 1, f) != 1)
 			return -1;
-	L_DEBUG("Read prefix %s", PREFIX_REPR(p));
+	//L_DEBUG("Read prefix %s", PREFIX_REPR(p));
 	return 0;
 }
 
