@@ -257,6 +257,7 @@ static void platform_commit(struct uloop_timeout *t)
 
 		blobmsg_add_u32(&b, "preferred", preferred);
 		blobmsg_add_u32(&b, "valid", valid);
+		blobmsg_add_u8(&b, "offlink", true);
 
 		uint8_t *oend = &a->dhcpv6_data[a->dhcpv6_len], *odata;
 		uint16_t olen, otype;
@@ -328,6 +329,27 @@ static void platform_commit(struct uloop_timeout *t)
 		blobmsg_add_u32(&b, "metric", r->metric);
 
 		L_DEBUG("	from %s to %s/%s via %s", buf4, buf, buf2, buf3);
+
+		blobmsg_close_table(&b, l);
+	}
+	vlist_for_each_element(&c->assigned, a, node) {
+		hnetd_time_t preferred = (a->preferred_until - now) / HNETD_TIME_PER_SECOND;
+		hnetd_time_t valid = (a->valid_until - now) / HNETD_TIME_PER_SECOND;
+		if (IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix) || valid <= 0 ||
+				(preferred <= 0 && valid <= 7200))
+			continue;
+
+		l = blobmsg_open_table(&b, NULL);
+
+		char *buf = blobmsg_alloc_string_buffer(&b, "target", INET6_ADDRSTRLEN);
+		inet_ntop(AF_INET6, &a->prefix.prefix, buf, INET6_ADDRSTRLEN);
+		blobmsg_add_string_buffer(&b);
+
+		char *buf2 = blobmsg_alloc_string_buffer(&b, "netmask", 4);
+		snprintf(buf2, 4, "%u", prefix_af_length(&a->prefix));
+		blobmsg_add_string_buffer(&b);
+
+		L_DEBUG("	on-link %s/%s", buf, buf2);
 
 		blobmsg_close_table(&b, l);
 	}
