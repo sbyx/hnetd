@@ -36,7 +36,7 @@ target_link_libraries(hnetd ubox blobmsg_json resolv ${BACKEND_LINK})
 
 # Unit test stuff
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
 
 # With this, 'make check' works even in a clean tree (sigh, cmake..)
