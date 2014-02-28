@@ -258,9 +258,6 @@ static void platform_commit(struct uloop_timeout *t)
 		blobmsg_add_u32(&b, "preferred", preferred);
 		blobmsg_add_u32(&b, "valid", valid);
 
-		if (!preferred && valid <= 7200)
-			blobmsg_add_u8(&b, "offlink", true);
-
 		uint8_t *oend = &a->dhcpv6_data[a->dhcpv6_len], *odata;
 		uint16_t olen, otype;
 		dhcpv6_for_each_option(a->dhcpv6_data, oend, otype, olen, odata) {
