@@ -46,9 +46,10 @@ struct platform_iface {
 
 
 /* ubus subscribe / handle control code */
-static void sync_netifd(void)
+static void sync_netifd(bool subscribe)
 {
-	ubus_subscribe(ubus, &netifd, ubus_network_interface);
+	if (subscribe)
+		ubus_subscribe(ubus, &netifd, ubus_network_interface);
 
 	ubus_abort_request(ubus, &req_dump);
 	if (!ubus_invoke_async(ubus, ubus_network_interface, "dump", NULL, &req_dump)) {
@@ -82,7 +83,7 @@ static void handle_event(__unused struct ubus_context *ctx, __unused struct ubus
 
 	ubus_network_interface = blobmsg_get_u32(tb[OBJ_ATTR_ID]);
 	iface_flush();
-	sync_netifd();
+	sync_netifd(true);
 }
 static struct ubus_event_handler event_handler = { .cb = handle_event };
 
@@ -100,7 +101,7 @@ int platform_init(void)
 	ubus_add_uloop(ubus);
 	ubus_register_event_handler(ubus, &event_handler, "ubus.object.add");
 	if (!ubus_lookup_id(ubus, "network.interface", &ubus_network_interface))
-		sync_netifd();
+		sync_netifd(true);
 
 	return 0;
 }
@@ -119,7 +120,7 @@ void platform_iface_new(struct iface *c, const char *handle)
 	c->platform = iface;
 
 	// Have to rerun dump here as to sync up on nested interfaces
-	sync_netifd();
+	sync_netifd(false);
 
 	// reqiest
 	INIT_LIST_HEAD(&iface->req.list);
