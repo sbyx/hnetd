@@ -10,6 +10,7 @@
 #include <assert.h>
 #include <ifaddrs.h>
 #include <stdarg.h>
+#include <limits.h>
 #include <arpa/inet.h>
 
 #include <sys/socket.h>
@@ -512,7 +513,9 @@ static void update_addr(struct vlist_tree *t, struct vlist_node *node_new, struc
 	if (node_new) {
 		a_new->timer.cb = purge_addr;
 		a_new->iface = c;
-		uloop_timeout_set(&a_new->timer, a_new->valid_until - now + 1);
+		hnetd_time_t timeout = a_new->valid_until - now + 1;
+		if (timeout <= INT_MAX)
+			uloop_timeout_set(&a_new->timer, timeout);
 	}
 
 	if (node_old) {
@@ -557,7 +560,9 @@ static void update_prefix(struct vlist_tree *t, struct vlist_node *node_new, str
 	if (node_new) {
 		a_new->timer.cb = purge_prefix;
 		a_new->iface = c;
-		uloop_timeout_set(&a_new->timer, a->valid_until - hnetd_time() + 1);
+		hnetd_time_t timeout = a->valid_until - hnetd_time() + 1;
+		if (timeout <= INT_MAX)
+			uloop_timeout_set(&a_new->timer, timeout);
 	}
 
 	if (node_old) {
