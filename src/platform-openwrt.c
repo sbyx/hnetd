@@ -642,7 +642,7 @@ static void platform_update(void *data, size_t len)
 		if (!rtb[ROUTE_ATTR_MASK] || blobmsg_get_u32(rtb[ROUTE_ATTR_MASK]))
 			continue;
 
-		const char *target = (!rtb[ROUTE_ATTR_TARGET]) ? blobmsg_get_string(rtb[ROUTE_ATTR_TARGET]) : NULL;
+		const char *target = (rtb[ROUTE_ATTR_TARGET]) ? blobmsg_get_string(rtb[ROUTE_ATTR_TARGET]) : NULL;
 		if (target && !strcmp(target, "::"))
 			v6uplink = true;
 		else if (target && !strcmp(target, "0.0.0.0"))
