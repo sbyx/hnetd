@@ -85,7 +85,9 @@ void iface_test_new_managed(void)
 	char test[] = "test";
 
 	struct iface *iface00 = iface_create("test00", "test00");
-	iface_set_dhcp_received(iface00, true, NULL, 0);
+	iface_update_ipv4_uplink(iface00);
+	iface_set_ipv4_uplink(iface00);
+	iface_commit_ipv4_uplink(iface00);
 	smock_pull_bool_is("test00", false);
 
 	struct iface *iface = iface_create("test0", "test0");
@@ -106,17 +108,20 @@ void iface_test_new_managed(void)
 	uloop_run();
 	smock_pull_bool_is("test0", true);
 
-	iface_set_dhcp_received(iface, true, NULL, 0);
+	iface_update_ipv4_uplink(iface);
+	iface_set_ipv4_uplink(iface);
+	iface_commit_ipv4_uplink(iface);
 	smock_pull_bool_is("test0", false);
 
-	iface_set_dhcp_received(iface, false, NULL, 0);
+	iface_update_ipv4_uplink(iface);
+	iface_commit_ipv4_uplink(iface);
 	uloop_cancelled = false;
 	uloop_run();
 	smock_pull_bool_is("test0", true);
 
-	iface_update_delegated(iface);
+	iface_update_ipv6_uplink(iface);
 	iface_add_delegated(iface, &p, NULL, HNETD_TIME_MAX, 0, test, sizeof(test));
-	iface_commit_delegated(iface);
+	iface_commit_ipv6_uplink(iface);
 
 	smock_pull_bool_is("test0", false);
 	sput_fail_unless(!prefix_cmp(&p, smock_pull("prefix_prefix")), "prefix address");
@@ -125,11 +130,16 @@ void iface_test_new_managed(void)
 	sput_fail_unless(!strcmp(smock_pull("dhcpv6_data"), "test"), "dhcpv6_data");
 	smock_pull_int_is("dhcpv6_len", sizeof(test));
 
-	iface_set_dhcp_received(iface, true, NULL, 0);
-	iface_update_delegated(iface);
-	iface_commit_delegated(iface);
+	iface_update_ipv4_uplink(iface);
+	iface_set_ipv4_uplink(iface);
+	iface_commit_ipv4_uplink(iface);
+
+	iface_update_ipv6_uplink(iface);
+	iface_commit_ipv6_uplink(iface);
 	smock_pull_bool_is("prefix_remove", true);
-	iface_set_dhcp_received(iface, false, NULL, 0);
+
+	iface_update_ipv4_uplink(iface);
+	iface_commit_ipv4_uplink(iface);
 
 	uloop_cancelled = false;
 	uloop_run();

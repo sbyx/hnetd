@@ -100,7 +100,7 @@ struct iface {
 	// Interface status
 	bool linkowner;
 	bool internal;
-	bool v4leased;
+	bool v4uplink;
 	bool carrier;
 
 	// LL-address
@@ -112,14 +112,18 @@ struct iface {
 	struct vlist_tree routes;
 
 	// Other data
+	void *dhcpv6_data_stage;
 	void *dhcpv6_data_in;
 	void *dhcpv6_data_out;
+	size_t dhcpv6_len_stage;
 	size_t dhcpv6_len_in;
 	size_t dhcpv6_len_out;
 
 	// DHCP data
+	void *dhcp_data_stage;
 	void *dhcp_data_in;
 	void *dhcp_data_out;
+	size_t dhcp_len_stage;
 	size_t dhcp_len_in;
 	size_t dhcp_len_out;
 
@@ -144,8 +148,9 @@ struct iface* iface_create(const char *ifname, const char *handle);
 void iface_remove(struct iface *iface);
 
 
-// Begin PD update cycle
-void iface_update_delegated(struct iface *c);
+// Begin uplink update cycle
+void iface_update_ipv6_uplink(struct iface *c);
+void iface_update_ipv4_uplink(struct iface *c);
 
 // Add currently available prefixes from PD
 void iface_add_delegated(struct iface *c,
@@ -153,16 +158,27 @@ void iface_add_delegated(struct iface *c,
 		hnetd_time_t valid_until, hnetd_time_t preferred_until,
 		const void *dhcpv6_data, size_t dhcpv6_len);
 
-// Flush and commit PD to synthesize events to users and rerun border discovery
-void iface_commit_delegated(struct iface *c);
+// Flush and commit uplink to synthesize events to users and rerun border discovery
+void iface_commit_ipv6_uplink(struct iface *c);
+void iface_commit_ipv4_uplink(struct iface *c);
+
+
+// Set DHCPv4 uplink
+void iface_set_ipv4_uplink(struct iface *c);
 
 
 // Set DHCPv4 leased flag and rerun border discovery
-void iface_set_dhcp_received(struct iface *c, bool leased, ...);
+void iface_add_dhcp_received(struct iface *c, const void *data, size_t len);
 
 
 // Set DHCPv6 data received
-void iface_set_dhcpv6_received(struct iface *c, ...);
+void iface_add_dhcpv6_received(struct iface *c, const void *data, size_t len);
+
+
+// Flush uplinks
+void iface_update(void);
+void iface_commit(void);
+
 
 // Flush all interfaces
 void iface_flush(void);

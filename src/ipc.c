@@ -122,7 +122,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 	ssize_t len;
 	struct sockaddr_un sender;
 	socklen_t sender_len = sizeof(sender);
-	struct blob_attr *tb[OPT_MAX], *p;
+	struct blob_attr *tb[OPT_MAX];
 
 	while ((len = recvfrom(fd->fd, buf, sizeof(buf), MSG_DONTWAIT,
 			(struct sockaddr*)&sender, &sender_len)) >= 0) {
@@ -140,7 +140,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 					blobmsg_get_string(tb[OPT_HANDLE]));
 		} else if (!strcmp(cmd, "ifdown")) {
 			iface_remove(c);
-		} else if (!strcmp(cmd, "set_v4lease")) {
+		} else if (!strcmp(cmd, "enable_ipv4_uplink")) {
 			const size_t dns_max = 4;
 			size_t dns_cnt = 0;
 			struct {
@@ -167,16 +167,23 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 				dns.len = 4 * dns_cnt;
 			}
 
-			iface_set_dhcp_received(c, true, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns), NULL);
-		} else if (!strcmp(cmd, "unset_v4lease")) {
-			iface_set_dhcp_received(c, false, NULL);
-		} else if (!strcmp(cmd, "set_prefixes") && (p = tb[OPT_PREFIX])) {
+			iface_update_ipv4_uplink(c);
+			iface_add_dhcp_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns));
+			iface_set_ipv4_uplink(c);
+			iface_commit_ipv4_uplink(c);
+		} else if (!strcmp(cmd, "disable_ipv4_uplink")) {
+			iface_update_ipv4_uplink(c);
+			iface_commit_ipv4_uplink(c);
+
+			if (avl_is_empty(&c->delegated.avl))
+				iface_remove(c);
+		} else if (!strcmp(cmd, "enable_ipv6_uplink")) {
 			hnetd_time_t now = hnetd_time();
-			iface_update_delegated(c);
+			iface_update_ipv6_uplink(c);
 
 			struct blob_attr *k;
 			unsigned rem;
-			blobmsg_for_each_attr(k, p, rem) {
+			blobmsg_for_each_attr(k, tb[OPT_PREFIX], rem) {
 				hnetd_time_t valid = HNETD_TIME_MAX, preferred = HNETD_TIME_MAX;
 
 				struct prefix addr = {IN6ADDR_ANY_INIT, 0};
@@ -214,8 +221,8 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 #endif
 				iface_add_delegated(c, &addr, (ex.plen) ? &ex : NULL, valid, preferred, data, len);
 			}
-			iface_commit_delegated(c);
-		} else if (!strcmp(cmd, "set_dhcpv6_data")) {
+
+
 			const size_t dns_max = 4;
 			size_t dns_cnt = 0;
 			struct {
@@ -240,10 +247,16 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			if (dns_cnt) {
 				dns.type = htons(DHCPV6_OPT_DNS_SERVERS);
 				dns.len = htons(dns_cnt * sizeof(struct in6_addr));
-				iface_set_dhcpv6_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns), NULL);
-			} else {
-				iface_set_dhcpv6_received(c, NULL);
+				iface_add_dhcpv6_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns));
 			}
+
+			iface_commit_ipv6_uplink(c);
+		} else if (!strcmp(cmd, "disable_ipv6_uplink")) {
+			iface_update_ipv6_uplink(c);
+			iface_commit_ipv6_uplink(c);
+
+			if (!c->v4uplink)
+				iface_remove(c);
 		}
 	}
 }

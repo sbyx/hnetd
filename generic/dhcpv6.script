@@ -38,7 +38,6 @@ setup_interface () {
 	done
 
 	update_resolv "$device" "$dns"
-	hnet-call "{\"command\": \"set_dhcpv6_data\", \"ifname\": \"$device\", \"dns\": [$dnspart]}"
 
 	local prefixpart=""
 	for entry in $PREFIXES; do
@@ -78,7 +77,7 @@ setup_interface () {
 		# TODO: delete this somehow when the prefix disappears
 		ip -6 route add unreachable "$addr" proto $PROTO
 	done
-	hnet-call "{\"command\": \"set_prefixes\", \"ifname\": \"$device\", \"prefix\": [$prefixpart]}"
+	hnet-call "{\"command\": \"enable_ipv6_uplink\", \"ifname\": \"$device\", \"prefix\": [$prefixpart], \"dns\": [$dnspart]}"
 
 	ip -6 route flush dev "$device" proto $PROTO
 	ip -6 address flush dev "$device" scope global
@@ -130,8 +129,7 @@ teardown_interface() {
 	local device="$1"
 	ip -6 route flush dev "$device" proto $PROTO
 	ip -6 address flush dev "$device" scope global
-	hnet-call "{\"command\": \"set_dhcpv6_data\", \"ifname\": \"$device\"}"
-	hnet-call "{\"command\": \"set_prefixes\", \"ifname\": \"$device\", \"prefix\": []}"
+	hnet-call "{\"command\": \"disable_ipv6_uplink\", \"ifname\": \"$device\"}"
 	update_resolv "$device" ""
 }
 

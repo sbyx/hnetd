@@ -39,7 +39,7 @@ void iface_pa_cps(struct pa_data_user *, struct pa_cp *, uint32_t flags);
 void iface_pa_aas(struct pa_data_user *, struct pa_aa *, uint32_t flags);
 void iface_pa_dps(struct pa_data_user *, struct pa_dp *, uint32_t flags);
 
-static void iface_discover_border(struct iface *c);
+static bool iface_discover_border(struct iface *c);
 
 static struct list_head interfaces = LIST_HEAD_INIT(interfaces);
 static struct list_head users = LIST_HEAD_INIT(users);
@@ -210,9 +210,9 @@ static void iface_notify_internal_state(struct iface *c, bool enabled)
 
 static void iface_notify_data_state(struct iface *c, bool enabled)
 {
-	void *data = (enabled) ? c->dhcpv6_data_in : NULL;
+	void *data = (enabled) ? (c->dhcpv6_data_in ? c->dhcpv6_data_in : (void*)1) : NULL;
 	size_t len = (enabled) ? c->dhcpv6_len_in : 0;
-	void *data4 = (enabled) ? c->dhcp_data_in : NULL;
+	void *data4 = (enabled) ? (c->dhcp_data_in ? c->dhcp_data_in : (void*)1) : NULL;
 	size_t len4 = (enabled) ? c->dhcp_len_in : 0;
 
 	struct iface_user *u;
@@ -666,14 +666,13 @@ static void iface_announce_preferred(struct uloop_timeout *t)
 }
 
 
-static void iface_discover_border(struct iface *c)
+static bool iface_discover_border(struct iface *c)
 {
 	if (!c->platform) // No border discovery on unmanaged interfaces
-		return;
+		return false;
 
 	// Perform border-discovery (border on DHCPv4 assignment or DHCPv6-PD)
-	bool internal = avl_is_empty(&c->delegated.avl) &&
-			!c->v4leased && !c->dhcpv6_len_in && c->carrier;
+	bool internal = avl_is_empty(&c->delegated.avl) && !c->v4uplink && c->carrier;
 	if (c->internal != internal) {
 		L_INFO("iface: %s border discovery detected state %s",
 				c->ifname, (internal) ? "internal" : "external");
@@ -686,7 +685,10 @@ static void iface_discover_border(struct iface *c)
 			uloop_timeout_set(&c->transition, 5000);
 		else
 			iface_announce_border(&c->transition);
+
+		return true;
 	}
+	return false;
 }
 
 
@@ -753,68 +755,21 @@ void iface_flush(void)
 }
 
 
-void iface_set_dhcp_received(struct iface *c, bool leased, ...)
+void iface_set_ipv4_uplink(struct iface *c)
 {
-	if (c->v4leased != leased) {
-		c->v4leased = leased;
-		iface_discover_border(c);
-	}
-
-	bool equal = true;
-	size_t offset = 0;
-	va_list ap;
-
-	va_start(ap, leased);
-	for (;;) {
-		void *data = va_arg(ap, void*);
-		if (!data)
-			break;
-
-		size_t len = va_arg(ap, size_t);
-		if (!equal || offset + len > c->dhcp_len_in ||
-				memcmp(((uint8_t*)c->dhcp_data_in) + offset, data, len))
-			equal = false;
-
-		offset += len;
-	}
-	va_end(ap);
-
-	if (equal && offset != c->dhcp_len_in)
-		equal = false;
-
-	if (!equal) {
-		if (c->dhcp_len_in)
-			c->dhcp_data_in = realloc(c->dhcp_data_in, offset);
-		else
-			c->dhcp_data_in = malloc(offset);
-
-		c->dhcp_len_in = offset;
-
-		offset = 0;
-
-		va_start(ap, leased);
-		for (;;) {
-			void *data = va_arg(ap, void*);
-			if (!data)
-				break;
-
-			size_t len = va_arg(ap, size_t);
-			memcpy(((uint8_t*)c->dhcp_data_in) + offset, data, len);
-
-			offset += len;
-		}
-		va_end(ap);
-
-		if (!c->internal)
-			iface_notify_data_state(c, true);
-	}
-
-	if (c->dhcp_len_in == 0)
-		c->dhcp_data_in = (void*)1;
+	c->v4uplink = true;
 }
 
 
-void iface_update_delegated(struct iface *c)
+void iface_add_dhcp_received(struct iface *c, const void *data, size_t len)
+{
+	c->dhcp_data_stage = realloc(c->dhcp_data_stage, c->dhcp_len_stage + len);
+	memcpy(((uint8_t*)c->dhcp_data_stage) + c->dhcp_len_stage, data, len);
+	c->dhcp_len_stage += len;
+}
+
+
+void iface_update_ipv6_uplink(struct iface *c)
 {
 	vlist_update(&c->delegated);
 }
@@ -837,64 +792,71 @@ void iface_add_delegated(struct iface *c,
 }
 
 
-void iface_commit_delegated(struct iface *c)
+void iface_update_ipv4_uplink(struct iface *c)
 {
-	vlist_flush(&c->delegated);
-	iface_discover_border(c);
+	c->v4uplink = false;
 }
 
 
-void iface_set_dhcpv6_received(struct iface *c, ...)
+void iface_commit_ipv4_uplink(struct iface *c)
 {
-	bool equal = true;
-	size_t offset = 0;
-	va_list ap;
+	bool changed = !iface_discover_border(c) && (c->dhcp_len_in != c->dhcp_len_stage ||
+					memcmp(c->dhcp_data_in, c->dhcp_data_stage, c->dhcp_len_in));
 
-	va_start(ap, c);
-	for (;;) {
-		void *data = va_arg(ap, void*);
-		if (!data)
-			break;
+	free(c->dhcp_data_in);
+	c->dhcp_data_in = c->dhcp_data_stage;
+	c->dhcp_len_in = c->dhcp_len_stage;
+	c->dhcp_data_stage = NULL;
+	c->dhcp_len_stage = 0;
 
-		size_t len = va_arg(ap, size_t);
-		if (!equal || offset + len > c->dhcpv6_len_in ||
-				memcmp(((uint8_t*)c->dhcpv6_data_in) + offset, data, len))
-			equal = false;
+	if (changed && !c->internal)
+		iface_notify_data_state(c, !c->internal);
+}
 
-		offset += len;
+
+void iface_commit_ipv6_uplink(struct iface *c)
+{
+	vlist_flush(&c->delegated);
+	bool changed = !iface_discover_border(c) && (c->dhcpv6_len_in != c->dhcpv6_len_stage ||
+					memcmp(c->dhcpv6_data_in, c->dhcpv6_data_stage, c->dhcpv6_len_in));
+
+	free(c->dhcpv6_data_in);
+	c->dhcpv6_data_in = c->dhcpv6_data_stage;
+	c->dhcpv6_len_in = c->dhcpv6_len_stage;
+	c->dhcpv6_data_stage = NULL;
+	c->dhcpv6_len_stage = 0;
+
+	if (changed && !c->internal)
+		iface_notify_data_state(c, !c->internal);
+}
+
+
+void iface_add_dhcpv6_received(struct iface *c, const void *data, size_t len)
+{
+	c->dhcpv6_data_stage = realloc(c->dhcpv6_data_stage, c->dhcpv6_len_stage + len);
+	memcpy(((uint8_t*)c->dhcpv6_data_stage) + c->dhcpv6_len_stage, data, len);
+	c->dhcpv6_len_stage += len;
+}
+
+
+void iface_update(void)
+{
+	struct iface *c;
+	list_for_each_entry(c, &interfaces, head) {
+		iface_update_ipv6_uplink(c);
+		iface_update_ipv4_uplink(c);
 	}
-	va_end(ap);
+}
 
-	if (equal && offset != c->dhcp_len_in)
-		equal = false;
 
-	if (!equal) {
-		if (c->dhcpv6_len_in)
-			c->dhcpv6_data_in = realloc(c->dhcpv6_data_in, offset);
-		else
-			c->dhcpv6_data_in = malloc(offset);
+void iface_commit(void)
+{
+	struct iface *c;
+	list_for_each_entry(c, &interfaces, head) {
+		iface_commit_ipv6_uplink(c);
+		iface_commit_ipv4_uplink(c);
 
-		c->dhcpv6_len_in = offset;
-
-		offset = 0;
-
-		va_start(ap, c);
-		for (;;) {
-			void *data = va_arg(ap, void*);
-			if (!data)
-				break;
-
-			size_t len = va_arg(ap, size_t);
-			memcpy(((uint8_t*)c->dhcpv6_data_in) + offset, data, len);
-
-			offset += len;
-		}
-		va_end(ap);
-
-		if (!c->internal)
-			iface_notify_data_state(c, true);
+		if (!c->platform && !c->v4uplink && avl_is_empty(&c->delegated.avl))
+			iface_remove(c);
 	}
-
-	if (c->dhcpv6_len_in == 0)
-		c->dhcpv6_data_in = (void*)1;
 }

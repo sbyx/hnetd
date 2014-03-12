@@ -489,36 +489,45 @@ enum {
 	IFACE_ATTR_IFNAME,
 	IFACE_ATTR_PROTO,
 	IFACE_ATTR_PREFIX,
-	IFACE_ATTR_V4ADDR,
+	IFACE_ATTR_ROUTE,
 	IFACE_ATTR_DELEGATION,
 	IFACE_ATTR_DNS,
 	IFACE_ATTR_UP,
 	IFACE_ATTR_MAX,
 };
 
+enum {
+	ROUTE_ATTR_TARGET,
+	ROUTE_ATTR_MASK,
+	ROUTE_ATTR_MAX
+};
 
 static const struct blobmsg_policy iface_attrs[IFACE_ATTR_MAX] = {
 	[IFACE_ATTR_HANDLE] = { .name = "interface", .type = BLOBMSG_TYPE_STRING },
 	[IFACE_ATTR_IFNAME] = { .name = "l3_device", .type = BLOBMSG_TYPE_STRING },
 	[IFACE_ATTR_PROTO] = { .name = "proto", .type = BLOBMSG_TYPE_STRING },
 	[IFACE_ATTR_PREFIX] = { .name = "ipv6-prefix", .type = BLOBMSG_TYPE_ARRAY },
-	[IFACE_ATTR_V4ADDR] = { .name = "ipv4-address", .type = BLOBMSG_TYPE_ARRAY },
+	[IFACE_ATTR_ROUTE] = { .name = "route", .type = BLOBMSG_TYPE_ARRAY },
 	[IFACE_ATTR_DELEGATION] = { .name = "delegation", .type = BLOBMSG_TYPE_BOOL },
 	[IFACE_ATTR_DNS] = { .name = "dns-server", .type = BLOBMSG_TYPE_ARRAY },
 	[IFACE_ATTR_UP] = { .name = "up", .type = BLOBMSG_TYPE_BOOL },
 };
 
+static const struct blobmsg_policy route_attrs[ROUTE_ATTR_MAX] = {
+	[ROUTE_ATTR_TARGET] = { .name = "target", .type = BLOBMSG_TYPE_STRING },
+	[ROUTE_ATTR_MASK] = { .name = "mask", .type = BLOBMSG_TYPE_INT32 },
+};
+
 
 // Decode and analyze all delegated prefixes and commit them to iface
-static void update_delegated(struct iface *c, struct blob_attr *tb[IFACE_ATTR_MAX])
+static void update_interface(struct iface *c,
+		struct blob_attr *tb[IFACE_ATTR_MAX], bool v4uplink, bool v6uplink)
 {
-	iface_update_delegated(c);
+	hnetd_time_t now = hnetd_time();
+	struct blob_attr *k;
+	unsigned rem;
 
-	if (tb[IFACE_ATTR_PREFIX]) {
-		hnetd_time_t now = hnetd_time();
-		struct blob_attr *k;
-		unsigned rem;
-
+	if (v6uplink) {
 		blobmsg_for_each_attr(k, tb[IFACE_ATTR_PREFIX], rem) {
 			struct blob_attr *tb[PREFIX_ATTR_MAX], *a;
 			blobmsg_parse(prefix_attrs, PREFIX_ATTR_MAX, tb,
@@ -550,7 +559,7 @@ static void update_delegated(struct iface *c, struct blob_attr *tb[IFACE_ATTR_MA
 			void *data = NULL;
 			size_t len = 0;
 
-#ifdef EXT_PREFIX_CLASS
+	#ifdef EXT_PREFIX_CLASS
 			struct dhcpv6_prefix_class pclass = {
 				.type = htons(DHCPV6_OPT_PREFIX_CLASS),
 				.len = htons(2),
@@ -561,14 +570,11 @@ static void update_delegated(struct iface *c, struct blob_attr *tb[IFACE_ATTR_MA
 				data = &pclass;
 				len = sizeof(pclass);
 			}
-#endif
+	#endif
 
 			iface_add_delegated(c, &p, &ex, valid, preferred, data, len);
 		}
 	}
-
-	iface_commit_delegated(c);
-
 
 	const size_t dns_max = 4;
 	size_t dns_cnt = 0, dns4_cnt = 0;
@@ -577,36 +583,39 @@ static void update_delegated(struct iface *c, struct blob_attr *tb[IFACE_ATTR_MA
 		uint16_t len;
 		struct in6_addr addr[dns_max];
 	} dns;
-	struct {
+	struct __attribute__((packed)) {
 		uint8_t type;
 		uint8_t len;
 		struct in_addr addr[dns_max];
 	} dns4;
 
-	if (tb[IFACE_ATTR_DNS]) {
-		struct blob_attr *k;
-		unsigned rem;
-
-		blobmsg_for_each_attr(k, tb[IFACE_ATTR_DNS], rem) {
-			if (dns_cnt >= dns_max || blobmsg_type(k) != BLOBMSG_TYPE_STRING ||
-					inet_pton(AF_INET6, blobmsg_data(k), &dns.addr[dns_cnt]) < 1) {
-				if (dns4_cnt >= dns_max ||
-						inet_pton(AF_INET, blobmsg_data(k), &dns4.addr[dns4_cnt]) < 1)
-					continue;
-				++dns4_cnt;
+	blobmsg_for_each_attr(k, tb[IFACE_ATTR_DNS], rem) {
+		if (dns_cnt >= dns_max || blobmsg_type(k) != BLOBMSG_TYPE_STRING ||
+				inet_pton(AF_INET6, blobmsg_data(k), &dns.addr[dns_cnt]) < 1) {
+			if (dns4_cnt >= dns_max ||
+					inet_pton(AF_INET, blobmsg_data(k), &dns4.addr[dns4_cnt]) < 1)
 				continue;
-			}
-
-			++dns_cnt;
+			++dns4_cnt;
+			continue;
 		}
+
+		++dns_cnt;
 	}
 
-	if (dns_cnt) {
+	if (v6uplink && dns_cnt) {
 		dns.type = htons(DHCPV6_OPT_DNS_SERVERS);
 		dns.len = htons(dns_cnt * sizeof(struct in6_addr));
-		iface_set_dhcpv6_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns), NULL);
-	} else {
-		iface_set_dhcpv6_received(c, NULL);
+		iface_add_dhcpv6_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns));
+	}
+
+	if (v4uplink) {
+		if (dns4_cnt) {
+			dns4.type = DHCPV4_OPT_DNSSERVER;
+			dns4.len = dns4_cnt * sizeof(struct in_addr);
+			iface_add_dhcp_received(c, &dns4, ((uint8_t*)&dns4.addr[dns4_cnt]) - ((uint8_t*)&dns4));
+		}
+
+		iface_set_ipv4_uplink(c);
 	}
 }
 
@@ -622,80 +631,57 @@ static void platform_update(void *data, size_t len)
 
 	const char *ifname = blobmsg_get_string(a);
 	struct iface *c = iface_get(ifname);
+	bool up = (a = tb[IFACE_ATTR_UP]) && blobmsg_get_bool(a);
+	bool v4uplink = false, v6uplink = false;
+
+	struct blob_attr *route;
+	unsigned rem;
+	blobmsg_for_each_attr(route, a, rem) {
+		struct blob_attr *rtb[ROUTE_ATTR_MAX];
+		blobmsg_parse(route_attrs, ROUTE_ATTR_MAX, rtb, blobmsg_data(a), blobmsg_len(a));
+		if (!rtb[ROUTE_ATTR_MASK] || blobmsg_get_u32(rtb[ROUTE_ATTR_MASK]))
+			continue;
+
+		const char *target = (!rtb[ROUTE_ATTR_TARGET]) ? blobmsg_get_string(rtb[ROUTE_ATTR_TARGET]) : NULL;
+		if (target && !strcmp(target, "::"))
+			v6uplink = true;
+		else if (target && !strcmp(target, "0.0.0.0"))
+			v4uplink = true;
+	}
 
 	const char *proto = "";
 	if ((a = tb[IFACE_ATTR_PROTO]))
 		proto = blobmsg_get_string(a);
 
-	if (!c && !strcmp(proto, "hnet") && (a = tb[IFACE_ATTR_HANDLE]))
+	if (!c && up && !strcmp(proto, "hnet") && (a = tb[IFACE_ATTR_HANDLE]))
 		c = iface_create(ifname, blobmsg_get_string(a));
 
 	L_INFO("platform: interface update for %s detected", ifname);
 
 	if (c && c->platform) {
 		// This is a known managed interface
-		if (!strcmp(proto, "dhcpv6")) {
-			// Our nested DHCPv6 client interface
-			update_delegated(c, tb);
-		} else if (!strcmp(proto, "dhcp")) {
-			// Our nested DHCP client interface
-			bool v4leased = false;
-
-			if ((a = tb[IFACE_ATTR_V4ADDR])) {
-				struct blob_attr *c;
-				unsigned rem;
-
-				blobmsg_for_each_attr(c, a, rem)
-					v4leased = true;
-			}
-
-			const size_t dns_max = 4;
-			size_t dns_cnt = 0;
-			struct __packed {
-				uint8_t type;
-				uint8_t len;
-				struct in_addr addr[dns_max];
-			} dns;
-
-			if ((a = tb[IFACE_ATTR_DNS])) {
-				struct blob_attr *k;
-				unsigned rem;
-
-				blobmsg_for_each_attr(k, a, rem) {
-					if (dns_cnt >= dns_max || blobmsg_type(k) != BLOBMSG_TYPE_STRING ||
-							inet_pton(AF_INET, blobmsg_data(k), &dns.addr[dns_cnt]) < 1)
-						continue;
-
-					++dns_cnt;
-				}
-			}
-
-			if (dns_cnt) {
-				dns.type = DHCPV4_OPT_DNSSERVER;
-				dns.len = 4 * dns_cnt;
-			}
-
-			iface_set_dhcp_received(c, v4leased, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns), NULL);
-		} else if (!strcmp(proto, "hnet")) {
-			if ((a = tb[IFACE_ATTR_UP]) && !blobmsg_get_bool(a))
+		if (!strcmp(proto, "hnet")) {
+			if (!up)
 				iface_remove(c);
+		} else {
+			update_interface(c, tb, v4uplink, v6uplink);
 		}
 	} else {
 		// We have only unmanaged interfaces at this point
-
 		// If netifd delegates this prefix, ignore it
-		if ((a = tb[IFACE_ATTR_DELEGATION]) && blobmsg_get_bool(a))
-			tb[IFACE_ATTR_PREFIX] = NULL;
+		if ((a = tb[IFACE_ATTR_DELEGATION]) && blobmsg_get_bool(a)) {
+			v4uplink = false;
+			v6uplink = false;
+		}
 
-		bool empty = (!(a = tb[IFACE_ATTR_PREFIX]) || blobmsg_data_len(a) <= 0) &&
-				(!(a = tb[IFACE_ATTR_V4ADDR]) || blobmsg_data_len(a));
+		bool empty = !up || (!v6uplink && !v4uplink);
 
 		// If we don't know this interface yet but it has a PD for us create it
 		if (!c && !empty)
 			c = iface_create(ifname, NULL);
 
-		if (c)
-			update_delegated(c, tb);
+		if (c && up)
+			update_interface(c, tb, v4uplink, v6uplink);
 
 		// Likewise, if all prefixes are gone, delete the interface
 		if (c && empty)
@@ -707,9 +693,9 @@ static void platform_update(void *data, size_t len)
 // Handle netifd ubus event for interfaces updates
 static int handle_update(__unused struct ubus_context *ctx, __unused struct ubus_object *obj,
 		__unused struct ubus_request_data *req, __unused const char *method,
-		struct blob_attr *msg)
+		__unused struct blob_attr *msg)
 {
-	platform_update(blob_data(msg), blob_len(msg));
+	sync_netifd(false);
 	return 0;
 }
 
@@ -736,7 +722,11 @@ static void handle_dump(__unused struct ubus_request *req,
 	struct blob_attr *c;
 	unsigned rem;
 
+	iface_update();
+
 	blobmsg_for_each_attr(c, tb[DUMP_ATTR_INTERFACE], rem)
 		platform_update(blobmsg_data(c), blobmsg_data_len(c));
+
+	iface_commit();
 }
 
