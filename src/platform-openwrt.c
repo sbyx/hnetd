@@ -636,9 +636,9 @@ static void platform_update(void *data, size_t len)
 
 	struct blob_attr *route;
 	unsigned rem;
-	blobmsg_for_each_attr(route, a, rem) {
+	blobmsg_for_each_attr(route, tb[IFACE_ATTR_ROUTE], rem) {
 		struct blob_attr *rtb[ROUTE_ATTR_MAX];
-		blobmsg_parse(route_attrs, ROUTE_ATTR_MAX, rtb, blobmsg_data(a), blobmsg_len(a));
+		blobmsg_parse(route_attrs, ROUTE_ATTR_MAX, rtb, blobmsg_data(route), blobmsg_len(route));
 		if (!rtb[ROUTE_ATTR_MASK] || blobmsg_get_u32(rtb[ROUTE_ATTR_MASK]))
 			continue;
 
