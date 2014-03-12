@@ -693,9 +693,14 @@ static void platform_update(void *data, size_t len)
 // Handle netifd ubus event for interfaces updates
 static int handle_update(__unused struct ubus_context *ctx, __unused struct ubus_object *obj,
 		__unused struct ubus_request_data *req, __unused const char *method,
-		__unused struct blob_attr *msg)
+		struct blob_attr *msg)
 {
-	sync_netifd(false);
+	struct blob_attr *tb[IFACE_ATTR_MAX];
+	blobmsg_parse(iface_attrs, IFACE_ATTR_MAX, tb, blob_data(msg), blob_len(msg));
+
+	if (!tb[IFACE_ATTR_PROTO] || strcmp(blobmsg_get_string(tb[IFACE_ATTR_PROTO]), "hnet"))
+		sync_netifd(false);
+
 	return 0;
 }
 
