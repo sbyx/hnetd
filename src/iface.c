@@ -851,8 +851,8 @@ void iface_update(void)
 
 void iface_commit(void)
 {
-	struct iface *c;
-	list_for_each_entry(c, &interfaces, head) {
+	struct iface *c, *n;
+	list_for_each_entry_safe(c, n, &interfaces, head) {
 		iface_commit_ipv6_uplink(c);
 		iface_commit_ipv4_uplink(c);
 
