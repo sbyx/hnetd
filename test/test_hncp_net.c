@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Mar 19 14:06:25 2014 mstenber
+ * Last modified: Wed Mar 19 14:48:08 2014 mstenber
  * Edit time:     328 min
  *
  */
@@ -202,7 +202,7 @@ static void raw_bird14(net_sim s)
 
   handle_connections(s, &nodeconnections[0], 2); /* Two first ones are needed */
 
-  SIM_WHILE(s, 1000, !net_sim_is_converged(s));
+  SIM_WHILE(s, 10000, !net_sim_is_converged(s));
 
   /* Then, simulate network for a while, keeping eye on how often it's
    * NOT converged. */
