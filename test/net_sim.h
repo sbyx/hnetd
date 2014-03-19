@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Wed Mar 19 13:24:22 2014 mstenber
- * Edit time:     60 min
+ * Last modified: Wed Mar 19 14:04:05 2014 mstenber
+ * Edit time:     70 min
  *
  */
 
@@ -230,6 +230,7 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
   if (!r)
     return NULL;
   list_add(&n->h, &s->nodes);
+  INIT_LIST_HEAD(&n->messages);
 #ifndef DISABLE_HNCP_PA
   memset(&n->pa_data_user, 0, sizeof(struct pa_data_user));
   n->pa_data_user.dps = net_sim_pa_dps;
@@ -351,6 +352,8 @@ void net_sim_remove_node(net_sim s, net_node node)
         }
     }
 
+  uloop_timeout_cancel(&node->run_to);
+
   /* Remove from list of nodes */
   list_del(&node->h);
   free(node->name);
@@ -397,21 +400,6 @@ void net_sim_uninit(net_sim s)
   sput_fail_unless(list_empty(&s->messages), "no messages");
 }
 
-hnetd_time_t net_sim_next(net_sim s)
-{
-  return fu_next_time();
-}
-
-int net_sim_poll(net_sim s)
-{
-  return fu_poll();
-}
-
-void net_sim_run(net_sim s)
-{
-  while (net_sim_poll(s));
-}
-
 void net_sim_advance(net_sim s, hnetd_time_t t)
 {
   set_hnetd_time(t);
@@ -423,12 +411,11 @@ void net_sim_advance(net_sim s, hnetd_time_t t)
     int iter = 0;                                       \
                                                         \
     sput_fail_unless((criteria), "criteria at start");  \
-    while(iter < maxiter)                               \
+    while (iter < maxiter && fu_loop(1) == 0)           \
       {                                                 \
-        net_sim_run(s);                                 \
+        while (fu_poll());                              \
         if (!(criteria))                                \
           break;                                        \
-        net_sim_advance(s, net_sim_next(s));            \
         iter++;                                         \
       }                                                 \
     sput_fail_unless(!(criteria), "!criteria at end");  \
