@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:14:59 2013 mstenber
- * Last modified: Wed Nov 27 09:50:39 2013 mstenber
- * Edit time:     64 min
+ * Last modified: Wed Mar 19 17:32:16 2014 mstenber
+ * Edit time:     72 min
  *
  */
 
@@ -153,8 +153,18 @@ static inline void smock_is_empty()
 #define smock_push_int(q,v) smock_push(q, (void *)((intptr_t) (v)))
 #define smock_pull_int(q) ((intptr_t)smock_pull(q))
 
-#define smock_push_bool(q,v) smock_push(q, (void *)((intptr_t) ((v) ? 1 : 0)))
-#define smock_pull_bool(q) ((intptr_t)smock_pull(q) == 1 ? true : false)
+#define smock_push_dup(q,v,v_len)       \
+do {                                    \
+  void *p = malloc(v_len);              \
+  memcpy(p, v, v_len);                  \
+  smock_push(q, p);                     \
+} while(0)
+
+#define smock_push_blob(q,v) smock_push_dup(q,&v,sizeof(v))
+#define smock_push_int64(q,v) smock_push_blob(q,v)
+
+#define smock_push_bool(q,v) smock_push_int(q, (v) ? 1 : 0)
+#define smock_pull_bool(q) (smock_pull_int(q) ? true : false)
 
 /* Assertion-like utilities. */
 #define smock_pull_int_is(q,v)                          \
@@ -162,6 +172,13 @@ do {                                                    \
   intptr_t _v = smock_pull_int(q);                      \
   sput_fail_unless(_v == (v), "int match " # q);        \
 } while(0)
+
+#define smock_pull_int64_is(q,v)                        \
+do {                                                    \
+  int64_t *_v = smock_pull(q);                          \
+  sput_fail_unless(*_v == (v), "int64ptr match " # q);  \
+  free(_v);                                             \
+ } while(0)
 
 
 #define smock_pull_bool_is(q,v)                         \

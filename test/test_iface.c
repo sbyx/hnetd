@@ -42,8 +42,8 @@ void prefix_mock(__unused struct iface_user *u, __unused const char *ifname,
 {
 	if (valid_until > hnetd_time()) {
 		smock_push("prefix_prefix", (void*)prefix);
-		smock_push_int("prefix_valid", valid_until);
-		smock_push_int("prefix_preferred", preferred_until);
+		smock_push_int64("prefix_valid", valid_until);
+		smock_push_int64("prefix_preferred", preferred_until);
 		smock_push("dhcpv6_data", (void*)dhcpv6_data);
 		smock_push_int("dhcpv6_len", dhcpv6_len);
 	} else {
@@ -126,8 +126,8 @@ void iface_test_new_managed(void)
 
 	smock_pull_bool_is("test0", false);
 	sput_fail_unless(!prefix_cmp(&p, smock_pull("prefix_prefix")), "prefix address");
-	smock_pull_int_is("prefix_valid", HNETD_TIME_MAX);
-	smock_pull_int_is("prefix_preferred", 0);
+	smock_pull_int64_is("prefix_valid", HNETD_TIME_MAX);
+	smock_pull_int64_is("prefix_preferred", 0);
 	sput_fail_unless(!strcmp(smock_pull("dhcpv6_data"), "test"), "dhcpv6_data");
 	smock_pull_int_is("dhcpv6_len", sizeof(test));
 
