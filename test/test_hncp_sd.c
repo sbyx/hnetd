@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Tue Feb 18 20:35:35 2014 mstenber
+ * Last modified: Wed Mar 19 14:02:14 2014 mstenber
  * Edit time:     47 min
  *
  */
@@ -38,6 +38,7 @@
 #define waitpid(pid, x, y)
 #define _exit(code)
 
+#undef uloop_timeout_set
 #include "hncp_sd.c"
 
 

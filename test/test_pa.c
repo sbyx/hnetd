@@ -26,89 +26,14 @@ static bool mask_random = false;
 
 /***************************************************** Masking time */
 
-#define hnetd_time 				test_pa_time
-#define uloop_timeout_set		test_pa_timeout_set
-#define uloop_timeout_cancel	test_pa_timeout_cancel
+/* Make sure timeout cancels are called only on scheduled timeouts */
+#define FU_PARANOID_TIMEOUT_CANCEL
 
-LIST_HEAD(timeouts);
-static hnetd_time_t now_time = 1000;
-
-static hnetd_time_t test_pa_time(void) {
-	return now_time;
-}
-
-static int test_pa_timeout_set(struct uloop_timeout *timeout, int ms)
-{
-	sput_fail_if(ms < 0, "Timeout delay is positive");
-	if(ms < 0)
-		ms = 0;
-
-	if(timeout->pending)
-		list_remove(&timeout->list);
-	else
-		timeout->pending = true;
-
-	timeout->time.tv_sec = now_time + ms;
-
-	struct uloop_timeout *tp;
-	list_for_each_entry(tp, &timeouts, list) {
-		if(timeout->time.tv_sec < tp->time.tv_sec) {
-			list_add_before(&tp->list, &timeout->list);
-			return 0;
-		}
-	}
-	list_add_tail(&timeout->list, &timeouts);
-	return 0;
-}
-
-static int test_pa_timeout_cancel(struct uloop_timeout *timeout)
-{
-	sput_fail_unless(timeout->pending, "Timeout is pending");
-	if(timeout->pending) {
-		list_remove(&timeout->list);
-		timeout->pending = 0;
-	}
-	return 0;
-}
-
-static hnetd_time_t to_time(struct uloop_timeout *t)
-{
-	return (hnetd_time_t) t->time.tv_sec;
-}
-
-#define to_check(to, when) ((to)->pending && (to_time(to) == (when)))
-
-static void to_run_one(struct uloop_timeout *t)
-{
-	hnetd_time_t when = to_time(t);
-	if(when >= now_time) {
-		test_pa_printf("Time going forward of %d ms\n", (int) (when - now_time));
-		now_time = when;
-	}
-
-	list_remove(&t->list);
-	t->pending = false;
-	if(t->cb)
-		t->cb(t);
-}
-
-static struct uloop_timeout *to_getfirst()
-{
-	if(list_is_empty(&timeouts))
-		return NULL;
-	return list_first_entry(&timeouts, struct uloop_timeout, list);
-}
-
-static int to_run(int rounds)
-{
-	struct uloop_timeout *to;
-	while(rounds > 0 && (to = to_getfirst())) {
-		to_run_one(to);
-		rounds--;
-	}
-	return rounds;
-}
-
+#include "fake_uloop.h"
+#define now_time hnetd_time()
+#define to_check(to, when) ((to)->pending && (_to_time(&(to)->time) == (when)))
+#define to_run(n) fu_loop(n)
+#define to_getfirst() fu_next()
 
 /***************************************************** Mask for pa.c */
 
@@ -259,6 +184,7 @@ void test_pa_initial()
 
 	mask_random = true;
 
+	uloop_init();
 	pa_init(&pa, NULL);
 	pa.local.conf.use_ipv4 = false;
 	pa.local.conf.use_ula = false;
@@ -280,7 +206,7 @@ void test_pa_initial()
 
 	sput_fail_unless(!to_run(3) && !to_getfirst(), "Run three timeouts");
 
-	now_time += 10000;
+        set_hnetd_time(hnetd_time() + 10000);
 
 	/* Create a new internal interface */
 	iface.user->cb_intiface(iface.user, IFNAME1, true);
@@ -334,6 +260,7 @@ void test_pa_ipv4()
 
 	mask_random = true;
 
+	uloop_init();
 	pa_init(&pa, NULL);
 	pa.local.conf.use_ipv4 = true;
 	pa.local.conf.use_ula = false;
@@ -431,6 +358,7 @@ void test_pa_network()
 	int res;
 
 	/* This test looks for collisions */
+	uloop_init();
 	pa_init(&pa, NULL);
 	pa.local.conf.use_ipv4 = false;
 	pa.local.conf.use_ula = false;

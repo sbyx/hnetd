@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Thu Feb 20 17:16:59 2014 mstenber
- * Edit time:     327 min
+ * Last modified: Wed Mar 19 14:48:08 2014 mstenber
+ * Edit time:     328 min
  *
  */
 
@@ -96,8 +96,8 @@ void hncp_two(void)
   node2 = container_of(n2, net_node_s, n);
 
   /* First, fake delegated prefixes */
-  pa_update_ldp(&node1->pa_data, &p1, "eth0", s.now + 123, s.now + 1, NULL, 0);
-  pa_update_ldp(&node1->pa_data, &p2, NULL, s.now + 123, s.now + 1, NULL, 0);
+  pa_update_ldp(&node1->pa_data, &p1, "eth0", hnetd_time() + 123, hnetd_time() + 1, NULL, 0);
+  pa_update_ldp(&node1->pa_data, &p2, NULL, hnetd_time() + 123, hnetd_time() + 1, NULL, 0);
 
   SIM_WHILE(&s, 1000,
             node2->updated_edp != 2);
@@ -188,7 +188,7 @@ static void raw_bird14(net_sim s)
   sput_fail_unless(net_sim_find_hncp(s, "b10")->nodes.avl.count == 11,
                    "b10 enough nodes");
 
-  sput_fail_unless(s->now - s->start < 10 * HNETD_TIME_PER_SECOND,
+  sput_fail_unless(hnetd_time() - s->start < 10 * HNETD_TIME_PER_SECOND,
                    "should converge in 10 seconds");
 
   sput_fail_unless(s->sent_multicast < 1000, "with 'few' multicast");
@@ -202,14 +202,14 @@ static void raw_bird14(net_sim s)
 
   handle_connections(s, &nodeconnections[0], 2); /* Two first ones are needed */
 
-  SIM_WHILE(s, 1000, !net_sim_is_converged(s));
+  SIM_WHILE(s, 10000, !net_sim_is_converged(s));
 
   /* Then, simulate network for a while, keeping eye on how often it's
    * NOT converged. */
   int converged_count = s->converged_count;
   int not_converged_count = s->not_converged_count;
   int sent_unicast = s->sent_unicast;
-  hnetd_time_t convergence_time = s->now;
+  hnetd_time_t convergence_time = hnetd_time();
 
   SIM_WHILE(s, 1000, !net_sim_is_converged(s) || iter < 900);
   L_NOTICE("unicasts sent:%d after convergence, last %lld ms after convergence",
@@ -277,7 +277,7 @@ static void raw_hncp_tube(unsigned int num_nodes)
       net_sim_set_connected(l1, l2, true);
       net_sim_set_connected(l2, l1, true);
     }
-  SIM_WHILE(&s, 10000, !net_sim_is_converged(&s));
+  SIM_WHILE(&s, 100000, !net_sim_is_converged(&s));
 
   sput_fail_unless(net_sim_find_hncp(&s, "node0")->nodes.avl.count == num_nodes,
                    "enough nodes");
