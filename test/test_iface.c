@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <unistd.h>
 
+#include "fake_uloop.h"
 #include "prefix_utils.c"
 #include "iface.c"
 
