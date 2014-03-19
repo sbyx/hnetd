@@ -273,7 +273,7 @@ static void _update_d_tlv(hncp_glue g, hncp_node n,
   start = tlv_data(tlv) + flen;
   left = tlv_len(tlv) - flen;
   L_DEBUG("considering what is at offset %lu->%u: %s",
-          sizeof(hncp_t_delegated_prefix_header_s) + plen,
+          (unsigned long)sizeof(hncp_t_delegated_prefix_header_s) + plen,
           flen,
           HEX_REPR(start, left));
   /* Now, flen is actually padded length of stuff, _before_ DHCPv6
