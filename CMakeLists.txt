@@ -1,4 +1,6 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 2.8.8)
+# object library support was added in 2.8.8
+
 project(hnetd C)
 
 set(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "")
@@ -7,26 +9,32 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -std=c99")
 add_definitions(-D_GNU_SOURCE -Wall -Wno-gnu -Wextra)
 
 if(${L_LEVEL})
-	add_definitions(-DL_LEVEL=${L_LEVEL})
+  add_definitions(-DL_LEVEL=${L_LEVEL})
 endif(${L_LEVEL})
 
+OPTION(COVERAGE "build with coverage" OFF)
+
+if (${COVERAGE})
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
+endif (${COVERAGE})
 
 if(${BACKEND} MATCHES "openwrt")
-	set(BACKEND_SOURCE "src/platform-openwrt.c")
-	set(BACKEND_LINK "ubus")
+  set(BACKEND_SOURCE "src/platform-openwrt.c")
+  set(BACKEND_LINK "ubus")
 else(${BACKEND} MATCHES "openwrt")
-	set(BACKEND_SOURCE src/platform-generic.c src/ipc.c)
-	set(BACKEND_LINK "")
-	add_definitions(-DWITH_IPC=1)
-        install(PROGRAMS generic/dhcp.script generic/dhcpv6.script DESTINATION share/hnetd/)
-        install(PROGRAMS generic/hnetd-backend DESTINATION sbin/)
-        # Symlinks for different hnetd aliases
-        install(CODE "execute_process(COMMAND ln -s hnetd \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/sbin/hnet-ifup)")
-        install(CODE "execute_process(COMMAND ln -s hnetd \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/sbin/hnet-ifdown)")
-        install(CODE "execute_process(COMMAND ln -s hnetd \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/sbin/hnet-call)")
+  set(BACKEND_SOURCE src/platform-generic.c src/ipc.c)
+  set(BACKEND_LINK "")
+  add_definitions(-DWITH_IPC=1)
+  install(PROGRAMS generic/dhcp.script generic/dhcpv6.script DESTINATION share/hnetd/)
+  install(PROGRAMS generic/hnetd-backend DESTINATION sbin/)
+  # Symlinks for different hnetd aliases
+  install(CODE "execute_process(COMMAND ln -s hnetd \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/sbin/hnet-ifup)")
+  install(CODE "execute_process(COMMAND ln -s hnetd \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/sbin/hnet-ifdown)")
+  install(CODE "execute_process(COMMAND ln -s hnetd \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/sbin/hnet-call)")
 endif(${BACKEND} MATCHES "openwrt")
 
-# TODO: split platform logic
+# hnetd and it's various pieces
 add_library(L_PU OBJECT src/prefix_utils.c)
 set(PU $<TARGET_OBJECTS:L_PU>)
 add_library(L_TLV OBJECT src/tlv.c)
@@ -48,14 +56,9 @@ set(HNCP_IO $<TARGET_OBJECTS:L_HNCP_IO>)
 set(HNCP ${HNCP_WITH_GLUE} ${HNCP_IO})
 add_executable(hnetd ${HNCP} src/hncp_routing.c src/hnetd.c src/iface.c ${PA} src/ ${BACKEND_SOURCE})
 target_link_libraries(hnetd ubox blobmsg_json resolv ${BACKEND_LINK})
+install(TARGETS hnetd DESTINATION sbin/)
 
 # Unit test stuff
-OPTION(COVERAGE "build with coverage" OFF)
-
-if (${COVERAGE})
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
-endif (${COVERAGE})
 
 # With this, 'make check' works even in a clean tree (sigh, cmake..)
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
@@ -119,9 +122,6 @@ add_executable(test_pa_data test/test_pa_data.c ${PA_D} ${PU})
 target_link_libraries(test_pa_data ubox)
 add_test(pa_data test_pa_data)
 add_dependencies(check test_pa_data)
-
-# Installation rules
-install(TARGETS hnetd DESTINATION sbin/)
 
 # Packaging rules
 set(CPACK_PACKAGE_VERSION "1")
