@@ -81,7 +81,7 @@ target_link_libraries(test_hncp_net ubox ${BACKEND_LINK} blobmsg_json)
 add_test(hncp_net test_hncp_net)
 add_dependencies(check test_hncp_net)
 
-add_executable(test_hncp_pa test/test_hncp_pa.c ${HNCP_WITH_GLUE})
+add_executable(test_hncp_pa test/test_hncp_pa.c ${HNCP_WITH_PROTO})
 target_link_libraries(test_hncp_pa ubox ${BACKEND_LINK} blobmsg_json)
 add_test(hncp_pa test_hncp_pa)
 add_dependencies(check test_hncp_pa)

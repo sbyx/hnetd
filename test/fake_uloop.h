@@ -73,7 +73,7 @@ static hnetd_time_t _to_time(struct timeval *tv)
   return (int64_t)tv->tv_sec * HNETD_TIME_PER_SECOND + tv->tv_usec;
 }
 
-static int fu_timeout_set(struct uloop_timeout *timeout, int ms)
+static inline int fu_timeout_set(struct uloop_timeout *timeout, int ms)
 {
   sput_fail_if(ms < 0, "Timeout delay is positive");
   hnetd_time_t v = hnetd_time() + ms;

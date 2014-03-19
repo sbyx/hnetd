@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:15:44 2013 mstenber
- * Last modified: Wed Feb 12 23:14:26 2014 mstenber
- * Edit time:     142 min
+ * Last modified: Wed Mar 19 13:08:07 2014 mstenber
+ * Edit time:     144 min
  *
  */
 
@@ -39,7 +39,14 @@
 /* 1 is always built-in. */
 #define MAXIMUM_PROPAGATION_DELAY 0
 
+#define DISABLE_HNCP_SD
 #include "net_sim.h"
+#include "hncp_pa.c"
+
+struct tlv_attr *hncp_get_dns_domain_tlv(hncp o)
+{
+  return NULL;
+}
 
 typedef struct {
   struct list_head lh;
@@ -110,7 +117,7 @@ int pa_update_eap(net_node node, const struct prefix *prefix,
            HEX_REPR(rid, HNCP_HASH_LEN),
            PREFIX_REPR(prefix),
            ifname ? ifname : "?",
-           (long long)node->s->now);
+           (long long)hnetd_time());
   sput_fail_unless(prefix, "prefix set");
   sput_fail_unless(rid, "rid set");
 
@@ -126,7 +133,7 @@ int pa_update_eap(net_node node, const struct prefix *prefix,
     strcpy(e->ifname, ifname);
   else
     *e->ifname = 0;
-  e->updated = node->s->now;
+  e->updated = hnetd_time();
   return 0;
 }
 
@@ -144,7 +151,7 @@ int pa_update_edp(net_node node, const struct prefix *prefix,
            PREFIX_REPR(prefix),
            (long long)valid_until, (long long)preferred_until,
            (int)dhcpv6_len,
-           (long long)node->s->now);
+           (long long)hnetd_time());
   sput_fail_unless(prefix, "prefix set");
   sput_fail_unless(rid, "rid set");
   e = _find_rp(prefix, &edps, valid_until == 0? 0 : sizeof(*e));
@@ -176,7 +183,7 @@ int pa_update_edp(net_node node, const struct prefix *prefix,
     {
       sput_fail_unless(dhcpv6_len == 0, "NULL data means zero length");
     }
-  e->updated = node->s->now;
+  e->updated = hnetd_time();
   return 0;
 }
 
@@ -411,14 +418,14 @@ void hncp_pa_two(void)
   /* First element */
   ea = list_entry(eaps.next, eap_s, rp.lh);
   sput_fail_unless(prefix_cmp(&ea->rp.p, &p1) == 0, "p1 same");
-  sput_fail_unless(ea->updated == s.now, "updated now");
+  sput_fail_unless(ea->updated == hnetd_time(), "updated now");
 
 
   /* Second element */
   sput_fail_unless(ea->rp.lh.next != &eaps, "eaps has >= 2");
   ea = list_entry(ea->rp.lh.next, eap_s, rp.lh);
   sput_fail_unless(prefix_cmp(&ea->rp.p, &p2) == 0, "p2 same");
-  sput_fail_unless(ea->updated == s.now, "updated now");
+  sput_fail_unless(ea->updated == hnetd_time(), "updated now");
   sput_fail_unless(strcmp(ea->ifname, "eth1") == 0, "eth1");
 
   /* The end */

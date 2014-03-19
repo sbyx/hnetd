@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu Feb 20 17:12:15 2014 mstenber
- * Edit time:     35 min
+ * Last modified: Wed Mar 19 13:24:22 2014 mstenber
+ * Edit time:     60 min
  *
  */
 
@@ -18,6 +18,9 @@
 #include "hncp_pa.h"
 #include "hncp_sd.h"
 #include "sput.h"
+
+/* We leverage the fake timers and other stuff in fake_uloop. */
+#include "fake_uloop.h"
 
 #include "pa_data.c"
 
@@ -42,12 +45,14 @@
 typedef struct {
   struct list_head h;
 
-  hnetd_time_t readable_at;
   hncp_link l;
   struct in6_addr src;
   struct in6_addr dst;
   void *buf;
   size_t len;
+
+  /* When is it delivered? */
+  struct uloop_timeout deliver_to;
 } net_msg_s, *net_msg;
 
 typedef struct {
@@ -68,10 +73,16 @@ typedef struct {
   hncp_glue g;
 #endif /* !DISABLE_HNCP_PA */
   hncp_sd sd;
-  hnetd_time_t want_timeout_at;
-  hnetd_time_t next_message_at;
   int updated_eap;
   int updated_edp;
+
+  /* Received messages (timeout has moved them from global list to
+   * ours readable list) */
+  struct list_head messages;
+
+  /* When is it scheduled to run? */
+  struct uloop_timeout run_to;
+
 } net_node_s, *net_node;
 
 typedef struct net_sim_t {
@@ -83,7 +94,7 @@ typedef struct net_sim_t {
   bool assume_bidirectional_reachability;
   bool disable_sd;
 
-  hnetd_time_t now, start;
+  hnetd_time_t start;
 
   int sent_unicast;
   hnetd_time_t last_unicast_sent;
@@ -142,9 +153,8 @@ void net_sim_init(net_sim s)
   INIT_LIST_HEAD(&s->nodes);
   INIT_LIST_HEAD(&s->neighs);
   INIT_LIST_HEAD(&s->messages);
-  /* 64 bits -> have to enjoy it.. */
-  /* s->start = s->now = 12345678901234; */
-  s->start = s->now = 10000000000000; /* easier to see deltas in abs. values */
+  uloop_init();
+  s->start = hnetd_time();
 }
 
 bool net_sim_is_converged(net_sim s)
@@ -231,6 +241,7 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
   if (!(n->g = hncp_pa_glue_create(&n->n, &n->pa_data)))
     return NULL;
 #endif /* !DISABLE_HNCP_PA */
+#ifndef DISABLE_HNCP_SD
   /* Add SD support */
   if (!s->disable_sd)
     if (!(n->sd = hncp_sd_create(&n->n,
@@ -239,6 +250,7 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
                                  "/bin/no",
                                  NULL, NULL)))
       return NULL;
+#endif /* !DISABLE_HNCP_SD */
   return &n->n;
 }
 
@@ -332,6 +344,7 @@ void net_sim_remove_node(net_sim s, net_node node)
       net_msg m = container_of(p, net_msg_s, h);
       if (m->l->hncp == o)
         {
+          uloop_timeout_cancel(&m->deliver_to);
           list_del(&m->h);
           free(m->buf);
           free(m);
@@ -343,9 +356,11 @@ void net_sim_remove_node(net_sim s, net_node node)
   free(node->name);
   hncp_uninit(&node->n);
 
+#ifndef DISABLE_HNCP_SD
   /* Get rid of sd data structure */
   if (!s->disable_sd)
     hncp_sd_destroy(node->sd);
+#endif /* !DISABLE_HNCP_SD */
 
 #ifndef DISABLE_HNCP_PA
   /* Kill glue (has to be done _after_ hncp_uninit). */
@@ -376,7 +391,7 @@ void net_sim_uninit(net_sim s)
     }
   L_NOTICE("#nodes:%d elapsed:%.2fs unicasts:%d multicasts:%d",
            c,
-           (float)(s->now - s->start) / HNETD_TIME_PER_SECOND,
+           (float)(hnetd_time() - s->start) / HNETD_TIME_PER_SECOND,
            s->sent_unicast, s->sent_multicast);
   sput_fail_unless(list_empty(&s->neighs), "no neighs");
   sput_fail_unless(list_empty(&s->messages), "no messages");
@@ -384,49 +399,12 @@ void net_sim_uninit(net_sim s)
 
 hnetd_time_t net_sim_next(net_sim s)
 {
-  hnetd_time_t v = 0;
-  net_node n;
-  net_msg m;
-
-  list_for_each_entry(n, &s->nodes, h)
-    {
-      n->next_message_at = 0;
-      v = TMIN(v, n->want_timeout_at);
-    }
-  list_for_each_entry(m, &s->messages, h)
-    {
-      hncp o = m->l->hncp;
-
-      n = container_of(o, net_node_s, n);
-      v = TMIN(v, m->readable_at);
-      n->next_message_at = TMIN(n->next_message_at, m->readable_at);
-    }
-  return v;
+  return fu_next_time();
 }
 
 int net_sim_poll(net_sim s)
 {
-  net_node n;
-  hnetd_time_t nt = net_sim_next(s);
-  int i = 0;
-
-  if (nt > s->now)
-    return 0;
-  list_for_each_entry(n, &s->nodes, h)
-    {
-      if (n->want_timeout_at && n->want_timeout_at <= s->now)
-        {
-          n->want_timeout_at = 0;
-          hncp_run(&n->n);
-          i++;
-        }
-      if (n->next_message_at && n->next_message_at <= s->now)
-        {
-          hncp_poll(&n->n);
-          i++;
-        }
-    }
-  return i;
+  return fu_poll();
 }
 
 void net_sim_run(net_sim s)
@@ -436,8 +414,7 @@ void net_sim_run(net_sim s)
 
 void net_sim_advance(net_sim s, hnetd_time_t t)
 {
-  sput_fail_unless(s->now <= t, "time moving forwards");
-  s->now = t;
+  set_hnetd_time(t);
   L_DEBUG("time = %lld", (long long int) (t - s->start));
 }
 
@@ -485,15 +462,18 @@ bool hncp_io_get_ipv6(struct in6_addr *addr, char *prefer_ifname)
   return true;
 }
 
+static void _node_run_cb(struct uloop_timeout *t)
+{
+  net_node node = container_of(t, net_node_s, run_to);
+  hncp_run(&node->n);
+}
+
 void hncp_io_schedule(hncp o, int msecs)
 {
   net_node node = container_of(o, net_node_s, n);
-  net_sim s = node->s;
-  hnetd_time_t wt = s->now + msecs;
-
-  sput_fail_unless(wt >= s->now, "should be present or future");
-  if (!node->want_timeout_at || node->want_timeout_at > wt)
-    node->want_timeout_at = wt;
+  sput_fail_unless(msecs >= 0, "should be present or future");
+  node->run_to.cb = _node_run_cb;
+  uloop_timeout_set(&node->run_to, msecs);
 }
 
 ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
@@ -502,24 +482,19 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
                          struct in6_addr *dst)
 {
   net_node node = container_of(o, net_node_s, n);
-  net_sim s = node->s;
   net_msg m;
 
-  list_for_each_entry(m, &s->messages, h)
+  list_for_each_entry(m, &node->messages, h)
     {
-      if (m->l->hncp == o && m->readable_at <= s->now)
-        {
-          int s = m->len > len ? len : m->len;
-          /* Aimed at us. Yay. */
-          strcpy(ifname, m->l->ifname);
-          *src = m->src;
-          *dst = m->dst;
-          memcpy(buf, m->buf, s);
-          list_del(&m->h);
-          free(m->buf);
-          free(m);
-          return s;
-        }
+      int s = m->len > len ? len : m->len;
+      strcpy(ifname, m->l->ifname);
+      *src = m->src;
+      *dst = m->dst;
+      memcpy(buf, m->buf, s);
+      list_del(&m->h);
+      free(m->buf);
+      free(m);
+      return s;
     }
   return -1;
 }
@@ -557,6 +532,18 @@ sanity_check_buf(void *buf, size_t len)
 
 }
 
+
+void _message_deliver_cb(struct uloop_timeout *t)
+{
+  net_msg m = container_of(t, net_msg_s, deliver_to);
+  hncp o = m->l->hncp;
+  net_node node = container_of(o, net_node_s, n);
+
+  list_del(&m->h);
+  list_add(&m->h, &node->messages);
+  hncp_poll(&node->n);
+}
+
 void _sendto(net_sim s, void *buf, size_t len, hncp_link sl, hncp_link dl,
              const struct in6_addr *dst)
 {
@@ -567,7 +554,6 @@ void _sendto(net_sim s, void *buf, size_t len, hncp_link sl, hncp_link dl,
   bool is_multicast = memcmp(dst, &o->multicast_address, sizeof(*dst)) == 0;
 #endif /* L_LEVEL >= 7 */
   net_msg m = calloc(1, sizeof(*m));
-  hnetd_time_t wt = s->now + MESSAGE_PROPAGATION_DELAY;
 
   sput_fail_unless(m, "calloc neigh");
   m->l = dl;
@@ -578,8 +564,10 @@ void _sendto(net_sim s, void *buf, size_t len, hncp_link sl, hncp_link dl,
   sput_fail_unless(sl->has_ipv6_address, "no ipv6 address?!?");
   m->src = sl->ipv6_address;
   m->dst = *dst;
-  m->readable_at = wt;
   list_add(&m->h, &s->messages);
+  m->deliver_to.cb = _message_deliver_cb;
+  uloop_timeout_set(&m->deliver_to, MESSAGE_PROPAGATION_DELAY);
+
   L_DEBUG("sendto: %s/%s -> %s/%s (%d bytes %s)",
           node1->name, sl->ifname, node2->name, dl->ifname, (int)len,
           is_multicast ? "multicast" : "unicast");
@@ -604,7 +592,7 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
   else
     {
       s->sent_unicast++;
-      s->last_unicast_sent = s->now;
+      s->last_unicast_sent = hnetd_time();
     }
   list_for_each_entry(n, &s->neighs, h)
     {
@@ -622,10 +610,7 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
 
 hnetd_time_t hncp_io_time(hncp o)
 {
-  net_node node = container_of(o, net_node_s, n);
-  net_sim s = node->s;
-
-  return s->now;
+  return hnetd_time();
 }
 
 /**************************************** (Partially mocked) interface - pa  */
