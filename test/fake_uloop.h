@@ -121,7 +121,7 @@ static inline struct uloop_timeout *fu_next()
 static inline hnetd_time_t fu_next_time()
 {
   struct uloop_timeout *to = fu_next();
-  return to && _to_time(&to->time) || 0;
+  return to && _to_time(&to->time);
 }
 
 static inline void fu_run_one(struct uloop_timeout *t)
