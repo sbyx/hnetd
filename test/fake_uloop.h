@@ -34,7 +34,6 @@
 #define FAKE_ULOOP_H
 
 #include <libubox/uloop.h>
-#include <libubox/list_compat.h>
 
 #include "sput.h"
 
@@ -79,7 +78,7 @@ static inline int fu_timeout_set(struct uloop_timeout *timeout, int ms)
   hnetd_time_t v = hnetd_time() + ms;
 
   if(timeout->pending)
-    list_remove(&timeout->list);
+    list_del(&timeout->list);
   else
     timeout->pending = true;
 
@@ -90,7 +89,7 @@ static inline int fu_timeout_set(struct uloop_timeout *timeout, int ms)
     {
       if (_to_time(&tp->time) > v)
         {
-          list_add_before(&tp->list, &timeout->list);
+          list_add_tail(&timeout->list, &tp->list);
           return 0;
         }
     }
@@ -105,7 +104,7 @@ static int fu_timeout_cancel(struct uloop_timeout *timeout)
 #endif /* FU_PARANOID_TIMEOUT_CANCEL */
   if (timeout->pending)
     {
-      list_remove(&timeout->list);
+      list_del(&timeout->list);
       timeout->pending = 0;
     }
   return 0;
@@ -113,7 +112,7 @@ static int fu_timeout_cancel(struct uloop_timeout *timeout)
 
 static inline struct uloop_timeout *fu_next()
 {
-  if (list_is_empty(&timeouts))
+  if (list_empty(&timeouts))
     return NULL;
   return list_first_entry(&timeouts, struct uloop_timeout, list);
 }
@@ -126,7 +125,7 @@ static inline hnetd_time_t fu_next_time()
 
 static inline void fu_run_one(struct uloop_timeout *t)
 {
-  list_remove(&t->list);
+  list_del(&t->list);
   t->pending = false;
   if(t->cb)
     t->cb(t);

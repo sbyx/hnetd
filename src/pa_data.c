@@ -32,23 +32,23 @@
 		flag |= newflag; \
 	}
 
-#define PA_NOTIFY(data, function, object, destroy)	\
-	struct pa_data_user *user; 						\
-	if(!(object)->__flags) 							\
-		return; 									\
-	uint32_t f = (object)->__flags;					\
-	(object)->__flags = 0; 							\
-	list_for_each_entry(user, &(data)->users, le) { \
-		if((user)->function) 						\
-		user->function(user, object, f);			\
-	} 												\
+#define PA_NOTIFY(data, function, object, destroy)      \
+        struct pa_data_user *user;                      \
+        if(!(object)->__flags)                          \
+                return;                                 \
+        uint32_t f = (object)->__flags;                 \
+        (object)->__flags = 0;                          \
+        list_for_each_entry(user, &(data)->users, le) { \
+                if((user)->function)                    \
+                user->function(user, object, f);        \
+        }                                               \
 	if(f & PADF_ALL_TODELETE)	{ destroy; }
 
 #define PA_SET_IFACE(object, iface, listname, flags)  \
 	if((object)->iface == iface) \
 		return; \
 	if((object)->iface) \
-		list_remove(&(object)->if_le); \
+		list_del(&(object)->if_le); \
 	if(iface) \
 		list_add(&(object)->if_le, &(iface)->listname); \
 	(object)->iface = iface; \
@@ -143,11 +143,11 @@ void pa_dp_destroy(struct pa_dp *dp)
 		pa_cp_set_dp(list_first_entry(&dp->cps, struct pa_cp, dp_le), NULL);
 	}
 	pa_dp_set_dhcp(dp, NULL, 0);
-	list_remove(&dp->le);
+	list_del(&dp->le);
 	if(dp->local) {
 		struct pa_ldp *ldp = container_of(dp, struct pa_ldp, dp);
 		if(ldp->iface)
-			list_remove(&ldp->if_le);
+			list_del(&ldp->if_le);
 		free(ldp);
 	} else {
 		struct pa_edp *edp = container_of(dp, struct pa_edp, dp);
@@ -353,7 +353,7 @@ void pa_aa_destroy(struct pa_aa *aa)
 	} else {
 		struct pa_eaa *eaa = container_of(aa, struct pa_eaa, aa);
 		pa_eaa_set_iface(eaa, NULL);
-		list_remove(&eaa->le);
+		list_del(&eaa->le);
 		free(eaa);
 	}
 }
@@ -406,7 +406,7 @@ void pa_cp_set_dp(struct pa_cp *cp, struct pa_dp *dp)
 		return;
 
 	if(cp->dp)
-		list_remove(&cp->dp_le);
+		list_del(&cp->dp_le);
 
 	if(dp)
 		list_add(&cp->dp_le, &dp->cps);
@@ -444,7 +444,7 @@ void pa_cp_destroy(struct pa_cp *cp)
 		pa_aa_destroy(&cp->laa->aa);
 	if(cp->apply_to.pending)
 		uloop_timeout_cancel(&cp->apply_to);
-	list_remove(&cp->le);
+	list_del(&cp->le);
 	free(cp);
 }
 
@@ -507,8 +507,8 @@ void pa_sp_destroy(struct pa_data *data, struct pa_sp *sp)
 	L_DEBUG("Destroying "PA_SP_L, PA_SP_LA(sp));
 	--data->sp_count;
 	--sp->iface->sp_count;
-	list_remove(&sp->le);
-	list_remove(&sp->if_le);
+	list_del(&sp->le);
+	list_del(&sp->if_le);
 	free(sp);
 }
 
@@ -564,7 +564,7 @@ void pa_sa_destroy(struct pa_data *data, struct pa_sa *sa)
 {
 	L_DEBUG("Destroying "PA_SA_L, PA_SA_LA(sa));
 	--data->sa_count;
-	list_remove(&sa->le);
+	list_del(&sa->le);
 	free(sa);
 }
 
@@ -658,19 +658,19 @@ void pa_iface_destroy(struct pa_data *data, struct pa_iface *iface)
 	while(!list_empty(&iface->aps))
 		pa_ap_destroy(data, list_first_entry(&iface->aps, struct pa_ap, if_le));
 
-	while(!list_is_empty(&iface->cps))
+	while(!list_empty(&iface->cps))
 		pa_cp_destroy(list_first_entry(&iface->cps, struct pa_cp, if_le));
 
-	while(!list_is_empty(&iface->ldps))
+	while(!list_empty(&iface->ldps))
 		pa_dp_destroy(&(list_first_entry(&iface->ldps, struct pa_ldp, if_le))->dp);
 
-	while(!list_is_empty(&iface->eaas))
+	while(!list_empty(&iface->eaas))
 		pa_aa_destroy(&(list_first_entry(&iface->eaas, struct pa_eaa, if_le))->aa);
 
 	while(!list_empty(&iface->sps))
 		pa_sp_destroy(data, list_first_entry(&iface->sps, struct pa_sp, if_le));
 
-	list_remove(&iface->le);
+	list_del(&iface->le);
 	free(iface);
 }
 
@@ -737,7 +737,7 @@ void pa_data_subscribe(struct pa_data *data, struct pa_data_user *user)
 void pa_data_unsubscribe(struct pa_data_user *user)
 {
 	L_INFO("Somebody unsubscribed (%p).", user);
-	list_remove(&user->le);
+	list_del(&user->le);
 }
 
 void pa_data_conf_defaults(struct pa_data_conf *conf)
@@ -809,7 +809,7 @@ void pa_data_term(struct pa_data *data)
 	while(!list_empty(&data->sas))
 			pa_sa_destroy(data, list_first_entry(&data->sas, struct pa_sa, le));
 
-	while(!list_is_empty(&data->ifs))
+	while(!list_empty(&data->ifs))
 		pa_iface_destroy(data, list_first_entry(&data->ifs, struct pa_iface, le));
 }
 
