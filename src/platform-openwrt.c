@@ -698,7 +698,8 @@ static int handle_update(__unused struct ubus_context *ctx, __unused struct ubus
 	struct blob_attr *tb[IFACE_ATTR_MAX];
 	blobmsg_parse(iface_attrs, IFACE_ATTR_MAX, tb, blob_data(msg), blob_len(msg));
 
-	if (!tb[IFACE_ATTR_PROTO] || strcmp(blobmsg_get_string(tb[IFACE_ATTR_PROTO]), "hnet"))
+	if (!tb[IFACE_ATTR_PROTO] || strcmp(blobmsg_get_string(tb[IFACE_ATTR_PROTO]), "hnet") ||
+			!tb[IFACE_ATTR_IFNAME] || !iface_get(blobmsg_get_string(tb[IFACE_ATTR_IFNAME])))
 		sync_netifd(false);
 
 	return 0;
