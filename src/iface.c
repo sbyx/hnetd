@@ -678,10 +678,9 @@ static bool iface_discover_border(struct iface *c)
 				c->ifname, (internal) ? "internal" : "external");
 
 		c->internal = internal;
+		uloop_timeout_cancel(&c->transition); // Flapped back to original state
 
-		if (c->transition.pending)
-			uloop_timeout_cancel(&c->transition); // Flapped back to original state
-		else if (internal)
+		if (internal)
 			uloop_timeout_set(&c->transition, 5000);
 		else
 			iface_announce_border(&c->transition);
