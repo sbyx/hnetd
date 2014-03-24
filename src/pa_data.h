@@ -84,6 +84,8 @@ struct pa_iface {
 	bool designated;        /* Used by paa. */
 	bool ipv4_uplink;       /* Whether this iface is the ipv4 uplink - used by pa.c */
 
+	uint32_t prand_ctr;     /* Pseudo random counter starts to zero and increments after each prand call */
+
 #define PADF_IF_CREATED  PADF_ALL_CREATED
 #define PADF_IF_TODELETE PADF_ALL_TODELETE
 #define PADF_IF_INTERNAL 0x0100

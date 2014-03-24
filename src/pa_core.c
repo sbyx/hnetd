@@ -8,6 +8,8 @@
 #endif
 #define L_PREFIX "pa_core - "
 
+#include <libubox/md5.h>
+
 #include "pa_core.h"
 #include "pa.h"
 #include "iface.h"
@@ -31,6 +33,33 @@
 
 static void __pa_aaa_schedule(struct pa_core *core);
 static void __pa_paa_schedule(struct pa_core *core);
+
+/* Generates a random or pseudo-random (based on the interface) prefix */
+int pa_prefix_prand(struct pa_iface *iface,
+		const struct prefix *p, struct prefix *dst,
+		uint8_t plen)
+{
+	struct in6_addr rand;
+	struct iface *i;
+	md5_ctx_t ctx;
+
+	if(plen > 128 || plen < p->plen)
+			return -1;
+
+	md5_begin(&ctx);
+	md5_hash(iface->ifname, strlen(iface->ifname) + 1, &ctx);
+	md5_hash(&iface->prand_ctr, 4, &ctx);
+	++iface->prand_ctr;
+	if((i = iface_get(iface->ifname))) {
+		md5_hash(&i->eui64_addr, 16, &ctx);
+	}
+	md5_end(rand.s6_addr, &ctx);
+
+	dst->plen = plen;
+	dst->prefix = p->prefix;
+	bmemcpy(&dst->prefix, &rand, p->plen, plen - p->plen);
+	return 0;
+}
 
 bool __pa_compute_dodhcp(struct pa_iface *iface)
 {
@@ -147,7 +176,7 @@ static struct prefix *__pa_core_prefix_getcollision(struct pa_core *core, const 
 }
 
 static int pa_getprefix_random(struct pa_core *core,
-		struct pa_dp *dp, struct prefix *new_prefix) {
+		struct pa_dp *dp, struct pa_iface *iface, struct prefix *new_prefix) {
 
 	int res;
 	bool looped;
@@ -170,6 +199,18 @@ static int pa_getprefix_random(struct pa_core *core,
 		return -1;
 	}
 
+	if (!iface) {
+		L_ERR("No specified interface for prefix random generation");
+		return -1;
+	}
+
+	/* Generate a pseudo-random subprefix */
+	if(pa_prefix_prand(iface, &dp->prefix, new_prefix, plen)) {
+		L_ERR("Cannot generate random prefix from "PA_DP_L" of length %d for "PA_IF_L,
+				PA_DP_LA(dp), dp->prefix.plen, PA_IF_LA(iface));
+		return -1;
+	}
+
 	/* The router first choose a random prefix. Then it iterates over all
 	 * the next prefixes, with a limit of PA_PREFIX_SEARCH_MAX_ROUNDS iterations. */
 	if(plen - dp->prefix.plen >= 32 || (rounds = 1 << (plen - dp->prefix.plen)) >= PA_CORE_PREFIX_SEARCH_MAX_ROUNDS) {
@@ -177,7 +218,6 @@ static int pa_getprefix_random(struct pa_core *core,
 	}
 
 	looped = false;
-	prefix_random(&dp->prefix, new_prefix, plen);
 	for(; rounds; rounds--) {
 
 		if(!(collision = __pa_core_prefix_getcollision(core, new_prefix)))
@@ -226,7 +266,7 @@ static void pa_core_make_new_assignment(struct pa_core *core, struct pa_dp *dp, 
 	p = pa_getprefix_storage(core, iface, dp);
 
 	/* If no storage */
-	if(!p && !pa_getprefix_random(core, dp, &np))
+	if(!p && !pa_getprefix_random(core, dp, iface, &np))
 		p = &np;
 
 	if(p)
@@ -568,13 +608,23 @@ static inline int __aaa_find_random(struct pa_core *core, struct pa_cp *cp, stru
 		return -1;
 	}
 
+	if (!cp->iface) {
+		L_ERR("No specified interface for address random generation");
+		return -1;
+	}
+
+	if(pa_prefix_prand(cp->iface, &rpool, &result, 128)) {
+		L_ERR("Cannot generate random address from "PA_CP_L" for "PA_IF_L,
+						PA_CP_LA(cp), PA_IF_LA(cp->iface));
+		return -1;
+	}
+
 	/* Selecting rounds duration */
 	diff = 128 - rpool.plen;
 	if(diff >= 32 || (rounds = 1 << diff) >= PA_CORE_PREFIX_SEARCH_MAX_ROUNDS)
 		rounds = PA_CORE_PREFIX_SEARCH_MAX_ROUNDS;
 
 	bool looped = false;
-	prefix_random(&rpool, &result, 128);
 	for(; rounds; rounds--) {
 
 		/* The first condition is intended to forbid the use of the network address
