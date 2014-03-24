@@ -1,5 +1,7 @@
 #define L_PREFIX "pa-store - "
 
+#include <arpa/inet.h>
+
 #include "pa_store.h"
 #include "pa.h"
 
@@ -10,6 +12,23 @@
 #define PAS_TYPE_SP  0x00
 #define PAS_TYPE_ULA 0x01
 #define PAS_TYPE_SA 0x02
+#define PAS_TYPE_DELAY 0x03 /* Delay in min that was used for the previous write */
+
+#define PAS_DELAY_MIN INT64_C(10*60)*HNETD_TIME_PER_SECOND
+#define PAS_DELAY_MAX INT64_C(24*60*60)*HNETD_TIME_PER_SECOND /* 24h */
+
+/* This algorithm will allow writes to stable storage if and only if no
+ * modifications are made during an increasing delay. The delay is 5min when the
+ * router is flashed, and will double at each writes up to 24h.
+ * Todo: Be more clever about when it is needed to write the file. */
+static hnetd_time_t pas_next_delay(hnetd_time_t prev)
+{
+	if(prev < PAS_DELAY_MIN)
+		return PAS_DELAY_MIN;
+
+	hnetd_time_t next = prev * 2;
+	return (next > PAS_DELAY_MAX) ? PAS_DELAY_MAX : next;
+}
 
 static int pas_ifname_write(char *ifname, FILE *f)
 {
@@ -114,6 +133,24 @@ static int pas_sp_save(struct pa_sp *sp, FILE *f)
 	return 0;
 }
 
+static int pas_delay_load(struct pa_store *store, FILE *f)
+{
+	uint32_t minutes;
+	if(fread(&minutes, sizeof(minutes), 1, f) != 1)
+		return -1;
+	minutes = ntohl(minutes);
+	store->save_delay = pas_next_delay(minutes * 60*HNETD_TIME_PER_SECOND);
+	return 0;
+}
+
+static int pas_delay_save(struct pa_store *store, FILE *f)
+{
+	uint32_t minutes = htonl((uint32_t) (store->save_delay / (60*HNETD_TIME_PER_SECOND)));
+	if(fwrite(&minutes, sizeof(minutes), 1, f) != 1)
+		return -1;
+	return 0;
+}
+
 static int pas_sa_load(struct pa_store *store, FILE *f)
 {
 	struct in6_addr addr;
@@ -139,7 +176,7 @@ static int pas_load(struct pa_store *store)
 	FILE *f;
 	int err = 0;
 
-	if(!store->filename)
+	if(!store->filename || !store->started)
 		return 0;
 
 	if(!(f = fopen(store->filename, "r"))) {
@@ -162,6 +199,9 @@ static int pas_load(struct pa_store *store)
 			case PAS_TYPE_SA:
 				err = pas_sa_load(store, f);
 				break;
+			case PAS_TYPE_DELAY:
+				err = pas_delay_load(store, f);
+				break;
 			default:
 				L_DEBUG("Invalid type");
 				return -2;
@@ -170,7 +210,6 @@ static int pas_load(struct pa_store *store)
 	fclose(f);
 	return err;
 }
-
 
 static int pas_save(struct pa_store *store)
 {
@@ -204,12 +243,32 @@ static int pas_save(struct pa_store *store)
 			goto err;
 	}
 
+	type = PAS_TYPE_DELAY;
+	if(((fwrite(&type, 1, 1, f) != 1) || pas_delay_save(store, f) ))
+			goto err;
+
 	fclose(f);
+	store->save_delay = pas_next_delay(store->save_delay); /* Getting next value */
 	return 0;
 err:
 	L_WARN("Writing error");
 	fclose(f);
+	store->save_delay = pas_next_delay(store->save_delay); /* Getting next value */
 	return -2;
+}
+
+void pas_save_cb(struct uloop_timeout *to)
+{
+	pas_save(container_of(to, struct pa_store, save_timeout));
+}
+
+void pas_save_schedule(struct pa_store *store)
+{
+	if(store->started) {
+		uloop_timeout_set(&store->save_timeout, (int) store->save_delay);
+	} else {
+		store->save_timeout.pending = true;
+	}
 }
 
 const struct prefix *pa_store_ula_get(struct pa_store *store)
@@ -223,9 +282,11 @@ const struct prefix *pa_store_ula_get(struct pa_store *store)
 static void __pa_store_dps(struct pa_data_user *user, struct pa_dp *dp, uint32_t flags) {
 	struct pa_store *store = container_of(user, struct pa_store, data_user);
 	if((flags & PADF_DP_CREATED) && dp->local && prefix_is_ipv6_ula(&dp->prefix)) {
-		prefix_cpy(&store->ula, &dp->prefix);
-		store->ula_valid = true;
-		pas_save(store);
+		if(!store->ula_valid || memcmp(&store->ula, &dp->prefix, sizeof(struct prefix))) {
+			prefix_cpy(&store->ula, &dp->prefix);
+			store->ula_valid = true;
+			pas_save_schedule(store);
+		}
 	}
 }
 
@@ -234,10 +295,10 @@ static void __pa_store_cps(struct pa_data_user *user, struct pa_cp *cp, uint32_t
 	struct pa_data *data = &container_of(user, struct pa, store.data_user)->data;
 	struct pa_sp *sp;
 	if((flags & (PADF_CP_APPLIED | PADF_CP_IFACE)) && !(flags & PADF_CP_TODELETE) && cp->applied && cp->iface) {
-		sp = pa_sp_get(data, cp->iface, &cp->prefix, true);
-		if(sp) {
+		if(((sp = pa_sp_get(data, cp->iface, &cp->prefix, false)) && (&sp->le != data->sps.next)) ||
+				(sp = pa_sp_get(data, cp->iface, &cp->prefix, true))) {
 			pa_sp_promote(data, sp);
-			pas_save(store);
+			pas_save_schedule(store);
 		}
 	}
 }
@@ -246,11 +307,12 @@ static void __pa_store_aas(struct pa_data_user *user, struct pa_aa *aa, uint32_t
 	struct pa_store *store = container_of(user, struct pa_store, data_user);
 	struct pa_data *data = store_p(store, data);
 	struct pa_laa *laa;
+	struct pa_sa *sa;
 	if(aa->local && (flags & PADF_LAA_APPLIED) && (laa = container_of(aa, struct pa_laa, aa))->applied) {
-		struct pa_sa *sa = pa_sa_get(data, &aa->address, true);
-		if(sa) {
+		if( ((sa = pa_sa_get(data, &aa->address, false)) && (&sa->le != data->sas.next)) ||
+				(sa = pa_sa_get(data, &aa->address, true))) {
 			pa_sa_promote(data, sa);
-			pas_save(store);
+			pas_save_schedule(store);
 		}
 	}
 }
@@ -289,6 +351,9 @@ void pa_store_init(struct pa_store *store)
 	store->data_user.cps = __pa_store_cps;
 	store->data_user.dps = __pa_store_dps;
 	store->data_user.aas = __pa_store_aas;
+	store->save_delay = pas_next_delay(0);
+	memset(&store->save_timeout, 0, sizeof(struct uloop_timeout));
+	store->save_timeout.cb = pas_save_cb;
 }
 
 void pa_store_start(struct pa_store *store)
@@ -297,6 +362,10 @@ void pa_store_start(struct pa_store *store)
 		return;
 
 	store->started = true;
+	if(store->save_timeout.pending) {
+		store->save_timeout.pending = false;
+		pas_save_schedule(store);
+	}
 	pa_data_subscribe(store_p(store, data), &store->data_user);
 	pas_load(store);
 }
@@ -305,7 +374,8 @@ void pa_store_stop(struct pa_store *store)
 {
 	if(!store->started)
 		return;
-	L_DEBUG("Stop");
+	if(store->save_timeout.pending)
+		uloop_timeout_cancel(&store->save_timeout);
 	pa_store_setfile(store, NULL);
 	pa_data_unsubscribe(&store->data_user);
 	store->started = false;

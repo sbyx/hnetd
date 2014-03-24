@@ -11,6 +11,7 @@
 #define PA_STORE_H
 
 #include <stdio.h>
+#include <libubox/uloop.h>
 
 #include "prefix_utils.h"
 #include "pa_data.h"
@@ -21,6 +22,8 @@ struct pa_store {
 	struct prefix ula;
 	struct pa_data_user data_user;
 	char *filename;
+	hnetd_time_t save_delay;
+	struct uloop_timeout save_timeout;
 };
 
 void pa_store_init(struct pa_store *);
