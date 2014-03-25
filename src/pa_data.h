@@ -74,7 +74,7 @@ struct pa_iface {
 	bool do_dhcp;          /* Whether router should do dhcp on that iface. */
 
 	struct list_head aps;   /* assigned prefixes on that iface */
-	struct list_head cps;   /* chosen prefixes on that iface */
+	struct list_head cpls;/* chosen prefixes on that iface */
 	struct list_head ldps;  /* ldps on that iface */
 	struct list_head eaas;  /* eaas on that iface */
 
@@ -139,7 +139,7 @@ struct pa_ldp {
 	struct {
 		bool valid;
 		struct prefix excluded;
-		struct pa_cp *cp;
+		struct pa_cpx *cpx;
 	} excluded;
 };
 
@@ -165,31 +165,36 @@ struct pa_ap {
 #define PA_AP_LA(ap)    PREFIX_REPR(&(ap)->prefix), PA_IFNAME_LA((ap)->iface), PA_RID_LA(&(ap)->rid), !!(ap)->authoritative, (ap)->priority
 };
 
+/* Generic part of chosen prefixes structure.
+ * That generic part is used for:
+ * 1) Check for assignment's validity
+ * 2) Advertise assignments
+ * A chosen prefix MUST always be part of an existing delegated prefix. */
 struct pa_cp {
 	struct list_head le;      /* Put in pa_data's cp list */
 	struct prefix prefix;	  /* The assigned prefix */
 
-	bool advertised;          /* Whether it was given to the flooding protocol */
+	bool advertised;          /* Whether it must be advertised */
 	bool applied;             /* Whether it was applied */
 	bool authoritative;       /* Whether that assignment is authoritative */
-	uint8_t priority;         /* Assignment's priority */
-
-	struct pa_iface *iface;   /* Iface for that cp or null if no interface */
-	struct list_head if_le;   /* Linked in iface list */
+	uint8_t priority;         /* The assignment priority */
 
 	struct pa_dp *dp;         /* The dp associated to that cp */
 	struct list_head dp_le;   /* Linked in dp's list */
 
-	bool invalid;                   /* Used by pa algo */
 	struct pa_data *pa_data;        /* Used by pa algo */
 	struct uloop_timeout apply_to;  /* Used by pa algo */
 
-	struct pa_laa *laa;       /* A local address assignment for the router */
+#define PA_CPT_ANY   0x00 /* NO TYPE - ONLY IN FUNCTION CALL */
+#define PA_CPT_L     0x01 /* Assignment made on some link */
+#define PA_CPT_X     0x02 /* Assignment made to exclude it */
+#define PA_CPT_D     0x03 /* Assignment made to give it */
+	uint8_t type;
 
 #define PADF_CP_CREATED   PADF_ALL_CREATED
 #define PADF_CP_TODELETE  PADF_ALL_TODELETE
-#define PADF_CP_IFACE     PADF_ALL_IFACE
 #define PADF_CP_ERROR     PADF_ALL_ERROR    /* In case address malloc fails */
+#define PADF_CP_IFACE     PADF_ALL_IFACE    /* Not really usefull cause iface should not change in cpl */
 #define PADF_CP_AUTHORITY 0x0100
 #define PADF_CP_PRIORITY  0x0200
 #define PADF_CP_ADVERTISE 0x0400
@@ -197,9 +202,41 @@ struct pa_cp {
 #define PADF_CP_DP        0x1000
 	uint32_t __flags;
 
-#define PA_CP_L         "cp %s%%"PA_IFNAME_L" priority %d:%d  state |%s|%s|"
-#define PA_CP_LA(cp)    PREFIX_REPR(&(cp)->prefix), PA_IFNAME_LA((cp)->iface), !!(cp)->authoritative, (cp)->priority, \
+#define PA_CP_TYPE(type)  ((type == PA_CPT_L)?"Assignment":((type == PA_CPT_X)?"Excluded":"Delegated" ))
+#define PA_CP_L         "cp(%s) %s priority %d:%d  state |%s|%s|"
+#define PA_CP_LA(cp)    PA_CP_TYPE((cp)->type), PREFIX_REPR(&(cp)->prefix), !!(cp)->authoritative, (cp)->priority, \
 	((cp)->advertised)?"adv.":"not adv.", ((cp)->applied)?"app.":"not app."
+};
+
+/* Chosen prefix for local assignment.
+ * Such struct MUST have an interface specified.
+ * It represents an assignment on some interface that must be
+ * acted upon by creating a localy assigned address.
+ * It is managed by pa_core.c */
+struct pa_cpl {
+	struct pa_cp cp;
+	struct pa_iface *iface;   /* Iface for that cp or null if no interface */
+	struct list_head if_le;   /* Linked in iface list */
+	struct pa_laa *laa;       /* A local address assignment for the router */
+	bool invalid;             /* Used by pa algo */
+};
+
+/* Chosen prefix for exclusion
+ * Created and managed by pa_core.c, it only intends
+ * to prevent prefix use.
+ * It is not associated to any particular interface. */
+struct pa_cpx {
+	struct pa_cp cp;
+};
+
+/* Chosen prefix for Prefix Delegation
+ * This chosen prefix allows PD in the home.
+ * It is not associated to any particular interface.
+ * It is managed by pa_pd.c */
+struct pa_cpd {
+	struct pa_cp cp;
+	struct list_head lease_le;
+	void *lease;
 };
 
 /* Address assignment */
@@ -221,7 +258,7 @@ struct pa_aa {
 /* Internal AA */
 struct pa_laa {
 	struct pa_aa aa;
-	struct pa_cp *cp;              /* The associated cp */
+	struct pa_cpl *cpl;          /* The associated cp */
 	bool applied;                  /* Whether it was applied */
 
 	struct uloop_timeout apply_to; /* Used by pa algo */
@@ -370,10 +407,13 @@ void pa_ap_notify(struct pa_data *data, struct pa_ap *ap);
 
 #define pa_for_each_cp(pa_cp, pa_data) list_for_each_entry(pa_cp, &(pa_data)->cps, le)
 #define pa_for_each_cp_safe(pa_cp, cp2, pa_data) list_for_each_entry_safe(pa_cp, cp2, &(pa_data)->cps, le)
-#define pa_for_each_cp_in_iface(pa_cp, pa_iface) list_for_each_entry(pa_cp, &(pa_iface)->cps, if_le)
+#define pa_for_each_cpl_in_iface(pa_cpl, pa_iface) list_for_each_entry(pa_cpl, &(pa_iface)->cpls, if_le)
 #define pa_for_each_cp_in_dp(pa_cp, pa_dp) list_for_each_entry(pa_cp, &(pa_dp)->cps, dp_le)
-struct pa_cp *pa_cp_get(struct pa_data *, const struct prefix *, bool goc);
-void pa_cp_set_iface(struct pa_cp *, struct pa_iface *);
+#define _pa_cpl(_cp) ((struct pa_cpl *)((_cp && (_cp)->type == PA_CPT_L)?container_of(_cp, struct pa_cpl, cp):NULL))
+#define _pa_cpx(_cp) ((struct pa_cpx *)((_cp && (_cp)->type == PA_CPT_X)?container_of(_cp, struct pa_cpx, cp):NULL))
+#define _pa_cpd(_cp) ((struct pa_cpd *)((_cp && (_cp)->type == PA_CPT_D)?container_of(_cp, struct pa_cpd, cp):NULL))
+struct pa_cp *pa_cp_get(struct pa_data *, const struct prefix *, uint8_t type, bool goc);
+void pa_cpl_set_iface(struct pa_cpl *, struct pa_iface *iface);
 void pa_cp_set_dp(struct pa_cp *, struct pa_dp *dp);
 void pa_cp_set_priority(struct pa_cp *, uint8_t priority);
 void pa_cp_set_authoritative(struct pa_cp *, bool authoritative);
@@ -385,7 +425,7 @@ void pa_cp_notify(struct pa_cp *);
 #define pa_aa_todelete(aa) (aa)->__flags |= PADF_AA_TODELETE
 void pa_aa_notify(struct pa_data *, struct pa_aa *);
 
-struct pa_laa *pa_laa_create(const struct in6_addr *, struct pa_cp *);
+struct pa_laa *pa_laa_create(const struct in6_addr *, struct pa_cpl *);
 void pa_laa_set_applied(struct pa_laa *, bool applied);
 
 #define pa_for_each_eaa(pa_eaa, pa_data) \

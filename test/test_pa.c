@@ -263,14 +263,15 @@ void test_pa_initial()
 	cp = list_first_entry(&pa.data.cps, struct pa_cp, le);
 	sput_fail_unless(cp, "One cp");
 	if(cp) {
+		sput_fail_unless(cp->type == PA_CPT_L, "CP local");
 		sput_fail_unless(to_check(&cp->apply_to, when), "Correct apply to");
 		sput_fail_unless(!prefix_cmp(&p1_1, &cp->prefix), "Correct cp prefix");
 	}
 	sput_fail_unless(!to_run(1), "Run aaa");
 
-	sput_fail_unless(cp->laa, "laa created");
-	if(cp->laa) {
-		sput_fail_unless(to_check(&cp->laa->apply_to, now_time + 0), "Correct laa timeout");
+	sput_fail_unless(_pa_cpl(cp)->laa, "laa created");
+	if(_pa_cpl(cp)->laa) {
+		sput_fail_unless(to_check(&_pa_cpl(cp)->laa->apply_to, now_time + 0), "Correct laa timeout");
 	}
 	//sput_fail_unless(!to_run(2) && !to_getfirst(), "Apply cp and laa");
 	to_run(100);
@@ -330,14 +331,15 @@ void test_pa_ipv4()
 	cp = list_first_entry(&pa.data.cps, struct pa_cp, le);
 	sput_fail_unless(cp, "One cp");
 	if(cp) {
+		sput_fail_unless(cp->type == PA_CPT_L, "Local cp");
 		sput_fail_unless(!prefix_cmp(&pv4_1, &cp->prefix), "Correct cp prefix");
 	}
 
 	test_pa_prand_push_prefix(&pv4_1_1);
 	sput_fail_unless(to_getfirst() == &pa.core.aaa.to && !to_run(1), "Run aaa");
-	sput_fail_unless(cp->laa, "Created laa");
-	if(cp->laa)
-		sput_fail_unless(!memcmp(&cp->laa->aa.address, &pv4_1_1.prefix, sizeof(struct in6_addr)), "Correct ipv4 laa");
+	sput_fail_unless(_pa_cpl(cp)->laa, "Created laa");
+	if(_pa_cpl(cp)->laa)
+		sput_fail_unless(!memcmp(&_pa_cpl(cp)->laa->aa.address, &pv4_1_1.prefix, sizeof(struct in6_addr)), "Correct ipv4 laa");
 
 	sput_fail_unless(!to_run(2), "Run cp and laa apply");
 
@@ -356,11 +358,12 @@ void test_pa_ipv4()
 	cp = list_first_entry(&pa.data.cps, struct pa_cp, le);
 	sput_fail_unless(cp, "One cp");
 	if(cp) {
+		sput_fail_unless(cp->type == PA_CPT_L, "Local cp");
 		sput_fail_unless(!prefix_cmp(&pv4_1, &cp->prefix), "Correct cp prefix");
 	}
-	sput_fail_unless(cp->laa, "Created laa");
-	if(cp->laa)
-		sput_fail_unless(!memcmp(&cp->laa->aa.address, &pv4_1_1.prefix, sizeof(struct in6_addr)), "Correct ipv4 laa");
+	sput_fail_unless(_pa_cpl(cp)->laa, "Created laa");
+	if(_pa_cpl(cp)->laa)
+		sput_fail_unless(!memcmp(&_pa_cpl(cp)->laa->aa.address, &pv4_1_1.prefix, sizeof(struct in6_addr)), "Correct ipv4 laa");
 
 	res = to_run(2);
 	sput_fail_unless(!res, "Apply cp and laa");
@@ -374,14 +377,14 @@ void test_pa_ipv4()
 	sput_fail_unless(list_empty(&timeouts), "No more timeout");
 }
 
-void test_pa_checkcp(struct pa_cp *cp, const struct prefix *p, const struct in6_addr *addr, const char *ifname)
+void test_pa_checkcpl(struct pa_cpl *cpl, const struct prefix *p, const struct in6_addr *addr, const char *ifname)
 {
-	sput_fail_unless(!p || !prefix_cmp(&cp->prefix, p), "Correct prefix");
-	sput_fail_unless(!ifname || (cp->iface && !strcmp(cp->iface->ifname, ifname)), "Correct ifname");
+	sput_fail_unless(!p || !prefix_cmp(&cpl->cp.prefix, p), "Correct prefix");
+	sput_fail_unless(!ifname || (cpl->iface && !strcmp(cpl->iface->ifname, ifname)), "Correct ifname");
 
-	sput_fail_unless(cp->laa, "Assigned address");
-	if(cp->laa)
-		sput_fail_unless(!addr || !memcmp(addr, &cp->laa->aa.address, sizeof(struct in6_addr)), "Correct address");
+	sput_fail_unless(cpl->laa, "Assigned address");
+	if(cpl->laa)
+		sput_fail_unless(!addr || !memcmp(addr, &cpl->laa->aa.address, sizeof(struct in6_addr)), "Correct address");
 }
 
 void test_pa_network()
@@ -413,7 +416,7 @@ void test_pa_network()
 	sput_fail_unless(!res && !to_getfirst(), "Run and apply everything");
 
 	cp = list_first_entry(&pa.data.cps, struct pa_cp, le);
-	test_pa_checkcp(cp, &p1_1, &p1_1_addr.prefix, IFNAME1);
+	test_pa_checkcpl(_pa_cpl(cp), &p1_1, &p1_1_addr.prefix, IFNAME1);
 
 	/* Lower ID, Lower priority */
 	ap = pa_ap_get(&pa.data, &p1_1, &rid_lower, true);
@@ -445,7 +448,7 @@ void test_pa_network()
 	res = to_run(3);
 	sput_fail_unless(!res && !to_getfirst(), "Run aaa and apply");
 	cp = list_first_entry(&pa.data.cps, struct pa_cp, le);
-	test_pa_checkcp(cp, &p1_2, &p1_2_addr.prefix, IFNAME1);
+	test_pa_checkcpl(_pa_cpl(cp), &p1_2, &p1_2_addr.prefix, IFNAME1);
 	pa_ap_todelete(ap);
 	pa_ap_notify(&pa.data, ap);
 	res = to_run(1);
@@ -510,7 +513,7 @@ void test_pa_network()
 	sput_fail_unless(!prefix_cmp(&cp->prefix, &p1_1), "Correct accepted prefix");
 	sput_fail_unless(cp->authoritative == false, "Authoritative is false");
 	sput_fail_unless(cp->advertised == true, "We advertises it");
-	sput_fail_unless(cp->iface->do_dhcp, "We do dhcp");
+	sput_fail_unless(_pa_cpl(cp)->iface->do_dhcp, "We do dhcp");
 	sput_fail_unless(cp->priority == PA_PRIORITY_AUTO_MIN, "We do dhcp");
 
 	pa_ap_todelete(ap);
@@ -534,11 +537,11 @@ void test_pa_network()
 	res = to_run(2);
 	sput_fail_unless(!res, "Run paa and aaa");
 
-	cp2 = pa_cp_get(&pa.data, &p2_1, false);
+	cp2 = pa_cp_get(&pa.data, &p2_1, PA_CPT_L, false);
 	sput_fail_unless(cp2, "New cp created");
 	if(cp2) {
-		sput_fail_unless(!cp2->iface->designated, "Not designated on this iface");
-		sput_fail_unless(!cp2->iface->do_dhcp, "Don't do dhcp anymore");
+		sput_fail_unless(!_pa_cpl(cp2)->iface->designated, "Not designated on this iface");
+		sput_fail_unless(!_pa_cpl(cp2)->iface->do_dhcp, "Don't do dhcp anymore");
 		sput_fail_unless(!cp2->advertised, "Do not advertise this one");
 	}
 
@@ -548,11 +551,11 @@ void test_pa_network()
 	res = to_run(4);
 	sput_fail_unless(!res && !to_getfirst(), "Run paa and aaa and apply");
 
-	cp = pa_cp_get(&pa.data, &p1_1, false);
-	cp2 = pa_cp_get(&pa.data, &p2_1, false);
+	cp = pa_cp_get(&pa.data, &p1_1, PA_CPT_L, false);
+	cp2 = pa_cp_get(&pa.data, &p2_1, PA_CPT_L, false);
 	sput_fail_unless(cp && cp2, "Two cps");
 	if(cp && cp2) {
-		sput_fail_unless(cp2->iface->do_dhcp, "Doing dhcp now");
+		sput_fail_unless(_pa_cpl(cp2)->iface->do_dhcp, "Doing dhcp now");
 		sput_fail_unless(cp2->advertised, "Advertise cp2");
 		sput_fail_unless(cp->advertised, "Advertise cp");
 	}
@@ -570,7 +573,7 @@ void test_pa_network()
 
 	sput_fail_if(cp2->advertised, "cp2 not advertised");
 	sput_fail_unless(cp->advertised, "cp advertised");
-	sput_fail_unless(!cp2->iface->do_dhcp, "Not do dhcp anymore");
+	sput_fail_unless(!_pa_cpl(cp2)->iface->do_dhcp, "Not do dhcp anymore");
 
 	/* Now we are going to change our rid */
 	pa_flood_set_rid(&pa.data, &rid_lower);

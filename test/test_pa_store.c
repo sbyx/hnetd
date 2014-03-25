@@ -95,11 +95,11 @@ static void test_pa_store_sps() {
 	pa.data.conf.max_sa = 2;
 	pa_store_setfile(store, TEST_PAS_FILE);
 
-	cp1_20 = pa_cp_get(&pa.data, &p1_20, true);
-	pa_cp_set_iface(cp1_20, if1);
+	cp1_20 = pa_cp_get(&pa.data, &p1_20, PA_CPT_L, true);
+	pa_cpl_set_iface(_pa_cpl(cp1_20), if1);
 	pa_cp_notify(cp1_20);
 
-	la1_20 = pa_laa_create(&p1_20.prefix, cp1_20);
+	la1_20 = pa_laa_create(&p1_20.prefix, _pa_cpl(cp1_20));
 	pa_aa_notify(&pa.data, &la1_20->aa);
 
 	sput_fail_unless(list_empty(&pa.data.sps), "No sp");
@@ -122,12 +122,12 @@ static void test_pa_store_sps() {
 	sa = list_first_entry(&pa.data.sas, struct pa_sa, le);
 	sput_fail_unless(!memcmp(&sa->addr, &la1_20->aa.address, sizeof(struct in6_addr)), "Address value");
 
-	cp2_20 = pa_cp_get(&pa.data, &p2_20, true);
-	pa_cp_set_iface(cp2_20, if1);
+	cp2_20 = pa_cp_get(&pa.data, &p2_20, PA_CPT_L, true);
+	pa_cpl_set_iface(_pa_cpl(cp2_20), if1);
 	pa_cp_set_applied(cp2_20, true);
 	pa_cp_notify(cp2_20);
 
-	la2_20 = pa_laa_create(&p2_20.prefix, cp2_20);
+	la2_20 = pa_laa_create(&p2_20.prefix, _pa_cpl(cp2_20));
 	pa_laa_set_applied(la2_20, true);
 	pa_aa_notify(&pa.data, &la2_20->aa);
 
@@ -156,12 +156,12 @@ static void test_pa_store_sps() {
 	sput_fail_unless(if1->sp_count == 2, "One sp for if1");
 	sput_fail_unless(if2->sp_count == 0, "Zero sp for if2");
 
-	cp1_21 = pa_cp_get(&pa.data, &p1_21, true);
-	pa_cp_set_iface(cp1_21, if1);
+	cp1_21 = pa_cp_get(&pa.data, &p1_21, PA_CPT_L, true);
+	pa_cpl_set_iface(_pa_cpl(cp1_21), if1);
 	pa_cp_set_applied(cp1_21, true);
 	pa_cp_notify(cp1_21);
 
-	la1_21 = pa_laa_create(&p1_21.prefix, cp1_21);
+	la1_21 = pa_laa_create(&p1_21.prefix, _pa_cpl(cp1_21));
 	pa_laa_set_applied(la1_21, true);
 	pa_aa_notify(&pa.data, &la1_21->aa);
 
@@ -191,8 +191,8 @@ static void test_pa_store_sps() {
 	sput_fail_unless(if1->sp_count == 2, "2 sp for if1");
 	sput_fail_unless(if2->sp_count == 0, "0 sp for if2");
 
-	cp1 = pa_cp_get(&pa.data, &p1, true);
-	pa_cp_set_iface(cp1, if2);
+	cp1 = pa_cp_get(&pa.data, &p1, PA_CPT_L, true);
+	pa_cpl_set_iface(_pa_cpl(cp1), if2);
 	pa_cp_set_applied(cp1, true);
 	pa_cp_notify(cp1);
 
@@ -200,8 +200,8 @@ static void test_pa_store_sps() {
 	sput_fail_unless(if1->sp_count == 2, "Two sp for if1");
 	sput_fail_unless(if2->sp_count == 1, "1 sp for if2");
 
-	cp2 = pa_cp_get(&pa.data, &p2, true);
-	pa_cp_set_iface(cp2, if2);
+	cp2 = pa_cp_get(&pa.data, &p2, PA_CPT_L, true);
+	pa_cpl_set_iface(_pa_cpl(cp2), if2);
 	pa_cp_set_applied(cp2, true);
 	pa_cp_notify(cp2);
 

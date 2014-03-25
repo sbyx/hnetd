@@ -173,19 +173,25 @@ void padt_check_ap(struct pa_ap *ap, struct prefix *p,
 	padt_check_scalar(ap, iface);
 }
 
+void padt_check_cpl(struct pa_cpl *cpl, struct pa_iface *iface,
+		struct pa_laa *laa, bool invalid)
+{
+	padt_check_scalar(cpl, iface);
+	padt_check_scalar(cpl, laa);
+	padt_check_scalar(cpl, invalid);
+}
+
 void padt_check_cp(struct pa_cp *cp, struct prefix *p,
 		bool advertised, bool applied, bool authoritative,
-		uint8_t priority, struct pa_iface *iface, struct pa_dp *dp,
-		struct pa_data *pa_data, struct pa_laa *laa)
+		uint8_t priority, struct pa_dp *dp,
+		struct pa_data *pa_data)
 {
 	padt_check_other(!prefix_cmp(p, &cp->prefix), cp, prefix);
 	padt_check_scalar(cp, advertised);
 	padt_check_scalar(cp, applied);
 	padt_check_scalar(cp, authoritative);
 	padt_check_scalar(cp, priority);
-	padt_check_scalar(cp, iface);
 	padt_check_scalar(cp, dp);
-	padt_check_scalar(cp, laa);
 	padt_check_scalar(cp, pa_data);
 }
 
@@ -197,10 +203,10 @@ void padt_check_aa(struct pa_aa *aa, struct in6_addr *address,
 	padt_check_scalar(aa, local);
 }
 
-void padt_check_laa(struct pa_laa *laa, struct pa_cp *cp,
+void padt_check_laa(struct pa_laa *laa, struct pa_cpl *cpl,
 		bool applied)
 {
-	padt_check_scalar(laa, cp);
+	padt_check_scalar(laa, cpl);
 	padt_check_scalar(laa, applied);
 }
 
@@ -471,24 +477,27 @@ void pa_data_test_cp()
 {
 	struct pa_iface *iface = pa_iface_get(data, IFNAME1, true);
 	struct pa_cp *cp, *cp2, *cp_i;
+	struct pa_cpl *cpl;
 	struct pa_ldp *ldp;
 
-	pa_for_each_cp_in_iface(cp_i, iface)
-				sput_fail_unless(0, "No cp in iface");
+	pa_for_each_cpl_in_iface(cpl, iface)
+		sput_fail_unless(0, "No cp in iface");
 
-	sput_fail_if(pa_cp_get(data, &p1, false), "Do not create");
-	sput_fail_unless(cp = pa_cp_get(data, &p1, true), "Create first");
-	sput_fail_unless(cp == pa_cp_get(data, &p1, true), "No duplicate");
-	sput_fail_unless(cp2 = pa_cp_get(data, &p1_1, true), "Create second");
+	sput_fail_if(pa_cp_get(data, &p1, PA_CPT_L, false), "Do not create");
+	sput_fail_unless(cp = pa_cp_get(data, &p1, PA_CPT_L, true), "Create first");
+	sput_fail_unless(cp == pa_cp_get(data, &p1, PA_CPT_L, true), "No duplicate");
+	sput_fail_unless(cp2 = pa_cp_get(data, &p1_1, PA_CPT_L, true), "Create second");
 
 	pa_cp_notify(cp);
 	padt_check_cb(PADT_CB_CPS, PADF_CP_CREATED);
 	pa_cp_notify(cp2);
 	padt_check_cb(PADT_CB_CPS, PADF_CP_CREATED);
-	padt_check_cp(cp, &p1, false, false, false, PAD_PRIORITY_DEFAULT, NULL, NULL, data, NULL);
+	padt_check_cp(cp, &p1, false, false, false, PAD_PRIORITY_DEFAULT, NULL, data);
+
+	padt_check_cpl(_pa_cpl(cp), NULL, NULL, false);
 
 	pa_cp_set_advertised(cp, true);
-	pa_cp_set_iface(cp, iface);
+	pa_cpl_set_iface(_pa_cpl(cp), iface);
 	pa_cp_notify(cp);
 	padt_check_cb(PADT_CB_CPS, PADF_CP_ADVERTISE | PADF_CP_IFACE);
 
@@ -502,8 +511,8 @@ void pa_data_test_cp()
 		}
 	}
 
-	pa_for_each_cp_in_iface(cp_i, iface)
-		sput_fail_unless(cp_i == cp, "cp in iface");
+	pa_for_each_cpl_in_iface(cpl, iface)
+		sput_fail_unless(cpl == _pa_cpl(cp), "cp in iface");
 
 	ldp = pa_ldp_get(data, &p1, true);
 	pa_cp_set_dp(cp2, &ldp->dp);
@@ -513,8 +522,9 @@ void pa_data_test_cp()
 	pa_for_each_cp_in_dp(cp_i, &ldp->dp)
 		sput_fail_unless(cp_i == cp2, "Cp in dp");
 
-	padt_check_cp(cp, &p1, true, false, false, PAD_PRIORITY_DEFAULT, iface, NULL, data, NULL);
-	padt_check_cp(cp2, &p1_1, false, false, false, PAD_PRIORITY_DEFAULT, NULL, &ldp->dp, data, NULL);
+	padt_check_cp(cp, &p1, true, false, false, PAD_PRIORITY_DEFAULT, NULL, data);
+	padt_check_cpl(_pa_cpl(cp), iface, NULL, false);
+	padt_check_cp(cp2, &p1_1, false, false, false, PAD_PRIORITY_DEFAULT, &ldp->dp, data);
 
 	pa_dp_todelete(&ldp->dp);
 	pa_dp_notify(data, &ldp->dp);
@@ -528,20 +538,20 @@ void pa_data_test_cp()
 void pa_data_test_aa()
 {
 	struct pa_iface *iface = pa_iface_get(data, IFNAME1, true);
-	struct pa_cp *cp = pa_cp_get(data, &p1, true);
+	struct pa_cpl *cpl = _pa_cpl(pa_cp_get(data, &p1, PA_CPT_L, true));
 	struct pa_eaa *eaa, *eaa_i;
 
-	struct pa_laa *laa = pa_laa_create(&p1.prefix, cp);
-	sput_fail_if(pa_laa_create(&p1.prefix, cp), "A single laa per cp");
+	struct pa_laa *laa = pa_laa_create(&p1.prefix, cpl);
+	sput_fail_if(pa_laa_create(&p1.prefix, cpl), "A single laa per cp");
 	padt_check_aa(&laa->aa, &p1.prefix, true);
-	padt_check_laa(laa, cp, false);
+	padt_check_laa(laa, cpl, false);
 	pa_aa_notify(data, &laa->aa);
 	padt_check_cb(PADT_CB_AAS,  PADF_AA_CREATED);
 
 	pa_laa_set_applied(laa, true);
 	pa_aa_notify(data, &laa->aa);
 	padt_check_aa(&laa->aa, &p1.prefix, true);
-	padt_check_laa(laa, cp, true);
+	padt_check_laa(laa, cpl, true);
 	padt_check_cb(PADT_CB_AAS,  PADF_LAA_APPLIED);
 
 	pa_aa_todelete(&laa->aa);
@@ -571,8 +581,8 @@ void pa_data_test_aa()
 	pa_aa_notify(data, &eaa->aa);
 	padt_check_cb(PADT_CB_AAS,  PADF_AA_TODELETE);
 
-	pa_cp_todelete(cp);
-	pa_cp_notify(cp);
+	pa_cp_todelete(&cpl->cp);
+	pa_cp_notify(&cpl->cp);
 	padt_check_cb(PADT_CB_CPS, PADF_CP_TODELETE | PADF_CP_CREATED);
 
 	pa_iface_todelete(iface);

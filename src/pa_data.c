@@ -183,7 +183,7 @@ struct pa_ldp *pa_ldp_get(struct pa_data *data, const struct prefix *p, bool goc
 	ldp->dp.local = true;
 	pa_dp_init(data, &ldp->dp, p);
 	ldp->excluded.valid = false;
-	ldp->excluded.cp = NULL;
+	ldp->excluded.cpx = NULL;
 	ldp->iface = NULL;
 	ldp->dp.__flags = PADF_DP_CREATED;
 	return ldp;
@@ -314,16 +314,16 @@ void pa_ap_notify(struct pa_data *data, struct pa_ap *ap)
 	PA_NOTIFY(data, aps, ap, pa_ap_destroy(data, ap));
 }
 
-struct pa_laa *pa_laa_create(const struct in6_addr *addr, struct pa_cp *cp)
+struct pa_laa *pa_laa_create(const struct in6_addr *addr, struct pa_cpl *cpl)
 {
 	struct pa_laa *laa;
 
-	if(cp->laa || !addr)
+	if(cpl->laa || !addr)
 			return NULL;
 
 	PA_P_ALLOC(laa);
-	laa->cp = cp;
-	cp->laa = laa;
+	laa->cpl = cpl;
+	cpl->laa = laa;
 	memcpy(&laa->aa.address, addr, sizeof(struct in6_addr));
 	laa->aa.local = true;
 	laa->applied = false;
@@ -345,8 +345,8 @@ void pa_aa_destroy(struct pa_aa *aa)
 
 	if(aa->local) {
 		struct pa_laa *laa = container_of(aa, struct pa_laa, aa);
-		if(laa->cp)
-			laa->cp->laa = NULL;
+		if(laa->cpl)
+			laa->cpl->laa = NULL;
 		if(laa->apply_to.pending)
 			uloop_timeout_cancel(&laa->apply_to);
 		free(laa);
@@ -368,36 +368,69 @@ struct pa_cp *__pa_cp_get(struct pa_data *data, const struct prefix *prefix)
 	return NULL;
 }
 
-struct pa_cp *pa_cp_get(struct pa_data *data, const struct prefix *prefix, bool goc)
+struct pa_cp *pa_cp_get(struct pa_data *data, const struct prefix *prefix, uint8_t type, bool goc)
 {
 	struct pa_cp *cp;
 
 	if((cp = __pa_cp_get(data, prefix)) || !goc)
-		return cp;
+		return (type == PA_CPT_ANY || (cp && cp->type == type))?cp:NULL;
 
-	PA_P_ALLOC(cp);
+	switch (type) {
+		case PA_CPT_L:
+			cp = malloc(sizeof(struct pa_cpl));
+			break;
+		case PA_CPT_X:
+			cp = malloc(sizeof(struct pa_cpx));
+			break;
+		case PA_CPT_D:
+			cp = malloc(sizeof(struct pa_cpd));
+			break;
+	}
+
+	if(!cp) {
+		L_ERR("malloc for cp type %s failed in %s", PA_CP_TYPE(type), __FUNCTION__);
+		return NULL;
+	}
+
+	switch (type) {
+	case PA_CPT_L:
+		container_of(cp, struct pa_cpl, cp)->cp.type = PA_CPT_L;
+		_pa_cpl(cp)->iface = NULL;
+		_pa_cpl(cp)->laa = NULL;
+		_pa_cpl(cp)->invalid = false;
+		cp = &_pa_cpl(cp)->cp;
+		break;
+	case PA_CPT_X:
+		container_of(cp, struct pa_cpx, cp)->cp.type = PA_CPT_X;
+		cp = &_pa_cpx(cp)->cp;
+		break;
+	case PA_CPT_D:
+		container_of(cp, struct pa_cpd, cp)->cp.type = PA_CPT_D;
+		_pa_cpd(cp)->lease = NULL;
+		cp = &_pa_cpd(cp)->cp;
+		break;
+	}
+
 	prefix_cpy(&cp->prefix, prefix);
 	cp->pa_data = data;
 
-	cp->laa = NULL;
 	cp->advertised = false;
 	cp->applied = false;
 	cp->authoritative = false;
 	cp->priority = PAD_PRIORITY_DEFAULT;
-	cp->iface = NULL;
-	cp->invalid = false;
 	list_add(&cp->le, &data->cps);
 	cp->apply_to.pending = false;
 	cp->apply_to.cb = NULL;
 	cp->dp = NULL;
 	cp->__flags = PADF_CP_CREATED;
+
 	L_DEBUG("Created "PA_CP_L, PA_CP_LA(cp));
 	return cp;
 }
 
-void pa_cp_set_iface(struct pa_cp *cp, struct pa_iface *iface)
+void pa_cpl_set_iface(struct pa_cpl *cpl, struct pa_iface *iface)
 {
-	PA_SET_IFACE(cp, iface, cps, cp->__flags);
+	PA_SET_IFACE(cpl, iface, cpls, cpl->cp.__flags);
 }
 
 void pa_cp_set_dp(struct pa_cp *cp, struct pa_dp *dp)
@@ -439,9 +472,19 @@ void pa_cp_destroy(struct pa_cp *cp)
 {
 	L_DEBUG("Destroying "PA_CP_L, PA_CP_LA(cp));
 	pa_cp_set_dp(cp, NULL);
-	pa_cp_set_iface(cp, NULL);
-	if(cp->laa)
-		pa_aa_destroy(&cp->laa->aa);
+
+	switch (cp->type) {
+	case PA_CPT_L:
+		pa_cpl_set_iface(_pa_cpl(cp), NULL);
+		if(_pa_cpl(cp)->laa)
+			pa_aa_destroy(&_pa_cpl(cp)->laa->aa);
+		break;
+	case PA_CPT_X:
+		break;
+	case PA_CPT_D:
+		break;
+	}
+
 	if(cp->apply_to.pending)
 		uloop_timeout_cancel(&cp->apply_to);
 	list_del(&cp->le);
@@ -623,7 +666,7 @@ struct pa_iface *pa_iface_get(struct pa_data *data, const char *ifname, bool goc
 	PA_P_ALLOC(iface);
 	strcpy(iface->ifname, ifname);
 	INIT_LIST_HEAD(&iface->aps);
-	INIT_LIST_HEAD(&iface->cps);
+	INIT_LIST_HEAD(&iface->cpls);
 	INIT_LIST_HEAD(&iface->eaas);
 	INIT_LIST_HEAD(&iface->ldps);
 	INIT_LIST_HEAD(&iface->sps);
@@ -659,8 +702,8 @@ void pa_iface_destroy(struct pa_data *data, struct pa_iface *iface)
 	while(!list_empty(&iface->aps))
 		pa_ap_destroy(data, list_first_entry(&iface->aps, struct pa_ap, if_le));
 
-	while(!list_empty(&iface->cps))
-		pa_cp_destroy(list_first_entry(&iface->cps, struct pa_cp, if_le));
+	while(!list_empty(&iface->cpls))
+		pa_cp_destroy(&(list_first_entry(&iface->cpls, struct pa_cpl, if_le))->cp);
 
 	while(!list_empty(&iface->ldps))
 		pa_dp_destroy(&(list_first_entry(&iface->ldps, struct pa_ldp, if_le))->dp);

@@ -637,7 +637,10 @@ static void hncp_pa_cps(struct pa_data_user *user, struct pa_cp *cp, uint32_t fl
 {
 	hncp_glue g = container_of(user, struct hncp_glue_struct, data_user);
 	if((flags & (PADF_CP_ADVERTISE | PADF_CP_TODELETE | PADF_CP_IFACE))) {
-		hncp_tlv_ap_update(g->hncp, &cp->prefix, cp->iface?cp->iface->ifname:NULL,
+		char *ifname = NULL;
+		if(cp->type == PA_CPT_L) /* For now, only type cp_la has an interface */
+			ifname = _pa_cpl(cp)->iface->ifname;
+		hncp_tlv_ap_update(g->hncp, &cp->prefix, ifname,
 				cp->authoritative, cp->priority, !(flags & PADF_CP_TODELETE) && cp->advertised);
 	}
 }
@@ -658,17 +661,17 @@ static void hncp_pa_aas(struct pa_data_user *user, struct pa_aa *aa, uint32_t fl
 	hncp_glue g = container_of(user, struct hncp_glue_struct, data_user);
 	if(aa->local && (flags & (PADF_AA_TODELETE | PADF_AA_CREATED))) {
 		struct pa_laa *laa = container_of(aa, struct pa_laa, aa);
-		if(!laa->cp || !laa->cp->iface)
+		if(!laa->cpl)
 			return;
-                hncp_link l = hncp_find_link_by_name(g->hncp, laa->cp->iface->ifname, false);
-                if (!l)
-                  return;
-                hncp_t_router_address_s ra;
-                ra.link_id = cpu_to_be32(l->iid);
-                ra.address = aa->address;
-                hncp_update_tlv_raw(g->hncp, HNCP_T_ROUTER_ADDRESS,
-                                    &ra, sizeof(ra),
-                                    (flags & PADF_AA_CREATED));
+		hncp_link l = hncp_find_link_by_name(g->hncp, laa->cpl->iface->ifname, false);
+		if (!l)
+			return;
+		hncp_t_router_address_s ra;
+		ra.link_id = cpu_to_be32(l->iid);
+		ra.address = aa->address;
+		hncp_update_tlv_raw(g->hncp, HNCP_T_ROUTER_ADDRESS,
+				&ra, sizeof(ra),
+				(flags & PADF_AA_CREATED));
 	}
 }
 

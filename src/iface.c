@@ -96,50 +96,50 @@ void iface_pa_ifs(__attribute__((unused))struct pa_data_user *user,
  * asynchronously as well.
  */
 
-static inline void iface_pa_prefix_update(struct pa_cp *cp)
+static void iface_pa_prefix_update(struct pa_cpl *cpl)
 {
-	L_DEBUG("iface_pa_prefix_update: "PA_CP_L, PA_CP_LA(cp));
-	if(!cp->iface) {
+	L_DEBUG("iface_pa_prefix_update: "PA_CP_L, PA_CP_LA(&cpl->cp));
+	if(!cpl->iface) {
 		L_WARN("Trying to configure a prefix with no interface");
 		return;
 	}
 
-	if(!cp->dp) { /* Can happen when a cp is made orphan. But it can't last long, or it will be deleted. */
+	if(!cpl->cp.dp) { /* Can happen when a cp is made orphan. But it can't last long, or it will be deleted. */
 		L_DEBUG("iface_pa_prefix_update: Ignoring cp with no dp.");
 		return;
 	}
 
-	struct iface *c = iface_get(cp->iface->ifname);
+	struct iface *c = iface_get(cpl->iface->ifname);
 	if(!c) {
-		L_DEBUG("iface_pa_prefix_update: No iface found (%s).", cp->iface->ifname);
+		L_DEBUG("iface_pa_prefix_update: No iface found (%s).", cpl->iface->ifname);
 		return;
 	}
 	assert(c->platform != NULL);
-	struct iface_addr *a = calloc(1, sizeof(*a) + cp->dp->dhcp_len);
-	memcpy(&a->prefix.prefix, &cp->laa->aa.address, sizeof(struct in6_addr));
-	a->prefix.plen = cp->prefix.plen;
-	a->valid_until = cp->dp->valid_until;
-	a->preferred_until = cp->dp->preferred_until;
-	a->dhcpv6_len = cp->dp->dhcp_len;
-	memcpy(a->dhcpv6_data, cp->dp->dhcp_data, cp->dp->dhcp_len);
+	struct iface_addr *a = calloc(1, sizeof(*a) + cpl->cp.dp->dhcp_len);
+	memcpy(&a->prefix.prefix, &cpl->laa->aa.address, sizeof(struct in6_addr));
+	a->prefix.plen = cpl->cp.prefix.plen;
+	a->valid_until = cpl->cp.dp->valid_until;
+	a->preferred_until = cpl->cp.dp->preferred_until;
+	a->dhcpv6_len = cpl->cp.dp->dhcp_len;
+	memcpy(a->dhcpv6_data, cpl->cp.dp->dhcp_data, cpl->cp.dp->dhcp_len);
 	vlist_add(&c->assigned, &a->node, &a->prefix);
 }
 
-static inline void iface_pa_prefix_delete(struct pa_cp *cp)
+static void iface_pa_prefix_delete(struct pa_cpl *cpl)
 {
-	L_DEBUG("iface_pa_prefix_delete: "PA_CP_L, PA_CP_LA(cp));
-	if(!cp->iface) {
+	L_DEBUG("iface_pa_prefix_delete: "PA_CP_L, PA_CP_LA(&cpl->cp));
+	if(!cpl->iface) {
 		L_WARN("Trying to delete a prefix with no interface");
 		return;
 	}
 
-	struct iface *c = iface_get(cp->iface->ifname);
+	struct iface *c = iface_get(cpl->iface->ifname);
 	if(!c) {
-		L_DEBUG("iface_pa_prefix_delete: No iface found (%s).", cp->iface->ifname);
+		L_DEBUG("iface_pa_prefix_delete: No iface found (%s).", cpl->iface->ifname);
 		return;
 	}
 	assert(c->platform != NULL);
-	struct iface_addr *a = vlist_find(&c->assigned, &cp->prefix, a, node);
+	struct iface_addr *a = vlist_find(&c->assigned, &cpl->cp.prefix, a, node);
 	if (a) {
 		vlist_delete(&c->assigned, &a->node);
 	} else {
@@ -153,8 +153,11 @@ void iface_pa_cps(__attribute__((unused))struct pa_data_user *user,
 {
 	/* This function is also called by iface_pa_dps when lifetime or dhcp data is modified.
 	 * The flags is then PADF_CP_DP. */
+	struct pa_cpl *cpl;
+	if(!(cpl = _pa_cpl(cp)))
+		return;
 
-	if(!cp->laa || !cp->laa->applied) /* This prefix is not known here */
+	if(!cpl->laa || !cpl->laa->applied) /* This prefix is not known here */
 			return;
 
 	bool applied = cp->applied;
@@ -167,9 +170,9 @@ void iface_pa_cps(__attribute__((unused))struct pa_data_user *user,
 	if(flags & (PADF_CP_APPLIED | PADF_CP_DP | PADF_CP_IFACE)) {
 		/* Changed application */
 		if(applied) {
-			iface_pa_prefix_update(cp);
+			iface_pa_prefix_update(cpl);
 		} else {
-			iface_pa_prefix_delete(cp);
+			iface_pa_prefix_delete(cpl);
 		}
 	}
 }
@@ -181,7 +184,7 @@ void iface_pa_aas(__attribute__((unused))struct pa_data_user *user,
 		return;
 
 	struct pa_laa *laa = container_of(aa, struct pa_laa, aa);
-	if(!laa->cp || !laa->cp->applied)
+	if(!laa->cpl || !laa->cpl->cp.applied)
 		return;
 
 	bool applied = laa->applied;
@@ -192,9 +195,9 @@ void iface_pa_aas(__attribute__((unused))struct pa_data_user *user,
 
 	if(flags & (PADF_LAA_APPLIED)) {
 		if(applied) {
-			iface_pa_prefix_update(laa->cp);
+			iface_pa_prefix_update(laa->cpl);
 		} else {
-			iface_pa_prefix_delete(laa->cp);
+			iface_pa_prefix_delete(laa->cpl);
 		}
 	}
 }

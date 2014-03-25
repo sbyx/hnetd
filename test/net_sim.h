@@ -605,17 +605,30 @@ hnetd_time_t hncp_io_time(hncp o)
 void pa_update_lap(struct pa_data *data, const struct prefix *prefix, const char *ifname,
 		int to_delete)
 {
-	struct pa_cp *cp = pa_cp_get(data, prefix, !to_delete);
-	if(!cp)
-		return;
-	if(!to_delete) {
-		struct pa_iface *iface = ifname?pa_iface_get(data, ifname, true):NULL;
-		pa_cp_set_iface(cp, iface);
-		pa_cp_set_advertised(cp, true);
+	/* In case of no ifname, we create a CPD */
+	if(ifname) {
+		struct pa_cpl *cpl = _pa_cpl(pa_cp_get(data, prefix, PA_CPT_L, !to_delete));
+		if(!cpl)
+			return;
+		if(!to_delete) {
+			struct pa_iface *iface = pa_iface_get(data, ifname, true);
+			pa_cpl_set_iface(cpl, iface);
+			pa_cp_set_advertised(&cpl->cp, true);
+		} else {
+			pa_cp_todelete(&cpl->cp);
+		}
+		pa_cp_notify(&cpl->cp);
 	} else {
-		pa_cp_todelete(cp);
+		struct pa_cpd *cpd = _pa_cpd(pa_cp_get(data, prefix, PA_CPT_D, !to_delete));
+		if(!cpd)
+			return;
+		if(!to_delete) {
+			pa_cp_set_advertised(&cpd->cp, true);
+		} else {
+			pa_cp_todelete(&cpd->cp);
+		}
+		pa_cp_notify(&cpd->cp);
 	}
-	pa_cp_notify(cp);
 }
 
 /* An laa can only be set for a valid chosen prefix */
@@ -623,25 +636,25 @@ void pa_update_laa(struct pa_data *data, const struct prefix *cp_prefix,
 		const struct in6_addr *addr, const char *ifname,
 		int to_delete)
 {
-	struct pa_cp *cp = pa_cp_get(data, cp_prefix, !to_delete);
+	struct pa_cpl *cpl = _pa_cpl(pa_cp_get(data, cp_prefix, PA_CPT_L, !to_delete));
 	struct pa_iface *iface = NULL;
 	struct pa_laa *laa = NULL;
-	if(!cp)
+	if(!cpl)
 		return;
 
 
 	if(to_delete) {
-		if(cp->laa)
-			pa_aa_todelete(&cp->laa->aa);
+		if(cpl->laa)
+			pa_aa_todelete(&cpl->laa->aa);
 	} else {
 		iface = ifname?pa_iface_get(data, ifname, true):NULL;
-		pa_cp_set_iface(cp, iface);
-		laa = pa_laa_create(addr, cp);
+		pa_cpl_set_iface(cpl, iface);
+		laa = pa_laa_create(addr, cpl);
 	}
 
-	pa_cp_notify(cp);
+	pa_cp_notify(&cpl->cp);
 	if(laa)
-		pa_aa_notify(data, &cp->laa->aa);
+		pa_aa_notify(data, &cpl->laa->aa);
 	if(iface)
 		pa_iface_notify(data, iface);
 }
