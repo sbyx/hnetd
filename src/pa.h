@@ -19,6 +19,7 @@
 #include "pa_data.h"
 #include "pa_local.h"
 #include "pa_store.h"
+#include "pa_pd.h"
 
 #include "hnetd.h"
 
@@ -44,6 +45,7 @@ struct pa {
 	struct pa_conf conf;                  /* Configuration */
 	struct pa_local local;                /* Ipv4 and ULA elements */
 	struct pa_store store;                /* Stable storage interface */
+	struct pa_pd pd;                      /* Prefix delegation support */
 	struct iface_user ifu;
 };
 

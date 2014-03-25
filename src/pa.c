@@ -45,6 +45,7 @@ void pa_init(struct pa *pa, const struct pa_conf *conf)
 	pa_store_init(&pa->store);
 	pa_core_init(&pa->core);
 	pa_local_init(&pa->local, conf?&conf->local_conf:NULL);
+	pa_pd_init(&pa->pd);
 
 	memset(&pa->ifu, 0, sizeof(struct iface_user));
 	pa->ifu.cb_intiface = __pa_ifu_intiface;
@@ -61,6 +62,7 @@ void pa_start(struct pa *pa)
 		pa_store_start(&pa->store);
 		pa_core_start(&pa->core);
 		pa_local_start(&pa->local);
+		pa_pd_start(&pa->pd);
 		iface_register_user(&pa->ifu);
 	}
 }
@@ -70,6 +72,7 @@ void pa_stop(struct pa *pa)
 	if(pa->started) {
 		L_NOTICE("Stopping prefix assignment");
 		iface_unregister_user(&pa->ifu);
+		pa_pd_stop(&pa->pd);
 		pa_local_stop(&pa->local);
 		pa_core_stop(&pa->core);
 		pa_store_stop(&pa->store);
@@ -82,6 +85,7 @@ void pa_term(struct pa *pa)
 	L_NOTICE("Terminating prefix assignment structures");
 
 	pa_stop(pa);
+	pa_pd_term(&pa->pd);
 	pa_local_term(&pa->local);
 	pa_core_term(&pa->core);
 	pa_store_term(&pa->store);
