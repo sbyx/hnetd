@@ -61,4 +61,22 @@ void pa_stop(struct pa *pa);
 /* Reset pa to post-init state, without modifying configuration. */
 void pa_term(struct pa *pa);
 
+
+/* Generic functions used by different sub-part of pa */
+
+/* Check if the proposed prefix collides with any other used prefix (local or distant).
+ * In case of collision, the colliding prefix is returned. */
+const struct prefix *pa_prefix_getcollision(struct pa *pa, const struct prefix *prefix);
+
+/* Check if some other router's assignment is colliding with the chosen prefix.
+ * It is assumed that collisions can't happen with other cps. */
+bool pa_cp_isvalid(struct pa *pa, struct pa_cp *cp);
+
+/* Check if another router's assignment is correct with respect to _other_ router's asisgnments.
+ * Local cps are not checked. */
+bool pa_ap_isvalid(struct pa *pa, struct pa_ap *ap);
+
+int pa_precedence_apap(struct pa_ap *ap1, struct pa_ap *ap2);
+int pa_precedence_apcp(struct pa_ap *ap, struct pa_cp *cp);
+
 #endif /* PA_H_ */

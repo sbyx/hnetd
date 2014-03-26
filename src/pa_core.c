@@ -8,8 +8,6 @@
 #endif
 #define L_PREFIX "pa_core - "
 
-#include <libubox/md5.h>
-
 #include "pa_core.h"
 #include "pa.h"
 #include "iface.h"
@@ -19,6 +17,9 @@
 
 #define PA_CORE_PREFIX_SEARCH_MAX_ROUNDS 256
 #define PA_CORE_ADDRESS_SEARCH_MAX_ROUNDS 256
+
+#define PAC_PRAND_PRFX 0
+#define PAC_PRAND_ADDR 1
 
 #define core_pa(core) (container_of(core, struct pa, core))
 #define core_rid(core) (&((core_pa(core))->flood.rid))
@@ -35,30 +36,23 @@ static void __pa_aaa_schedule(struct pa_core *core);
 static void __pa_paa_schedule(struct pa_core *core);
 
 /* Generates a random or pseudo-random (based on the interface) prefix */
-int pa_prefix_prand(struct pa_iface *iface,
+int pa_prefix_prand(struct pa_iface *iface, size_t ctr_index,
 		const struct prefix *p, struct prefix *dst,
 		uint8_t plen)
 {
-	struct in6_addr rand;
 	struct iface *i;
-	md5_ctx_t ctx;
+	char seed[IFNAMSIZ + 10];
+	size_t pos = 0;
 
-	if(plen > 128 || plen < p->plen)
-			return -1;
-
-	md5_begin(&ctx);
-	md5_hash(iface->ifname, strlen(iface->ifname) + 1, &ctx);
-	md5_hash(&iface->prand_ctr, 4, &ctx);
-	++iface->prand_ctr;
 	if((i = iface_get(iface->ifname))) {
-		md5_hash(&i->eui64_addr, 16, &ctx);
+		memcpy(seed, &i->eui64_addr.s6_addr[8], 8);
+		pos += sizeof(struct in6_addr);
 	}
-	md5_end(rand.s6_addr, &ctx);
 
-	dst->plen = plen;
-	dst->prefix = p->prefix;
-	bmemcpy(&dst->prefix, &rand, p->plen, plen - p->plen);
-	return 0;
+	memcpy(seed + pos, iface->ifname, strlen(iface->ifname));
+	pos += strlen(iface->ifname);
+
+	return prefix_prandom(seed, pos, iface->prand_ctr[ctr_index]++, p, dst, plen);
 }
 
 bool __pa_compute_dodhcp(struct pa_iface *iface)
@@ -159,25 +153,6 @@ static void pa_core_create_cpl(struct pa_core *core, const struct prefix *p,
 	uloop_timeout_set(&cpl->cp.apply_to, 2*core_p(core, data.flood)->flooding_delay);
 }
 
-static struct prefix *__pa_core_prefix_getcollision(struct pa_core *core, const struct prefix *prefix)
-{
-	struct pa_ap *ap;
-	pa_for_each_ap(ap, core_p(core, data)) {
-		if(prefix_contains(prefix, &ap->prefix) || prefix_contains(&ap->prefix, prefix)) {
-			return &ap->prefix;
-		}
-	}
-
-	struct pa_cp *cp;
-	pa_for_each_cp(cp, core_p(core, data)) {
-		if(prefix_contains(prefix, &cp->prefix) || prefix_contains(&cp->prefix, prefix)) {
-			return &cp->prefix;
-		}
-	}
-
-	return NULL;
-}
-
 static int pa_getprefix_random(struct pa_core *core,
 		struct pa_dp *dp, struct pa_iface *iface, struct prefix *new_prefix) {
 
@@ -185,7 +160,7 @@ static int pa_getprefix_random(struct pa_core *core,
 	bool looped;
 	uint32_t rounds;
 	uint8_t plen;
-	struct prefix *collision;
+	const struct prefix *collision;
 
 
 	/* Selecting required prefix length */
@@ -208,7 +183,7 @@ static int pa_getprefix_random(struct pa_core *core,
 	}
 
 	/* Generate a pseudo-random subprefix */
-	if(pa_prefix_prand(iface, &dp->prefix, new_prefix, plen)) {
+	if(pa_prefix_prand(iface, PAC_PRAND_PRFX, &dp->prefix, new_prefix, plen)) {
 		L_ERR("Cannot generate random prefix from "PA_DP_L" of length %d for "PA_IF_L,
 				PA_DP_LA(dp), dp->prefix.plen, PA_IF_LA(iface));
 		return -1;
@@ -223,7 +198,7 @@ static int pa_getprefix_random(struct pa_core *core,
 	looped = false;
 	for(; rounds; rounds--) {
 
-		if(!(collision = __pa_core_prefix_getcollision(core, new_prefix)))
+		if(!(collision = pa_prefix_getcollision(core_pa(core), new_prefix)))
 			return 0;
 
 		L_DEBUG("Prefix %s can't be used", PREFIX_REPR(new_prefix));
@@ -253,7 +228,7 @@ static const struct prefix * pa_getprefix_storage(struct pa_core *core, struct p
 	struct pa_sp *sp;
 	pa_for_each_sp_in_iface(sp, iface) {
 		if(prefix_contains(&dp->prefix, &sp->prefix) &&
-					!__pa_core_prefix_getcollision(core, &sp->prefix))
+				!pa_prefix_getcollision(core_pa(core), &sp->prefix))
 			return &sp->prefix;
 	}
 
@@ -357,63 +332,6 @@ static struct pa_cpl *pa_core_getcpl(struct pa_dp *dp, struct pa_iface *iface)
 	return NULL;
 }
 
-static int pa_core_precedence(bool auth1, uint8_t prio1, struct pa_rid *rid1,
-		bool auth2, uint8_t prio2, struct pa_rid *rid2) {
-	if(auth1 > auth2)
-		return 1;
-
-	if(auth1 < auth2)
-		return -1;
-
-	if(prio1 > prio2)
-		return 1;
-
-	if(prio2 > prio1)
-		return -1;
-
-	return PA_RIDCMP(rid1, rid2);
-}
-
-
-static int pa_core_precedence_apap(struct pa_ap *ap1, struct pa_ap *ap2)
-{
-	return pa_core_precedence(ap1->authoritative, ap1->priority, &ap1->rid,
-			ap2->authoritative, ap2->priority, &ap2->rid);
-}
-
-static int pa_core_precedence_apcp(struct pa_ap *ap, struct pa_cp *cp)
-{
-	return pa_core_precedence(ap->authoritative, ap->priority, &ap->rid,
-			cp->authoritative, cp->priority, &cp->pa_data->flood.rid);
-}
-
-static bool pa_core_cpl_check_global_validity(struct pa_core *core, struct pa_cpl *cpl)
-{
-	struct pa_ap *ap_iter;
-
-	pa_for_each_ap(ap_iter, core_p(core, data)) {
-		if(pa_core_precedence_apcp(ap_iter, &cpl->cp) > 0
-				&& (prefix_contains(&ap_iter->prefix, &cpl->cp.prefix) || prefix_contains(&cpl->cp.prefix, &ap_iter->prefix)))
-			return false;
-	}
-
-	return true;
-}
-
-static bool pa_core_ap_check_global_validity(struct pa_core *core, struct pa_ap *ap)
-{
-	struct pa_ap *ap_iter;
-
-	pa_for_each_ap(ap_iter, core_p(core, data)) {
-		if(ap != ap_iter
-				&& pa_core_precedence_apap(ap_iter, ap) > 0
-				&& (prefix_contains(&ap_iter->prefix, &ap->prefix) || prefix_contains(&ap->prefix, &ap_iter->prefix)))
-			return false;
-	}
-
-	return true;
-}
-
 static struct pa_ap *pa_core_getap(struct pa_core *core, struct pa_dp *dp, struct pa_iface *iface, struct pa_cp *cp)
 {
 	/* Retrieve a valid ap for that dp */
@@ -423,12 +341,12 @@ static struct pa_ap *pa_core_getap(struct pa_core *core, struct pa_dp *dp, struc
 	/* Get the highest priority on that interface */
 	pa_for_each_ap_in_iface(ap_iter, iface) {
 		if(prefix_contains(&dp->prefix, &ap_iter->prefix)
-				&& (!ap || pa_core_precedence_apap(ap_iter, ap) > 0)
-				&& pa_core_ap_check_global_validity(core, ap_iter))
+				&& (!ap || pa_precedence_apap(ap_iter, ap) > 0)
+				&& pa_ap_isvalid(core_pa(core), ap_iter))
 				ap = ap_iter;
 	}
 
-	if(cp && ap && pa_core_precedence_apcp(ap, cp) < 0)
+	if(cp && ap && pa_precedence_apcp(ap, cp) < 0)
 		return NULL;
 
 	return ap;
@@ -447,7 +365,7 @@ static inline void pa_core_case2(struct pa_core *core, struct pa_iface *iface, s
 
 static inline void pa_core_case3(struct pa_core *core, struct pa_iface *iface, struct pa_dp *dp, struct pa_cpl *cpl)
 {
-	if(pa_core_cpl_check_global_validity(core, cpl)) {
+	if(pa_cp_isvalid(core_pa(core), &cpl->cp)) {
 		cpl->invalid = false;
 		pa_cp_set_advertised(&cpl->cp, true);
 		pa_cp_set_dp(&cpl->cp, dp);
@@ -616,7 +534,7 @@ static inline int __aaa_find_random(struct pa_core *core, struct pa_cpl *cpl, st
 		return -1;
 	}
 
-	if(pa_prefix_prand(cpl->iface, &rpool, &result, 128)) {
+	if(pa_prefix_prand(cpl->iface, PAC_PRAND_ADDR, &rpool, &result, 128)) {
 		L_ERR("Cannot generate random address from "PA_CP_L" for "PA_IF_L,
 						PA_CP_LA(&cpl->cp), PA_IF_LA(cpl->iface));
 		return -1;

@@ -100,6 +100,7 @@ add_test(hncp_bfs test_hncp_bfs)
 add_dependencies(check test_hncp_bfs)
 
 add_executable(test_prefix_utils test/test_prefix_utils.c ${PU})
+target_link_libraries(test_prefix_utils ubox)
 add_test(prefix_utils test_prefix_utils)
 add_dependencies(check test_prefix_utils)
 

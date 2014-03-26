@@ -7,6 +7,7 @@
 
 #include "prefix_utils.h"
 
+#include <libubox/md5.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -187,6 +188,27 @@ int prefix_random(const struct prefix *p, struct prefix *dst,
 	size_t i;
 	for (i = 0; i < sizeof(rand); ++i)
 		rand.s6_addr[i] = random();
+
+	dst->plen = plen;
+	dst->prefix = p->prefix;
+	bmemcpy(&dst->prefix, &rand, p->plen, plen - p->plen);
+	return 0;
+}
+
+int prefix_prandom(const char *seed, size_t seedlen, uint32_t ctr,
+		const struct prefix *p, struct prefix *dst,
+		uint8_t plen)
+{
+	struct in6_addr rand;
+	md5_ctx_t ctx;
+
+	if(plen > 128 || plen < p->plen)
+		return -1;
+
+	md5_begin(&ctx);
+	md5_hash(seed, seedlen, &ctx);
+	md5_hash(&ctr, sizeof(ctr), &ctx);
+	md5_end(rand.s6_addr, &ctx);
 
 	dst->plen = plen;
 	dst->prefix = p->prefix;

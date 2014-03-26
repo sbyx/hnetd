@@ -67,6 +67,13 @@ uint8_t prefix_af_length(const struct prefix *p);
 int prefix_random(const struct prefix *p, struct prefix *dst,
 		uint8_t plen);
 
+/* Generates a pseudo-random sub-prefix of p, of length plen.
+ * The seed is used to generate the random part ctr may be used to
+ * generate other random values with the same seed. */
+int prefix_prandom(const char *seed, size_t seedlen, uint32_t ctr,
+		const struct prefix *p, struct prefix *dst,
+		uint8_t plen);
+
 /* Increments the prefix by one. The protected_len first bits are never modified.
  * Instead, the increment loops back to the first prefix (all other bits are zero).
  * (p->plen - protected_len) must be <= 32 and  p->plen < protected_len.

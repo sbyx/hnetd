@@ -179,3 +179,81 @@ static void __pa_ifu_ipv4(struct iface_user *u, const char *ifname,
 		pa_ipv4_notify(&pa->data);
 	}
 }
+
+/************************************/
+/******** Other generic fcts ********/
+/************************************/
+const struct prefix *pa_prefix_getcollision(struct pa *pa, const struct prefix *prefix)
+{
+	struct pa_ap *ap;
+	pa_for_each_ap(ap, &pa->data) {
+		if(prefix_contains(prefix, &ap->prefix) || prefix_contains(&ap->prefix, prefix)) {
+			return &ap->prefix;
+		}
+	}
+
+	struct pa_cp *cp;
+	pa_for_each_cp(cp, &pa->data) {
+		if(prefix_contains(prefix, &cp->prefix) || prefix_contains(&cp->prefix, prefix)) {
+			return &cp->prefix;
+		}
+	}
+
+	return NULL;
+}
+
+static int pa_precedence(bool auth1, uint8_t prio1, struct pa_rid *rid1,
+		bool auth2, uint8_t prio2, struct pa_rid *rid2) {
+	if(auth1 > auth2)
+		return 1;
+
+	if(auth1 < auth2)
+		return -1;
+
+	if(prio1 > prio2)
+		return 1;
+
+	if(prio2 > prio1)
+		return -1;
+
+	return PA_RIDCMP(rid1, rid2);
+}
+
+
+int pa_precedence_apap(struct pa_ap *ap1, struct pa_ap *ap2)
+{
+	return pa_precedence(ap1->authoritative, ap1->priority, &ap1->rid,
+			ap2->authoritative, ap2->priority, &ap2->rid);
+}
+
+int pa_precedence_apcp(struct pa_ap *ap, struct pa_cp *cp)
+{
+	return pa_precedence(ap->authoritative, ap->priority, &ap->rid,
+			cp->authoritative, cp->priority, &cp->pa_data->flood.rid);
+}
+
+bool pa_ap_isvalid(struct pa *pa, struct pa_ap *ap)
+{
+	struct pa_ap *ap_iter;
+	pa_for_each_ap(ap_iter, &pa->data) {
+		if(ap != ap_iter
+				&& pa_precedence_apap(ap_iter, ap) > 0
+				&& (prefix_contains(&ap_iter->prefix, &ap->prefix) || prefix_contains(&ap->prefix, &ap_iter->prefix)))
+			return false;
+	}
+	return true;
+}
+
+bool pa_cp_isvalid(struct pa *pa, struct pa_cp *cp)
+{
+	struct pa_ap *ap_iter;
+	pa_for_each_ap(ap_iter, &pa->data) {
+		if(pa_precedence_apcp(ap_iter, cp) > 0
+				&& (prefix_contains(&ap_iter->prefix, &cp->prefix) ||
+						prefix_contains(&cp->prefix, &ap_iter->prefix)))
+			return false;
+	}
+	return true;
+}
+
+
