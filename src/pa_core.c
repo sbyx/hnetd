@@ -75,24 +75,6 @@ void __pa_update_dodhcp(struct pa_core *core, struct pa_iface *iface)
 	pa_iface_notify(core_p(core, data), iface);
 }
 
-void __pa_cp_apply_cb(struct uloop_timeout *to)
-{
-	struct pa_cp *cp = container_of(to, struct pa_cp, apply_to);
-	L_DEBUG("Apply callback for "PA_CP_L, PA_CP_LA(cp));
-	pa_cp_set_applied(cp, true);
-	pa_cp_notify(cp);
-	if(cp->type == PA_CPT_L)
-		__pa_update_dodhcp(&container_of(cp->pa_data, struct pa, data)->core, _pa_cpl(cp)->iface);
-}
-
-void __pa_laa_apply_cb(struct uloop_timeout *to)
-{
-	struct pa_laa *laa = container_of(to, struct pa_laa, apply_to);
-	L_DEBUG("Apply callback for "PA_AA_L, PA_AA_LA(&laa->aa));
-	pa_laa_set_applied(laa, true);
-	pa_aa_notify(laa->cpl->cp.pa_data, &laa->aa);
-}
-
 /* Accepting an ap */
 static void pa_core_accept_ap(struct pa_core *core, struct pa_ap *ap, struct pa_dp *dp, bool advertise)
 {
@@ -116,8 +98,7 @@ static void pa_core_accept_ap(struct pa_core *core, struct pa_ap *ap, struct pa_
 	pa_cp_set_advertised(&cpl->cp, advertise);
 	pa_cp_notify(&cpl->cp);
 
-	cpl->cp.apply_to.cb = __pa_cp_apply_cb;
-	uloop_timeout_set(&cpl->cp.apply_to, 2*core_p(core, data.flood)->flooding_delay);
+	pa_cp_set_apply_to(&cpl->cp, 2*core_p(core, data.flood)->flooding_delay);
 }
 
 static void pa_core_update_cpl(struct pa_dp *dp, struct pa_ap *ap, struct pa_cpl *cpl, bool advertise)
@@ -149,8 +130,7 @@ static void pa_core_create_cpl(struct pa_core *core, const struct prefix *p,
 	pa_cp_set_dp(&cpl->cp, dp);
 	pa_cp_notify(&cpl->cp);
 
-	cpl->cp.apply_to.cb = __pa_cp_apply_cb;
-	uloop_timeout_set(&cpl->cp.apply_to, 2*core_p(core, data.flood)->flooding_delay);
+	pa_cp_set_apply_to(&cpl->cp, 2*core_p(core, data.flood)->flooding_delay);
 }
 
 static int pa_getprefix_random(struct pa_core *core,
@@ -264,24 +244,6 @@ static void pa_core_destroy_cpl(struct pa_core *core, struct pa_cpl *cpl)
 	/* Delete the cp */
 	pa_cp_todelete(&cpl->cp);
 	pa_cp_notify(&cpl->cp);
-}
-
-static bool pa_core_dp_ignore(struct pa_core *core, struct pa_dp *dp)
-{
-	struct pa_data *data = core_p(core, data);
-	struct pa_dp *dp2;
-	bool seen = false;
-	pa_for_each_dp(dp2, data) {
-		if(dp2 == dp) {
-			seen = true;
-			continue;
-		}
-
-		if((!seen && !prefix_cmp(&dp->prefix, &dp2->prefix))
-				|| prefix_contains(&dp->prefix, &dp2->prefix))
-			return true;
-	}
-	return false;
 }
 
 static bool pa_core_iface_is_designated(struct pa_core *core, struct pa_iface *iface)
@@ -414,7 +376,7 @@ void paa_algo_do(struct pa_core *core)
 
 	pa_for_each_dp(dp, data) {
 
-		if(pa_core_dp_ignore(core, dp))
+		if(pa_dp_ignore(core_pa(core), dp))
 			continue;
 
 		L_DEBUG("Considering "PA_DP_L, PA_DP_LA(dp));
@@ -579,12 +541,10 @@ static void aaa_algo_do(struct pa_core *core)
 				laa = pa_laa_create(&addr, cpl);
 				if(laa) {
 					pa_aa_notify(data, &laa->aa);
-					laa->apply_to.cb = __pa_laa_apply_cb;
 					if(cp->prefix.plen <= 64) {
-						//Immediate assignment
-						uloop_timeout_set(&laa->apply_to, 0);
+						pa_laa_set_apply_to(laa, 0);
 					} else {
-						uloop_timeout_set(&laa->apply_to, 2*core_p(core, data.flood)->flooding_delay_ll);
+						pa_laa_set_apply_to(laa, 2*core_p(core, data.flood)->flooding_delay_ll);
 					}
 				} else {
 					L_WARN("Could not create laa from address %s", ADDR_REPR(&addr));
@@ -716,7 +676,7 @@ static void __pad_cb_dps(struct pa_data_user *user, struct pa_dp *dp, uint32_t f
 		}
 	}
 
-	if((flags & PADF_DP_CREATED) && !pa_core_dp_ignore(core, dp)) {
+	if((flags & PADF_DP_CREATED) && !pa_dp_ignore(core_pa(core), dp)) {
 		/* Remove orphans if possible */
 		pa_for_each_cp(cp, core_p(core, data)) {
 			if(!cp->dp && prefix_contains(&dp->prefix, &cp->prefix)) {
@@ -752,6 +712,9 @@ static void __pad_cb_cps(struct pa_data_user *user,
 	struct pa_core *core = container_of(user, struct pa_core, data_user);
 	if(cpl && !(flags & PADF_CP_TODELETE) && (flags & PADF_CP_CREATED))
 		__pa_aaa_schedule(core);
+
+	if(cpl && (flags & PADF_CP_APPLIED)) /* Update dodhcp */
+		__pa_update_dodhcp(&container_of(cp->pa_data, struct pa, data)->core, _pa_cpl(cp)->iface);
 }
 
 /************* Control functions ********************************/

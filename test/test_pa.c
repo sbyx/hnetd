@@ -115,6 +115,7 @@ static void _md5end(void *resbuf, md5_ctx_t *ctx)
 #include "pa.c"
 #include "pa_core.c"
 #include "pa_local.c"
+#include "pa_data.c"
 
 /***************************************************** Utilities */
 /*

@@ -315,6 +315,21 @@ void pa_ap_notify(struct pa_data *data, struct pa_ap *ap)
 	PA_NOTIFY(data, aps, ap, pa_ap_destroy(data, ap));
 }
 
+void pa_laa_set_applied(struct pa_laa *laa, bool applied)
+{
+	if(!applied)
+		pa_laa_set_apply_to(laa, -1);
+	PA_SET_SCALAR(laa->applied, applied, laa->aa.__flags, PADF_LAA_APPLIED);
+}
+
+static void _pa_laa_apply_to(struct uloop_timeout *to)
+{
+	struct pa_laa *laa = container_of(to, struct pa_laa, apply_to);
+	L_DEBUG("Apply callback for "PA_AA_L, PA_AA_LA(&laa->aa));
+	pa_laa_set_applied(laa, true);
+	pa_aa_notify(laa->cpl->cp.pa_data, &laa->aa);
+}
+
 struct pa_laa *pa_laa_create(const struct in6_addr *addr, struct pa_cpl *cpl)
 {
 	struct pa_laa *laa;
@@ -329,15 +344,21 @@ struct pa_laa *pa_laa_create(const struct in6_addr *addr, struct pa_cpl *cpl)
 	laa->aa.local = true;
 	laa->applied = false;
 	laa->apply_to.pending = false;
-	laa->apply_to.cb = NULL;
+	laa->apply_to.cb = _pa_laa_apply_to;
 	laa->aa.__flags = PADF_AA_CREATED;
 	L_DEBUG("Created "PA_AA_L, PA_AA_LA(&laa->aa));
 	return laa;
 }
 
-void pa_laa_set_applied(struct pa_laa *laa, bool applied)
+void pa_laa_set_apply_to(struct pa_laa *laa, hnetd_time_t delay)
 {
-	PA_SET_SCALAR(laa->applied, applied, laa->aa.__flags, PADF_LAA_APPLIED);
+	if(delay >= 0) {
+		if(delay > INT32_MAX)
+			delay = INT32_MAX;
+		uloop_timeout_set(&laa->apply_to, (int) delay);
+	} else if (laa->apply_to.pending){
+		uloop_timeout_cancel(&laa->apply_to);
+	}
 }
 
 void pa_aa_destroy(struct pa_aa *aa)
@@ -367,6 +388,22 @@ struct pa_cp *__pa_cp_get(struct pa_data *data, const struct prefix *prefix)
 			return cp;
 	}
 	return NULL;
+}
+
+
+void pa_cp_set_applied(struct pa_cp *cp, bool applied)
+{
+	if(!applied)
+		pa_cp_set_apply_to(cp, -1);
+	PA_SET_SCALAR(cp->applied, applied, cp->__flags, PADF_CP_APPLIED);
+}
+
+static void _pa_cp_apply_to(struct uloop_timeout *to)
+{
+	struct pa_cp *cp = container_of(to, struct pa_cp, apply_to);
+	L_DEBUG("Apply callback for "PA_CP_L, PA_CP_LA(cp));
+	pa_cp_set_applied(cp, true);
+	pa_cp_notify(cp);
 }
 
 struct pa_cp *pa_cp_get(struct pa_data *data, const struct prefix *prefix, uint8_t type, bool goc)
@@ -425,7 +462,7 @@ struct pa_cp *pa_cp_get(struct pa_data *data, const struct prefix *prefix, uint8
 	cp->priority = PAD_PRIORITY_DEFAULT;
 	list_add(&cp->le, &data->cps);
 	cp->apply_to.pending = false;
-	cp->apply_to.cb = NULL;
+	cp->apply_to.cb = _pa_cp_apply_to;
 	cp->dp = NULL;
 	cp->__flags = PADF_CP_CREATED;
 
@@ -468,9 +505,15 @@ void pa_cp_set_advertised(struct pa_cp *cp, bool adv)
 	PA_SET_SCALAR(cp->advertised, adv, cp->__flags, PADF_CP_ADVERTISE);
 }
 
-void pa_cp_set_applied(struct pa_cp *cp, bool applied)
+void pa_cp_set_apply_to(struct pa_cp *cp, hnetd_time_t delay)
 {
-	PA_SET_SCALAR(cp->applied, applied, cp->__flags, PADF_CP_APPLIED);
+	if(delay >= 0) {
+		if(delay > INT32_MAX)
+			delay = INT32_MAX;
+		uloop_timeout_set(&cp->apply_to, (int) delay);
+	} else if (cp->apply_to.pending){
+		uloop_timeout_cancel(&cp->apply_to);
+	}
 }
 
 void pa_cp_destroy(struct pa_cp *cp)

@@ -20,6 +20,7 @@ void pa_conf_set_defaults(struct pa_conf *conf)
 
 	pa_data_conf_defaults(&conf->data_conf);
 	pa_local_conf_defaults(&conf->local_conf);
+	pa_pd_conf_defaults(&conf->pd_conf);
 }
 
 static void __pa_ifu_intiface(struct iface_user *u, const char *ifname, bool enabled);
@@ -45,7 +46,7 @@ void pa_init(struct pa *pa, const struct pa_conf *conf)
 	pa_store_init(&pa->store);
 	pa_core_init(&pa->core);
 	pa_local_init(&pa->local, conf?&conf->local_conf:NULL);
-	pa_pd_init(&pa->pd);
+	pa_pd_init(&pa->pd, conf?&conf->pd_conf:NULL);
 
 	memset(&pa->ifu, 0, sizeof(struct iface_user));
 	pa->ifu.cb_intiface = __pa_ifu_intiface;
@@ -278,6 +279,23 @@ bool pa_cp_isvalid(struct pa *pa, struct pa_cp *cp)
 			return false;
 	}
 	return true;
+}
+
+bool pa_dp_ignore(struct pa *pa, struct pa_dp *dp)
+{
+	struct pa_dp *dp2;
+	bool seen = false;
+	pa_for_each_dp(dp2, &pa->data) {
+		if(dp2 == dp) {
+			seen = true;
+			continue;
+		}
+
+		if((!seen && !prefix_cmp(&dp->prefix, &dp2->prefix))
+				|| prefix_contains(&dp->prefix, &dp2->prefix))
+			return true;
+	}
+	return false;
 }
 
 

@@ -422,6 +422,7 @@ void pa_cp_set_dp(struct pa_cp *, struct pa_dp *dp);
 void pa_cp_set_priority(struct pa_cp *, uint8_t priority);
 void pa_cp_set_authoritative(struct pa_cp *, bool authoritative);
 void pa_cp_set_advertised(struct pa_cp *, bool adv);
+void pa_cp_set_apply_to(struct pa_cp *, hnetd_time_t delay);
 void pa_cp_set_applied(struct pa_cp *, bool applied);
 #define pa_cp_todelete(cp) (cp)->__flags |= PADF_CP_TODELETE
 void pa_cp_notify(struct pa_cp *);
@@ -431,6 +432,7 @@ void pa_aa_notify(struct pa_data *, struct pa_aa *);
 
 struct pa_laa *pa_laa_create(const struct in6_addr *, struct pa_cpl *);
 void pa_laa_set_applied(struct pa_laa *, bool applied);
+void pa_laa_set_apply_to(struct pa_laa *laa, hnetd_time_t delay);
 
 #define pa_for_each_eaa(pa_eaa, pa_data) \
 		list_for_each_entry(pa_eaa, &(pa_data)->eaas, le)

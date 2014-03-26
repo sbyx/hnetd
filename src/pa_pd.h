@@ -15,13 +15,18 @@
 
 #include "pa_data.h"
 
+struct pa_pd_conf {
+	uint8_t pd_min_len;       /* pd will not provide bigger prefixes : default = 60 */
+	uint8_t pd_min_ratio_exp; /* pd will not provide more than 1/(2^x) of the available dp : default 2 */
+};
+
 /* General structure for pa_pd management.
  * Put in pa structure. */
 struct pa_pd {
 	struct list_head leases;       /* List of known leases */
-	struct uloop_timeout pd_to;    /* Used to schedule leases update */
 	struct pa_data_user data_user; /* Used to receive data updates */
 	bool started;
+	struct pa_pd_conf conf;
 };
 
 /* This structure keeps track of a given delegation lease. */
@@ -56,7 +61,9 @@ void pa_pd_lease_init(struct pa_pd *, struct pa_pd_lease *, uint8_t preferred_le
 /* Terminates an existing lease. */
 void pa_pd_lease_term(struct pa_pd *, struct pa_pd_lease *);
 
-void pa_pd_init(struct pa_pd *);
+void pa_pd_conf_defaults(struct pa_pd_conf *);
+
+void pa_pd_init(struct pa_pd *, const struct pa_pd_conf *);
 void pa_pd_start(struct pa_pd *);
 void pa_pd_stop(struct pa_pd *);
 void pa_pd_term(struct pa_pd *);
