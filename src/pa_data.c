@@ -385,6 +385,8 @@ struct pa_cp *pa_cp_get(struct pa_data *data, const struct prefix *prefix, uint8
 		case PA_CPT_D:
 			cp = malloc(sizeof(struct pa_cpd));
 			break;
+		case PA_CPT_ANY: //Can't happend but here because of warning
+			break;
 	}
 
 	if(!cp) {
@@ -408,6 +410,8 @@ struct pa_cp *pa_cp_get(struct pa_data *data, const struct prefix *prefix, uint8
 		container_of(cp, struct pa_cpd, cp)->cp.type = PA_CPT_D;
 		_pa_cpd(cp)->lease = NULL;
 		cp = &_pa_cpd(cp)->cp;
+		break;
+	case PA_CPT_ANY: //Can't happend but here because of warning
 		break;
 	}
 
@@ -480,8 +484,8 @@ void pa_cp_destroy(struct pa_cp *cp)
 			pa_aa_destroy(&_pa_cpl(cp)->laa->aa);
 		break;
 	case PA_CPT_X:
-		break;
 	case PA_CPT_D:
+	case PA_CPT_ANY: //To avoid warning
 		break;
 	}
 

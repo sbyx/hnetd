@@ -179,17 +179,21 @@ struct pa_cp {
 	bool authoritative;       /* Whether that assignment is authoritative */
 	uint8_t priority;         /* The assignment priority */
 
+	/* A chosen prefix is -most of the time- associated to a dp.
+	 * During short lapses of time, it may be NULL. But it has to be
+	 * updated shortly. */
 	struct pa_dp *dp;         /* The dp associated to that cp */
 	struct list_head dp_le;   /* Linked in dp's list */
 
 	struct pa_data *pa_data;        /* Used by pa algo */
 	struct uloop_timeout apply_to;  /* Used by pa algo */
 
-#define PA_CPT_ANY   0x00 /* NO TYPE - ONLY IN FUNCTION CALL */
-#define PA_CPT_L     0x01 /* Assignment made on some link */
-#define PA_CPT_X     0x02 /* Assignment made to exclude it */
-#define PA_CPT_D     0x03 /* Assignment made to give it */
-	uint8_t type;
+	enum pa_cp_type {
+		PA_CPT_ANY,		/* NO TYPE - ONLY IN FUNCTION CALL */
+		PA_CPT_L,		/* Assignment made on some link */
+		PA_CPT_X,		/* Assignment made to exclude it */
+		PA_CPT_D		/* Assignment made to give it */
+	} type;
 
 #define PADF_CP_CREATED   PADF_ALL_CREATED
 #define PADF_CP_TODELETE  PADF_ALL_TODELETE
@@ -236,7 +240,7 @@ struct pa_cpx {
 struct pa_cpd {
 	struct pa_cp cp;
 	struct list_head lease_le;
-	void *lease;
+	struct pa_pd_lease *lease;
 };
 
 /* Address assignment */
