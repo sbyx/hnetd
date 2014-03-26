@@ -13,6 +13,7 @@
 #define L_PREFIX "pa_data - "
 
 #include "pa_data.h"
+#include "pa_pd.h"
 
 #include <stdio.h>
 #include <inttypes.h>

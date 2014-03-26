@@ -21,6 +21,7 @@ struct pa_pd {
 	struct list_head leases;       /* List of known leases */
 	struct uloop_timeout pd_to;    /* Used to schedule leases update */
 	struct pa_data_user data_user; /* Used to receive data updates */
+	bool started;
 };
 
 /* This structure keeps track of a given delegation lease. */
@@ -30,21 +31,26 @@ struct pa_pd_lease {
 	void (*update_cb)(struct pa_pd_lease *lease);
 
 	/* Contains a list of pa_cpds (see pa_data.h).
-	 * A cpd may be delegated only if cpd->cp.valid == true.
+	 * A cpd may be delegated only if (cpd->cp.valid == true && cpd->cp.dp != NULL).
 	 * It is false initially and becomes true after some time (depending on hncp speed).
-	 * When a cpd becomes invalid for other reasons, it is immediately deleted
-	 * and the callback is called later.
+	 * cpd->cp.dp is the associated delegated prefix. If null, it means the element is not valid
+	 * and will be removed.
 	 * Lifetimes may be found there: cpd->cp.dp->valid_lifetime (or preferred).
-	 * Sometimes cpd->cp.dp may be null, but the callback will never
-	 * be called in such situation (and will be called later instead). */
+	 * Dhcp data may be found here: cpd->cp.dp->dhcp_data/len. */
 	struct list_head cpds;
 
 	/****** Private *****/
 	struct list_head le;        /* Linked in pa_pd structure */
 	struct uloop_timeout cb_to;
+	struct pa_pd *pd;
+	uint8_t preferred_len;
+	uint8_t max_len;
 };
 
-/* Adds a new lease request. */
+#define pa_pd_foreach_cpd(pa_cpd, lease) list_for_each_entry(pa_cpd, &(lease)->cpds, lease_le)
+
+/* Adds a new lease request.
+ * When the function returns, the prefix list is empty. It is updated later and the  */
 void pa_pd_lease_init(struct pa_pd *, struct pa_pd_lease *, uint8_t preferred_len, uint8_t max_len);
 
 /* Terminates an existing lease. */
