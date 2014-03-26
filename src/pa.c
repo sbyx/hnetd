@@ -202,6 +202,30 @@ const struct prefix *pa_prefix_getcollision(struct pa *pa, const struct prefix *
 	return NULL;
 }
 
+bool pa_addr_available(struct pa *pa, struct pa_iface *iface, const struct in6_addr *addr)
+{
+	struct pa_eaa *eaa;
+	if(pa->data.flood.aa_ll_enabled && iface) {
+		pa_for_each_eaa_in_iface(eaa, iface) {
+			if(!memcmp(&eaa->aa.address, addr, sizeof(struct in6_addr)))
+				return false;
+		}
+	} else {
+		pa_for_each_eaa(eaa, &pa->data) {
+			if(!memcmp(&eaa->aa.address, addr, sizeof(struct in6_addr)))
+				return false;
+		}
+	}
+
+	struct pa_cp *cp;
+	struct pa_cpl *cpl;
+	pa_for_each_cp(cp, &pa->data) {
+		if((cpl = _pa_cpl(cp)) && cpl->laa && !memcmp(&cpl->laa->aa.address, addr, sizeof(struct in6_addr)))
+			return false;
+	}
+	return true;
+}
+
 static int pa_precedence(bool auth1, uint8_t prio1, struct pa_rid *rid1,
 		bool auth2, uint8_t prio2, struct pa_rid *rid2) {
 	if(auth1 > auth2)

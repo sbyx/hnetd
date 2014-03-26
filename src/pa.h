@@ -67,6 +67,7 @@ void pa_term(struct pa *pa);
 /* Check if the proposed prefix collides with any other used prefix (local or distant).
  * In case of collision, the colliding prefix is returned. */
 const struct prefix *pa_prefix_getcollision(struct pa *pa, const struct prefix *prefix);
+bool pa_addr_available(struct pa *pa, struct pa_iface *iface, const struct in6_addr *addr);
 
 /* Check if some other router's assignment is colliding with the chosen prefix.
  * It is assumed that collisions can't happen with other cps. */

@@ -456,32 +456,6 @@ void paa_algo_do(struct pa_core *core)
 	L_INFO("End of prefix assignment algorithm");
 }
 
-static bool __aaa_addr_available(struct pa_core *core, struct pa_iface *iface, const struct in6_addr *addr)
-{
-	struct pa_eaa *eaa;
-
-	if(core_p(core, data)->flood.aa_ll_enabled && iface) {
-		pa_for_each_eaa_in_iface(eaa, iface) {
-			if(!memcmp(&eaa->aa.address, addr, sizeof(struct in6_addr)))
-				return false;
-		}
-	} else {
-		pa_for_each_eaa(eaa, core_p(core, data)) {
-			if(!memcmp(&eaa->aa.address, addr, sizeof(struct in6_addr)))
-				return false;
-		}
-	}
-
-	struct pa_cp *cp;
-	struct pa_cpl *cpl;
-	pa_for_each_cp(cp, core_p(core, data)) {
-		if((cpl = _pa_cpl(cp)) && cpl->laa && !memcmp(&cpl->laa->aa.address, addr, sizeof(struct in6_addr)))
-			return false;
-	}
-
-	return true;
-}
-
 static int __aaa_from_storage(struct pa_core *core, struct pa_cpl *cpl, struct in6_addr *addr)
 {
 	struct pa_sa *sa;
@@ -489,7 +463,7 @@ static int __aaa_from_storage(struct pa_core *core, struct pa_cpl *cpl, struct i
 	pa_for_each_sa(sa, core_p(core, data)) {
 		p.plen = 128;
 		memcpy(&p.prefix, &sa->addr, sizeof(struct in6_addr));
-		if(prefix_contains(&cpl->cp.prefix, &p) && __aaa_addr_available(core, cpl->iface, &sa->addr)) {
+		if(prefix_contains(&cpl->cp.prefix, &p) && pa_addr_available(core_pa(core), cpl->iface, &sa->addr)) {
 			memcpy(addr, &sa->addr, sizeof(struct in6_addr));
 			return 0;
 		}
@@ -552,7 +526,7 @@ static inline int __aaa_find_random(struct pa_core *core, struct pa_cpl *cpl, st
 		 * in the case of IPv4. */
 		if((!prefix_is_ipv4(&rpool)
 					|| memcmp(&rpool.prefix, &result.prefix, sizeof(struct in6_addr)))
-				&& __aaa_addr_available(core, cpl->iface, &result.prefix)) {
+				&& pa_addr_available(core_pa(core), cpl->iface, &result.prefix)) {
 			memcpy(addr, &result.prefix, sizeof(struct in6_addr));
 			return 0;
 		}
