@@ -17,9 +17,11 @@ struct prefix ipv4_in_ipv6_prefix = {
 				0x00,0x00, 0xff,0xff }},
 		.plen = 96 };
 
+/* While IETF has assigned fc00::/7 for ULAs, fc00::/8 is 'reserved';
+ * we use only fd00::/8 for locally generated ULA /48s. */
 struct prefix ipv6_ula_prefix = {
-		.prefix = { .s6_addr = { 0xfc }},
-		.plen = 7 };
+		.prefix = { .s6_addr = { 0xfd }},
+		.plen = 8 };
 
 struct prefix ipv6_ll_prefix = {
 		.prefix = { .s6_addr = { 0xfe,0x80 }},
