@@ -39,6 +39,9 @@ proto_hnet_setup() {
     [ -n "$dhcpv4_clientid" ] && json_add_string clientid "$dhcpv4_clientid"
     json_add_string iface6rd "${interface}_6rd"
 
+    # Don't delegate 6rd
+    json_add_boolean delegate 0
+
     json_close_object
     ubus call network add_dynamic "$(json_dump)"
 
