@@ -38,14 +38,19 @@ static int pa_pd_create_cpd(struct pa_pd *pd, struct pa_dp *dp,
 	return 0;
 }
 
-static int pa_pd_find_available_prefix(struct pa_pd *pd,
+static int pa_pd_find_available_prefix(struct pa_pd *pd, const char *client_id,
 		struct pa_dp *dp, uint8_t plen, struct prefix *dst)
 {
 	uint32_t rounds;
 	int res;
 
-	if(prefix_random(&dp->prefix, dst, plen))
-		return -1;
+	if(client_id) {
+		if(prefix_prandom(client_id, strlen(client_id), 0, &dp->prefix, dst, plen))
+			return -1;
+	} else {
+		if(prefix_random(&dp->prefix, dst, plen))
+			return -1;
+	}
 
 	if(plen - dp->prefix.plen >= 32 || (rounds = 1 << (plen - dp->prefix.plen)) >= PA_PD_PREFIX_SEARCH_MAX_ROUNDS) {
 		rounds = PA_PD_PREFIX_SEARCH_MAX_ROUNDS;
@@ -99,7 +104,7 @@ static int pa_pd_add_dp(struct pa_pd *pd, struct pa_pd_lease *lease,
 	try_len = min_len;
 	best_found = false;
 	while(true) {
-		if(!pa_pd_find_available_prefix(pd, dp, try_len, &try_prefix)) {
+		if(!pa_pd_find_available_prefix(pd, lease->client_id, dp, try_len, &try_prefix)) {
 			if(!best_found || try_prefix.plen < best_prefix.plen) {
 				best_found = true;
 				best_prefix = try_prefix;
@@ -234,18 +239,21 @@ static void pa_pd_lease_cb(struct uloop_timeout *to)
 	}
 }
 
-void pa_pd_lease_init(struct pa_pd *pd, struct pa_pd_lease *lease, uint8_t preferred_len, uint8_t max_len)
+int pa_pd_lease_init(struct pa_pd *pd, struct pa_pd_lease *lease,
+		const char *client_id, uint8_t preferred_len, uint8_t max_len)
 {
 	lease->cb_to.cb = pa_pd_lease_cb;
 	lease->cb_to.pending = false;
 	lease->pd = pd;
 	lease->preferred_len = preferred_len;
 	lease->max_len = max_len;
+	lease->client_id = client_id;
 	list_init_head(&lease->cpds);
 	list_add(&lease->le, &pd->leases);
 
 	/* */
 	pa_pd_lease_populate(pd, lease);
+	return 0;
 }
 
 void pa_pd_lease_term(__unused struct pa_pd *pd, struct pa_pd_lease *lease)
