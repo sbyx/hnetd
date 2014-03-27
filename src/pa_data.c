@@ -475,6 +475,17 @@ void pa_cpl_set_iface(struct pa_cpl *cpl, struct pa_iface *iface)
 	PA_SET_IFACE(cpl, iface, cpls, cpl->cp.__flags);
 }
 
+void pa_cpd_set_lease(struct pa_cpd *cpd, struct pa_pd_lease *lease)
+{
+	if(cpd->lease == lease)
+		return;
+	if(cpd->lease)
+		list_remove(&cpd->lease_le);
+	if(lease)
+		list_add(&cpd->lease_le, &lease->cpds);
+	cpd->lease = lease;
+}
+
 void pa_cp_set_dp(struct pa_cp *cp, struct pa_dp *dp)
 {
 	if(cp->dp == dp)
@@ -527,8 +538,10 @@ void pa_cp_destroy(struct pa_cp *cp)
 		if(_pa_cpl(cp)->laa)
 			pa_aa_destroy(&_pa_cpl(cp)->laa->aa);
 		break;
-	case PA_CPT_X:
 	case PA_CPT_D:
+		pa_cpd_set_lease(_pa_cpd(cp), NULL);
+		break;
+	case PA_CPT_X:
 	case PA_CPT_ANY: //To avoid warning
 		break;
 	}

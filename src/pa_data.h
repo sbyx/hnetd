@@ -419,6 +419,7 @@ void pa_ap_notify(struct pa_data *data, struct pa_ap *ap);
 #define _pa_cpd(_cp) ((struct pa_cpd *)((_cp && (_cp)->type == PA_CPT_D)?container_of(_cp, struct pa_cpd, cp):NULL))
 struct pa_cp *pa_cp_get(struct pa_data *, const struct prefix *, uint8_t type, bool goc);
 void pa_cpl_set_iface(struct pa_cpl *, struct pa_iface *iface);
+void pa_cpd_set_lease(struct pa_cpd *, struct pa_pd_lease *lease);
 void pa_cp_set_dp(struct pa_cp *, struct pa_dp *dp);
 void pa_cp_set_priority(struct pa_cp *, uint8_t priority);
 void pa_cp_set_authoritative(struct pa_cp *, bool authoritative);

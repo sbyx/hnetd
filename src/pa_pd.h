@@ -16,8 +16,8 @@
 #include "pa_data.h"
 
 struct pa_pd_conf {
-	uint8_t pd_min_len;       /* pd will not provide bigger prefixes : default = 60 */
-	uint8_t pd_min_ratio_exp; /* pd will not provide more than 1/(2^x) of the available dp : default 2 */
+	uint8_t pd_min_len;       /* pd will not provide bigger prefixes : default = 62 */
+	uint8_t pd_min_ratio_exp; /* pd will not provide more than 1/(2^x) of the dp size : default 3 (1/8) */
 };
 
 /* General structure for pa_pd management.
@@ -52,7 +52,9 @@ struct pa_pd_lease {
 	uint8_t max_len;
 };
 
-#define pa_pd_foreach_cpd(pa_cpd, lease) list_for_each_entry(pa_cpd, &(lease)->cpds, lease_le)
+#define pa_pd_for_each_lease(lease, pa_pd) list_for_each_entry(lease, &(pa_pd)->leases, le)
+#define pa_pd_for_each_cpd(pa_cpd, lease) list_for_each_entry(pa_cpd, &(lease)->cpds, lease_le)
+#define pa_pd_for_each_cpd_safe(pa_cpd, cpd2, lease) list_for_each_entry_safe(pa_cpd, cpd2, &(lease)->cpds, lease_le)
 
 /* Adds a new lease request.
  * When the function returns, the prefix list is empty. It is updated later and the  */
