@@ -51,6 +51,11 @@ struct pa_pd_lease {
 	struct pa_pd *pd;
 	uint8_t preferred_len;
 	uint8_t max_len;
+
+#define PA_PDL_ID_L "'%s'"
+#define PA_PDL_ID_LA(lease_id) (lease_id)?(lease_id):"NO-ID"
+#define PA_PDL_L "pa_pd_lease("PA_PDL_ID_L")"
+#define PA_PDL_LA(lease) PA_PDL_ID_LA((lease)->lease_id)
 };
 
 #define pa_pd_for_each_lease(lease, pa_pd) list_for_each_entry(lease, &(pa_pd)->leases, le)

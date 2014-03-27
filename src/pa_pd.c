@@ -91,6 +91,8 @@ static int pa_pd_add_dp(struct pa_pd *pd, struct pa_pd_lease *lease,
 	uint8_t max_len = lease->max_len;
 	bool best_found;
 
+	L_DEBUG("Adding "PA_DP_L" to "PA_PDL_L, PA_DP_LA(dp), PA_PDL_LA(lease));
+
 	/* We want to prevent a single pd to take too many addresses. */
 	if(min_len < dp->prefix.plen + pd->conf.pd_min_ratio_exp)
 		min_len = dp->prefix.plen + pd->conf.pd_min_ratio_exp;
@@ -131,6 +133,7 @@ static int pa_pd_add_dp(struct pa_pd *pd, struct pa_pd_lease *lease,
 static void pa_pd_lease_schedule(struct pa_pd *pd, struct pa_pd_lease *lease)
 {
 	if(!lease->cb_to.pending) {
+		L_DEBUG("Scheduling lease callback "PA_PDL_L, PA_PDL_LA(lease));
 		if(pd->started) {
 			uloop_timeout_set(&lease->cb_to, PA_PD_LEASE_CB_DELAY);
 		} else {
@@ -227,6 +230,8 @@ static void pa_pd_lease_cb(struct uloop_timeout *to)
 	struct pa_pd_lease *lease = container_of(to, struct pa_pd_lease, cb_to);
 	struct pa_cpd *cpd, *cpd2;
 
+	L_INFO("Lease callback for "PA_PDL_L, PA_PDL_LA(lease));
+
 	if(lease->update_cb)
 		lease->update_cb(lease);
 
@@ -251,6 +256,8 @@ int pa_pd_lease_init(struct pa_pd *pd, struct pa_pd_lease *lease,
 	list_init_head(&lease->cpds);
 	list_add(&lease->le, &pd->leases);
 
+	L_INFO("Initializing "PA_PDL_L, PA_PDL_LA(lease));
+
 	/* */
 	pa_pd_lease_populate(pd, lease);
 	return 0;
@@ -261,6 +268,8 @@ void pa_pd_lease_term(__unused struct pa_pd *pd, struct pa_pd_lease *lease)
 	struct pa_cpd *cpd;
 	if(lease->cb_to.pending)
 		pa_pd_lease_unschedule(pd, lease);
+
+	L_INFO("Terminating "PA_PDL_L, PA_PDL_LA(lease));
 
 	while(!list_empty(&lease->cpds)) {
 		cpd = list_first_entry(&lease->cpds, struct pa_cpd, lease_le);
@@ -280,6 +289,7 @@ void pa_pd_conf_defaults(struct pa_pd_conf *conf)
 
 void pa_pd_init(struct pa_pd *pd, const struct pa_pd_conf *conf)
 {
+	L_NOTICE("Initializing pa_pd");
 	list_init_head(&pd->leases);
 	if(conf)
 		pd->conf = *conf;
@@ -292,6 +302,7 @@ void pa_pd_start(struct pa_pd *pd)
 {
 	struct pa_pd_lease *lease;
 	if(!pd->started) {
+		L_NOTICE("Starting pa_pd");
 		pd->started = true;
 		pa_data_subscribe(&pd_pa(pd)->data, &pd->data_user);
 		list_for_each_entry(lease, &pd->leases, le) {
@@ -307,6 +318,7 @@ void pa_pd_stop(struct pa_pd *pd)
 {
 	struct pa_pd_lease *lease;
 	if(pd->started) {
+		L_NOTICE("Stopping pa_pd");
 		list_for_each_entry(lease, &pd->leases, le) {
 			if(lease->cb_to.pending) {
 				uloop_timeout_cancel(&lease->cb_to);
@@ -320,6 +332,7 @@ void pa_pd_stop(struct pa_pd *pd)
 
 void pa_pd_term(struct pa_pd *pd)
 {
+	L_NOTICE("Terminating pa_pd");
 	struct pa_pd_lease *lease;
 	pa_pd_stop(pd);
 
