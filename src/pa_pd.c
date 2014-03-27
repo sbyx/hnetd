@@ -247,12 +247,17 @@ static void pa_pd_lease_cb(struct uloop_timeout *to)
 int pa_pd_lease_init(struct pa_pd *pd, struct pa_pd_lease *lease,
 		const char *lease_id, uint8_t preferred_len, uint8_t max_len)
 {
+	if(!lease_id) {
+		lease->lease_id = NULL;
+	} else if(!(lease->lease_id = strdup(lease_id))) {
+		return -1;
+	}
+
 	lease->cb_to.cb = pa_pd_lease_cb;
 	lease->cb_to.pending = false;
 	lease->pd = pd;
 	lease->preferred_len = preferred_len;
 	lease->max_len = max_len;
-	lease->lease_id = lease_id;
 	list_init_head(&lease->cpds);
 	list_add(&lease->le, &pd->leases);
 
