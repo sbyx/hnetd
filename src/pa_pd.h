@@ -43,7 +43,7 @@ struct pa_pd_lease {
 	 * Lifetimes may be found there: cpd->cp.dp->valid_lifetime (or preferred).
 	 * Dhcp data may be found here: cpd->cp.dp->dhcp_data/len. */
 	struct list_head cpds;
-	const char *client_id;
+	const char *lease_id;
 
 	/****** Private *****/
 	struct list_head le;        /* Linked in pa_pd structure */
@@ -63,7 +63,7 @@ struct pa_pd_lease {
  * copied, so it must be accessible during the lease lifetime.
  * If client_id is NULL is set, the prefix is chosen randomly.
  * Returns 0 on success. -1 otherwise. */
-int pa_pd_lease_init(struct pa_pd *, struct pa_pd_lease *, const char *client_id,
+int pa_pd_lease_init(struct pa_pd *, struct pa_pd_lease *, const char *lease_id,
 		uint8_t preferred_len, uint8_t max_len);
 
 /* Terminates an existing lease. */
