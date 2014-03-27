@@ -413,6 +413,7 @@ void pa_ap_notify(struct pa_data *data, struct pa_ap *ap);
 #define pa_for_each_cp_safe(pa_cp, cp2, pa_data) list_for_each_entry_safe(pa_cp, cp2, &(pa_data)->cps, le)
 #define pa_for_each_cpl_in_iface(pa_cpl, pa_iface) list_for_each_entry(pa_cpl, &(pa_iface)->cpls, if_le)
 #define pa_for_each_cp_in_dp(pa_cp, pa_dp) list_for_each_entry(pa_cp, &(pa_dp)->cps, dp_le)
+#define pa_for_each_cp_in_dp_safe(pa_cp, cp2, pa_dp) list_for_each_entry_safe(pa_cp, cp2, &(pa_dp)->cps, dp_le)
 #define _pa_cpl(_cp) ((struct pa_cpl *)((_cp && (_cp)->type == PA_CPT_L)?container_of(_cp, struct pa_cpl, cp):NULL))
 #define _pa_cpx(_cp) ((struct pa_cpx *)((_cp && (_cp)->type == PA_CPT_X)?container_of(_cp, struct pa_cpx, cp):NULL))
 #define _pa_cpd(_cp) ((struct pa_cpd *)((_cp && (_cp)->type == PA_CPT_D)?container_of(_cp, struct pa_cpd, cp):NULL))

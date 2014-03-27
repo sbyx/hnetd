@@ -663,26 +663,35 @@ static void __pad_cb_ifs(struct pa_data_user *user,
 static void __pad_cb_dps(struct pa_data_user *user, struct pa_dp *dp, uint32_t flags)
 {
 	struct pa_core *core = container_of(user, struct pa_core, data_user);
-	struct pa_cp *cp;
+	struct pa_cp *cp, *cp2;
+	struct pa_ldp *ldp;
+
 	if(flags & (PADF_DP_CREATED | PADF_DP_TODELETE))
 		__pa_paa_schedule(core);
-
-	if(flags & PADF_DP_TODELETE) {
-		/* Need to make assignments orphans */
-		while(!(list_empty(&dp->cps))) {
-			cp = list_first_entry(&dp->cps, struct pa_cp, dp_le);
-			pa_cp_set_dp(cp, NULL);
-			pa_cp_notify(cp);
-		}
-	}
 
 	if((flags & PADF_DP_CREATED) && !pa_dp_ignore(core_pa(core), dp)) {
 		/* Remove orphans if possible */
 		pa_for_each_cp(cp, core_p(core, data)) {
-			if(!cp->dp && prefix_contains(&dp->prefix, &cp->prefix)) {
+			if((cp->type == PA_CPT_L) && !cp->dp && prefix_contains(&dp->prefix, &cp->prefix)) {
 				pa_cp_set_dp(cp, dp);
 				pa_cp_notify(cp);
 			}
+		}
+	}
+
+	if(flags & PADF_DP_TODELETE) {
+		/* Need to make assignments orphans */
+		pa_for_each_cp_in_dp_safe(cp, cp2, dp) {
+			if(cp->type == PA_CPT_L) {
+				pa_cp_set_dp(cp, NULL);
+				pa_cp_notify(cp);
+			}
+		}
+
+		/* When deleted, we need to delete the excluded prefix properly */
+		if(dp->local && (ldp = container_of(dp, struct pa_ldp, dp))->excluded.valid) {
+			ldp->excluded.valid = false;
+			flags |= PADF_LDP_EXCLUDED;
 		}
 	}
 
