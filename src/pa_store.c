@@ -298,7 +298,7 @@ static void __pa_store_cps(struct pa_data_user *user, struct pa_cp *cp, uint32_t
 	struct pa_store *store = container_of(user, struct pa_store, data_user);
 	struct pa_data *data = &container_of(user, struct pa, store.data_user)->data;
 	struct pa_sp *sp;
-	if(cpl && (flags & (PADF_CP_APPLIED | PADF_CP_IFACE)) && !(flags & PADF_CP_TODELETE) && cp->applied) {
+	if(cpl && (flags & (PADF_CP_APPLIED)) && !(flags & PADF_CP_TODELETE) && cp->applied) {
 		if(((sp = pa_sp_get(data, cpl->iface, &cp->prefix, false)) && (&sp->le != data->sps.next)) ||
 				(sp = pa_sp_get(data, cpl->iface, &cp->prefix, true))) {
 			pa_sp_promote(data, sp);

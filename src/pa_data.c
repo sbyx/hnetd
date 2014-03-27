@@ -472,7 +472,13 @@ struct pa_cp *pa_cp_get(struct pa_data *data, const struct prefix *prefix, uint8
 
 void pa_cpl_set_iface(struct pa_cpl *cpl, struct pa_iface *iface)
 {
-	PA_SET_IFACE(cpl, iface, cpls, cpl->cp.__flags);
+	if(cpl->iface == iface)
+		return;
+	if(cpl->iface)
+		list_remove(&cpl->if_le);
+	if(iface)
+		list_add(&cpl->if_le, &iface->cpls);
+	cpl->iface = iface;
 }
 
 void pa_cpd_set_lease(struct pa_cpd *cpd, struct pa_pd_lease *lease)

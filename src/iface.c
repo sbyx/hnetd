@@ -167,7 +167,7 @@ void iface_pa_cps(__attribute__((unused))struct pa_data_user *user,
 	}
 	//todo: What to do if iface is set to NULL ? We don't remember the old one...
 	//Maybe a cp should never change iface... (which is true for now)
-	if(flags & (PADF_CP_APPLIED | PADF_CP_DP | PADF_CP_IFACE)) {
+	if(flags & (PADF_CP_APPLIED | PADF_CP_DP)) {
 		/* Changed application */
 		if(applied) {
 			iface_pa_prefix_update(cpl);

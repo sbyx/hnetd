@@ -499,7 +499,7 @@ void pa_data_test_cp()
 	pa_cp_set_advertised(cp, true);
 	pa_cpl_set_iface(_pa_cpl(cp), iface);
 	pa_cp_notify(cp);
-	padt_check_cb(PADT_CB_CPS, PADF_CP_ADVERTISE | PADF_CP_IFACE);
+	padt_check_cb(PADT_CB_CPS, PADF_CP_ADVERTISE);
 
 	bool first = true;
 	pa_for_each_cp(cp_i, data) {

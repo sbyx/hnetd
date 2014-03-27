@@ -636,7 +636,7 @@ static void _updated_ldp(hncp_glue g,
 static void hncp_pa_cps(struct pa_data_user *user, struct pa_cp *cp, uint32_t flags)
 {
 	hncp_glue g = container_of(user, struct hncp_glue_struct, data_user);
-	if((flags & (PADF_CP_ADVERTISE | PADF_CP_TODELETE | PADF_CP_IFACE))) {
+	if((flags & (PADF_CP_ADVERTISE | PADF_CP_TODELETE))) {
 		char *ifname = NULL;
 		if(cp->type == PA_CPT_L) /* For now, only type cp_la has an interface */
 			ifname = _pa_cpl(cp)->iface->ifname;

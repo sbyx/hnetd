@@ -31,7 +31,7 @@ static struct prefix p1_21 = {
 static struct prefix p2_20 = {
 		.prefix = { .s6_addr = {
 				0x20, 0x01, 0x20, 0x02, 0xff, 0xff, 0xff, 0x20}},
-		.plen = 56 };
+		.plen = 64 };
 
 static struct prefix p_ula = {
 		.prefix = { .s6_addr = {
