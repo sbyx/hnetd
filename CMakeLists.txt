@@ -56,7 +56,7 @@ set(HNCP_WITH_GLUE ${HNCP_WITH_PROTO} $<TARGET_OBJECTS:L_HNCP_GLUE>)
 add_library(L_HNCP_IO OBJECT src/hncp_io.c)
 set(HNCP_IO $<TARGET_OBJECTS:L_HNCP_IO>)
 set(HNCP ${HNCP_WITH_GLUE} ${HNCP_IO})
-add_executable(hnetd ${HNCP} src/hncp_routing.c src/hnetd.c src/iface.c ${PA} src/ ${BACKEND_SOURCE})
+add_executable(hnetd ${HNCP} src/hncp_routing.c src/hnetd.c src/iface.c src/pd.c ${PA} src/ ${BACKEND_SOURCE})
 target_link_libraries(hnetd ubox blobmsg_json resolv ${BACKEND_LINK})
 install(TARGETS hnetd DESTINATION sbin/)
 

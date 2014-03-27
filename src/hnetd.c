@@ -26,6 +26,7 @@
 #include "ipc.h"
 #include "platform.h"
 #include "pa.h"
+#include "pd.h"
 
 #define FLOODING_DELAY 2 * HNETD_TIME_PER_SECOND
 
@@ -125,8 +126,9 @@ int main(__unused int argc, char* const argv[])
 	const char *ohp_script = NULL;
 	const char *router_name = NULL;
 	const char *pa_store_file = NULL;
+	const char *pd_socket_path = "/var/run/hnetd_pd";
 
-	while ((c = getopt(argc, argv, "d:f:o:n:r:s:")) != -1) {
+	while ((c = getopt(argc, argv, "d:f:o:n:r:s:p:")) != -1) {
 		switch (c) {
 		case 'd':
 			dnsmasq_script = optarg;
@@ -145,6 +147,9 @@ int main(__unused int argc, char* const argv[])
 			break;
 		case 's':
 			pa_store_file = optarg;
+			break;
+		case 'p':
+			pd_socket_path = optarg;
 			break;
 		}
 	}
@@ -184,6 +189,9 @@ int main(__unused int argc, char* const argv[])
 
 	/* Glue together HNCP, PA-glue and and iface */
 	hncp_iface_glue(&hiu, h, hg);
+
+	/* PA */
+	pd_create(&pa.pd, pd_socket_path);
 
 	/* Fire up the prefix assignment code. */
 	pa_start(&pa);
