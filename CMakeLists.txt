@@ -111,6 +111,11 @@ target_link_libraries(test_pa ubox)
 add_test(pa test_pa)
 add_dependencies(check test_pa)
 
+add_executable(test_pa_pd test/test_pa_pd.c)
+target_link_libraries(test_pa_pd ubox)
+add_test(pa_pd test_pa_pd)
+add_dependencies(check test_pa_pd)
+
 add_executable(test_iface test/test_iface.c)
 target_link_libraries(test_iface ubox)
 add_test(iface test_iface)
