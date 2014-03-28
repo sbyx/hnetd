@@ -110,8 +110,10 @@ void pa_dp_init(struct pa_data *data, struct pa_dp *dp, const struct prefix *p)
 	dp->dhcp_len = 0;
 	dp->preferred_until = 0;
 	dp->valid_until = 0;
+	dp->compute_leases_last = 0;
 	prefix_cpy(&dp->prefix, p);
 	INIT_LIST_HEAD(&dp->cps);
+	INIT_LIST_HEAD(&dp->lease_reqs);
 	list_add(&dp->le, &data->dps);
 	dp->__flags = PADF_DP_CREATED;
 	L_DEBUG("Initialized "PA_DP_L, PA_DP_LA(dp));
@@ -142,6 +144,9 @@ void pa_dp_destroy(struct pa_dp *dp)
 	L_DEBUG("Terminating "PA_DP_L, PA_DP_LA(dp));
 	while(!(list_empty(&dp->cps))) {
 		pa_cp_set_dp(list_first_entry(&dp->cps, struct pa_cp, dp_le), NULL);
+	}
+	if(!list_empty(&dp->lease_reqs)) {
+		L_ERR("Lease links list from "PA_DP_L" is not empty", PA_DP_LA(dp));
 	}
 	pa_dp_set_dhcp(dp, NULL, 0);
 	list_del(&dp->le);

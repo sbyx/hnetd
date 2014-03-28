@@ -110,6 +110,12 @@ struct pa_dp {
 	struct list_head cps;         /* cps that are associated to that dp */
 	bool local;                   /* Whether it is ldp or edp */
 
+/* Used by pa_dp */
+	struct list_head lease_reqs;  /* List of unsatisfied lease requests for that dp */
+	/* If true, the pa_dp algorithm will try to assign prefixes to missing leases. */
+	hnetd_time_t compute_leases_last;
+/* End of use by pa_dp */
+
 #define PADF_DP_CREATED   PADF_ALL_CREATED
 #define PADF_DP_TODELETE  PADF_ALL_TODELETE
 #define PADF_LDP_IFACE    PADF_ALL_IFACE
