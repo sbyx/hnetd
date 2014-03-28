@@ -323,6 +323,10 @@ void test_pa_ipv4()
 		return;
 
 	sput_fail_unless(!prefix_cmp(&ldp->dp.prefix, &pa.local.conf.v4_prefix), "Correct v4 prefix");
+	sput_fail_unless(ldp->iface != NULL, "IPv4 must have an interface");
+	if(ldp->iface) {
+		sput_fail_unless(!strcmp(IFNAME2, ldp->iface->ifname), "Correct ipv4 interface");
+	}
 
 	test_pa_prand_push_prefix(&pv4_1);
 	sput_fail_unless(to_getfirst() == &pa.core.paa.to && !to_run(1), "Run paa");

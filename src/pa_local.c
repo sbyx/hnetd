@@ -166,6 +166,8 @@ static uint8_t pa_local_ipv4_get_status(struct pa_local *local, struct pa_local_
 static void pa_local_ipv4_create(struct pa_local *local, struct pa_local_elem *elem)
 {
 	elem->ldp = pa_ldp_get(local_p(local, data), &local->conf.v4_prefix, true);
+	if(elem->ldp)
+		pa_ldp_set_iface(elem->ldp, local_p(local, data.ipv4)->iface);
 }
 
 /* Generic function for IPv4 and ULA generation */
@@ -265,6 +267,8 @@ static void __pa_local_ipv4_cb(struct pa_data_user *user,
 	struct pa_local *local = container_of(user, struct pa_local, data_user);
 	if(flags & PADF_IPV4_IFACE) {
 		hnetd_time_t now = hnetd_time();
+		//Not best way to do it (destroyes the ldp), but changing interface should not happen so often
+		__pa_local_elem_term(local, &local->ipv4);
 		pa_local_schedule(local, now, now);
 	} else if(flags & PADF_IPV4_DHCP) { /* If only dhcp is changed, just update it */
 		if(local->ipv4.ldp) {
