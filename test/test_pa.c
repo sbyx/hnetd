@@ -10,20 +10,6 @@
 /**************************************************** Tested structures */
 struct pa pa;
 
-
-/***************************************************** Test behaviour */
-static bool mask_random = false;
-
-#define SMOCK_RANDOM_QUEUE "random queue"
-
-#define TEST_PA_DEBUG
-#ifdef TEST_PA_DEBUG
-#define test_pa_printf(...) printf(__VA_ARGS__)
-#else
-#define test_pa_printf(...)
-#endif
-
-
 /***************************************************** Masking time */
 
 /* Make sure timeout cancels are called only on scheduled timeouts */
@@ -34,6 +20,8 @@ static bool mask_random = false;
 #define to_check(to, when) ((to)->pending && (_to_time(&(to)->time) == (when)))
 #define to_run(n) fu_loop(n)
 #define to_getfirst() fu_next()
+
+#include "fake_random.h"
 
 /***************************************************** Mask for pa.c */
 
@@ -66,83 +54,12 @@ static struct iface* pa_test_iface_get(__attribute__((unused))const char *ifname
 	return &iface.iface;
 }
 
-static int test_pa_random() {
-	int res;
-	if(mask_random) {
-		res = smock_pull_int(SMOCK_RANDOM_QUEUE);
-	} else {
-		res = random();
-	}
-	test_pa_printf("Called random (0x%2x)\n", res);
-	return res;
-}
-
-#include <libubox/md5.h>
-
-#define SMOCK_PRAND_QUEUE "prefix prand queue"
-static void _md5begin(md5_ctx_t *ctx)
-{
-	if(!mask_random)
-		md5_begin(ctx);
-}
-static void _md5hash(const void *data, size_t length, md5_ctx_t *ctx)
-{
-	if(!mask_random)
-		md5_hash(data, length, ctx);
-}
-
-static void _md5end(void *resbuf, md5_ctx_t *ctx)
-{
-	struct in6_addr *addr;
-	if(!mask_random) {
-		md5_end(resbuf, ctx);
-		return;
-	}
-
-	addr = smock_pull(SMOCK_PRAND_QUEUE);
-	test_pa_printf("Called random %s\n", ADDR_REPR(addr));
-	memcpy(resbuf, addr, sizeof(struct in6_addr));
-}
-
-#define md5_begin _md5begin
-#define md5_hash _md5hash
-#define md5_end _md5end
-
-#define random test_pa_random
-
 /* Masked sources */
 #include "prefix_utils.c"
 #include "pa.c"
 #include "pa_core.c"
 #include "pa_local.c"
 #include "pa_data.c"
-
-/***************************************************** Utilities */
-/*
-static void test_pa_random_push(const int *int_array, size_t array_len)
-{
-	int i;
-	for(i=0; i< (int) array_len; i++) {
-		smock_push_int(SMOCK_RANDOM_QUEUE, int_array[i]);
-	}
-}
-
-static void test_pa_random_push_prefix(const struct prefix *p)
-{
-	struct prefix pc;
-	prefix_canonical(&pc, p);
-	int array[16];
-	int i;
-	for(i=0; i<16; i++) {
-		array[i] = (int) pc.prefix.s6_addr[i];
-	}
-	test_pa_random_push(array, 16);
-}*/
-
-static void test_pa_prand_push_prefix(struct prefix *p)
-{
-	smock_push(SMOCK_PRAND_QUEUE, &p->prefix);
-}
 
 /***************************************************** Data */
 
@@ -219,7 +136,7 @@ void test_pa_initial()
 	struct pa_cp *cp;
 	hnetd_time_t when;
 
-	mask_random = true;
+	fr_mask_md5 = true;
 
 	uloop_init();
 	pa_init(&pa, NULL);
@@ -256,7 +173,7 @@ void test_pa_initial()
 	sput_fail_unless(to_check(&pa.local.timeout, now_time + PA_LOCAL_MIN_DELAY), "Correct paa timeout");
 	when = now_time + PA_TEST_FLOOD / PA_CORE_DELAY_FACTOR + 2*PA_TEST_FLOOD;
 
-	test_pa_prand_push_prefix(&p1_1);
+	fr_md5_push_prefix(&p1_1);
 	sput_fail_unless(!to_run(2), "Run two timeouts (remains the new cp apply and aaa)");
 
 	sput_fail_unless(to_check(&pa.core.aaa.to, now_time + PA_TEST_FLOOD_LL / PA_CORE_DELAY_FACTOR), "Correct aaa timeout");
@@ -296,7 +213,7 @@ void test_pa_ipv4()
 	hnetd_time_t when;
 	int res;
 
-	mask_random = true;
+	fr_mask_md5 = true;
 
 	uloop_init();
 	pa_init(&pa, NULL);
@@ -326,7 +243,7 @@ void test_pa_ipv4()
 
 	sput_fail_unless(!prefix_cmp(&ldp->dp.prefix, &pa.local.conf.v4_prefix), "Correct v4 prefix");
 
-	test_pa_prand_push_prefix(&pv4_1);
+	fr_md5_push_prefix(&pv4_1);
 	sput_fail_unless(to_getfirst() == &pa.core.paa.to && !to_run(1), "Run paa");
 
 	cp = list_first_entry(&pa.data.cps, struct pa_cp, le);
@@ -336,7 +253,7 @@ void test_pa_ipv4()
 		sput_fail_unless(!prefix_cmp(&pv4_1, &cp->prefix), "Correct cp prefix");
 	}
 
-	test_pa_prand_push_prefix(&pv4_1_1);
+	fr_md5_push_prefix(&pv4_1_1);
 	sput_fail_unless(to_getfirst() == &pa.core.aaa.to && !to_run(1), "Run aaa");
 	sput_fail_unless(_pa_cpl(cp)->laa, "Created laa");
 	if(_pa_cpl(cp)->laa)
@@ -412,7 +329,7 @@ void test_pa_network()
 	preferred = now_time + 50000;
 	iface.user->cb_prefix(iface.user, IFNAME1, &p1, NULL, valid , preferred, NULL, 0);
 
-	test_pa_prand_push_prefix(&p1_1);
+	fr_md5_push_prefix(&p1_1);
 	res = to_run(6);
 	sput_fail_unless(!res && !to_getfirst(), "Run and apply everything");
 
@@ -442,7 +359,7 @@ void test_pa_network()
 	ap = pa_ap_get(&pa.data, &p1_1, &rid_lower, true);
 	pa_ap_set_priority(ap, PA_PRIORITY_AUTO_MAX);
 	pa_ap_notify(&pa.data, ap);
-	test_pa_prand_push_prefix(&p1_1); /* This one should be ignored and the second one should be chosen */
+	fr_md5_push_prefix(&p1_1); /* This one should be ignored and the second one should be chosen */
 	res = to_run(1);
 	sput_fail_unless(!res, "Run paa");
 	sput_fail_if(list_empty(&pa.data.cps), "The cp remains");
@@ -470,7 +387,7 @@ void test_pa_network()
 	/* Adding an excluded prefix, which should remove the current cp and address */
 	iface.user->cb_prefix(iface.user, IFNAME1, &p1, &p1_excluded, valid, preferred, NULL, 0);
 	/* That should trigger paa only */
-	test_pa_prand_push_prefix(&p1_2); // <-this one is in excluded
+	fr_md5_push_prefix(&p1_2); // <-this one is in excluded
 	sput_fail_unless(to_getfirst() == &pa.core.paa.to, "Paa is to be run");
 	res = to_run(1);
 	sput_fail_unless(!res, "Run paa");
