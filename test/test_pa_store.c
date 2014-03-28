@@ -12,45 +12,20 @@
 static struct pa pa;
 #define store (&pa.store)
 
-static struct prefix p1 = {
-		.prefix = { .s6_addr = {
-				0x20, 0x01, 0x20, 0x01, 0xff, 0xff, 0xff}},
-		.plen = 56 };
-static struct prefix p2 = {
-		.prefix = { .s6_addr = {
-				0x20, 0x01, 0x20, 0x02, 0xff, 0xff, 0xff}},
-		.plen = 56 };
-static struct prefix p1_20 = {
-		.prefix = { .s6_addr = {
-				0x20, 0x01, 0x20, 0x01, 0xff, 0xff, 0xff, 0x20}},
-		.plen = 64 };
-static struct prefix p1_21 = {
-		.prefix = { .s6_addr = {
-				0x20, 0x01, 0x20, 0x01, 0xff, 0xff, 0xff, 0x21}},
-		.plen = 64 };
-static struct prefix p2_20 = {
-		.prefix = { .s6_addr = {
-				0x20, 0x01, 0x20, 0x02, 0xff, 0xff, 0xff, 0x20}},
-		.plen = 64 };
+#include "prefixes_library.h"
 
-static struct prefix p_ula = {
-		.prefix = { .s6_addr = {
-				0xfd, 0x00, 0xde, 0xad}},
-		.plen = 56 };
-static struct prefix p_ula2 = {
-		.prefix = { .s6_addr = {
-				0xfd, 0x00, 0xde, 0xae}},
-		.plen = 56 };
-static struct prefix p_global = {
-		.prefix = { .s6_addr = {
-				0x20, 0x01, 0xde, 0xad}},
-		.plen = 56 };
+static struct prefix p1 = PL_P1;
+static struct prefix p2 = PL_P2;
+static struct prefix p1_20 = PL_P1_01;
+static struct prefix p1_21 = PL_P1_02;
+static struct prefix p2_20 = PL_P2_01;
+static struct prefix p_ula = PL_ULA1;
+static struct prefix p_ula2 = PL_ULA2;
+static struct prefix p_global = PL_P3;
 
 static struct pa_rid rid = { .id = {0x20} };
 
 struct pa_iface *if1, *if2;
-#define IFNAME_1 "iface0"
-#define IFNAME_2 "iface1"
 #define TEST_PAS_FILE "/tmp/hnetd_pa.db"
 
 static void test_pa_file_reset() {
@@ -65,8 +40,8 @@ static void test_pa_store_init() {
 	pa_store_init(store);
 	pa_store_start(store);
 
-	if1 = pa_iface_get(&pa.data, IFNAME_1, true);
-	if2 = pa_iface_get(&pa.data, IFNAME_2, true);
+	if1 = pa_iface_get(&pa.data, PL_IFNAME1, true);
+	if2 = pa_iface_get(&pa.data, PL_IFNAME2, true);
 	pa_iface_notify(&pa.data, if1);
 	pa_iface_notify(&pa.data, if2);
 }

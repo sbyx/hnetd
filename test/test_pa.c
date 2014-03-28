@@ -25,15 +25,15 @@ struct pa pa;
 
 /***************************************************** Mask for pa.c */
 
+#include "prefixes_library.h"
+
 static struct pa_test_iface {
 	struct iface_user *user;
 	struct iface iface;
 } iface = { .user = NULL,
 		.iface = { .eui64_addr = {
-				.s6_addr = { 0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00,
-						0x00,0x00, 0x00,0x00,  0xff,0xff, 0xff,0xff }
+				.s6_addr = { 0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00, PL_EUI64 }
 		} } };
-
 
 #define iface_register_user   pa_test_iface_register_user
 #define iface_unregister_user pa_test_iface_unregister_user
@@ -67,68 +67,21 @@ static struct pa_rid rid = { .id = {0x20} };
 static struct pa_rid rid_higher = { .id = {0x30} };
 static struct pa_rid rid_lower = { .id = {0x10} };
 
-static struct prefix p1 = {
-		.prefix = { .s6_addr = {
-				0x20, 0x01, 0x20, 0x01, 0xff, 0xff, 0xff}},
-		.plen = 56 };
+static struct prefix p1 = PL_P1;
+static struct prefix p1_1 = PL_P1_01;
+static struct prefix p1_2 = PL_P1_02;
 
-static struct prefix p1_1 = {
-		.prefix = { .s6_addr = {
-				0x20,0x01, 0x20,0x01,  0xff,0xff, 0xff,0x01}},
-		.plen = 64 };
-static struct prefix p1_2 = {
-		.prefix = { .s6_addr = {
-				0x20,0x01, 0x20,0x01,  0xff,0xff, 0xff,0x02}},
-		.plen = 64 };
+static struct prefix p2 = PL_P2;
+static struct prefix p2_1 = PL_P2_01;
 
-static struct prefix p2 = {
-		.prefix = { .s6_addr = {
-				0x20, 0x01, 0x20, 0x02, 0xff, 0xff, 0xff}},
-		.plen = 56 };
-
-static struct prefix p2_1 = {
-		.prefix = { .s6_addr = {
-				0x20,0x01, 0x20,0x02,  0xff,0xff, 0xff,0x01}},
-		.plen = 64 };
-
-
-static struct prefix p1_excluded = {
-		.prefix = { .s6_addr = {
-				0x20,0x01, 0x20,0x01,  0xff,0xff, 0xff,0x00}},
-		.plen = 60 };
-
-static struct prefix p1_1_addr = {
-		.prefix = { .s6_addr = {
-				0x20,0x01, 0x20,0x01,  0xff,0xff, 0xff,0x01,
-				0x00,0x00, 0x00,0x00,  0xff,0xff, 0xff,0xff}},
-		.plen = 128 };
-static struct prefix p1_2_addr = {
-		.prefix = { .s6_addr = {
-				0x20,0x01, 0x20,0x01,  0xff,0xff, 0xff,0x02,
-				0x00,0x00, 0x00,0x00,  0xff,0xff, 0xff,0xff}},
-		.plen = 128 };
-
-static struct prefix pv4_1 = {
-		.prefix = { .s6_addr = {
-				0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00,
-				0x00,0x00, 0xff,0xff,  0x0a,0x00, 0x01,0x01 }},
-		.plen = 120 };
-
-static struct prefix pv4_1_1 = {
-		.prefix = { .s6_addr = {
-				0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00,
-				0x00,0x00, 0xff,0xff,  0x0a,0x00, 0x01,0x01 }},
-		.plen = 128 };
+static struct prefix p1_excluded = PL_P1_0;
+static struct prefix p1_1_addr = PL_P1_01A;
+static struct prefix p1_2_addr = PL_P1_02A;
+static struct prefix pv4_1 = PL_PV4_1;
+static struct prefix pv4_1_1 = PL_PV4_1_1;
 
 #define PA_TEST_FLOOD 1000
 #define PA_TEST_FLOOD_LL 100
-
-#define IFNAME1 "ifname.1"
-#define IFNAME2 "ifname.2"
-
-#define DHCP_DATA "dhcpdata"
-#define DHCP_LEN 9
-
 
 /***************************************************** Tests */
 void test_pa_initial()
@@ -163,12 +116,12 @@ void test_pa_initial()
         set_hnetd_time(hnetd_time() + 10000);
 
 	/* Create a new internal interface */
-	iface.user->cb_intiface(iface.user, IFNAME1, true);
+	iface.user->cb_intiface(iface.user, PL_IFNAME1, true);
 	sput_fail_unless(to_check(&pa.core.paa.to, now_time + PA_TEST_FLOOD / PA_CORE_DELAY_FACTOR), "Correct paa timeout");
 	sput_fail_unless(!to_run(1) && !to_getfirst(), "Run one timeouts");
 
 	/* Create a new ldp */
-	iface.user->cb_prefix(iface.user, IFNAME1, &p1, NULL, now_time + 100000, now_time + 50000, NULL, 0);
+	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, now_time + 100000, now_time + 50000, NULL, 0);
 	sput_fail_unless(to_check(&pa.core.paa.to, now_time + PA_TEST_FLOOD / PA_CORE_DELAY_FACTOR), "Correct paa timeout");
 	sput_fail_unless(to_check(&pa.local.timeout, now_time + PA_LOCAL_MIN_DELAY), "Correct paa timeout");
 	when = now_time + PA_TEST_FLOOD / PA_CORE_DELAY_FACTOR + 2*PA_TEST_FLOOD;
@@ -195,9 +148,9 @@ void test_pa_initial()
 	to_run(100);
 
 	/* Removing dp */
-	iface.user->cb_prefix(iface.user, IFNAME1, &p1, NULL, 0, 0, NULL, 0);
+	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, 0, 0, NULL, 0);
 	sput_fail_unless(!to_run(2) && !to_getfirst(), "Run paa and local");
-	iface.user->cb_intiface(iface.user, IFNAME1, false);
+	iface.user->cb_intiface(iface.user, PL_IFNAME1, false);
 	sput_fail_unless(!to_run(1) && !to_getfirst(), "Run paa");
 
 	pa_stop(&pa);
@@ -225,8 +178,8 @@ void test_pa_ipv4()
 	pa_flood_notify(&pa.data);
 	pa_start(&pa);
 
-	iface.user->cb_intiface(iface.user, IFNAME1, true);
-	iface.user->cb_ext4data(iface.user, IFNAME2, DHCP_DATA, DHCP_LEN);
+	iface.user->cb_intiface(iface.user, PL_IFNAME1, true);
+	iface.user->cb_ext4data(iface.user, PL_IFNAME2, PL_DHCP_DATA, PL_DHCP_LEN);
 
 	sput_fail_unless(to_check(&pa.local.timeout, now_time + PA_TEST_FLOOD), "Correct local timeout");
 	when = now_time + PA_TEST_FLOOD + 2*PA_TEST_FLOOD;
@@ -266,10 +219,10 @@ void test_pa_ipv4()
 	sput_fail_unless(to_getfirst() == &pa.local.timeout && !to_run(1), "Renew");
 
 	/* Test if the same address is used again */
-	iface.user->cb_intiface(iface.user, IFNAME1, false);
+	iface.user->cb_intiface(iface.user, PL_IFNAME1, false);
 	res = to_run(1);
 	sput_fail_unless(!res, "Run paa");
-	iface.user->cb_intiface(iface.user, IFNAME1, true);
+	iface.user->cb_intiface(iface.user, PL_IFNAME1, true);
 	res = to_run(2);
 	sput_fail_unless(!res, "Run paa and laa");
 
@@ -286,7 +239,7 @@ void test_pa_ipv4()
 	res = to_run(2);
 	sput_fail_unless(!res, "Apply cp and laa");
 
-	iface.user->cb_ext4data(iface.user, IFNAME2, NULL, 0);
+	iface.user->cb_ext4data(iface.user, PL_IFNAME2, NULL, 0);
 	res = to_run(2);
 	sput_fail_unless(!res && !to_getfirst(), "Remove IPv4 connectivity");
 
@@ -324,17 +277,17 @@ void test_pa_network()
 	pa_flood_notify(&pa.data);
 	pa_start(&pa);
 
-	iface.user->cb_intiface(iface.user, IFNAME1, true);
+	iface.user->cb_intiface(iface.user, PL_IFNAME1, true);
 	valid = now_time + 100000;
 	preferred = now_time + 50000;
-	iface.user->cb_prefix(iface.user, IFNAME1, &p1, NULL, valid , preferred, NULL, 0);
+	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, valid , preferred, NULL, 0);
 
 	fr_md5_push_prefix(&p1_1);
 	res = to_run(6);
 	sput_fail_unless(!res && !to_getfirst(), "Run and apply everything");
 
 	cp = list_first_entry(&pa.data.cps, struct pa_cp, le);
-	test_pa_checkcpl(_pa_cpl(cp), &p1_1, &p1_1_addr.prefix, IFNAME1);
+	test_pa_checkcpl(_pa_cpl(cp), &p1_1, &p1_1_addr.prefix, PL_IFNAME1);
 
 	/* Lower ID, Lower priority */
 	ap = pa_ap_get(&pa.data, &p1_1, &rid_lower, true);
@@ -366,7 +319,7 @@ void test_pa_network()
 	res = to_run(3);
 	sput_fail_unless(!res && !to_getfirst(), "Run aaa and apply");
 	cp = list_first_entry(&pa.data.cps, struct pa_cp, le);
-	test_pa_checkcpl(_pa_cpl(cp), &p1_2, &p1_2_addr.prefix, IFNAME1);
+	test_pa_checkcpl(_pa_cpl(cp), &p1_2, &p1_2_addr.prefix, PL_IFNAME1);
 	pa_ap_todelete(ap);
 	pa_ap_notify(&pa.data, ap);
 	res = to_run(1);
@@ -374,7 +327,7 @@ void test_pa_network()
 
 	/* Now let's delete the address */
 	eaa = pa_eaa_get(&pa.data, &p1_2_addr.prefix, &rid_higher, true);
-	pa_eaa_set_iface(eaa, pa_iface_get(&pa.data, IFNAME1, true));
+	pa_eaa_set_iface(eaa, pa_iface_get(&pa.data, PL_IFNAME1, true));
 	pa_aa_notify(&pa.data, &eaa->aa);
 	res = to_run(2);
 	sput_fail_unless(!res && !to_getfirst(), "Run aaa and apply");
@@ -385,7 +338,7 @@ void test_pa_network()
 	sput_fail_unless(!res && !to_getfirst(), "Run aaa");
 
 	/* Adding an excluded prefix, which should remove the current cp and address */
-	iface.user->cb_prefix(iface.user, IFNAME1, &p1, &p1_excluded, valid, preferred, NULL, 0);
+	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, &p1_excluded, valid, preferred, NULL, 0);
 	/* That should trigger paa only */
 	fr_md5_push_prefix(&p1_2); // <-this one is in excluded
 	sput_fail_unless(to_getfirst() == &pa.core.paa.to, "Paa is to be run");
@@ -400,7 +353,7 @@ void test_pa_network()
 	sput_fail_unless(!res && !to_getfirst(), "No remaining timeout");
 
 	/* Let's remove the excluded */
-	iface.user->cb_prefix(iface.user, IFNAME1, &p1, NULL, valid, preferred, NULL, 0);
+	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, valid, preferred, NULL, 0);
 	/* paa is not run in this case */
 
 	/* Now let's make paa accept a prefix (using authority bit) */
@@ -415,7 +368,7 @@ void test_pa_network()
 	sput_fail_unless(!res, "Run paa");
 
 	/* Now that ap suddenly come to our interface ! */
-	pa_ap_set_iface(ap, pa_iface_get(&pa.data, IFNAME1, true));
+	pa_ap_set_iface(ap, pa_iface_get(&pa.data, PL_IFNAME1, true));
 	pa_ap_notify(&pa.data, ap);
 
 	//Running paa
@@ -444,12 +397,12 @@ void test_pa_network()
 	/* Now let someone else start advertising another dp */
 	edp = pa_edp_get(&pa.data, &p2, &rid_higher, true);
 	pa_dp_set_lifetime(&edp->dp, preferred, valid);
-	pa_dp_set_dhcp(&edp->dp, DHCP_DATA, DHCP_LEN);
+	pa_dp_set_dhcp(&edp->dp, PL_DHCP_DATA, PL_DHCP_LEN);
 	pa_dp_notify(&pa.data, &edp->dp);
 
 	ap = pa_ap_get(&pa.data, &p2_1, &rid_higher, true);
 	pa_ap_set_priority(ap, PA_PRIORITY_AUTO_MIN);
-	pa_ap_set_iface(ap, pa_iface_get(&pa.data, IFNAME1, true));
+	pa_ap_set_iface(ap, pa_iface_get(&pa.data, PL_IFNAME1, true));
 	pa_ap_notify(&pa.data, ap);
 
 	res = to_run(2);
@@ -481,7 +434,7 @@ void test_pa_network()
 	/* Now we are going to make the cp2 not advertised */
 	ap = pa_ap_get(&pa.data, &p2_1, &rid_higher, true);
 	pa_ap_set_priority(ap, PA_PRIORITY_AUTO_MIN);
-	pa_ap_set_iface(ap, pa_iface_get(&pa.data, IFNAME1, true));
+	pa_ap_set_iface(ap, pa_iface_get(&pa.data, PL_IFNAME1, true));
 	pa_ap_notify(&pa.data, ap);
 
 	/* The router stops from beeing designated and stops advertising cp2 */
