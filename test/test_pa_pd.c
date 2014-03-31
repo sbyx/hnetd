@@ -40,13 +40,23 @@ void iface_unregister_user(__unused struct iface_user *user) {}
 static struct pa pa;
 #define pd (&pa.pd)
 
+static struct pa_rid rid = { .id = {0x20} };
+
 struct test_lease {
 	struct pa_pd_lease lease;
 	int update_calls;
+	struct prefix deleted_prefix;
 } tl1, tl2;
 
 void test_update_cb(struct pa_pd_lease *lease) {
-	container_of(lease, struct test_lease, lease)->update_calls++;
+	struct pa_cpd *cpd;
+	struct test_lease *tl = container_of(lease, struct test_lease, lease);
+	tl->update_calls++;
+	pa_pd_for_each_cpd(cpd, lease) {
+		if(!cpd->cp.dp) {
+			prefix_cpy(&tl->deleted_prefix, &cpd->cp.prefix);
+		}
+	}
 }
 
 #define LEASE_ID_1 "lease_id_1"
@@ -76,9 +86,11 @@ void test_1()
 	struct prefix p1 = PL_P1;
 	struct prefix p1_01 = PL_P1_01;
 	struct prefix p1_04 = PL_P1_04;
+	struct prefix p1_10 = PL_P1_10;
 	struct prefix p2 = PL_P2;
 	struct prefix p2_01 = PL_P2_01;
 	struct prefix delegated;
+	struct pa_ap *ap;
 
 	//hnetd_time_t start = hnetd_time();
 	test_init_pa();
@@ -189,10 +201,70 @@ void test_1()
 	sput_fail_unless(list_empty(&ldp2->dp.lease_reqs), "No requests in dp");
 	sput_fail_unless(!list_empty(&tl1.lease.cpds), "There is a cpd");
 	cpd = list_first_entry(&tl1.lease.cpds, struct pa_cpd, lease_le);
+	delegated = p2_01;
+	delegated.plen = PA_PD_DFLT_MIN_LEN;
+	sput_fail_unless(!prefix_cmp(&delegated, &cpd->cp.prefix), "Correct delegated prefix");
 	fu_loop(2); //Apply callback and lease cb
 	sput_fail_unless(tl1.update_calls == 3, "Second lease update call");
+	sput_fail_unless(fu_next() == NULL, "No next schedule");
 
-	//todo: Dynamicaly unvalidate the used cp
+	/* Invalidate the first cpd with another ap */
+	ap = pa_ap_get(&pa.data, &p1_01, &rid, true);
+	pa_ap_set_priority(ap, PA_PRIORITY_AUTHORITY_MAX);
+	pa_ap_notify(&pa.data, ap);
+	fu_loop(1); //Lease cb that will destroy the cpd and schedule the pd algorithm
+	sput_fail_unless(fu_next() != NULL, "There is a next schedule");
+	sput_fail_unless(!list_empty(&tl1.lease.dp_reqs), "There is a request in lease");
+	sput_fail_unless(!list_empty(&ldp1->dp.lease_reqs), "There is a request in lease");
+	fr_md5_push(&p1_01);
+	fu_loop(1); //Execute algorithm. p1_01 should not be used. And p1_04 should be used instead.
+	sput_fail_unless(list_empty(&tl1.lease.dp_reqs), "No requests in lease");
+	sput_fail_unless(list_empty(&ldp1->dp.lease_reqs), "No requests in dp");
+	cpd = list_first_entry(&tl1.lease.cpds, struct pa_cpd, lease_le);
+	delegated = p1_04;
+	delegated.plen = PA_PD_DFLT_MIN_LEN;
+	sput_fail_unless(!prefix_cmp(&delegated, &cpd->cp.prefix), "Correct delegated prefix");
+	fu_loop(2); //Apply callback and update the lease
+	sput_fail_unless(fu_next() == NULL, "No next schedule");
+
+	/* Do a flappy dp */
+	pa_dp_todelete(&ldp1->dp);
+	pa_dp_notify(&pa.data, &ldp1->dp);
+	sput_fail_unless((ldp1 = pa_ldp_get(&pa.data, &p1, true)), "Created new ldp");
+	pa_ldp_set_iface(ldp1, iface1);
+	pa_dp_notify(&pa.data, &ldp1->dp);
+	sput_fail_unless(fu_next() != NULL, "There is a schedule");
+	fu_loop(1); //pd callback (adopting orphans)
+	sput_fail_unless(fu_next() != NULL, "There is a schedule");
+	fu_loop(1); //Lease callback
+	sput_fail_unless(fu_next() == NULL, "No next schedule");
+
+	/* Externally destroy the cpd */
+	cpd = list_first_entry(&tl1.lease.cpds, struct pa_cpd, lease_le);
+	pa_cp_todelete(&cpd->cp);
+	pa_cp_notify(&cpd->cp);
+	fr_md5_push(&p1_10);
+	fu_loop(1); //Execute pd
+	cpd = container_of(list_first_entry(&ldp1->dp.cps, struct pa_cp, dp_le), struct pa_cpd, cp);
+	delegated = p1_10;
+	delegated.plen = PA_PD_DFLT_MIN_LEN;
+	sput_fail_unless(!prefix_cmp(&delegated, &cpd->cp.prefix), "Correct delegated prefix");
+	fu_loop(2); //Apply callback and update the lease
+	sput_fail_unless(fu_next() == NULL, "No next schedule");
+
+	/* Remove one ldp */
+	pa_dp_todelete(&ldp1->dp);
+	pa_dp_notify(&pa.data, &ldp1->dp);
+	fu_loop(1); //Lease callback
+	sput_fail_unless(fu_next() == NULL, "No next schedule");
+
+	/* Terminate the lease */
+	pa_pd_lease_term(pd, &tl1.lease);
+	sput_fail_unless(fu_next() == NULL, "No next schedule");
+
+	/* Remove the dp */
+	pa_dp_todelete(&ldp2->dp);
+	sput_fail_unless(fu_next() == NULL, "No next schedule");
 
 	test_term_pa();
 }

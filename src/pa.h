@@ -29,6 +29,7 @@
 #define PA_PRIORITY_AUTHORITY_MIN    4
 #define PA_PRIORITY_AUTO_MIN         6
 #define PA_PRIORITY_DEFAULT          8
+#define PA_PRIORITY_PD               9
 #define PA_PRIORITY_AUTO_MAX         10
 #define PA_PRIORITY_AUTHORITY_MAX    12
 #define PA_PRIORITY_MAX              15

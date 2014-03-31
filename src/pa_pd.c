@@ -99,6 +99,7 @@ static int pa_pd_create_cpd(struct pa_pd_dp_req *req, struct prefix *p)
 
 	pa_cpd_set_lease(cpd, req->lease);
 	pa_cp_set_advertised(&cpd->cp, true);
+	pa_cp_set_priority(&cpd->cp, PA_PRIORITY_PD);
 	pa_cp_set_dp(&cpd->cp, req->dp);
 	pa_cp_set_apply_to(&cpd->cp, 2*pd_pa(pd)->data.flood.flooding_delay);
 	pa_pd_req_destroy(req);
@@ -279,6 +280,8 @@ static void pa_pd_dp_schedule(struct pa_pd *pd, struct pa_dp *dp)
 static void pa_pd_aps_cb(struct pa_data_user *user, struct pa_ap *ap, uint32_t flags)
 {
 	struct pa_dp *dp_cont, *dp;
+	struct pa_cpd *cpd, *cpd2;
+	struct pa_pd_lease *lease;
 	struct pa_pd *pd = container_of(user, struct pa_pd, data_user);
 	if(flags & PADF_AP_TODELETE) {
 		//aps are not associated with any dp. So this search is not very optimal.
@@ -294,6 +297,19 @@ static void pa_pd_aps_cb(struct pa_data_user *user, struct pa_ap *ap, uint32_t f
 		}
 		if(dp_cont)
 			pa_pd_dp_schedule(pd, dp_cont);
+	} else if (flags & PADF_AP_CREATED) {
+		//Check for collisions. That should delete cpd whenever an ap forbids its use
+		pa_pd_for_each_lease(lease, pd) {
+			pa_pd_for_each_cpd_safe(cpd, cpd2, lease) {
+				if((prefix_contains(&cpd->cp.prefix, &ap->prefix) ||
+						prefix_contains(&ap->prefix, &cpd->cp.prefix)) &&
+						(pa_precedence_apcp(ap, &cpd->cp) > 0)) {
+					pa_cp_set_applied(&cpd->cp, false);    //Unapplied if ever applied
+					pa_cp_set_advertised(&cpd->cp, false); //Do not advertise because invalid
+					pa_cp_notify(&cpd->cp);
+				}
+			}
+		}
 	}
 }
 
@@ -306,11 +322,11 @@ static void pa_pd_cps_cb(struct pa_data_user *user, struct pa_cp *cp, uint32_t f
 	struct pa_pd *pd = container_of(user, struct pa_pd, data_user);
 	if(flags & PADF_CP_TODELETE) { //Schedule dp if new space is made
 		if(cp->dp) {
-			dp_cont = cp->dp;
+			dp_cont = (list_empty(&cp->dp->lease_reqs))?NULL:cp->dp;
 		} else {
 			dp_cont = NULL;
 			pa_for_each_dp(dp, pd_p(pd, data)) {
-				L_DEBUG("Looking for the dp");
+				L_DEBUG("Looking for the dp (this is not optimal)");
 				if(!list_empty(&dp->lease_reqs) &&
 						prefix_contains(&dp->prefix, &cp->prefix) &&
 						!prefix_is_ipv4(&dp->prefix) &&
@@ -327,12 +343,14 @@ static void pa_pd_cps_cb(struct pa_data_user *user, struct pa_cp *cp, uint32_t f
 	if(!(cpd = _pa_cpd(cp)))
 		return;
 
-	if(flags & PADF_CP_TODELETE) {
-		if(cpd->lease && cpd->lease->update_cb) { // Not local delete (from pa_core for instance)
+	if((flags & PADF_CP_TODELETE) && cpd->lease && cpd->lease->update_cb) { //todo: Better do it with applied, maybe...
+		dp = cpd->cp.dp;
+		if(dp) {
 			pa_cp_set_dp(&cpd->cp, NULL);
-			cpd->lease->update_cb(cpd->lease);
-			//No need to delete, it is already deleting
+			pa_pd_req_create(cpd->lease, dp); // Add to unsatisfied
+			pa_pd_dp_schedule(pd, dp); // Schedule the dp for recomputation
 		}
+		cpd->lease->update_cb(cpd->lease);
 		return;
 	}
 
@@ -476,6 +494,18 @@ static void pa_pd_lease_cb(struct uloop_timeout *to)
 
 	L_INFO("Lease callback for "PA_PDL_L, PA_PDL_LA(lease));
 
+	pa_pd_for_each_cpd(cpd, lease) {
+		if(!cpd->cp.advertised) { //It is invalid and must be deleted
+			struct pa_dp *dp = cpd->cp.dp;
+			if(dp) {
+				pa_cp_set_dp(&cpd->cp, NULL);
+				pa_cp_notify(&cpd->cp);
+				pa_pd_req_create(cpd->lease, dp); // Add to unsatisfied
+				pa_pd_dp_schedule(lease->pd, dp); // Schedule the dp for recomputation
+			}
+		}
+	}
+
 	if(lease->update_cb)
 		lease->update_cb(lease);
 
@@ -484,8 +514,8 @@ static void pa_pd_lease_cb(struct uloop_timeout *to)
 		if(!cpd->cp.dp) {
 			pa_cp_todelete(&cpd->cp);
 			pa_cpd_set_lease(cpd, NULL); //Important to differentiate local deletes
-			pa_cp_notify(&cpd->cp);
 		}
+		pa_cp_notify(&cpd->cp); //Do for all because maybe dp was removed before
 	}
 }
 
