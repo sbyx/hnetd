@@ -197,7 +197,7 @@ void test_pa_ipv4()
 	sput_fail_unless(!prefix_cmp(&ldp->dp.prefix, &pa.local.conf.v4_prefix), "Correct v4 prefix");
 	sput_fail_unless(ldp->iface != NULL, "IPv4 must have an interface");
 	if(ldp->iface) {
-		sput_fail_unless(!strcmp(IFNAME2, ldp->iface->ifname), "Correct ipv4 interface");
+		sput_fail_unless(!strcmp(PL_IFNAME2, ldp->iface->ifname), "Correct ipv4 interface");
 	}
 
 	fr_md5_push_prefix(&pv4_1);
