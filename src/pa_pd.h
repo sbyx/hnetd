@@ -28,7 +28,6 @@ struct pa_pd {
 	bool started;
 	struct pa_pd_conf conf;        /* The current pa_pd conf */
 	struct uloop_timeout update;   /* Update leases with new dps or retry for other dps */
-	hnetd_time_t update_when;      /* Update time or 0 */
 };
 
 /* This structure keeps track of a given delegation lease. */

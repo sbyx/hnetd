@@ -14,10 +14,12 @@
 #define PA_PD_LEASE_CB_DELAY 400
 #define PA_PD_UPDATE_DELAY   100
 #define PA_PD_UPDATE_RATE_DELAY 15000 //Limit DP-wide update
-#define PA_PD_UPDATE_TOLERANCE  1000 //Do multiple things at the same uloop call if possible
+#define PA_PD_UPDATE_TOLERANCE  10000 //Do multiple things at the same uloop call if possible
 
 #define pd_pa(pd) (container_of(pd, struct pa, pd))
 #define pd_p(pd, field) (&(pd_pa(pd)->field))
+
+#define pa_pd_for_each_lease_safe(lease, l2, pa_pd) list_for_each_entry_safe(lease, l2, &(pa_pd)->leases, le)
 
 struct pa_pd_dp_req {
 	struct pa_dp *dp;
@@ -104,29 +106,21 @@ static int pa_pd_create_cpd(struct pa_pd_dp_req *req, struct prefix *p)
 	return 0;
 }
 
-/* Look for a prefix of given exact length */
-static int pa_pd_find_prefix_plen(struct pa_pd_dp_req *req, struct prefix *dst, uint8_t plen)
+/* Look for a prefix of seed's prefix length and using the seed as starting point */
+static int pa_pd_find_prefix_plen(struct pa_pd_dp_req *req, const struct prefix *seed,
+		struct prefix *dst)
 {
 	uint32_t rounds;
 	int res;
-	char *lease_id = req->lease->lease_id;
 	struct pa_dp *dp = req->dp;
 	struct pa_pd *pd = req->lease->pd;
-	struct prefix p_init;
+	prefix_cpy(dst, seed);
 
-	if(lease_id) {
-		if(prefix_prandom(lease_id, strlen(lease_id), 0, &dp->prefix, dst, plen))
-			goto err;
-	} else {
-		if(prefix_random(&dp->prefix, dst, plen))
-			goto err;
-	}
-
-	prefix_cpy(&p_init, dst); //Remember the first chosen
-
-	if(plen - dp->prefix.plen >= 32 || (rounds = 1 << (plen - dp->prefix.plen)) >= PA_PD_PREFIX_SEARCH_MAX_ROUNDS) {
+	if(seed->plen - dp->prefix.plen >= 32 || (rounds = 1 << (seed->plen - dp->prefix.plen)) >= PA_PD_PREFIX_SEARCH_MAX_ROUNDS) {
 		rounds = PA_PD_PREFIX_SEARCH_MAX_ROUNDS;
 	}
+
+	L_DEBUG("Trying with plen %d for a max of %u rounds", (int) seed->plen, (unsigned int) rounds);
 
 	const struct prefix *collision;
 	for(; rounds; rounds--) {
@@ -139,11 +133,11 @@ static int pa_pd_find_prefix_plen(struct pa_pd_dp_req *req, struct prefix *dst, 
 		} else { //prefix_contains(collision, new_prefix)
 			if((res = prefix_increment(dst, collision, dp->prefix.plen)) == -1)
 				goto err;
-			dst->plen = plen;
+			dst->plen = seed->plen;
 		}
 
 		//todo: That approach may be more clever that what is done in pa_core.
-		if(!prefix_cmp(dst, &p_init)) {
+		if(!prefix_cmp(dst, seed)) {
 			// We looped
 			return -1;
 		}
@@ -152,14 +146,16 @@ static int pa_pd_find_prefix_plen(struct pa_pd_dp_req *req, struct prefix *dst, 
 
 	return -1;
 err:
-	L_ERR("Critical error in random prefix search");
+	L_ERR("Critical error in prefix increment");
 	return -1;
 }
 
 static int pa_pd_find_prefix(struct pa_pd_dp_req *req, struct prefix *dst,
 		uint8_t min_len_override)
 {
+	struct prefix seed;
 	struct prefix try_prefix;
+	struct pa_pd_lease *lease = req->lease;
 	uint8_t min_len = req->min_len;
 	uint8_t max_len = req->max_len;
 
@@ -173,11 +169,22 @@ static int pa_pd_find_prefix(struct pa_pd_dp_req *req, struct prefix *dst,
 	uint8_t new_len;
 	bool best_found = false;
 
+	if(lease->lease_id) {
+		if(prefix_prandom(lease->lease_id, strlen(lease->lease_id), 0, &req->dp->prefix, &seed, max_len))
+			goto err;
+	} else {
+		if(prefix_random(&req->dp->prefix, &seed, max_len))
+			goto err;
+	}
+
+	L_DEBUG("Trying to find a pd in "PA_DP_L" len(%d:%d) seed(%s)",
+			PA_DP_LA(req->dp), (int) min_len, (int) max_len, ADDR_REPR(&seed.prefix));
+
 	/* todo: Maybe the dichotomy is not that good afterall. At least when we do all
 	 * requests from a given dp. Maybe using both approach may be good. */
-
 	while(true) {
-		if(!pa_pd_find_prefix_plen(req, &try_prefix, try_len)) {
+		seed.plen = try_len;
+		if(!pa_pd_find_prefix_plen(req, &seed, &try_prefix)) {
 			if(!best_found || try_prefix.plen < dst->plen) {
 				best_found = true;
 				prefix_cpy(dst, &try_prefix);
@@ -196,6 +203,10 @@ static int pa_pd_find_prefix(struct pa_pd_dp_req *req, struct prefix *dst,
 	}
 
 	return (best_found)?0:-1;
+
+err:
+	L_ERR("Critical error in random prefix search");
+	return -1;
 }
 
 //todo: I think those macros may be useful in other pa_foo files
@@ -233,7 +244,7 @@ static void pa_pd_lease_schedule(struct pa_pd *pd, struct pa_pd_lease *lease)
 static void pa_pd_schedule(struct pa_pd *pd)
 {
 	pa_pd_to_schedule(&pd->update, pd->started, PA_PD_UPDATE_DELAY,
-			L_DEBUG("Scheduling pd computation"));
+			L_DEBUG("Scheduling pd computation in %d ms", (int) PA_PD_UPDATE_DELAY));
 }
 
 static void pa_pd_dp_schedule(struct pa_pd *pd, struct pa_dp *dp)
@@ -256,10 +267,33 @@ static void pa_pd_dp_schedule(struct pa_pd *pd, struct pa_dp *dp)
 		if(!pd->started) {
 			pa_pd_schedule(pd);
 		} else if (!pd->update.pending) {
+			L_DEBUG("Scheduling pd computation in %d ms", (int) delay);
 			uloop_timeout_set(&pd->update, (int) delay);
 		} else if (uloop_timeout_remaining(&pd->update) > (int) (delay + PA_PD_UPDATE_TOLERANCE)) {
+			L_DEBUG("Scheduling pd computation in %d ms", (int) delay);
 			uloop_timeout_set(&pd->update, (int) delay);
 		}
+	}
+}
+
+static void pa_pd_aps_cb(struct pa_data_user *user, struct pa_ap *ap, uint32_t flags)
+{
+	struct pa_dp *dp_cont, *dp;
+	struct pa_pd *pd = container_of(user, struct pa_pd, data_user);
+	if(flags & PADF_AP_TODELETE) {
+		//aps are not associated with any dp. So this search is not very optimal.
+		dp_cont = NULL;
+		pa_for_each_dp(dp, pd_p(pd, data)) {
+			if(!list_empty(&dp->lease_reqs) &&
+					prefix_contains(&dp->prefix, &ap->prefix) &&
+					!prefix_is_ipv4(&dp->prefix) &&
+					!pa_dp_ignore(pd_pa(pd), dp)) {
+				dp_cont = dp;
+				break;
+			}
+		}
+		if(dp_cont)
+			pa_pd_dp_schedule(pd, dp_cont);
 	}
 }
 
@@ -268,12 +302,42 @@ static void pa_pd_dp_schedule(struct pa_pd *pd, struct pa_dp *dp)
 static void pa_pd_cps_cb(struct pa_data_user *user, struct pa_cp *cp, uint32_t flags)
 {
 	struct pa_cpd *cpd;
+	struct pa_dp *dp_cont, *dp;
+	struct pa_pd *pd = container_of(user, struct pa_pd, data_user);
+	if(flags & PADF_CP_TODELETE) { //Schedule dp if new space is made
+		if(cp->dp) {
+			dp_cont = cp->dp;
+		} else {
+			dp_cont = NULL;
+			pa_for_each_dp(dp, pd_p(pd, data)) {
+				L_DEBUG("Looking for the dp");
+				if(!list_empty(&dp->lease_reqs) &&
+						prefix_contains(&dp->prefix, &cp->prefix) &&
+						!prefix_is_ipv4(&dp->prefix) &&
+						!pa_dp_ignore(pd_pa(pd), dp)) {
+					dp_cont = dp;
+					break;
+				}
+			}
+		}
+		if(dp_cont)
+			pa_pd_dp_schedule(pd, dp_cont);
+	}
 
-	if(!(cpd = _pa_cpd(cp)) || (flags & PADF_CP_TODELETE))
+	if(!(cpd = _pa_cpd(cp)))
 		return;
 
+	if(flags & PADF_CP_TODELETE) {
+		if(cpd->lease && cpd->lease->update_cb) { // Not local delete (from pa_core for instance)
+			pa_cp_set_dp(&cpd->cp, NULL);
+			cpd->lease->update_cb(cpd->lease);
+			//No need to delete, it is already deleting
+		}
+		return;
+	}
+
 	if((flags & (PADF_CP_APPLIED)) || (cp->applied && (flags & PADF_CP_DP))) {
-		pa_pd_lease_schedule(container_of(user, struct pa_pd, data_user), cpd->lease);
+		pa_pd_lease_schedule(pd, cpd->lease);
 	}
 }
 
@@ -330,11 +394,14 @@ static void pa_pd_update_cb(struct uloop_timeout *to)
 	struct pa_pd_dp_req *req, *req2;
 	hnetd_time_t now = hnetd_time();
 
+	L_INFO("Updating prefix delegation");
+
 	/* Check for all dps if some wants to be updated */
 	pa_for_each_dp(dp, &pd_pa(pd)->data) {
 		if(prefix_is_ipv4(&dp->prefix))
 			continue;
 
+		L_DEBUG("Considering "PA_DP_L, PA_DP_LA(dp));
 		if(pa_dp_ignore(pd_pa(pd), dp)) {
 			/* Orphan all cpds and add them to unsatisfied */
 			pa_for_each_cp_in_dp_safe(cp, cp2, dp) {
@@ -351,6 +418,9 @@ static void pa_pd_update_cb(struct uloop_timeout *to)
 			/* Try to satisfy unsatisfied */
 			uint8_t min_len = 0;
 			pa_for_each_req_in_dp_safe(req, req2, dp) {
+				if(req->lease->just_created) //That will be done later
+					continue;
+
 				bool found = false;
 				/* find orphans */
 				pa_pd_for_each_cpd(cpd, req->lease) {
@@ -395,6 +465,8 @@ static void pa_pd_update_cb(struct uloop_timeout *to)
 			lease->just_created = false;
 		}
 	}
+
+	L_DEBUG("Updating prefix delegation done");
 }
 
 static void pa_pd_lease_cb(struct uloop_timeout *to)
@@ -411,6 +483,7 @@ static void pa_pd_lease_cb(struct uloop_timeout *to)
 	pa_pd_for_each_cpd_safe(cpd, cpd2, lease) {
 		if(!cpd->cp.dp) {
 			pa_cp_todelete(&cpd->cp);
+			pa_cpd_set_lease(cpd, NULL); //Important to differentiate local deletes
 			pa_cp_notify(&cpd->cp);
 		}
 	}
@@ -450,11 +523,11 @@ int pa_pd_lease_init(struct pa_pd *pd, struct pa_pd_lease *lease,
 	return 0;
 }
 
-void pa_pd_lease_term(__unused struct pa_pd *pd, struct pa_pd_lease *lease)
+void pa_pd_lease_term(struct pa_pd *pd, struct pa_pd_lease *lease)
 {
 	struct pa_cpd *cpd;
 	struct pa_pd_dp_req *req;
-	if(lease->cb_to.pending)
+	if(lease->cb_to.pending && pd->started)
 		uloop_timeout_cancel(&lease->cb_to);
 
 	L_INFO("Terminating "PA_PDL_L, PA_PDL_LA(lease));
@@ -464,6 +537,7 @@ void pa_pd_lease_term(__unused struct pa_pd *pd, struct pa_pd_lease *lease)
 		list_remove(&cpd->lease_le); // This is just for safety in case somebody look at it somewhere...
 		cpd->lease = NULL;
 		pa_cp_todelete(&cpd->cp);
+		pa_cpd_set_lease(cpd, NULL); //Important to differentiate local deletes
 		pa_cp_notify(&cpd->cp);
 	}
 
@@ -490,9 +564,12 @@ void pa_pd_init(struct pa_pd *pd, const struct pa_pd_conf *conf)
 	list_init_head(&pd->leases);
 	if(conf)
 		pd->conf = *conf;
+	else
+		pa_pd_conf_defaults(&pd->conf);
 	memset(&pd->data_user, 0, sizeof(struct pa_data_user));
 	pd->data_user.dps = pa_pd_dps_cb;
 	pd->data_user.cps = pa_pd_cps_cb;
+	pd->data_user.aps = pa_pd_aps_cb;
 	pd->update.cb = pa_pd_update_cb;
 	pd->update.pending = false;
 }
@@ -527,10 +604,10 @@ void pa_pd_stop(struct pa_pd *pd)
 void pa_pd_term(struct pa_pd *pd)
 {
 	L_NOTICE("Terminating pa_pd");
-	struct pa_pd_lease *lease;
+	struct pa_pd_lease *lease, *lease2;
 	pa_pd_stop(pd);
 
-	pa_pd_for_each_lease(lease, pd) {
+	pa_pd_for_each_lease_safe(lease, lease2, pd) {
 		pa_pd_lease_term(pd, lease);
 	}
 }

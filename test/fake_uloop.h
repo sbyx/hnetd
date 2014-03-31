@@ -44,6 +44,7 @@
 #define uloop_end() do { _fu_loop_ended = true; } while(0)
 #define uloop_timeout_set fu_timeout_set
 #define uloop_timeout_cancel fu_timeout_cancel
+#define uloop_timeout_remaining(to) (int)((to)->pending?(_to_time(&(to)->time) - _fu_time):-1)
 
 static hnetd_time_t _fu_time;
 LIST_HEAD(timeouts);
