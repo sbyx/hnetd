@@ -39,6 +39,10 @@ proto_hnet_setup() {
     [ -n "$dhcpv4_clientid" ] && json_add_string clientid "$dhcpv4_clientid"
     json_add_string iface6rd "${interface}_6rd"
 
+    # Don't delegate 6rd
+    json_add_boolean delegate 0
+    json_add_string zone6rd wan
+
     json_close_object
     ubus call network add_dynamic "$(json_dump)"
 
@@ -48,6 +52,7 @@ proto_hnet_setup() {
     json_add_string proto dhcpv6
     [ -n "$dhcpv6_clientid" ] && json_add_string clientid "$dhcpv6_clientid"
     json_add_string iface_dslite "${interface}_dslite"
+    json_add_string zone_dslite wan
 
     # Require PD, not only NA/SLAAC
     json_add_string forceprefix 1
