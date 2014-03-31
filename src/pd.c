@@ -38,7 +38,7 @@ struct pd_handle {
 // TCP transmission has ended, either because of success or timeout or other error
 static void pd_handle_done(struct ustream *s)
 {
-	struct pd_handle *c = container_of(s, struct pd_handle, fd);
+	struct pd_handle *c = container_of(s, struct pd_handle, fd.stream);
 
 	if (c->established)
 		pa_pd_lease_term(c->pd->pa_pd, &c->lease);
@@ -105,7 +105,7 @@ static void pd_handle_update(struct pa_pd_lease *lease)
 // More data was received from TCP connection
 static void pd_handle_data(struct ustream *s, __unused int bytes_new)
 {
-	struct pd_handle *c = container_of(s, struct pd_handle, fd);
+	struct pd_handle *c = container_of(s, struct pd_handle, fd.stream);
 	int pending;
 	char *data = ustream_get_read_buf(s, &pending);
 	char *end = memmem(data, pending, "\n\n", 2);
