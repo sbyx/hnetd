@@ -12,18 +12,14 @@
 #include "sput.h"
 #include "smock.h"
 #include "pa_data.h"
+#include "prefixes_library.h"
 
 static struct pa_data _data;
 #define data (&_data)
 
-static struct prefix p1 = {
-		.prefix = { .s6_addr = {
-				0x20, 0x01, 0x20, 0x01, 0xff, 0xff, 0xff}},
-		.plen = 56 };
-static struct prefix p1_1 = {
-		.prefix = { .s6_addr = {
-				0x20, 0x01, 0x20, 0x01, 0xff, 0xff, 0xff, 0x10}},
-		.plen = 60 };
+static struct prefix p1 = PL_P1;
+static struct prefix p1_1 = PL_P1_01;
+static struct prefix p1_2 = PL_P1_02;
 
 static struct pa_rid ridnull = { .id = {0} };
 static struct pa_rid rid1 = { .id = {0x20} };
@@ -50,10 +46,10 @@ static struct pa_rid rid2 = { .id = {0x30} };
 
 static uint8_t last_cb;
 static uint32_t last_flags;
+bool allow_multiple_cb = false;
 
 #define padt_cb(cb, flags) do {\
-	sput_fail_unless(!last_cb, "No previous unchecked callback"); \
-	printf("Set flags %x\n", flags); \
+	sput_fail_unless(allow_multiple_cb || !last_cb, "No previous unchecked callback"); \
 	last_cb = cb; \
 	last_flags = flags; } while(0)
 
@@ -107,7 +103,6 @@ static void padt_check_cb(uint8_t callback, uint32_t flags)
 {
 	sput_fail_unless((callback) == last_cb, "padt_check_cb correct function");
 	sput_fail_unless((flags) == last_flags, "padt_check_cb correct flags");
-	printf("Check flags %x %x\n", last_flags, flags);
 	last_cb = 0;
 	last_flags = 0;
 }
@@ -314,30 +309,30 @@ void pa_data_test_dp()
 {
 	struct pa_dp *dp;
 	struct pa_ldp *ldp, *ldp_i;
-	ldp = pa_ldp_get(data, &p1_1, false);
+	ldp = pa_ldp_get(data, &p1, false);
 	sput_fail_if(ldp, "Do not create");
 
-	ldp = pa_ldp_get(data, &p1_1, true);
+	ldp = pa_ldp_get(data, &p1, true);
 	pa_dp_notify(data, &ldp->dp);
 	padt_check_cb(PADT_CB_DPS, PADF_DP_CREATED);
-	padt_check_dp(&ldp->dp, &p1_1, 0, 0, 0, NULL, true);
+	padt_check_dp(&ldp->dp, &p1, 0, 0, 0, NULL, true);
 
 	pa_dp_set_lifetime(&ldp->dp, 100, 1000);
 	pa_dp_notify(data, &ldp->dp);
 	padt_check_cb(PADT_CB_DPS, PADF_DP_LIFETIME);
-	padt_check_dp(&ldp->dp, &p1_1, 1000, 100, 0, NULL, true);
+	padt_check_dp(&ldp->dp, &p1, 1000, 100, 0, NULL, true);
 
 	pa_dp_set_dhcp(&ldp->dp, DHCP_DATA, DHCP_LEN);
 	pa_dp_notify(data, &ldp->dp);
 	padt_check_cb(PADT_CB_DPS, PADF_DP_DHCP);
-	padt_check_dp(&ldp->dp, &p1_1, 1000, 100, DHCP_LEN, DHCP_DATA, true);
+	padt_check_dp(&ldp->dp, &p1, 1000, 100, DHCP_LEN, DHCP_DATA, true);
 	padt_check_ldp(ldp, NULL, NULL);
 
 	struct pa_iface *iface = pa_iface_get(data, IFNAME1, true);
 	pa_ldp_set_iface(ldp, iface);
 	pa_dp_notify(data, &ldp->dp);
 	padt_check_cb(PADT_CB_DPS, PADF_LDP_IFACE);
-	padt_check_dp(&ldp->dp, &p1_1, 1000, 100, DHCP_LEN, DHCP_DATA, true);
+	padt_check_dp(&ldp->dp, &p1, 1000, 100, DHCP_LEN, DHCP_DATA, true);
 	padt_check_ldp(ldp, iface, NULL);
 
 	pa_for_each_ldp_in_iface(ldp_i, iface) {
@@ -347,24 +342,24 @@ void pa_data_test_dp()
 	pa_ldp_set_excluded(ldp, &p1_1);
 	pa_dp_notify(data, &ldp->dp);
 	padt_check_cb(PADT_CB_DPS, PADF_LDP_EXCLUDED);
-	padt_check_dp(&ldp->dp, &p1_1, 1000, 100, DHCP_LEN, DHCP_DATA, true);
+	padt_check_dp(&ldp->dp, &p1, 1000, 100, DHCP_LEN, DHCP_DATA, true);
 	padt_check_ldp(ldp, iface, &p1_1);
 
 	pa_ldp_set_iface(ldp, NULL);
 	pa_ldp_set_excluded(ldp, NULL);
 	pa_dp_notify(data, &ldp->dp);
 	padt_check_cb(PADT_CB_DPS, PADF_LDP_EXCLUDED | PADF_LDP_IFACE);
-	padt_check_dp(&ldp->dp, &p1_1, 1000, 100, DHCP_LEN, DHCP_DATA, true);
+	padt_check_dp(&ldp->dp, &p1, 1000, 100, DHCP_LEN, DHCP_DATA, true);
 	padt_check_ldp(ldp, NULL, NULL);
 
 	struct pa_edp *edp;
-	edp = pa_edp_get(data, &p1_1, &rid1, false);
+	edp = pa_edp_get(data, &p1_2, &rid1, false);
 	sput_fail_if(edp, "Do not create");
 
-	edp = pa_edp_get(data, &p1_1, &rid1, true);
+	edp = pa_edp_get(data, &p1_2, &rid1, true);
 	pa_dp_notify(data, &edp->dp);
-	padt_check_cb(PADT_CB_DPS, PADF_DP_CREATED);
-	padt_check_dp(&edp->dp, &p1_1, 0, 0, 0, NULL, false);
+	padt_check_cb(PADT_CB_DPS, PADF_DP_CREATED | PADF_DP_IGNORE);
+	padt_check_dp(&edp->dp, &p1_2, 0, 0, 0, NULL, false);
 	padt_check_edp(edp, &rid1);
 
 	pa_for_each_dp(dp, data) {
@@ -374,15 +369,18 @@ void pa_data_test_dp()
 			sput_fail_unless(dp == &edp->dp, "Distant one");
 	}
 
-	pa_dp_todelete(&edp->dp);
-	pa_dp_notify(data, &edp->dp);
-	padt_check_cb(PADT_CB_DPS, PADF_DP_TODELETE);
+	pa_dp_todelete(&ldp->dp);
+	allow_multiple_cb = true;
+	pa_dp_notify(data, &ldp->dp);
+	allow_multiple_cb = false;
+	/* catch the edp ignore notify */
+	padt_check_cb(PADT_CB_DPS, PADF_DP_IGNORE);
 	pa_for_each_dp(dp, data) {
-		sput_fail_unless(dp == &ldp->dp, "Local one");
+		sput_fail_unless(dp == &edp->dp, "External one");
 	}
 
-	pa_dp_todelete(&ldp->dp);
-	pa_dp_notify(data, &ldp->dp);
+	pa_dp_todelete(&edp->dp);
+	pa_dp_notify(data, &edp->dp);
 	padt_check_cb(PADT_CB_DPS, PADF_DP_TODELETE);
 	pa_for_each_dp(dp, data) {
 		sput_fail_unless(1, "No dp remaining");

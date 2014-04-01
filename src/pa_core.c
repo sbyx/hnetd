@@ -376,7 +376,7 @@ void paa_algo_do(struct pa_core *core)
 
 	pa_for_each_dp(dp, data) {
 
-		if(pa_dp_ignore(core_pa(core), dp))
+		if(dp->ignore)
 			continue;
 
 		L_DEBUG("Considering "PA_DP_L, PA_DP_LA(dp));
@@ -669,7 +669,7 @@ static void __pad_cb_dps(struct pa_data_user *user, struct pa_dp *dp, uint32_t f
 	if(flags & (PADF_DP_CREATED | PADF_DP_TODELETE))
 		__pa_paa_schedule(core);
 
-	if((flags & PADF_DP_CREATED) && !pa_dp_ignore(core_pa(core), dp)) {
+	if((flags & PADF_DP_CREATED) && !dp->ignore) {
 		/* Remove orphans if possible */
 		pa_for_each_cp(cp, core_p(core, data)) {
 			if((cp->type == PA_CPT_L) && !cp->dp && prefix_contains(&dp->prefix, &cp->prefix)) {

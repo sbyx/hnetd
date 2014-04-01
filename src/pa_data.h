@@ -110,6 +110,13 @@ struct pa_dp {
 	struct list_head cps;         /* cps that are associated to that dp */
 	bool local;                   /* Whether it is ldp or edp */
 
+	/* The ignore flag is introduced in order to avoid recomputing it everytime
+	 * we need. It is updated everytime a dp is created or deleted, and if changed,
+	 * it is notify after the created or deleted dp is notified.
+	 * It must not be changed by hand.
+	 * And a dp must not be created or removed during such notify. */
+	bool ignore;
+
 /* Used by pa_dp */
 	struct list_head lease_reqs;  /* List of unsatisfied lease requests for that dp */
 	/* If true, the pa_dp algorithm will try to assign prefixes to missing leases. */
@@ -123,6 +130,7 @@ struct pa_dp {
 #define PADF_DP_DHCP      PADF_ALL_DHCP
 #define PADF_DP_LIFETIME  0x0100
 #define PADF_LDP_EXCLUDED 0x0200
+#define PADF_DP_IGNORE    0x0400            /* When a dp ignore flag changes */
 	uint32_t __flags;
 
 #define PA_DP_L			"dp %s(local=%d)"

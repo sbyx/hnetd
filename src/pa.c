@@ -281,21 +281,3 @@ bool pa_cp_isvalid(struct pa *pa, struct pa_cp *cp)
 	return true;
 }
 
-bool pa_dp_ignore(struct pa *pa, struct pa_dp *dp)
-{
-	struct pa_dp *dp2;
-	bool seen = false;
-	pa_for_each_dp(dp2, &pa->data) {
-		if(dp2 == dp) {
-			seen = true;
-			continue;
-		}
-
-		if((!seen && !prefix_cmp(&dp->prefix, &dp2->prefix))
-				|| prefix_contains(&dp->prefix, &dp2->prefix))
-			return true;
-	}
-	return false;
-}
-
-

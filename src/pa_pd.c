@@ -283,14 +283,14 @@ static void pa_pd_aps_cb(struct pa_data_user *user, struct pa_ap *ap, uint32_t f
 	struct pa_cpd *cpd, *cpd2;
 	struct pa_pd_lease *lease;
 	struct pa_pd *pd = container_of(user, struct pa_pd, data_user);
-	if(flags & PADF_AP_TODELETE) {
+	if(flags & PADF_AP_TODELETE) { //More space is available in this dp
 		//aps are not associated with any dp. So this search is not very optimal.
 		dp_cont = NULL;
 		pa_for_each_dp(dp, pd_p(pd, data)) {
 			if(!list_empty(&dp->lease_reqs) &&
 					prefix_contains(&dp->prefix, &ap->prefix) &&
 					!prefix_is_ipv4(&dp->prefix) &&
-					!pa_dp_ignore(pd_pa(pd), dp)) {
+					!dp->ignore) {
 				dp_cont = dp;
 				break;
 			}
@@ -330,7 +330,7 @@ static void pa_pd_cps_cb(struct pa_data_user *user, struct pa_cp *cp, uint32_t f
 				if(!list_empty(&dp->lease_reqs) &&
 						prefix_contains(&dp->prefix, &cp->prefix) &&
 						!prefix_is_ipv4(&dp->prefix) &&
-						!pa_dp_ignore(pd_pa(pd), dp)) {
+						!dp->ignore) {
 					dp_cont = dp;
 					break;
 				}
@@ -420,7 +420,7 @@ static void pa_pd_update_cb(struct uloop_timeout *to)
 			continue;
 
 		L_DEBUG("Considering "PA_DP_L, PA_DP_LA(dp));
-		if(pa_dp_ignore(pd_pa(pd), dp)) {
+		if(dp->ignore) {
 			/* Orphan all cpds and add them to unsatisfied */
 			pa_for_each_cp_in_dp_safe(cp, cp2, dp) {
 				if((cpd = _pa_cpd(cp))) {
@@ -471,7 +471,7 @@ static void pa_pd_update_cb(struct uloop_timeout *to)
 		if(lease->just_created) {
 			pa_for_each_req_in_lease_safe(req, req2, lease) {
 				struct prefix p;
-				if(!pa_dp_ignore(pd_pa(pd), req->dp) && !pa_pd_find_prefix(req, &p, 0)) {
+				if(!req->dp->ignore && !pa_pd_find_prefix(req, &p, 0)) {
 					pa_pd_create_cpd(req, &p);
 				}
 			}

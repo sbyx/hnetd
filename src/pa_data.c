@@ -18,6 +18,10 @@
 #include <stdio.h>
 #include <inttypes.h>
 
+/* We can decide what dp to ignore */
+#define PAD_DP_IGNORE_INCLUDED   //Makes sense to avoid prefix delegated by 7084
+//#define PAD_DP_IGNORE_INCLUDER //Makes sense with prefix coloring
+
 #define PA_P_ALLOC(pa_struct) \
 	do { \
 		pa_struct = malloc(sizeof(*pa_struct)); \
@@ -104,12 +108,43 @@ static int pa_data_avl_prefix_cmp (const void *k1, const void *k2,
 	return (i>0)?1:-1;
 }
 
+static bool __pad_dp_compute_ignore(struct pa_data *data, struct pa_dp *dp)
+{
+	struct pa_dp *dp2;
+	bool seen = false;
+	pa_for_each_dp(dp2, data) {
+		if(dp2 == dp) {
+			seen = true;
+			continue;
+		}
+
+		if(dp2->__flags & PADF_DP_TODELETE)
+			continue;
+
+		bool eq = !prefix_cmp(&dp->prefix, &dp2->prefix);
+
+		if((!seen && eq)
+#ifdef PAD_DP_IGNORE_INCLUDED
+				|| (!eq && prefix_contains(&dp2->prefix, &dp->prefix))
+#endif
+#ifdef PAD_DP_IGNORE_INCLUDER
+				|| (!eq && prefix_contains(&dp->prefix, &dp2->prefix))
+#endif
+		)
+			return true;
+
+	}
+	return false;
+}
+
+
 void pa_dp_init(struct pa_data *data, struct pa_dp *dp, const struct prefix *p)
 {
 	dp->dhcp_data = NULL;
 	dp->dhcp_len = 0;
 	dp->preferred_until = 0;
 	dp->valid_until = 0;
+	dp->ignore = false;
 	dp->compute_leases_last = 0;
 	prefix_cpy(&dp->prefix, p);
 	INIT_LIST_HEAD(&dp->cps);
@@ -163,9 +198,41 @@ void pa_dp_destroy(struct pa_dp *dp)
 	}
 }
 
+static void __pa_dp_set_ignore(struct pa_dp *dp, bool ignore) {
+	PA_SET_SCALAR(dp->ignore, ignore, dp->__flags, PADF_DP_IGNORE);
+}
+
 void pa_dp_notify(struct pa_data *data, struct pa_dp *dp)
 {
+	struct pa_dp *dp2;
+	// For ignore computation
+	if(dp->__flags & PADF_DP_TODELETE) {
+		pa_for_each_dp(dp2, data) {
+			if(dp2->ignore &&
+					(prefix_contains(&dp2->prefix, &dp->prefix) ||
+							prefix_contains(&dp->prefix, &dp2->prefix))) {
+				__pa_dp_set_ignore(dp2, __pad_dp_compute_ignore(data, dp2));
+			}
+		}
+	} else if (dp->__flags & PADF_DP_CREATED){
+		pa_for_each_dp(dp2, data) {
+			if(!dp2->ignore &&
+					(prefix_contains(&dp2->prefix, &dp->prefix) ||
+							prefix_contains(&dp->prefix, &dp2->prefix))) {
+				__pa_dp_set_ignore(dp2, __pad_dp_compute_ignore(data, dp2));
+			}
+		}
+		__pa_dp_set_ignore(dp, __pad_dp_compute_ignore(data, dp));
+	}
+
 	PA_NOTIFY(data, dps, dp, pa_dp_destroy(dp));
+
+	/* Notify other dp which ignore flag have changed (but nothing else) */
+	pa_for_each_dp(dp2, data) {
+		if(dp2 != dp && dp2->__flags == PADF_DP_IGNORE) {
+			pa_dp_notify(data, dp2);
+		}
+	}
 }
 
 struct pa_ldp *__pa_ldp_get(struct pa_data *data, const struct prefix *p)

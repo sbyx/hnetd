@@ -82,6 +82,4 @@ bool pa_ap_isvalid(struct pa *pa, struct pa_ap *ap);
 int pa_precedence_apap(struct pa_ap *ap1, struct pa_ap *ap2);
 int pa_precedence_apcp(struct pa_ap *ap, struct pa_cp *cp);
 
-bool pa_dp_ignore(struct pa *pa, struct pa_dp *dp);
-
 #endif /* PA_H_ */
