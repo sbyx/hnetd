@@ -46,6 +46,7 @@ startdhcp)
 	set dhcp.$2.dhcpv6=server
 	set dhcp.$2.dhcpv4=server
 	set dhcp.$2.ra=server
+	set dhcp.$2.pd_manager=$3
 	commit dhcp
 EOF
 	killall -SIGHUP odhcpd

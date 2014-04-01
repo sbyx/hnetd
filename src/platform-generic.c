@@ -24,15 +24,16 @@
 #include "prefix_utils.h"
 
 static char backend[] = "/usr/sbin/hnetd-backend";
-
+static const char *hnetd_pd_socket = NULL;
 
 struct platform_iface {
 	pid_t dhcpv4;
 	pid_t dhcpv6;
 };
 
-int platform_init(void)
+int platform_init(const char *pd_socket)
 {
+	hnetd_pd_socket = pd_socket;
 	return 0;
 }
 
@@ -160,7 +161,7 @@ void platform_set_route(struct iface *c, struct iface_route *route, bool enable)
 
 void platform_set_owner(struct iface *c, bool enable)
 {
-	char *argv[] = {backend, (enable) ? "startdhcp" : "stopdhcp", c->ifname, NULL};
+	char *argv[] = {backend, (enable) ? "startdhcp" : "stopdhcp", c->ifname, (char*)hnetd_pd_socket, NULL};
 	platform_call(argv);
 }
 

@@ -12,7 +12,7 @@
 
 
 // Platform specific initialization
-int platform_init(void);
+int platform_init(const char *pd_socket);
 
 
 

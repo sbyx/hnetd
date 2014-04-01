@@ -86,9 +86,9 @@ static void handle_event(__unused struct ubus_context *ctx, __unused struct ubus
 	sync_netifd(true);
 }
 static struct ubus_event_handler event_handler = { .cb = handle_event };
+static const char *hnetd_pd_socket = NULL;
 
-
-int platform_init(void)
+int platform_init(const char *pd_socket)
 {
 	if (!(ubus = ubus_connect(NULL))) {
 		L_ERR("Failed to connect to ubus: %s", strerror(errno));
@@ -103,6 +103,7 @@ int platform_init(void)
 	if (!ubus_lookup_id(ubus, "network.interface", &ubus_network_interface))
 		sync_netifd(true);
 
+	hnetd_pd_socket = pd_socket;
 	return 0;
 }
 
@@ -429,6 +430,9 @@ static void platform_commit(struct uloop_timeout *t)
 	blobmsg_add_string(&b, "ra", service);
 	blobmsg_add_string(&b, "dhcpv4", service);
 	blobmsg_add_string(&b, "dhcpv6", service);
+
+	if (c->internal && c->linkowner)
+		blobmsg_add_string(&b, "pd_manager", hnetd_pd_socket);
 
 	const char *zone = (c->internal) ? "lan" : "wan";
 	blobmsg_add_string(&b, "zone", zone);

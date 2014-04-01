@@ -136,7 +136,7 @@ struct iface {
 };
 
 // Generic initializer to be called by main()
-int iface_init(struct pa_data *pa_data);
+int iface_init(struct pa_data *pa_data, const char *pd_socket);
 
 // Get an interface by name
 struct iface* iface_get(const char *ifname);

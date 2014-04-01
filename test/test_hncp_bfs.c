@@ -14,7 +14,7 @@
 
 void pa_data_subscribe(__unused struct pa_data *d, __unused struct pa_data_user *u){}
 void platform_set_owner(__unused struct iface *c, __unused bool enable) {}
-int platform_init(void) { return 0; }
+int platform_init(__unused const char *pd_socket) { return 0; }
 void platform_set_address(__unused struct iface *c, __unused struct iface_addr *addr, __unused bool enable) {}
 void platform_set_route(__unused struct iface *c, __unused struct iface_route *addr, __unused bool enable) {}
 void platform_iface_free(__unused struct iface *c) {}
