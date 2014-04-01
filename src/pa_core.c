@@ -143,8 +143,6 @@ static void pa_core_create_cp(struct pa_core *core, const struct prefix *p,
 		return;
 	}
 
-	L_INFO("Creating new "PA_CP_L, PA_CP_LA(cp));
-
 	pa_cp_set_iface(cp, iface);
 	pa_cp_set_priority(cp, priority);
 	pa_cp_set_authoritative(cp, authority);
@@ -154,6 +152,8 @@ static void pa_core_create_cp(struct pa_core *core, const struct prefix *p,
 
 	cp->apply_to.cb = __pa_cp_apply_cb;
 	uloop_timeout_set(&cp->apply_to, 2*core_p(core, data.flood)->flooding_delay);
+
+	L_INFO("Created new "PA_CP_L, PA_CP_LA(cp));
 }
 
 static struct prefix *__pa_core_prefix_getcollision(struct pa_core *core, const struct prefix *prefix)

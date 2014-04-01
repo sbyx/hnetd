@@ -1,12 +1,3 @@
-#if 0
-/* Please remove pa_data dependency from net_sim.h. This l_level
- * redefine causes stupid warnings there.. */
-#ifdef L_LEVEL
-#undef L_LEVEL
-#endif
-#define L_LEVEL 7
-#endif /* 0 */
-
 #ifdef L_PREFIX
 #undef L_PREFIX
 #endif
@@ -269,6 +260,7 @@ struct pa_ap *pa_ap_get(struct pa_data *data, const struct prefix *p,
 	if((ap = __pa_ap_get(data, p, rid)) || !goc)
 		return ap;
 
+	L_INFO("Creating ap for %s from "PA_RID_L, PREFIX_REPR(p), PA_RID_LA(rid));
 	PA_P_ALLOC(ap);
 	ap->authoritative = false;
 	ap->priority = PAD_PRIORITY_DEFAULT;
@@ -282,7 +274,6 @@ struct pa_ap *pa_ap_get(struct pa_data *data, const struct prefix *p,
 		return NULL;
 	}
 	ap->__flags = PADF_AP_CREATED;
-	L_INFO("Created "PA_AP_L, PA_AP_LA(ap));
 	return ap;
 }
 
@@ -311,6 +302,9 @@ void pa_ap_destroy(struct pa_data *data, struct pa_ap *ap)
 
 void pa_ap_notify(struct pa_data *data, struct pa_ap *ap)
 {
+	if(ap->__flags & PADF_AP_CREATED) {
+		L_INFO("Created "PA_AP_L, PA_AP_LA(ap));
+	}
 	PA_NOTIFY(data, aps, ap, pa_ap_destroy(data, ap));
 }
 
@@ -375,6 +369,7 @@ struct pa_cp *pa_cp_get(struct pa_data *data, const struct prefix *prefix, bool 
 	if((cp = __pa_cp_get(data, prefix)) || !goc)
 		return cp;
 
+	L_DEBUG("Create cp from prefix %s", PREFIX_REPR(prefix));
 	PA_P_ALLOC(cp);
 	prefix_cpy(&cp->prefix, prefix);
 	cp->pa_data = data;
@@ -391,7 +386,6 @@ struct pa_cp *pa_cp_get(struct pa_data *data, const struct prefix *prefix, bool 
 	cp->apply_to.cb = NULL;
 	cp->dp = NULL;
 	cp->__flags = PADF_CP_CREATED;
-	L_DEBUG("Created "PA_CP_L, PA_CP_LA(cp));
 	return cp;
 }
 
@@ -450,6 +444,9 @@ void pa_cp_destroy(struct pa_cp *cp)
 
 void pa_cp_notify(struct pa_cp *cp)
 {
+	if(cp->__flags & PADF_CP_CREATED) {
+		L_DEBUG("Created "PA_CP_L, PA_CP_LA(cp));
+	}
 	PA_NOTIFY(cp->pa_data, cps, cp, pa_cp_destroy(cp));
 }
 
@@ -471,6 +468,7 @@ struct pa_eaa *pa_eaa_get(struct pa_data *data, const struct in6_addr *addr, con
 	if((eaa = __pa_eaa_get(data, addr, rid)) || !goc)
 		return eaa;
 
+	L_DEBUG("Creating eaa for %s from "PA_RID_L , ADDR_REPR(addr), PA_RID_LA(rid));
 	PA_P_ALLOC(eaa);
 	PA_RIDCPY(&eaa->rid, rid);
 	memcpy(&eaa->aa.address, addr, sizeof(struct in6_addr));
@@ -478,7 +476,6 @@ struct pa_eaa *pa_eaa_get(struct pa_data *data, const struct in6_addr *addr, con
 	eaa->aa.__flags = PADF_AA_CREATED;
 	eaa->iface = NULL;
 	list_add(&eaa->le, &data->eaas);
-	L_DEBUG("Created "PA_AA_L, PA_AA_LA(&eaa->aa));
 	return eaa;
 }
 
@@ -489,6 +486,9 @@ void pa_eaa_set_iface(struct pa_eaa *eaa, struct pa_iface *iface)
 
 void pa_aa_notify(struct pa_data *data, struct pa_aa *aa)
 {
+	if(aa->__flags & PADF_AA_CREATED) {
+			L_INFO("Created "PA_AA_L, PA_AA_LA(aa));
+	}
 	PA_NOTIFY(data, aas, aa, pa_aa_destroy(aa));
 }
 
