@@ -36,15 +36,13 @@ static void handle_dump(__unused struct ubus_request *req,
 
 static struct ubus_request req_dump = { .list = LIST_HEAD_INIT(req_dump.list) };
 
+static void platform_commit(struct uloop_timeout *t);
 struct platform_iface {
 	struct iface *iface;
 	struct uloop_timeout update;
 	struct ubus_request req;
 	char handle[];
 };
-
-static void platform_commit(struct platform_iface *iface, bool stage2);
-static void platform_commit_1(struct uloop_timeout *t);
 
 
 /* ubus subscribe / handle control code */
@@ -118,7 +116,7 @@ void platform_iface_new(struct iface *c, const char *handle)
 	struct platform_iface *iface = calloc(1, sizeof(*iface) + handlenamelen);
 	memcpy(iface->handle, handle, handlenamelen);
 	iface->iface = c;
-	iface->update.cb = platform_commit_1;
+	iface->update.cb = platform_commit;
 
 	c->platform = iface;
 
@@ -184,29 +182,17 @@ void platform_set_prefix_route(const struct prefix *p, bool enable)
 
 
 // Handle netifd ubus event for interfaces updates
-static void handle_complete_1(struct ubus_request *req, int ret)
+static void handle_complete(struct ubus_request *req, int ret)
 {
 	struct platform_iface *iface = container_of(req, struct platform_iface, req);
-	L_INFO("platform: async stage 1 notify_proto for %s: %s", iface->handle, ubus_strerror(ret));
-	platform_commit(iface, true);
+	L_INFO("platform: async notify_proto for %s: %s", iface->handle, ubus_strerror(ret));
 }
 
-// Handle netifd ubus event for interfaces updates
-static void handle_complete_2(struct ubus_request *req, int ret)
-{
-	struct platform_iface *iface = container_of(req, struct platform_iface, req);
-	L_INFO("platform: async stage 2 notify_proto for %s: %s", iface->handle, ubus_strerror(ret));
-}
 
 // Commit platform changes to netifd
-static void platform_commit_1(struct uloop_timeout *t)
+static void platform_commit(struct uloop_timeout *t)
 {
 	struct platform_iface *iface = container_of(t, struct platform_iface, update);
-	platform_commit(iface, false);
-}
-
-static void platform_commit(struct platform_iface *iface, bool stage2)
-{
 	struct iface *c = iface->iface;
 
 	struct blob_buf b = {NULL, NULL, 0, NULL};
@@ -215,8 +201,7 @@ static void platform_commit(struct platform_iface *iface, bool stage2)
 	blobmsg_add_u8(&b, "link-up", 1);
 	blobmsg_add_string(&b, "interface", iface->handle);
 
-	L_DEBUG("platform: *** begin stage %d interface update %s (%s)",
-			(int)stage2 + 1, iface->handle, c->ifname);
+	L_DEBUG("platform: *** begin interface update %s (%s)", iface->handle, c->ifname);
 
 	void *k, *l;
 	struct iface_addr *a;
@@ -293,67 +278,62 @@ static void platform_commit(struct platform_iface *iface, bool stage2)
 	}
 	blobmsg_close_array(&b, k);
 
-	if (stage2) {
-		k = blobmsg_open_array(&b, "routes");
-		vlist_for_each_element(&c->routes, r, node) {
-			if (!IN6_IS_ADDR_V4MAPPED(&r->to.prefix))
-				continue;
+	k = blobmsg_open_array(&b, "routes");
+	vlist_for_each_element(&c->routes, r, node) {
+		if (!IN6_IS_ADDR_V4MAPPED(&r->to.prefix))
+			continue;
 
-			l = blobmsg_open_table(&b, NULL);
+		l = blobmsg_open_table(&b, NULL);
 
-			char *buf = blobmsg_alloc_string_buffer(&b, "target", INET_ADDRSTRLEN);
-			inet_ntop(AF_INET, &r->to.prefix.s6_addr[12], buf, INET_ADDRSTRLEN);
-			blobmsg_add_string_buffer(&b);
+		char *buf = blobmsg_alloc_string_buffer(&b, "target", INET_ADDRSTRLEN);
+		inet_ntop(AF_INET, &r->to.prefix.s6_addr[12], buf, INET_ADDRSTRLEN);
+		blobmsg_add_string_buffer(&b);
 
-			char *buf2 = blobmsg_alloc_string_buffer(&b, "netmask", 4);
-			snprintf(buf2, 4, "%u", prefix_af_length(&r->to));
-			blobmsg_add_string_buffer(&b);
+		char *buf2 = blobmsg_alloc_string_buffer(&b, "netmask", 4);
+		snprintf(buf2, 4, "%u", prefix_af_length(&r->to));
+		blobmsg_add_string_buffer(&b);
 
-			char *buf3 = blobmsg_alloc_string_buffer(&b, "gateway", INET_ADDRSTRLEN);
-			inet_ntop(AF_INET, &r->via.s6_addr[12], buf3, INET_ADDRSTRLEN);
-			blobmsg_add_string_buffer(&b);
+		char *buf3 = blobmsg_alloc_string_buffer(&b, "gateway", INET_ADDRSTRLEN);
+		inet_ntop(AF_INET, &r->via.s6_addr[12], buf3, INET_ADDRSTRLEN);
+		blobmsg_add_string_buffer(&b);
 
-			blobmsg_add_u32(&b, "metric", r->metric);
+		blobmsg_add_u32(&b, "metric", r->metric);
 
-			L_DEBUG("	to %s/%s via %s", buf, buf2, buf3);
+		L_DEBUG("	to %s/%s via %s", buf, buf2, buf3);
 
-			blobmsg_close_table(&b, l);
-		}
-		blobmsg_close_array(&b, k);
-
-		k = blobmsg_open_array(&b, "routes6");
-		vlist_for_each_element(&c->routes, r, node) {
-			if (IN6_IS_ADDR_V4MAPPED(&r->to.prefix))
-				continue;
-
-			l = blobmsg_open_table(&b, NULL);
-
-			char *buf = blobmsg_alloc_string_buffer(&b, "target", INET6_ADDRSTRLEN);
-			inet_ntop(AF_INET6, &r->to.prefix, buf, INET6_ADDRSTRLEN);
-			blobmsg_add_string_buffer(&b);
-
-			char *buf2 = blobmsg_alloc_string_buffer(&b, "netmask", 4);
-			snprintf(buf2, 4, "%u", prefix_af_length(&r->to));
-			blobmsg_add_string_buffer(&b);
-
-			char *buf3 = blobmsg_alloc_string_buffer(&b, "gateway", INET6_ADDRSTRLEN);
-			inet_ntop(AF_INET6, &r->via, buf3, INET6_ADDRSTRLEN);
-			blobmsg_add_string_buffer(&b);
-
-			char *buf4 = blobmsg_alloc_string_buffer(&b, "source", PREFIX_MAXBUFFLEN);
-			prefix_ntop(buf4, PREFIX_MAXBUFFLEN, &r->from, true);
-			blobmsg_add_string_buffer(&b);
-
-			blobmsg_add_u32(&b, "metric", r->metric);
-
-			L_DEBUG("	from %s to %s/%s via %s", buf4, buf, buf2, buf3);
-
-			blobmsg_close_table(&b, l);
-		}
-	} else {
-		k = blobmsg_open_array(&b, "routes6");
+		blobmsg_close_table(&b, l);
 	}
+	blobmsg_close_array(&b, k);
 
+	k = blobmsg_open_array(&b, "routes6");
+	vlist_for_each_element(&c->routes, r, node) {
+		if (IN6_IS_ADDR_V4MAPPED(&r->to.prefix))
+			continue;
+
+		l = blobmsg_open_table(&b, NULL);
+
+		char *buf = blobmsg_alloc_string_buffer(&b, "target", INET6_ADDRSTRLEN);
+		inet_ntop(AF_INET6, &r->to.prefix, buf, INET6_ADDRSTRLEN);
+		blobmsg_add_string_buffer(&b);
+
+		char *buf2 = blobmsg_alloc_string_buffer(&b, "netmask", 4);
+		snprintf(buf2, 4, "%u", prefix_af_length(&r->to));
+		blobmsg_add_string_buffer(&b);
+
+		char *buf3 = blobmsg_alloc_string_buffer(&b, "gateway", INET6_ADDRSTRLEN);
+		inet_ntop(AF_INET6, &r->via, buf3, INET6_ADDRSTRLEN);
+		blobmsg_add_string_buffer(&b);
+
+		char *buf4 = blobmsg_alloc_string_buffer(&b, "source", PREFIX_MAXBUFFLEN);
+		prefix_ntop(buf4, PREFIX_MAXBUFFLEN, &r->from, true);
+		blobmsg_add_string_buffer(&b);
+
+		blobmsg_add_u32(&b, "metric", r->metric);
+
+		L_DEBUG("	from %s to %s/%s via %s", buf4, buf, buf2, buf3);
+
+		blobmsg_close_table(&b, l);
+	}
 	vlist_for_each_element(&c->assigned, a, node) {
 		hnetd_time_t preferred = (a->preferred_until - now) / HNETD_TIME_PER_SECOND;
 		hnetd_time_t valid = (a->valid_until - now) / HNETD_TIME_PER_SECOND;
@@ -475,7 +455,7 @@ static void platform_commit(struct platform_iface *iface, bool stage2)
 	int ret;
 	ubus_abort_request(ubus, &iface->req);
 	if (!(ret = ubus_invoke_async(ubus, ubus_network_interface, "notify_proto", b.head, &iface->req))) {
-		iface->req.complete_cb = (stage2) ? handle_complete_2 : handle_complete_1;
+		iface->req.complete_cb = handle_complete;
 		ubus_complete_request_async(ubus, &iface->req);
 	} else {
 		L_INFO("platform: async notify_proto for %s (%s) failed: %s", iface->handle, c->ifname, ubus_strerror(ret));
