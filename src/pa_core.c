@@ -121,8 +121,6 @@ static void pa_core_create_cpl(struct pa_core *core, const struct prefix *p,
 		return;
 	}
 
-	L_INFO("Creating new "PA_CP_L, PA_CP_LA(&cpl->cp));
-
 	pa_cpl_set_iface(cpl, iface);
 	pa_cp_set_priority(&cpl->cp, priority);
 	pa_cp_set_authoritative(&cpl->cp, authority);
@@ -131,6 +129,8 @@ static void pa_core_create_cpl(struct pa_core *core, const struct prefix *p,
 	pa_cp_notify(&cpl->cp);
 
 	pa_cp_set_apply_to(&cpl->cp, 2*core_p(core, data.flood)->flooding_delay);
+
+	L_INFO("Created new "PA_CP_L, PA_CP_LA(&cpl->cp));
 }
 
 static int pa_getprefix_random(struct pa_core *core,
