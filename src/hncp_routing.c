@@ -335,6 +335,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 					}
 			} else if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX && hncp_tlv_ap_valid(a) && c != hncp->own_node) {
 				hncp_t_assigned_prefix_header ap = tlv_data(a);
+				hncp_link link = hncp_find_link_by_name(hncp, c->bfs.ifname, false);
 
 				// Skip routes for prefixes on connected links
 				if (c->bfs.hopcount == 1) {
@@ -342,7 +343,6 @@ static void hncp_routing_run(struct uloop_timeout *t)
 						.node_identifier_hash = c->node_identifier_hash,
 						.iid = be32_to_cpu(ap->link_id)
 					};
-					hncp_link link = hncp_find_link_by_name(hncp, c->bfs.ifname, false);
 					if (link && vlist_find(&link->neighbors, &query, &query, in_neighbors))
 						continue;
 				}
@@ -350,13 +350,16 @@ static void hncp_routing_run(struct uloop_timeout *t)
 				struct prefix to = { .plen = ap->prefix_length_bits };
 				size_t plen = ROUND_BITS_TO_BYTES(to.plen);
 				memcpy(&to.prefix, &ap[1], plen);
+				unsigned linkid = (link) ? link->iid : 0;
 
 				if (!IN6_IS_ADDR_V4MAPPED(&to.prefix)) {
 					if (c->bfs.next_hop && c->bfs.ifname)
-						iface_add_internal_route(c->bfs.ifname, &to, c->bfs.next_hop, c->bfs.hopcount);
+						iface_add_internal_route(c->bfs.ifname, &to, c->bfs.next_hop,
+								c->bfs.hopcount << 8 | linkid);
 				} else {
 					if (c->bfs.next_hop4 && c->bfs.ifname && iface_has_ipv4_address(c->bfs.ifname))
-						iface_add_internal_route(c->bfs.ifname, &to, c->bfs.next_hop4, c->bfs.hopcount);
+						iface_add_internal_route(c->bfs.ifname, &to, c->bfs.next_hop4,
+								c->bfs.hopcount << 8 | linkid);
 				}
 			}
 		}
