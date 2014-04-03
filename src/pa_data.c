@@ -540,7 +540,7 @@ void pa_cpl_set_iface(struct pa_cpl *cpl, struct pa_iface *iface)
 	if(cpl->iface == iface)
 		return;
 	if(cpl->iface)
-		list_remove(&cpl->if_le);
+		list_del(&cpl->if_le);
 	if(iface)
 		list_add(&cpl->if_le, &iface->cpls);
 	cpl->iface = iface;
@@ -551,7 +551,7 @@ void pa_cpd_set_lease(struct pa_cpd *cpd, struct pa_pd_lease *lease)
 	if(cpd->lease == lease)
 		return;
 	if(cpd->lease)
-		list_remove(&cpd->lease_le);
+		list_del(&cpd->lease_le);
 	if(lease)
 		list_add(&cpd->lease_le, &lease->cpds);
 	cpd->lease = lease;

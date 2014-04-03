@@ -564,7 +564,7 @@ void pa_pd_lease_term(struct pa_pd *pd, struct pa_pd_lease *lease)
 
 	while(!list_empty(&lease->cpds)) {
 		cpd = list_first_entry(&lease->cpds, struct pa_cpd, lease_le);
-		list_remove(&cpd->lease_le); // This is just for safety in case somebody look at it somewhere...
+		list_del(&cpd->lease_le); // This is just for safety in case somebody look at it somewhere...
 		cpd->lease = NULL;
 		pa_cp_todelete(&cpd->cp);
 		pa_cpd_set_lease(cpd, NULL); //Important to differentiate local deletes
@@ -577,7 +577,7 @@ void pa_pd_lease_term(struct pa_pd *pd, struct pa_pd_lease *lease)
 		pa_pd_req_destroy(req);
 	}
 
-	list_remove(&lease->le);
+	list_del(&lease->le);
 	if(lease->lease_id)
 		free(lease->lease_id);
 }
@@ -591,7 +591,7 @@ void pa_pd_conf_defaults(struct pa_pd_conf *conf)
 void pa_pd_init(struct pa_pd *pd, const struct pa_pd_conf *conf)
 {
 	L_NOTICE("Initializing pa_pd");
-	list_init_head(&pd->leases);
+	INIT_LIST_HEAD(&pd->leases);
 	if(conf)
 		pd->conf = *conf;
 	else
