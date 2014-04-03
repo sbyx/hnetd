@@ -387,7 +387,7 @@ void paa_algo_do(struct pa_core *core)
 				continue;
 
 			cpl = pa_core_getcpl(dp, iface);
-			ap = pa_core_getap(core, dp, iface, cp);
+			ap = pa_core_getap(core, dp, iface, &cpl->cp);
 
 			if(cpl) {
 				if(ap)
