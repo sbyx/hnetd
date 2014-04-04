@@ -12,6 +12,8 @@
 #ifndef PA_H_
 #define PA_H_
 
+#include "hnetd.h"
+
 #include <libubox/uloop.h>
 #include <stdint.h>
 
@@ -20,8 +22,6 @@
 #include "pa_local.h"
 #include "pa_store.h"
 #include "pa_pd.h"
-
-#include "hnetd.h"
 
 #include "iface.h"
 
