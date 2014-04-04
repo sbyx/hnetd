@@ -158,6 +158,15 @@ void test_1()
 	delegated.plen = PA_PD_DFLT_MIN_LEN;
 	sput_fail_unless(!prefix_cmp(&delegated, &cpd->cp.prefix), "Correct delegated prefix");
 
+#ifndef PA_PD_RIGOUROUS_LEASES
+	/* Called once after creation */
+	sput_fail_unless(tl1.lease.cb_to.pending, "Lease timeout is pending");
+	sput_fail_unless(uloop_timeout_remaining(&tl1.lease.cb_to) == PA_PD_LEASE_CB_DELAY, "Correct timeout value");
+	fu_loop(1);
+	sput_fail_unless(tl1.update_calls == 2, "Second lease update call");
+	tl1.update_calls--;
+#endif
+
 	/* Now let's apply the prefix */
 	fu_loop(1); //This is the apply callback
 	sput_fail_unless(tl1.lease.cb_to.pending, "Lease timeout is pending");
@@ -181,6 +190,13 @@ void test_1()
 	delegated = p1_04;
 	delegated.plen = 63;
 	sput_fail_unless(!prefix_cmp(&delegated, &cpd->cp.prefix), "Correct delegated prefix");
+
+#ifndef PA_PD_RIGOUROUS_LEASES
+	fu_loop(1);
+	sput_fail_unless(tl2.update_calls == 1, "Second lease update call");
+	tl2.update_calls--;
+#endif
+
 	fu_loop(2); //This is the apply callback and lease cb
 	sput_fail_unless(tl2.update_calls == 1, "Second lease update call");
 	sput_fail_unless(fu_next() == NULL, "No next schedule");
@@ -204,6 +220,13 @@ void test_1()
 	delegated = p2_01;
 	delegated.plen = PA_PD_DFLT_MIN_LEN;
 	sput_fail_unless(!prefix_cmp(&delegated, &cpd->cp.prefix), "Correct delegated prefix");
+
+#ifndef PA_PD_RIGOUROUS_LEASES
+	fu_loop(1);
+	sput_fail_unless(tl1.update_calls == 3, "Second lease update call");
+	tl1.update_calls--;
+#endif
+
 	fu_loop(2); //Apply callback and lease cb
 	sput_fail_unless(tl1.update_calls == 3, "Second lease update call");
 	sput_fail_unless(fu_next() == NULL, "No next schedule");
@@ -224,6 +247,9 @@ void test_1()
 	delegated = p1_04;
 	delegated.plen = PA_PD_DFLT_MIN_LEN;
 	sput_fail_unless(!prefix_cmp(&delegated, &cpd->cp.prefix), "Correct delegated prefix");
+#ifndef PA_PD_RIGOUROUS_LEASES
+	fu_loop(1);
+#endif
 	fu_loop(2); //Apply callback and update the lease
 	sput_fail_unless(fu_next() == NULL, "No next schedule");
 
@@ -249,6 +275,9 @@ void test_1()
 	delegated = p1_10;
 	delegated.plen = PA_PD_DFLT_MIN_LEN;
 	sput_fail_unless(!prefix_cmp(&delegated, &cpd->cp.prefix), "Correct delegated prefix");
+#ifndef PA_PD_RIGOUROUS_LEASES
+	fu_loop(1);
+#endif
 	fu_loop(2); //Apply callback and update the lease
 	sput_fail_unless(fu_next() == NULL, "No next schedule");
 

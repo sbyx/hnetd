@@ -15,6 +15,8 @@
 
 #include "pa_data.h"
 
+//#define PA_PD_RIGOUROUS_LEASES
+
 struct pa_pd_conf {
 	uint8_t pd_min_len;       /* pd will not provide bigger prefixes : default = 62 */
 	uint8_t pd_min_ratio_exp; /* pd will not provide more than 1/(2^x) of the dp size : default 3 (1/8) */
@@ -37,7 +39,8 @@ struct pa_pd_lease {
 	void (*update_cb)(struct pa_pd_lease *lease);
 
 	/* Contains a list of pa_cpds (see pa_data.h).
-	 * A cpd may be delegated only if (cpd->cp.applied == true && cpd->cp.dp != NULL).
+	 * A cpd may be delegated only if  cpd->cp.dp != NULL.
+	 * If cpd->cp.applied == false, the prefix MAY be delegated, but only with a significantly short delay.
 	 * cpd->cp.applied is false initially and becomes true after some time.
 	 * cpd->cp.dp is the associated delegated prefix. If null, it means the element is not valid
 	 * and will be removed.

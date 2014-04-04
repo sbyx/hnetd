@@ -340,7 +340,7 @@ static void pa_pd_cps_cb(struct pa_data_user *user, struct pa_cp *cp, uint32_t f
 			pa_pd_dp_schedule(pd, dp_cont);
 	}
 
-	if(!(cpd = _pa_cpd(cp)))
+	if(!(cpd = _pa_cpd(cp)) || !cpd->lease ) // if !cpd->lease, it will be deleted afterward anyway
 		return;
 
 	if((flags & PADF_CP_TODELETE) && cpd->lease && cpd->lease->update_cb) { //todo: Better do it with applied, maybe...
@@ -354,9 +354,15 @@ static void pa_pd_cps_cb(struct pa_data_user *user, struct pa_cp *cp, uint32_t f
 		return;
 	}
 
+#ifdef PA_PD_RIGOUROUS_LEASES
 	if((flags & (PADF_CP_APPLIED)) || (cp->applied && (flags & PADF_CP_DP))) {
 		pa_pd_lease_schedule(pd, cpd->lease);
 	}
+#else
+	if(flags & (PADF_CP_APPLIED | PADF_CP_CREATED | PADF_CP_DP)) {
+		pa_pd_lease_schedule(pd, cpd->lease);
+	}
+#endif
 }
 
 /* pa_core.c takes care of removing deleted dps from all cps. No need to do it here.
@@ -445,6 +451,7 @@ static void pa_pd_update_cb(struct uloop_timeout *to)
 					if(!cpd->cp.dp && prefix_contains(&dp->prefix, &cpd->cp.prefix)) {
 						pa_pd_cpd_adopt(req, cpd);
 						found = true;
+						break;
 					}
 				}
 
@@ -499,7 +506,6 @@ static void pa_pd_lease_cb(struct uloop_timeout *to)
 			struct pa_dp *dp = cpd->cp.dp;
 			if(dp) {
 				pa_cp_set_dp(&cpd->cp, NULL);
-				pa_cp_notify(&cpd->cp);
 				pa_pd_req_create(cpd->lease, dp); // Add to unsatisfied
 				pa_pd_dp_schedule(lease->pd, dp); // Schedule the dp for recomputation
 			}
