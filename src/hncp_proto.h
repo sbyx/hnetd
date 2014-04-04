@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Wed Feb 26 17:21:52 2014 mstenber
- * Edit time:     41 min
+ * Last modified: Fri Apr  4 12:45:46 2014 mstenber
+ * Edit time:     45 min
  *
  */
 
@@ -19,8 +19,12 @@
 
 /******************************** Not standardized, but hopefully one day..  */
 
-/* Current ABI version */
-#define HNCP_ABI_VERSION 1
+/* Current (binary) data schema version
+ *
+ * Note that adding new TLVs does not require change of version; only
+ * change of contents of existing TLVs (used by others) does.
+ */
+#define HNCP_VERSION 1
 
 /* Let's assume we use MD5 for the time being.. */
 #define HNCP_HASH_LEN 16
@@ -105,18 +109,18 @@ typedef struct __packed {
   uint32_t update_number;
 } hncp_t_node_data_header_s, *hncp_t_node_data_header;
 
-/* HNCP_T_NODE_VERSION */
-typedef struct __packed {
-	uint32_t abi_version;
-	char user_agent[];
-} hncp_t_version_s, *hncp_t_version;
-
 /* HNCP_T_NODE_DATA_NEIGHBOR */
 typedef struct __packed {
   hncp_hash_s neighbor_node_identifier_hash;
   uint32_t neighbor_link_id;
   uint32_t link_id;
 } hncp_t_node_data_neighbor_s, *hncp_t_node_data_neighbor;
+
+/* HNCP_T_VERSION */
+typedef struct __packed {
+  uint32_t version;
+  char user_agent[];
+} hncp_t_version_s, *hncp_t_version;
 
 /* HNCP_T_DELEGATED_PREFIX */
 typedef struct __packed {

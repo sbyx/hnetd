@@ -167,7 +167,7 @@ void hncp_routing_destroy(hncp_bfs bfs)
 static bool hncp_routing_neighbors_are_mutual(hncp_node node, hncp_hash node_identifier_hash,
 		uint32_t link_id, uint32_t neighbor_link_id)
 {
-	struct tlv_attr *a, *tlvs = node->tlv_container;
+	struct tlv_attr *a, *tlvs = hncp_node_get_tlvs(node);
 	tlv_for_each_attr(a, tlvs) {
 		if (tlv_id(a) == HNCP_T_NODE_DATA_NEIGHBOR &&
 				tlv_len(a) == sizeof(hncp_t_node_data_neighbor_s)) {
@@ -206,7 +206,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 		c->bfs.hopcount = 0;
 
 		++routercnt;
-		struct tlv_attr *a, *tlvs = c->tlv_container;
+		struct tlv_attr *a, *tlvs = hncp_node_get_tlvs(c);
 		tlv_for_each_attr(a, tlvs) {
 			if (tlv_id(a) == HNCP_T_ROUTING_PROTOCOL &&
 					tlv_len(a) >= sizeof(hncp_t_routing_protocol_s)) {
@@ -258,7 +258,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 		c = container_of(list_first_entry(&queue, struct hncp_bfs_head, head), hncp_node_s, bfs);
 		L_WARN("Router %d", c->node_identifier_hash.buf[0]);
 
-		struct tlv_attr *a, *a2, *tlvs = c->tlv_container;
+		struct tlv_attr *a, *a2, *tlvs = hncp_node_get_tlvs(c);
 		tlv_for_each_attr(a, tlvs) {
 			if (tlv_id(a) == HNCP_T_NODE_DATA_NEIGHBOR &&
 					tlv_len(a) == sizeof(hncp_t_node_data_neighbor_s)) {
@@ -290,7 +290,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 						n->bfs.ifname = link->ifname;
 					}
 
-					struct tlv_attr *na, *ntlvs = n->tlv_container;
+					struct tlv_attr *na, *ntlvs = hncp_node_get_tlvs(n);
 					hncp_t_router_address ra;
 					tlv_for_each_attr(na, ntlvs) {
 						if (tlv_id(na) == HNCP_T_ROUTER_ADDRESS &&
