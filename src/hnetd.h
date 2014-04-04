@@ -47,6 +47,8 @@
 #include <sys/types.h>
 #include <libubox/utils.h>
 
+#define STR_EXPAND(tok) #tok
+#define STR(tok) STR_EXPAND(tok)
 
 typedef int64_t hnetd_time_t;
 #define HNETD_TIME_MAX INT64_MAX

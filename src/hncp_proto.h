@@ -19,6 +19,9 @@
 
 /******************************** Not standardized, but hopefully one day..  */
 
+/* Current ABI version */
+#define HNCP_ABI_VERSION 1
+
 /* Let's assume we use MD5 for the time being.. */
 #define HNCP_HASH_LEN 16
 
@@ -57,6 +60,8 @@ enum {
   HNCP_T_NODE_DATA_NEIGHBOR = 8,
 
   HNCP_T_CUSTOM = 9, /* not implemented */
+
+  HNCP_T_VERSION = 10,
 
   HNCP_T_EXTERNAL_CONNECTION = 41,
   HNCP_T_DELEGATED_PREFIX = 42, /* may contain TLVs */
@@ -99,6 +104,12 @@ typedef struct __packed {
   hncp_hash_s node_identifier_hash;
   uint32_t update_number;
 } hncp_t_node_data_header_s, *hncp_t_node_data_header;
+
+/* HNCP_T_NODE_VERSION */
+typedef struct __packed {
+	uint32_t abi_version;
+	char user_agent[];
+} hncp_t_version_s, *hncp_t_version;
 
 /* HNCP_T_NODE_DATA_NEIGHBOR */
 typedef struct __packed {

@@ -481,6 +481,29 @@ handle_message(hncp_link l,
       L_INFO("node data and state update number mismatch, ignoring");
       return;
     }
+
+  uint32_t abi_version = 0;
+  const char *agent = NULL;
+  int agent_len = 0;
+
+  tlv_for_each_in_buf(a, nd_data, nd_len) {
+	if (tlv_id(a) == HNCP_T_VERSION &&
+	    tlv_len(a) >= sizeof(hncp_t_version_s)) {
+		hncp_t_version v = tlv_data(a);
+		abi_version = ntohl(v->abi_version);
+		agent = v->user_agent;
+		agent_len = tlv_len(a) - sizeof(hncp_t_version_s);
+	}
+  }
+
+  L_INFO("%llx runs HNCP v%u: %.*s", hncp_hash64(&ns->node_identifier_hash),
+		  abi_version, agent_len, agent);
+  if (abi_version != HNCP_ABI_VERSION) {
+	  L_ERR("Ignoring data from %llx: ABI mismatch %u (%.*s) != %u", hncp_hash64(&ns->node_identifier_hash),
+			  abi_version, agent_len, agent, HNCP_ABI_VERSION);
+	  return;
+  }
+
   /* Let's see if it's more recent. */
   n = hncp_find_node_by_hash(o, &ns->node_identifier_hash, true);
   if (!n)

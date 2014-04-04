@@ -282,6 +282,17 @@ hncp hncp_create(void)
   o->io_init_done = true;
   if (o->should_schedule)
     hncp_schedule(o);
+
+  struct {
+	struct tlv_attr hdr;
+	uint32_t version;
+	char agent[32];
+  } tlv;
+  tlv.version = htonl(HNCP_ABI_VERSION);
+  int alen = snprintf(tlv.agent, sizeof(tlv.agent), "hnetd-%s", STR(HNETD_VERSION));
+  tlv_init(&tlv.hdr, HNCP_T_VERSION, 8 + alen);
+  hncp_add_tlv(o, &tlv.hdr);
+
   return o;
  err2:
   vlist_flush_all(&o->nodes);
