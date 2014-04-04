@@ -27,6 +27,11 @@ void platform_set_prefix_route(__unused const struct prefix *p, __unused bool en
 void hncp_bfs_one(void)
 {
 	hncp hncp = hncp_create();
+
+	/* Get rid of version, as synthesizing versions for other
+	 * routers is a bore */
+	(void)hncp_remove_tlvs_by_type(hncp, HNCP_T_VERSION);
+
 	hncp_bfs bfs = hncp_routing_create(hncp, NULL);
 
 	hncp_hash_s h = {{0}};

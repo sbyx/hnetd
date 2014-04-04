@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Feb 26 17:07:19 2014 mstenber
- * Edit time:     129 min
+ * Last modified: Fri Apr  4 12:39:27 2014 mstenber
+ * Edit time:     130 min
  *
  */
 
@@ -192,6 +192,8 @@ struct hncp_node_struct {
   /* These map 1:1 to node data TLV's start */
   hncp_hash_s node_identifier_hash;
   uint32_t update_number;
+
+  uint32_t version;
 
   /* Node state stuff */
   hncp_hash_s node_data_hash;

@@ -12,6 +12,13 @@ if(${L_LEVEL})
   add_definitions(-DL_LEVEL=${L_LEVEL})
 endif(${L_LEVEL})
 
+if(${VERSION})
+  add_definitions(-DHNETD_VERSION=${VERSION})
+else(${VERSION})
+  execute_process(COMMAND git describe --always OUTPUT_VARIABLE VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
+  add_definitions(-DHNETD_VERSION=${VERSION})
+endif(${VERSION})
+
 OPTION(COVERAGE "build with coverage" OFF)
 
 if (${COVERAGE})
