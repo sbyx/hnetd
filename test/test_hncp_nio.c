@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Tue Feb  4 18:23:56 2014 mstenber
- * Edit time:     160 min
+ * Last modified: Fri Apr  4 13:49:09 2014 mstenber
+ * Edit time:     166 min
  *
  */
 
@@ -163,6 +163,7 @@ static void dummy_tlv_cb(hncp_subscriber s,
   sput_fail_unless(tlv, "tlv set");
   L_NOTICE("tlv callback %s/%s %s",
            HNCP_NODE_REPR(n), TLV_REPR(tlv), add ? "add" : "remove");
+  if (tlv_id(tlv) == HNCP_T_VERSION) return;
   int exp_v = (add ? 1 : -1) * tlv_id(tlv);
   smock_pull_int_is("tlv_callback", exp_v);
 }
@@ -175,6 +176,7 @@ static void dummy_local_tlv_cb(hncp_subscriber s,
                    "tlv cb set");
   sput_fail_unless(tlv, "tlv set");
   L_NOTICE("local tlv callback %s %s", TLV_REPR(tlv), add ? "add" : "remove");
+  if (tlv_id(tlv) == HNCP_T_VERSION) return;
   int exp_v = (add ? 1 : -1) * tlv_id(tlv);
   smock_pull_int_is("local_tlv_callback", exp_v);
 }

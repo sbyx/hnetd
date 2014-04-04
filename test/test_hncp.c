@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Fri Feb 14 10:40:50 2014 mstenber
- * Edit time:     68 min
+ * Last modified: Fri Apr  4 13:25:12 2014 mstenber
+ * Edit time:     73 min
  *
  */
 
@@ -41,7 +41,7 @@ void hncp_ext(void)
   hncp_node n;
   bool r;
   struct tlv_buf tb;
-  struct tlv_attr *t, *t_data;
+  struct tlv_attr *t, *v = NULL, *t_data;
 
   sput_fail_if(!o, "create works");
   n = hncp_get_first_node(o);
@@ -51,6 +51,14 @@ void hncp_ext(void)
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0);
+
+  sput_fail_unless(hncp_node_get_tlvs(n), "should have tlvs");
+
+  tlv_for_each_attr(v, hncp_node_get_tlvs(n))
+    break;
+  sput_fail_unless(v && tlv_id(v) == HNCP_T_VERSION, "no version tlv");
+
+  tlv_put(&tb, HNCP_T_VERSION, tlv_data(v), tlv_len(v));
   t_data = tlv_put(&tb, 123, NULL, 0);
 
   /* Put the 123 type length = 0 TLV as TLV to hncp. */

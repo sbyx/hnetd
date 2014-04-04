@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Feb 27 11:39:20 2014 mstenber
- * Edit time:     412 min
+ * Last modified: Fri Apr  4 13:50:20 2014 mstenber
+ * Edit time:     445 min
  *
  */
 
@@ -63,6 +63,38 @@ bool hncp_node_set_tlvs(hncp_node n, struct tlv_attr *a)
   n->hncp->network_hash_dirty = true;
   n->node_data_hash_dirty = true;
   n->hncp->neighbors_dirty = true;
+
+  uint32_t version = 0;
+  const char *agent = NULL;
+  int agent_len = 0;
+  if (a)
+    {
+      struct tlv_attr *va;
+
+      tlv_for_each_attr(va, a)
+        {
+          if (tlv_id(va) == HNCP_T_VERSION &&
+              tlv_len(va) >= sizeof(hncp_t_version_s))
+            {
+              hncp_t_version v = tlv_data(va);
+              version = ntohl(v->version);
+              agent = v->user_agent;
+              agent_len = tlv_len(va) - sizeof(hncp_t_version_s);
+              break;
+            }
+        }
+    }
+  if (n->version != version)
+    {
+      hncp_node on = n->hncp->own_node;
+      if (on && on->version && version != on->version)
+        L_ERR("Incompatible node: %s version %u (%.*s) != %u",
+              HNCP_NODE_REPR(n), version, agent_len, agent, on->version);
+      else if (!n->version)
+        L_INFO("%s runs %.*s",
+               HNCP_NODE_REPR(n), agent_len, agent);
+    }
+  n->version = version;
   return true;
 }
 
@@ -282,6 +314,16 @@ hncp hncp_create(void)
   o->io_init_done = true;
   if (o->should_schedule)
     hncp_schedule(o);
+
+  struct __packed {
+    hncp_t_version_s h;
+    char agent[32];
+  } data;
+  data.h.version = htonl(HNCP_VERSION);
+  int alen = snprintf(data.agent, sizeof(data.agent),
+                      "hnetd-%s", STR(HNETD_VERSION));
+  hncp_add_tlv_raw(o, HNCP_T_VERSION, &data, sizeof(data.h) + alen);
+
   return o;
  err2:
   vlist_flush_all(&o->nodes);
@@ -554,6 +596,8 @@ struct tlv_attr *hncp_node_get_tlvs(hncp_node n)
 {
   if (hncp_node_is_self(n))
     hncp_self_flush(n);
+  if (n->version != n->hncp->own_node->version)
+    return NULL;
   return n->tlv_container;
 }
 
