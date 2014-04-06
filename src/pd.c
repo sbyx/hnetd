@@ -29,6 +29,7 @@ struct pd_handle {
 	struct list_head head;
 	struct ustream_fd fd;
 	bool established;
+	bool prepared;
 	// todo: add timeout?
 	struct pa_pd_lease lease;
 	struct pd *pd;
@@ -60,7 +61,7 @@ static void pd_handle_update(struct pa_pd_lease *lease)
 	bool keep = false;
 	bool applied = false;
 	pa_pd_for_each_cpd(cpd, &c->lease) {
-		if (cpd->cp.applied) {
+		if (cpd->cp.applied || !c->prepared) {
 			char buf[PREFIX_MAXBUFFLEN];
 			hnetd_time_t valid = 0;
 			hnetd_time_t preferred = 0;
@@ -79,6 +80,11 @@ static void pd_handle_update(struct pa_pd_lease *lease)
 			if (preferred > UINT32_MAX)
 				preferred = UINT32_MAX;
 
+			if (!cpd->cp.applied) {
+				valid = 60;
+				preferred = 60;
+			}
+
 			ustream_printf(&c->fd.stream, "%s,%"PRId64",%u"PRId64"\n",
 					prefix_ntop(buf, sizeof(buf), &cpd->cp.prefix, false),
 					preferred, valid);
@@ -95,6 +101,7 @@ static void pd_handle_update(struct pa_pd_lease *lease)
 	if (applied) {
 		ustream_write(&c->fd.stream, "\n", 1, false);
 		ustream_write_pending(&c->fd.stream);
+		c->prepared = true;
 	}
 
 	if (!keep)
