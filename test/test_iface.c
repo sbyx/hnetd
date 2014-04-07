@@ -62,13 +62,13 @@ void iface_test_new_unmanaged(void)
 {
 	iface_register_user(&user_mock);
 
-	struct iface *iface = iface_create("test0", NULL);
+	struct iface *iface = iface_create("test0", NULL, 0);
 	sput_fail_unless(!!iface, "alloc unmanaged");
 
 	struct iface *iface2 = iface_get("test0");
 	sput_fail_unless(iface == iface2, "get after create");
 
-	struct iface *iface3 = iface_create("test0", NULL);
+	struct iface *iface3 = iface_create("test0", NULL, 0);
 	sput_fail_unless(iface == iface3, "create after create");
 
 	iface_remove(iface);
@@ -85,13 +85,13 @@ void iface_test_new_managed(void)
 	struct prefix p = {IN6ADDR_LOOPBACK_INIT, 0};
 	char test[] = "test";
 
-	struct iface *iface00 = iface_create("test00", "test00");
+	struct iface *iface00 = iface_create("test00", "test00", 0);
 	iface_update_ipv4_uplink(iface00);
 	iface_set_ipv4_uplink(iface00);
 	iface_commit_ipv4_uplink(iface00);
 	smock_pull_bool_is("test00", false);
 
-	struct iface *iface = iface_create("test0", "test0");
+	struct iface *iface = iface_create("test0", "test0", 0);
 	iface->carrier = true;
 	iface_discover_border(iface);
 
@@ -100,7 +100,7 @@ void iface_test_new_managed(void)
 	struct iface *iface2 = iface_get("test0");
 	sput_fail_unless(iface == iface2, "get after create");
 
-	struct iface *iface3 = iface_create("test0", "test0");
+	struct iface *iface3 = iface_create("test0", "test0", 0);
 	sput_fail_unless(iface == iface3, "create after create");
 
 	smock_pull_bool_is("test0", false);

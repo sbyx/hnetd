@@ -91,8 +91,8 @@ Afterwards run hnetd with appropriate parameters.
 
 Once both services are running, you can use hnet-ifup and hnet-ifdown:
 
-hnet-ifup <interfacename> [external] adds an interface to hnet.
+hnet-ifup [-e] <interfacename> adds an interface to hnet.
 <interfacename> is the name of the network interface (e.g. eth0).
-[external] is an optional parameter indicating the interface is fixed-external.
+-e is an optional parameter indicating the interface is fixed-external.
 
 hnet-ifdown <interfacename> removes an interface from hnet again.

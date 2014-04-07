@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 #include <unistd.h>
+#include <getopt.h>
 
 #include <sys/un.h>
 #include <sys/socket.h>
@@ -31,6 +32,9 @@ enum ipc_option {
 	OPT_HANDLE,
 	OPT_PREFIX,
 	OPT_DNS,
+	OPT_ACCEPT_CERID,
+	OPT_CERID,
+	OPT_GUEST,
 	OPT_MAX
 };
 
@@ -40,6 +44,9 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_HANDLE] = {"handle", BLOBMSG_TYPE_STRING},
 	[OPT_PREFIX] = {"prefix", BLOBMSG_TYPE_ARRAY},
 	[OPT_DNS] = {"dns", BLOBMSG_TYPE_ARRAY},
+	[OPT_ACCEPT_CERID] = {"accept_cerid", BLOBMSG_TYPE_BOOL},
+	[OPT_CERID] = {"cerid", BLOBMSG_TYPE_STRING},
+	[OPT_GUEST] = {"guest", BLOBMSG_TYPE_BOOL},
 };
 
 enum ipc_prefix_option {
@@ -100,16 +107,36 @@ int ipc_client(const char *buffer)
 
 
 // Multicall handler for hnet-ifup/hnet-ifdown
-int ipc_ifupdown(const char *action, const char *ifname, const char *external)
+int ipc_ifupdown(int argc, char const* argv[])
 {
 	struct blob_buf b = {NULL, NULL, 0, NULL};
 	blob_buf_init(&b, 0);
 
-	blobmsg_add_string(&b, "command", strstr(action, "ifup") ? "ifup" : "ifdown");
-	blobmsg_add_string(&b, "ifname", ifname);
+	bool external = false;
 
-	if (!external || strcmp(external, "external"))
-		blobmsg_add_string(&b, "handle", ifname);
+	int c;
+	while ((c = getopt(argc, argv, "ecg")) > 0) {
+		switch(c) {
+		case 'e':
+			external = true;
+			break;
+
+		case 'c':
+			blobmsg_add_u8(&b, "accept_cerid", 1);
+			break;
+
+		case 'g':
+			blobmsg_add_u8(&b, "guest", 1);
+			break;
+		}
+	}
+
+
+	blobmsg_add_string(&b, "command", strstr(argv[0], "ifup") ? "ifup" : "ifdown");
+	blobmsg_add_string(&b, "ifname", argv[optind]);
+
+	if (!external)
+		blobmsg_add_string(&b, "handle", argv[optind]);
 
 	return ipc_client(blobmsg_format_json(b.head, true));
 }
@@ -136,8 +163,16 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 		const char *cmd = blobmsg_get_string(tb[OPT_COMMAND]);
 		L_DEBUG("Handling ipc command %s", cmd);
 		if (!strcmp(cmd, "ifup")) {
+			enum iface_flags flags = 0;
+
+			if (tb[OPT_ACCEPT_CERID] && blobmsg_get_bool(tb[OPT_ACCEPT_CERID]))
+				flags |= IFACE_FLAG_ACCEPT_CERID;
+
+			if (tb[OPT_GUEST] && blobmsg_get_bool(tb[OPT_GUEST]))
+				flags |= IFACE_FLAG_GUEST;
+
 			iface_create(ifname, tb[OPT_HANDLE] == NULL ? NULL :
-					blobmsg_get_string(tb[OPT_HANDLE]));
+					blobmsg_get_string(tb[OPT_HANDLE]), flags);
 		} else if (!strcmp(cmd, "ifdown")) {
 			iface_remove(c);
 		} else if (!strcmp(cmd, "enable_ipv4_uplink")) {
@@ -249,6 +284,9 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 				dns.len = htons(dns_cnt * sizeof(struct in6_addr));
 				iface_add_dhcpv6_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns));
 			}
+
+			if (tb[OPT_CERID])
+				inet_pton(AF_INET6, blobmsg_get_string(tb[OPT_CERID]), &c->cer);
 
 			iface_commit_ipv6_uplink(c);
 		} else if (!strcmp(cmd, "disable_ipv6_uplink")) {

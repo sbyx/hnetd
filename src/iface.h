@@ -91,6 +91,12 @@ struct iface_route {
 	unsigned metric;
 };
 
+
+enum iface_flags {
+	IFACE_FLAG_ACCEPT_CERID,
+	IFACE_FLAG_GUEST,
+};
+
 struct iface {
 	struct list_head head;
 
@@ -103,8 +109,12 @@ struct iface {
 	bool v4uplink;
 	bool carrier;
 
+	// Flags
+	enum iface_flags flags;
+
 	// LL-address
 	struct in6_addr eui64_addr;
+	struct in6_addr cer;
 
 	// Prefix storage
 	struct vlist_tree assigned;
@@ -142,7 +152,7 @@ int iface_init(struct pa_data *pa_data, const char *pd_socket);
 struct iface* iface_get(const char *ifname);
 
 // Create / get an interface (external or internal), handle set = managed
-struct iface* iface_create(const char *ifname, const char *handle);
+struct iface* iface_create(const char *ifname, const char *handle, enum iface_flags flags);
 
 // Remove a known interface
 void iface_remove(struct iface *iface);

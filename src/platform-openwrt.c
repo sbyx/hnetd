@@ -434,7 +434,8 @@ static void platform_commit(struct uloop_timeout *t)
 	if (c->internal && c->linkowner)
 		blobmsg_add_string(&b, "pd_manager", hnetd_pd_socket);
 
-	const char *zone = (c->internal) ? "lan" : "wan";
+	const char *zone = (c->internal ||
+			((c->flags & IFACE_FLAG_ACCEPT_CERID) && !IN6_IS_ADDR_UNSPECIFIED(&c->cer))) ? "lan" : "wan";
 	blobmsg_add_string(&b, "zone", zone);
 
 	L_DEBUG("	RA/DHCP/DHCPv6: %s, Zone: %s", service, zone);
@@ -497,6 +498,7 @@ enum {
 	IFACE_ATTR_DELEGATION,
 	IFACE_ATTR_DNS,
 	IFACE_ATTR_UP,
+	IFACE_ATTR_DATA,
 	IFACE_ATTR_MAX,
 };
 
@@ -504,6 +506,13 @@ enum {
 	ROUTE_ATTR_TARGET,
 	ROUTE_ATTR_MASK,
 	ROUTE_ATTR_MAX
+};
+
+enum {
+	DATA_ATTR_ACCEPT_CERID,
+	DATA_ATTR_CER,
+	DATA_ATTR_GUEST,
+	DATA_ATTR_MAX
 };
 
 static const struct blobmsg_policy iface_attrs[IFACE_ATTR_MAX] = {
@@ -515,11 +524,18 @@ static const struct blobmsg_policy iface_attrs[IFACE_ATTR_MAX] = {
 	[IFACE_ATTR_DELEGATION] = { .name = "delegation", .type = BLOBMSG_TYPE_BOOL },
 	[IFACE_ATTR_DNS] = { .name = "dns-server", .type = BLOBMSG_TYPE_ARRAY },
 	[IFACE_ATTR_UP] = { .name = "up", .type = BLOBMSG_TYPE_BOOL },
+	[IFACE_ATTR_DATA] = { .name = "data", .type = BLOBMSG_TYPE_ARRAY },
 };
 
 static const struct blobmsg_policy route_attrs[ROUTE_ATTR_MAX] = {
 	[ROUTE_ATTR_TARGET] = { .name = "target", .type = BLOBMSG_TYPE_STRING },
 	[ROUTE_ATTR_MASK] = { .name = "mask", .type = BLOBMSG_TYPE_INT32 },
+};
+
+static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
+	[DATA_ATTR_ACCEPT_CERID] = { .name = "accept_cerid", .type = BLOBMSG_TYPE_BOOL },
+	[DATA_ATTR_CER] = { .name = "cer", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_GUEST] = { .name = "guest", .type = BLOBMSG_TYPE_BOOL },
 };
 
 
@@ -653,12 +669,31 @@ static void platform_update(void *data, size_t len)
 			v4uplink = true;
 	}
 
+	enum iface_flags flags = 0;
+	struct in6_addr cer = IN6ADDR_ANY_INIT;
+	if (tb[IFACE_ATTR_DATA]) {
+		struct blob_attr *dtb[DATA_ATTR_MAX];
+		blobmsg_parse(data_attrs, DATA_ATTR_MAX, dtb,
+				blobmsg_data(tb[IFACE_ATTR_DATA]), blobmsg_len(tb[IFACE_ATTR_DATA]));
+
+		if (dtb[DATA_ATTR_ACCEPT_CERID] && blobmsg_get_bool(dtb[DATA_ATTR_ACCEPT_CERID]))
+			flags |= IFACE_FLAG_ACCEPT_CERID;
+
+		if (dtb[DATA_ATTR_GUEST] && blobmsg_get_bool(dtb[DATA_ATTR_GUEST]))
+			flags |= IFACE_FLAG_GUEST;
+
+		if (dtb[DATA_ATTR_CER])
+			inet_pton(AF_INET6, blobmsg_get_string(dtb[DATA_ATTR_CER]), &cer);
+	}
+
 	const char *proto = "";
 	if ((a = tb[IFACE_ATTR_PROTO]))
 		proto = blobmsg_get_string(a);
 
 	if (!c && up && !strcmp(proto, "hnet") && (a = tb[IFACE_ATTR_HANDLE]))
-		c = iface_create(ifname, blobmsg_get_string(a));
+		c = iface_create(ifname, blobmsg_get_string(a), flags);
+
+	c->cer = cer;
 
 	L_INFO("platform: interface update for %s detected", ifname);
 
@@ -682,7 +717,7 @@ static void platform_update(void *data, size_t len)
 
 		// If we don't know this interface yet but it has a PD for us create it
 		if (!c && !empty)
-			c = iface_create(ifname, NULL);
+			c = iface_create(ifname, NULL, 0);
 
 		if (c && up)
 			update_interface(c, tb, v4uplink, v6uplink);

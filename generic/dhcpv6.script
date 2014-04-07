@@ -77,7 +77,9 @@ setup_interface () {
 		# TODO: delete this somehow when the prefix disappears
 		ip -6 route add unreachable "$addr" proto $PROTO
 	done
-	hnet-call "{\"command\": \"enable_ipv6_uplink\", \"ifname\": \"$device\", \"prefix\": [$prefixpart], \"dns\": [$dnspart]}"
+	
+	[ -n "$CER" ] && cerid=", \"cerid\": \"$CER\""
+	hnet-call "{\"command\": \"enable_ipv6_uplink\", \"ifname\": \"$device\", \"prefix\": [$prefixpart], \"dns\": [$dnspart]$cerid}"
 
 	ip -6 route flush dev "$device" proto $PROTO
 	ip -6 address flush dev "$device" scope global

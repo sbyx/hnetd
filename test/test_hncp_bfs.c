@@ -53,8 +53,8 @@ void hncp_bfs_one(void)
 
 	hncp_link l1 = hncp_find_link_by_name(hncp, "l1", true);
 	hncp_link l3 = hncp_find_link_by_name(hncp, "l3", true);
-	struct iface *i1 = iface_create("l1", "l1");
-	struct iface *i3 = iface_create("l3", "l3");
+	struct iface *i1 = iface_create("l1", "l1", 0);
+	struct iface *i3 = iface_create("l3", "l3", 0);
 
 	hncp_t_link_id_s lid1 = {n1->node_identifier_hash, 0};
 	_heard(l1, &lid1, (struct in6_addr*)n1->node_identifier_hash.buf);

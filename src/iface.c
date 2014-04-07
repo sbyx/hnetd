@@ -689,12 +689,14 @@ static bool iface_discover_border(struct iface *c)
 			iface_announce_border(&c->transition);
 
 		return true;
+	} else if (c->flags & IFACE_FLAG_ACCEPT_CERID) {
+		iface_announce_border(&c->transition);
 	}
 	return false;
 }
 
 
-struct iface* iface_create(const char *ifname, const char *handle)
+struct iface* iface_create(const char *ifname, const char *handle, enum iface_flags flags)
 {
 	struct iface *c = iface_get(ifname);
 	if (!c) {
@@ -740,6 +742,8 @@ struct iface* iface_create(const char *ifname, const char *handle)
 		list_add(&c->head, &interfaces);
 	}
 
+	c->flags = flags;
+
 	if (!c->platform && handle) {
 		platform_iface_new(c, handle);
 		iface_announce_border(&c->transition);
@@ -774,6 +778,7 @@ void iface_add_dhcp_received(struct iface *c, const void *data, size_t len)
 void iface_update_ipv6_uplink(struct iface *c)
 {
 	vlist_update(&c->delegated);
+	memset(&c->cer, 0, sizeof(c->cer));
 }
 
 

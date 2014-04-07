@@ -85,6 +85,9 @@ void platform_iface_free(struct iface *c)
 
 void platform_set_internal(struct iface *c, bool internal)
 {
+	if (!internal && (c->flags & IFACE_FLAG_ACCEPT_CERID) && !IN6_IS_ADDR_UNSPECIFIED(&c->cer))
+		internal = true;
+
 	char *argv[] = {backend, (internal) ? "setfilter" : "unsetfilter",
 			c->ifname, NULL};
 	platform_call(argv);
