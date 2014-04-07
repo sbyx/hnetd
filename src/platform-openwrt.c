@@ -693,7 +693,8 @@ static void platform_update(void *data, size_t len)
 	if (!c && up && !strcmp(proto, "hnet") && (a = tb[IFACE_ATTR_HANDLE]))
 		c = iface_create(ifname, blobmsg_get_string(a), flags);
 
-	c->cer = cer;
+	if (c)
+		c->cer = cer;
 
 	L_INFO("platform: interface update for %s detected", ifname);
 
