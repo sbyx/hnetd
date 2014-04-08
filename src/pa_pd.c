@@ -11,10 +11,10 @@
 
 #define PA_PD_PREFIX_SEARCH_MAX_ROUNDS 64 //Done for each tested prefix length
 
-#define PA_PD_LEASE_CB_DELAY 400
-#define PA_PD_UPDATE_DELAY   100
-#define PA_PD_UPDATE_RATE_DELAY 15000 //Limit DP-wide update
-#define PA_PD_UPDATE_TOLERANCE  10000 //Do multiple things at the same uloop call if possible
+#define PA_PD_LEASE_CB_DELAY 100
+#define PA_PD_UPDATE_DELAY   40
+#define PA_PD_UPDATE_RATE_DELAY 1500 //Limit DP-wide update
+#define PA_PD_UPDATE_TOLERANCE  1000 //Do multiple things at the same uloop call if possible
 
 #define pd_pa(pd) (container_of(pd, struct pa, pd))
 #define pd_p(pd, field) (&(pd_pa(pd)->field))
