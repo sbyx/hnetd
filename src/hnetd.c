@@ -82,7 +82,7 @@ void hncp_iface_glue(hncp_iface_user hiu, hncp h, hncp_glue g)
 	iface_register_user(&hiu->iu);
 }
 
-int main(__unused int argc, char* const argv[])
+int main(__unused int argc, char *argv[])
 {
 	hncp h;
 	struct pa pa;
@@ -94,7 +94,7 @@ int main(__unused int argc, char* const argv[])
 	if (strstr(argv[0], "hnet-call"))
 		return ipc_client(argv[1]);
 	else if ((strstr(argv[0], "hnet-ifup") || strstr(argv[0], "hnet-ifdown")) && argc >= 2)
-		return ipc_ifupdown(argv[0], argv[1], argv[2]);
+		return ipc_ifupdown(argc, argv);
 #endif
 
 	openlog("hnetd", LOG_PERROR | LOG_PID, LOG_DAEMON);

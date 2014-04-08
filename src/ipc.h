@@ -14,4 +14,4 @@ int ipc_init(void);
 int ipc_client(const char *buffer);
 
 // IPC ifup/ifdown client
-int ipc_ifupdown(const char *action, const char *ifname, const char *external);
+int ipc_ifupdown(int argc, char *argv[]);

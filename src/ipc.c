@@ -107,7 +107,7 @@ int ipc_client(const char *buffer)
 
 
 // Multicall handler for hnet-ifup/hnet-ifdown
-int ipc_ifupdown(int argc, char const* argv[])
+int ipc_ifupdown(int argc, char *argv[])
 {
 	struct blob_buf b = {NULL, NULL, 0, NULL};
 	blob_buf_init(&b, 0);
