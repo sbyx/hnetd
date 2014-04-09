@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Fri Apr  4 12:39:27 2014 mstenber
- * Edit time:     130 min
+ * Last modified: Wed Apr  9 13:18:19 2014 mstenber
+ * Edit time:     134 min
  *
  */
 
@@ -317,30 +317,43 @@ static inline hnetd_time_t hncp_time(hncp o)
 #define ROUND_BITS_TO_BYTES(b) (((b) + 7) / 8)
 #define ROUND_BYTES_TO_4BYTES(b) ((((b) + 3) / 4) * 4)
 
-static inline bool hncp_tlv_ap_valid(const struct tlv_attr *a)
+static inline hncp_t_assigned_prefix_header
+hncp_tlv_ap(const struct tlv_attr *a)
 {
   hncp_t_assigned_prefix_header ah;
 
-  if (tlv_len(a) < sizeof(*ah))
-    return false;
+  if (tlv_id(a) != HNCP_T_ASSIGNED_PREFIX || tlv_len(a) < sizeof(*ah))
+    return NULL;
   ah = tlv_data(a);
   if (tlv_len(a) < (sizeof(*ah) + ROUND_BITS_TO_BYTES(ah->prefix_length_bits))
       || ah->prefix_length_bits > 128)
-    return false;
-  return true;
+    return NULL;
+  return ah;
 }
 
-static inline bool hncp_tlv_dp_valid(const struct tlv_attr *a)
+static inline hncp_t_delegated_prefix_header
+hncp_tlv_dp(const struct tlv_attr *a)
 {
   hncp_t_delegated_prefix_header dh;
 
-  if (tlv_len(a) < sizeof(*dh))
-    return false;
+  if (tlv_id(a) != HNCP_T_DELEGATED_PREFIX || tlv_len(a) < sizeof(*dh))
+    return NULL;
   dh = tlv_data(a);
   if (tlv_len(a) < (sizeof(*dh) + ROUND_BITS_TO_BYTES(dh->prefix_length_bits))
       || dh->prefix_length_bits > 128)
-    return false;
-  return true;
+    return NULL;
+  return dh;
 }
+
+static inline hncp_t_node_data_neighbor
+hncp_tlv_neighbor(const struct tlv_attr *a)
+{
+  if (tlv_id(a) != HNCP_T_NODE_DATA_NEIGHBOR
+      || tlv_len(a) != sizeof(hncp_t_node_data_neighbor_s))
+    return NULL;
+  return tlv_data(a);
+}
+
+
 
 #endif /* HNCP_I_H */

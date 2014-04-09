@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Feb 12 22:26:08 2014 mstenber
- * Edit time:     99 min
+ * Last modified: Wed Apr  9 13:17:58 2014 mstenber
+ * Edit time:     100 min
  *
  */
 
@@ -72,7 +72,7 @@ static void hncp_prune_rec(hncp_node n)
 
   /* Look at it's neighbors. */
   tlv_for_each_attr(a, tlvs)
-    if (tlv_id(a) == HNCP_T_NODE_DATA_NEIGHBOR)
+    if ((ne = hncp_tlv_neighbor(a)))
       {
         if (tlv_len(a) == sizeof(hncp_t_node_data_neighbor_s))
           {
@@ -87,11 +87,6 @@ static void hncp_prune_rec(hncp_node n)
                 L_DEBUG("unable to find node %llx -> ignoring",
                         hncp_hash64(&ne->neighbor_node_identifier_hash));
               }
-          }
-        else
-          {
-            L_INFO("invalid node data neighbor TLV size %d, ignoring",
-                   (int) tlv_len(a));
           }
       }
 }

@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Wed Feb 26 17:15:41 2014 mstenber
- * Edit time:     425 min
+ * Last modified: Wed Apr  9 13:07:56 2014 mstenber
+ * Edit time:     426 min
  *
  */
 
@@ -231,13 +231,12 @@ static void _publish_ddzs(hncp_sd sd)
       if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX)
         {
           /* Forward DDZ handling (note: duplication doesn't matter here yet) */
-          if (!hncp_tlv_ap_valid(a))
+          if (!(ah = hncp_tlv_ap(a)))
             {
               L_ERR("invalid ap _published by us: %s", TLV_REPR(a));
               return;
             }
 
-          ah = tlv_data(a);
           uint32_t link_id = be32_to_cpu(ah->link_id);
 
           l = hncp_find_link_by_id(sd->hncp, link_id);

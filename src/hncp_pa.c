@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Wed Feb 26 17:29:30 2014 mstenber
- * Edit time:     333 min
+ * Last modified: Wed Apr  9 13:29:44 2014 mstenber
+ * Edit time:     374 min
  *
  */
 
@@ -135,15 +135,14 @@ static hncp_link _find_local_link(hncp_node onode, uint32_t olink_no)
 {
   hncp o = onode->hncp;
   struct tlv_attr *a;
+  hncp_t_node_data_neighbor nh;
 
   /* We're lazy and just compare published information; we _could_
    * of course also look at per-link and per-neighbor structures,
    * but this is simpler.. */
   hncp_node_for_each_tlv_i(o->own_node, a)
-    if (tlv_id(a) == HNCP_T_NODE_DATA_NEIGHBOR)
+    if ((nh = hncp_tlv_neighbor(a)))
       {
-        hncp_t_node_data_neighbor nh = tlv_data(a);
-
         if (nh->neighbor_link_id != olink_no)
           continue;
         if (memcmp(&onode->node_identifier_hash,
@@ -163,29 +162,28 @@ static void _update_a_tlv(hncp_glue g, hncp_node n,
   struct prefix p;
   hncp_link l;
 
-  if (!hncp_tlv_ap_valid(tlv))
+  if (!(ah = hncp_tlv_ap(tlv)))
     return;
   memset(&p, 0, sizeof(p));
-  ah = tlv_data(tlv);
   p.plen = ah->prefix_length_bits;
   plen = ROUND_BITS_TO_BYTES(p.plen);
-  memcpy(&p, tlv_data(tlv) + sizeof(*ah), plen);
+  memcpy(&p, ah->prefix_data, plen);
   l = _find_local_link(n, ah->link_id);
 
   struct pa_ap *ap = pa_ap_get(g->pa_data, &p, (struct pa_rid *)&n->node_identifier_hash, add);
-  if(!ap)
-	  return;
+  if (!ap)
+    return;
 
   struct pa_iface *iface = NULL;
-  if(l)
-	  iface = pa_iface_get(g->pa_data, l->ifname, add);
+  if (l)
+    iface = pa_iface_get(g->pa_data, l->ifname, add);
 
-  if(!add) {
-	  pa_ap_todelete(ap);
+  if (!add) {
+    pa_ap_todelete(ap);
   } else {
-	  pa_ap_set_iface(ap, iface);
-          pa_ap_set_priority(ap, ah->preference);
-          pa_ap_set_authoritative(ap, ah->authoritative);
+    pa_ap_set_iface(ap, iface);
+    pa_ap_set_priority(ap, ah->preference);
+    pa_ap_set_authoritative(ap, ah->authoritative);
   }
 
   pa_ap_notify(g->pa_data, ap);
@@ -197,10 +195,10 @@ static void _update_pa_eaa(struct pa_data *data, const struct in6_addr *addr,
 {
 	/* This is a function to update external address assignments */
 	struct pa_eaa *eaa = pa_eaa_get(data, addr, rid, !to_delete);
-	if(!eaa)
+	if (!eaa)
 		return;
 
-	if(to_delete)
+	if (to_delete)
 		pa_aa_todelete(&eaa->aa);
 
 	pa_aa_notify(data, &eaa->aa);
@@ -243,13 +241,12 @@ static void _update_d_tlv(hncp_glue g, hncp_node n,
   int plen;
   struct prefix p;
 
-  if (!hncp_tlv_dp_valid(tlv))
+  if (!(dh = hncp_tlv_dp(tlv)))
     return;
   memset(&p, 0, sizeof(p));
-  dh = tlv_data(tlv);
   p.plen = dh->prefix_length_bits;
   plen = ROUND_BITS_TO_BYTES(p.plen);
-  memcpy(&p, tlv_data(tlv) + sizeof(*dh), plen);
+  memcpy(&p, dh->prefix_data, plen);
   if (!add)
     {
       valid = 0;
@@ -298,9 +295,9 @@ static void _update_d_tlv(hncp_glue g, hncp_node n,
   if(valid) {
 	  pa_dp_set_lifetime(&edp->dp, preferred, valid);
 	  pa_dp_set_dhcp(&edp->dp, dhcpv6_data, dhcpv6_len);
-	  if(edp->timeout.pending)
+	  if (edp->timeout.pending)
 		  uloop_timeout_cancel(&edp->timeout);
-  } else if(!edp->timeout.pending) {
+  } else if (!edp->timeout.pending) {
 	  edp->timeout.cb = _pa_dp_delayed_delete;
 	  edp->data = g->pa_data;
 	  uloop_timeout_set(&edp->timeout, HNCP_PA_EDP_DELAYED_DELETE_MS);
@@ -308,6 +305,38 @@ static void _update_d_tlv(hncp_glue g, hncp_node n,
 
   pa_dp_notify(g->pa_data, &edp->dp);
   return;
+}
+
+static void _update_a_local_links(hncp_glue g)
+{
+  hncp o = g->hncp;
+  hncp_node n;
+  struct tlv_attr *a;
+  hncp_t_assigned_prefix_header ah;
+  hncp_link l;
+  struct prefix p;
+
+  hncp_for_each_node(o, n)
+    {
+      hncp_node_for_each_tlv(n, a)
+        {
+          if (!(ah = hncp_tlv_ap(a)))
+            return;
+          memset(&p, 0, sizeof(p));
+          p.plen = ah->prefix_length_bits;
+          int plen = ROUND_BITS_TO_BYTES(p.plen);
+          memcpy(&p, ah->prefix_data, plen);
+          l = _find_local_link(n, ah->link_id);
+          struct pa_ap *ap = pa_ap_get(g->pa_data, &p, (struct pa_rid *)&n->node_identifier_hash, false);
+          if (!ap)
+            continue;
+          struct pa_iface *iface = NULL;
+          if (l)
+            iface = pa_iface_get(g->pa_data, l->ifname, true);
+          pa_ap_set_iface(ap, iface);
+          pa_ap_notify(g->pa_data, ap);
+        }
+    }
 }
 
 static void _tlv_cb(hncp_subscriber s,
@@ -369,6 +398,25 @@ static void _tlv_cb(hncp_subscriber s,
         }
       }
       break;
+    case HNCP_T_NODE_DATA_NEIGHBOR:
+      /* If it's either us, or change on a directly connected link
+       * (_not neccessarily pointed at us), we care. */
+      {
+        /* Note: There's underlying assumption here that the remote
+         * node information dies 'faster' than local one; it may or
+         * may not be true.
+         *
+         * If the assumption is actually false, we should simply not
+         * do any checks here, and just call _update_a_local_links
+         * blindly (at serious CPU cost, however).
+         */
+        hncp_t_node_data_neighbor ne;
+        if (n == g->hncp->own_node
+            || ((ne = hncp_tlv_neighbor(tlv))
+                && _find_local_link(n, be32_to_cpu(ne->link_id))))
+          _update_a_local_links(g);
+      }
+      break;
     default:
       return;
     }
@@ -386,7 +434,7 @@ void hncp_pa_set_dhcpv6_data_in_dirty(hncp_glue g)
 #define APPEND_BUF(buf, len, ibuf, ilen)        \
 do                                              \
   {                                             \
-  if (ilen)                                     \
+  if (ilen) \
     {                                           \
       buf = realloc(buf, len + ilen);           \
       if (!buf)                                 \

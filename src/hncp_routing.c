@@ -169,9 +169,8 @@ static bool hncp_routing_neighbors_are_mutual(hncp_node node, hncp_hash node_ide
 {
 	struct tlv_attr *a, *tlvs = hncp_node_get_tlvs(node);
 	tlv_for_each_attr(a, tlvs) {
-		if (tlv_id(a) == HNCP_T_NODE_DATA_NEIGHBOR &&
-				tlv_len(a) == sizeof(hncp_t_node_data_neighbor_s)) {
-			hncp_t_node_data_neighbor ne = tlv_data(a);
+		hncp_t_node_data_neighbor ne;
+		if ((ne = hncp_tlv_neighbor(a))) {
 			if (ne->link_id == neighbor_link_id && ne->neighbor_link_id == link_id &&
 					!memcmp(&ne->neighbor_node_identifier_hash,
 							node_identifier_hash, sizeof(*node_identifier_hash)))
@@ -260,10 +259,10 @@ static void hncp_routing_run(struct uloop_timeout *t)
 
 		struct tlv_attr *a, *a2, *tlvs = hncp_node_get_tlvs(c);
 		tlv_for_each_attr(a, tlvs) {
-			if (tlv_id(a) == HNCP_T_NODE_DATA_NEIGHBOR &&
-					tlv_len(a) == sizeof(hncp_t_node_data_neighbor_s)) {
+			hncp_t_assigned_prefix_header ap;
+			hncp_t_node_data_neighbor ne;
+			if ((ne = hncp_tlv_neighbor(a))) {
 
-				hncp_t_node_data_neighbor ne = tlv_data(a);
 				n = hncp_find_node_by_hash(hncp,
 					&ne->neighbor_node_identifier_hash, false);
 
@@ -315,10 +314,9 @@ static void hncp_routing_run(struct uloop_timeout *t)
 				n->bfs.hopcount = c->bfs.hopcount + 1;
 				list_add_tail(&n->bfs.head, &queue);
 			} else if (tlv_id(a) == HNCP_T_EXTERNAL_CONNECTION && c != hncp->own_node) {
+				hncp_t_delegated_prefix_header dp;
 				tlv_for_each_attr(a2, a)
-					if (tlv_id(a2) == HNCP_T_DELEGATED_PREFIX && hncp_tlv_dp_valid(a2)) {
-						hncp_t_delegated_prefix_header dp = tlv_data(a2);
-
+					if ((dp = hncp_tlv_dp(a2))) {
 						struct prefix from = { .plen = dp->prefix_length_bits };
 						size_t plen = ROUND_BITS_TO_BYTES(from.plen);
 						memcpy(&from.prefix, &dp[1], plen);
@@ -333,8 +331,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 							}
 						}
 					}
-			} else if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX && hncp_tlv_ap_valid(a) && c != hncp->own_node) {
-				hncp_t_assigned_prefix_header ap = tlv_data(a);
+			} else if ((ap = hncp_tlv_ap(a)) && c != hncp->own_node) {
 				hncp_link link = hncp_find_link_by_name(hncp, c->bfs.ifname, false);
 
 				// Skip routes for prefixes on connected links

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Feb 26 17:14:18 2014 mstenber
- * Edit time:     281 min
+ * Last modified: Wed Apr  9 13:12:54 2014 mstenber
+ * Edit time:     286 min
  *
  */
 
@@ -288,15 +288,12 @@ handle_message(hncp_link l,
             L_INFO("got multiple link ids - ignoring");
             return;
           }
-        if (tlv_len(a) == sizeof(hncp_t_link_id_s))
-          {
-            lid = tlv_data(a);
-          }
-        else
+        if (tlv_len(a) != sizeof(*lid))
           {
             L_INFO("got invalid sized link ids - ignoring");
             return; /* weird link id */
           }
+        lid = tlv_data(a);
       }
 
   if (!lid)
@@ -321,6 +318,11 @@ handle_message(hncp_link l,
       switch (tlv_id(a))
         {
         case HNCP_T_NETWORK_HASH:
+          if (tlv_len(a) != HNCP_HASH_LEN)
+            {
+              L_DEBUG("got invalid network hash length: %d", tlv_len(a));
+              return;
+            }
           nethash = tlv_data(a);
           /* We don't care, if network hash state IS same. */
           if (memcmp(nethash, &o->network_hash, HNCP_HASH_LEN) == 0)
@@ -348,12 +350,11 @@ handle_message(hncp_link l,
               L_INFO("ignoring req-net-hash in unicast");
               return;
             }
-          if (tlv_len(a) == HNCP_HASH_LEN)
-            {
-              n = hncp_find_node_by_hash(o, tlv_data(a), false);
-              if (n)
-                (void)hncp_link_send_node_data(l, src, n);
-            }
+          if (tlv_len(a) != HNCP_HASH_LEN)
+            return;
+          n = hncp_find_node_by_hash(o, tlv_data(a), false);
+          if (n)
+            (void)hncp_link_send_node_data(l, src, n);
           return;
         }
     }
