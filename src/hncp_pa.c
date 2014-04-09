@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Wed Apr  9 18:46:21 2014 mstenber
- * Edit time:     382 min
+ * Last modified: Wed Apr  9 19:03:00 2014 mstenber
+ * Edit time:     389 min
  *
  */
 
@@ -326,7 +326,7 @@ static void _update_a_local_links(hncp_glue g)
       hncp_node_for_each_tlv(n, a)
         {
           if (!(ah = hncp_tlv_ap(a)))
-            return;
+            continue;
           memset(&p, 0, sizeof(p));
           p.plen = ah->prefix_length_bits;
           int plen = ROUND_BITS_TO_BYTES(p.plen);
@@ -334,7 +334,10 @@ static void _update_a_local_links(hncp_glue g)
           l = _find_local_link(n, ah->link_id);
           struct pa_ap *ap = pa_ap_get(g->pa_data, &p, (struct pa_rid *)&n->node_identifier_hash, false);
           if (!ap)
-            continue;
+            {
+              L_DEBUG(" unable to find AP for %s", PREFIX_REPR(&p));
+              continue;
+            }
           struct pa_iface *iface = NULL;
           if (l)
             iface = pa_iface_get(g->pa_data, l->ifname, true);
