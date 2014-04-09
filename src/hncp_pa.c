@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Wed Apr  9 13:29:44 2014 mstenber
- * Edit time:     374 min
+ * Last modified: Wed Apr  9 18:46:21 2014 mstenber
+ * Edit time:     382 min
  *
  */
 
@@ -53,6 +53,7 @@
 #include "dns_util.h"
 
 #define HNCP_PA_EDP_DELAYED_DELETE_MS 50
+#define HNCP_PA_AP_LINK_UPDATE_MS 50
 
 typedef struct {
   struct vlist_node in_dps;
@@ -72,6 +73,9 @@ struct hncp_glue_struct {
 
   /* HNCP notification subscriber structure */
   hncp_subscriber_s subscriber;
+
+  /* Timeout for updating assigned prefixes links */
+  struct uloop_timeout ap_if_update_timeout;
 
   /* What are we gluing together anyway? */
   hncp hncp;
@@ -316,6 +320,7 @@ static void _update_a_local_links(hncp_glue g)
   hncp_link l;
   struct prefix p;
 
+  L_DEBUG("_update_a_local_links");
   hncp_for_each_node(o, n)
     {
       hncp_node_for_each_tlv(n, a)
@@ -334,6 +339,7 @@ static void _update_a_local_links(hncp_glue g)
           if (l)
             iface = pa_iface_get(g->pa_data, l->ifname, true);
           pa_ap_set_iface(ap, iface);
+          L_DEBUG(" updated " PA_AP_L, PA_AP_LA(ap));
           pa_ap_notify(g->pa_data, ap);
         }
     }
@@ -399,22 +405,11 @@ static void _tlv_cb(hncp_subscriber s,
       }
       break;
     case HNCP_T_NODE_DATA_NEIGHBOR:
-      /* If it's either us, or change on a directly connected link
-       * (_not neccessarily pointed at us), we care. */
       {
-        /* Note: There's underlying assumption here that the remote
-         * node information dies 'faster' than local one; it may or
-         * may not be true.
-         *
-         * If the assumption is actually false, we should simply not
-         * do any checks here, and just call _update_a_local_links
-         * blindly (at serious CPU cost, however).
-         */
-        hncp_t_node_data_neighbor ne;
-        if (n == g->hncp->own_node
-            || ((ne = hncp_tlv_neighbor(tlv))
-                && _find_local_link(n, be32_to_cpu(ne->link_id))))
-          _update_a_local_links(g);
+        /* Should do it every now and then even if already busy. So if
+         * already queued, ignore this extra change. */
+        if (!g->ap_if_update_timeout.pending)
+          uloop_timeout_set(&g->ap_if_update_timeout, HNCP_PA_AP_LINK_UPDATE_MS);
       }
       break;
     default:
@@ -740,6 +735,13 @@ static void _node_change_cb(hncp_subscriber s, hncp_node n, bool add)
   pa_flood_notify(g->pa_data);
 }
 
+static void _ap_if_update_timeout_cb(struct uloop_timeout *to)
+{
+  hncp_glue g = container_of(to, hncp_glue_s, ap_if_update_timeout);
+
+  _update_a_local_links(g);
+}
+
 hncp_glue hncp_pa_glue_create(hncp o, struct pa_data *pa_data)
 {
   struct pa_rid *rid = (struct pa_rid *)&o->own_node->node_identifier_hash;
@@ -758,6 +760,7 @@ hncp_glue hncp_pa_glue_create(hncp o, struct pa_data *pa_data)
   g->data_user.cps = hncp_pa_cps;
   g->data_user.dps = hncp_pa_dps;
   g->data_user.aas = hncp_pa_aas;
+  g->ap_if_update_timeout.cb = _ap_if_update_timeout_cb;
 
   /* Set the rid */
   pa_flood_set_rid(pa_data, rid);
@@ -773,6 +776,7 @@ hncp_glue hncp_pa_glue_create(hncp o, struct pa_data *pa_data)
 
 void hncp_pa_glue_destroy(hncp_glue g)
 {
+  uloop_timeout_cancel(&g->ap_if_update_timeout);
   vlist_flush_all(&g->dps);
   free(g);
 }
