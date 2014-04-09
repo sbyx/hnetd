@@ -608,6 +608,7 @@ void pa_pd_init(struct pa_pd *pd, const struct pa_pd_conf *conf)
 	pd->data_user.aps = pa_pd_aps_cb;
 	pd->update.cb = pa_pd_update_cb;
 	pd->update.pending = false;
+	pd->started = false;
 }
 
 void pa_pd_start(struct pa_pd *pd)
