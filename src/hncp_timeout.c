@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Apr  9 13:17:58 2014 mstenber
+ * Last modified: Mon Apr 14 18:33:10 2014 mstenber
  * Edit time:     100 min
  *
  */
@@ -255,7 +255,8 @@ void hncp_run(hncp o)
           if (n->ping_count++ == HNCP_INTERVAL_RETRIES)
             {
               /* Zap the neighbor */
-              /* printf("neighbor gone\n"); */
+              L_DEBUG("neighbor %llx is gone - no response to pings",
+                      hncp_hash64(&n->node_identifier_hash));
               vlist_delete(&l->neighbors, &n->in_neighbors);
               continue;
             }
