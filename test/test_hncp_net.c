@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Apr 14 15:08:03 2014 mstenber
- * Edit time:     333 min
+ * Last modified: Mon Apr 14 17:12:22 2014 mstenber
+ * Edit time:     344 min
  *
  */
 
@@ -195,15 +195,6 @@ static void raw_bird14(net_sim s)
 
   sput_fail_unless(s->sent_unicast < 2000, "with 'few' unicast");
 
-  net_sim_remove_node_by_name(s, nodenames[0]);
-
-  /* Re-add the node */
-  (void)net_sim_find_hncp(s, nodenames[0]);
-
-  handle_connections(s, &nodeconnections[0], 2); /* Two first ones are needed */
-
-  SIM_WHILE(s, 10000, !net_sim_is_converged(s));
-
   /* Then, simulate network for a while, keeping eye on how often it's
    * NOT converged. */
   int converged_count = s->converged_count;
@@ -225,6 +216,19 @@ static void raw_bird14(net_sim s)
                    "should stay converged");
   sput_fail_unless(s->converged_count > converged_count,
                    "converged count rising");
+
+  /* Make sure it will converge after remove + re-add in reasonable
+   * timeframe too. */
+  net_sim_remove_node_by_name(s, nodenames[0]);
+
+  /* Re-add the node */
+  (void)net_sim_find_hncp(s, nodenames[0]);
+
+  handle_connections(s, &nodeconnections[0], 2); /* Two first ones are needed */
+
+  SIM_WHILE(s, 10000, !net_sim_is_converged(s));
+
+
 }
 
 void hncp_bird14()
@@ -285,6 +289,7 @@ static void raw_hncp_tube(unsigned int num_nodes)
                    "enough nodes");
 
   net_sim_uninit(&s);
+  L_NOTICE("finished in %lld ms", hnetd_time() - s.start);
 }
 
 void hncp_tube_small(void)
