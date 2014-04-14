@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Wed Apr  9 19:03:00 2014 mstenber
- * Edit time:     389 min
+ * Last modified: Mon Apr 14 19:03:44 2014 mstenber
+ * Edit time:     392 min
  *
  */
 
@@ -186,8 +186,8 @@ static void _update_a_tlv(hncp_glue g, hncp_node n,
     pa_ap_todelete(ap);
   } else {
     pa_ap_set_iface(ap, iface);
-    pa_ap_set_priority(ap, ah->preference);
-    pa_ap_set_authoritative(ap, ah->authoritative);
+    pa_ap_set_priority(ap, HNCP_T_ASSIGNED_PREFIX_FLAG_PREFERENCE(ah->flags));
+    pa_ap_set_authoritative(ap, ah->flags & HNCP_T_ASSIGNED_PREFIX_FLAG_AUTHORITATIVE);
   }
 
   pa_ap_notify(g->pa_data, ap);

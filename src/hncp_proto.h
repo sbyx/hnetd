@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Mon Apr 14 11:24:24 2014 mstenber
- * Edit time:     51 min
+ * Last modified: Mon Apr 14 19:05:19 2014 mstenber
+ * Edit time:     63 min
  *
  */
 
@@ -150,13 +150,14 @@ typedef struct __packed {
 /* HNCP_T_ASSIGNED_PREFIX */
 typedef struct __packed {
   uint32_t link_id;
-  unsigned int reserved: 3;
-  unsigned int authoritative: 1;
-  unsigned int preference: 4;
+  uint8_t flags;
   uint8_t prefix_length_bits;
   /* Prefix data, padded so that ends at 4 byte boundary (0s). */
   uint8_t prefix_data[];
 } hncp_t_assigned_prefix_header_s, *hncp_t_assigned_prefix_header;
+
+#define HNCP_T_ASSIGNED_PREFIX_FLAG_AUTHORITATIVE 0x10
+#define HNCP_T_ASSIGNED_PREFIX_FLAG_PREFERENCE(flags) ((flags) & 0xf)
 
 /* HNCP_T_DHCP_OPTIONS - just container, no own content */
 /* HNCP_T_DHCPV6_OPTIONS - just container, no own content */
@@ -175,6 +176,9 @@ typedef struct __packed {
   uint8_t ll[];
 } hncp_t_dns_delegated_zone_s, *hncp_t_dns_delegated_zone;
 
+#define HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE 1
+#define HNCP_T_DNS_DELEGATED_ZONE_FLAG_SEARCH 2
+
 /* HNCP_T_DNS_DOMAIN_NAME has just DNS label sequence */
 
 /* HNCP_T_DNS_ROUTER_NAME has just variable length string. */
@@ -185,9 +189,6 @@ typedef struct __packed {
   uint8_t preference;
 } hncp_t_routing_protocol_s, *hncp_t_routing_protocol;
 
-
-#define HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE 1
-#define HNCP_T_DNS_DELEGATED_ZONE_FLAG_SEARCH 2
 
 /**************************************************************** Addressing */
 

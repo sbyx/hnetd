@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Apr  9 13:12:54 2014 mstenber
- * Edit time:     286 min
+ * Last modified: Mon Apr 14 19:03:59 2014 mstenber
+ * Edit time:     330 min
  *
  */
 
@@ -592,8 +592,9 @@ void hncp_tlv_ap_update(hncp o,
   l = hncp_find_link_by_name(o, ifname, false);
   if (l)
     ah->link_id = cpu_to_be32(l->iid);
-  ah->authoritative = authoritative;
-  ah->preference = preference;
+  ah->flags =
+    HNCP_T_ASSIGNED_PREFIX_FLAG_PREFERENCE(preference)
+    | authoritative ? HNCP_T_ASSIGNED_PREFIX_FLAG_AUTHORITATIVE : 0;
   ah->prefix_length_bits = p.plen;
   ah++;
   memcpy(ah, &p, plen);
