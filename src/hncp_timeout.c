@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Mon Apr 14 18:33:10 2014 mstenber
- * Edit time:     100 min
+ * Last modified: Mon Apr 14 20:04:32 2014 mstenber
+ * Edit time:     114 min
  *
  */
 
@@ -152,7 +152,7 @@ void hncp_run(hncp o)
    * replicating code. */
   hncp_self_flush(o->own_node);
 
-  if (o->neighbors_dirty && !o->disable_prune)
+  if (o->graph_dirty && !o->disable_prune)
     {
       hnetd_time_t prune_at = HNCP_MINIMUM_PRUNE_INTERVAL + o->last_prune;
 
@@ -163,7 +163,7 @@ void hncp_run(hncp o)
       else
         {
           hncp_prune(o);
-          o->neighbors_dirty = false;
+          o->graph_dirty = false;
           o->last_prune = now;
         }
     }

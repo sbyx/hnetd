@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Apr  9 13:18:19 2014 mstenber
- * Edit time:     134 min
+ * Last modified: Mon Apr 14 20:03:55 2014 mstenber
+ * Edit time:     136 min
  *
  */
 
@@ -65,7 +65,7 @@ struct hncp_struct {
 
   /* flag which indicates that we (or someone connected) may have
    * changed connectivity. */
-  bool neighbors_dirty;
+  bool graph_dirty;
   hnetd_time_t last_prune;
 
   /* flag which indicates that we should re-calculate network hash

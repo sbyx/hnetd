@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Mon Apr 14 19:06:33 2014 mstenber
- * Edit time:     330 min
+ * Last modified: Mon Apr 14 20:04:17 2014 mstenber
+ * Edit time:     334 min
  *
  */
 
@@ -352,7 +352,7 @@ handle_message(hncp_link l,
           n = hncp_find_node_by_hash(o, tlv_data(a), false);
           if (n)
             {
-              if (o->neighbors_dirty && n != o->own_node)
+              if (o->graph_dirty && n != o->own_node)
                 {
                   L_DEBUG("prune pending, ignoring node data request");
                   return;

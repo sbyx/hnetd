@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Apr 14 18:27:44 2014 mstenber
- * Edit time:     452 min
+ * Last modified: Mon Apr 14 20:06:32 2014 mstenber
+ * Edit time:     453 min
  *
  */
 
@@ -62,7 +62,7 @@ bool hncp_node_set_tlvs(hncp_node n, struct tlv_attr *a)
   n->tlv_container = a;
   n->hncp->network_hash_dirty = true;
   n->node_data_hash_dirty = true;
-  n->hncp->neighbors_dirty = true;
+  n->hncp->graph_dirty = true;
   hncp_schedule(n->hncp);
 
   uint32_t version = 0;
@@ -122,7 +122,7 @@ static void update_node(__unused struct vlist_tree *t,
       hncp_notify_subscribers_node_changed(n_new, true);
     }
   o->network_hash_dirty = true;
-  o->neighbors_dirty = true;
+  o->graph_dirty = true;
   hncp_schedule(o);
 }
 
