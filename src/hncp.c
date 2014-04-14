@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Apr 14 20:06:32 2014 mstenber
- * Edit time:     453 min
+ * Last modified: Mon Apr 14 20:33:33 2014 mstenber
+ * Edit time:     455 min
  *
  */
 
@@ -593,8 +593,6 @@ void hncp_self_flush(hncp_node n)
 
 struct tlv_attr *hncp_node_get_tlvs(hncp_node n)
 {
-  if (hncp_node_is_self(n))
-    hncp_self_flush(n);
   if (n->version != n->hncp->own_node->version)
     return NULL;
   return n->tlv_container;

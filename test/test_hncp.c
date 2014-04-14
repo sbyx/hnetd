@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Fri Apr  4 13:25:12 2014 mstenber
- * Edit time:     73 min
+ * Last modified: Mon Apr 14 20:36:47 2014 mstenber
+ * Edit time:     75 min
  *
  */
 
@@ -17,6 +17,12 @@
 
 /* Lots of stubs here, rather not put __unused all over the place. */
 #pragma GCC diagnostic ignored "-Wunused-parameter"
+
+/* Only 'internal' method we use from here; normally, it is possible
+ * to get NULL tlvs right after setting, until timeout causes flush to
+ * network. */
+void hncp_self_flush(hncp_node n);
+
 
 /* Fake structures to keep pa's default config happy. */
 void *iface_register_user;
@@ -52,6 +58,7 @@ void hncp_ext(void)
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0);
 
+  hncp_self_flush(n);
   sput_fail_unless(hncp_node_get_tlvs(n), "should have tlvs");
 
   tlv_for_each_attr(v, hncp_node_get_tlvs(n))
@@ -65,6 +72,7 @@ void hncp_ext(void)
   r = hncp_add_tlv(o, t_data);
   sput_fail_unless(r, "hncp_add_tlv ok (should work)");
 
+  hncp_self_flush(n);
   t = hncp_node_get_tlvs(n);
   sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs consistent");
 
@@ -78,6 +86,7 @@ void hncp_ext(void)
   r = hncp_set_link_enabled(o, "eth1", true);
   sput_fail_unless(!r, "hncp_set_link_enabled eth1 (2nd true)");
 
+  hncp_self_flush(n);
   t = hncp_node_get_tlvs(n);
   sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs should be same");
 
@@ -87,6 +96,7 @@ void hncp_ext(void)
   r = hncp_set_link_enabled(o, "eth1", false);
   sput_fail_unless(!r, "hncp_set_link_enabled eth1 (2nd false)");
 
+  hncp_self_flush(n);
   t = hncp_node_get_tlvs(n);
   sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs should be same");
 
