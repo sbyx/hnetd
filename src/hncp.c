@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Fri Apr  4 13:50:20 2014 mstenber
- * Edit time:     445 min
+ * Last modified: Mon Apr 14 18:27:44 2014 mstenber
+ * Edit time:     452 min
  *
  */
 
@@ -63,6 +63,7 @@ bool hncp_node_set_tlvs(hncp_node n, struct tlv_attr *a)
   n->hncp->network_hash_dirty = true;
   n->node_data_hash_dirty = true;
   n->hncp->neighbors_dirty = true;
+  hncp_schedule(n->hncp);
 
   uint32_t version = 0;
   const char *agent = NULL;
@@ -586,8 +587,6 @@ void hncp_self_flush(hncp_node n)
     }
   n->update_number++;
   n->origination_time = hncp_time(o);
-  o->network_hash_dirty = true;
-  hncp_schedule(o);
   L_DEBUG("hncp_self_flush: %p -> update_number = %d @ %lld",
           n, n->update_number, (long long)n->origination_time);
 }
