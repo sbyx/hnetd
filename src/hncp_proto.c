@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Apr  9 13:12:54 2014 mstenber
- * Edit time:     286 min
+ * Last modified: Mon Apr 14 18:54:40 2014 mstenber
+ * Edit time:     327 min
  *
  */
 
@@ -290,8 +290,8 @@ handle_message(hncp_link l,
           }
         if (tlv_len(a) != sizeof(*lid))
           {
-            L_INFO("got invalid sized link ids - ignoring");
-            return; /* weird link id */
+            L_INFO("got invalid sized link id - ignoring");
+            return;
           }
         lid = tlv_data(a);
       }
@@ -302,6 +302,8 @@ handle_message(hncp_link l,
       return;
     }
 
+  /* We cannot simply ignore same node identifier; it might be someone
+   * with duplicated node identifier (hash). */
   if (memcmp(&lid->node_identifier_hash,
              &l->hncp->own_node->node_identifier_hash,
              HNCP_HASH_LEN) != 0)
@@ -324,12 +326,6 @@ handle_message(hncp_link l,
               return;
             }
           nethash = tlv_data(a);
-          /* We don't care, if network hash state IS same. */
-          if (memcmp(nethash, &o->network_hash, HNCP_HASH_LEN) == 0)
-            {
-              L_DEBUG("received network state which is consistent");
-              return;
-            }
           break;
         case HNCP_T_NODE_STATE:
           nodestates++;
@@ -352,24 +348,46 @@ handle_message(hncp_link l,
             }
           if (tlv_len(a) != HNCP_HASH_LEN)
             return;
+
           n = hncp_find_node_by_hash(o, tlv_data(a), false);
           if (n)
-            (void)hncp_link_send_node_data(l, src, n);
+            {
+              if (o->neighbors_dirty && n != o->own_node)
+                {
+                  L_DEBUG("prune pending, ignoring node data request");
+                  return;
+                }
+
+              (void)hncp_link_send_node_data(l, src, n);
+            }
           return;
         }
     }
-  /* Three different cases:
-     - raw network hash
-     - network hash + node states
-     - node state + node data
-  */
+
+  /* Requests were handled above. So what's left is response
+   * processing here. If it was unicast, it was probably solicited
+   * response, so we can mark the node as having been in touch with us
+   * recently. */
   if (!multicast && ne)
     {
       ne->last_response = hncp_time(l->hncp);
       ne->ping_count = 0;
     }
+
+  /* Three different cases to be handled for solicited/unsolicited responses:
+     - raw network hash
+     - network hash + node states
+     - node state + node data
+  */
   if (nethash)
     {
+      /* We don't care, if network hash state IS same. */
+      if (memcmp(nethash, &o->network_hash, HNCP_HASH_LEN) == 0)
+        {
+          L_DEBUG("received network state which is consistent");
+          return;
+        }
+
       /* Short form (raw network hash) */
       if (!nodestates)
         {
@@ -430,6 +448,7 @@ handle_message(hncp_link l,
       L_INFO("received node data via multicast, ignoring");
       return;
     }
+
   /* Look for node state + node data. */
   ns = NULL;
   nd = NULL;
