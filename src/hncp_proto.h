@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Fri Apr  4 12:45:46 2014 mstenber
- * Edit time:     45 min
+ * Last modified: Mon Apr 14 11:24:24 2014 mstenber
+ * Edit time:     51 min
  *
  */
 
@@ -95,6 +95,12 @@ typedef struct __packed {
   uint32_t link_id;
 } hncp_t_link_id_s, *hncp_t_link_id;
 
+/* HNCP_T_REQ_NET_HASH has no content */
+
+/* HNCP_T_REQ_NODE_DATA has only (node identifier) hash */
+
+/* HNCP_T_NETWORK_HASH has only (network state) hash */
+
 /* HNCP_T_NODE_STATE */
 typedef struct __packed {
   hncp_hash_s node_identifier_hash;
@@ -109,6 +115,9 @@ typedef struct __packed {
   uint32_t update_number;
 } hncp_t_node_data_header_s, *hncp_t_node_data_header;
 
+/* HNCP_T_NODE_DATA_KEY has only raw public key (perhaps it should
+ * have more information though? TBD */
+
 /* HNCP_T_NODE_DATA_NEIGHBOR */
 typedef struct __packed {
   hncp_hash_s neighbor_node_identifier_hash;
@@ -116,11 +125,15 @@ typedef struct __packed {
   uint32_t link_id;
 } hncp_t_node_data_neighbor_s, *hncp_t_node_data_neighbor;
 
+/* HNCP_T_CUSTOM custom data, with H-64 of URI at start to identify type TBD */
+
 /* HNCP_T_VERSION */
 typedef struct __packed {
   uint32_t version;
   char user_agent[];
 } hncp_t_version_s, *hncp_t_version;
+
+/* HNCP_T_EXTERNAL_CONNECTION - just container, no own content */
 
 /* HNCP_T_DELEGATED_PREFIX */
 typedef struct __packed {
@@ -145,18 +158,14 @@ typedef struct __packed {
   uint8_t prefix_data[];
 } hncp_t_assigned_prefix_header_s, *hncp_t_assigned_prefix_header;
 
-/* XXX - draft-00 has just address there, but we really want link id too. */
+/* HNCP_T_DHCP_OPTIONS - just container, no own content */
+/* HNCP_T_DHCPV6_OPTIONS - just container, no own content */
+
 /* HNCP_T_ROUTER_ADDRESS */
 typedef struct __packed {
   uint32_t link_id;
   struct in6_addr address;
 } hncp_t_router_address_s, *hncp_t_router_address;
-
-/* HNCP_T_ROUTING_PROTOCOL */
-typedef struct __packed {
-  uint8_t protocol;
-  uint8_t preference;
-} hncp_t_routing_protocol_s, *hncp_t_routing_protocol;
 
 /* HNCP_T_DNS_DELEGATED_ZONE */
 typedef struct __packed {
@@ -165,6 +174,17 @@ typedef struct __packed {
   /* Label list in DNS encoding (no compression). */
   uint8_t ll[];
 } hncp_t_dns_delegated_zone_s, *hncp_t_dns_delegated_zone;
+
+/* HNCP_T_DNS_DOMAIN_NAME has just DNS label sequence */
+
+/* HNCP_T_DNS_ROUTER_NAME has just variable length string. */
+
+/* HNCP_T_ROUTING_PROTOCOL */
+typedef struct __packed {
+  uint8_t protocol;
+  uint8_t preference;
+} hncp_t_routing_protocol_s, *hncp_t_routing_protocol;
+
 
 #define HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE 1
 #define HNCP_T_DNS_DELEGATED_ZONE_FLAG_SEARCH 2
