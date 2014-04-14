@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Apr 14 20:33:33 2014 mstenber
- * Edit time:     455 min
+ * Last modified: Mon Apr 14 21:47:06 2014 mstenber
+ * Edit time:     462 min
  *
  */
 
@@ -523,6 +523,7 @@ void hncp_self_flush(hncp_node n)
 
   if (o->links_dirty)
     {
+      L_DEBUG("hncp_self_flush: handling links_dirty");
       o->links_dirty = false;
       /* Rather crude: We simply get rid of existing link TLVs, and
        * publish new ones. Assumption: Whatever is added using
@@ -557,6 +558,7 @@ void hncp_self_flush(hncp_node n)
   if (!o->tlvs_dirty)
     return;
 
+  L_DEBUG("hncp_self_flush: notify about to republish tlvs");
   hncp_notify_subscribers_about_to_republish_tlvs(n);
 
   /* Dump the contents of hncp->tlvs to single tlv_buf. */
