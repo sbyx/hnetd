@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Mon Apr 14 19:03:44 2014 mstenber
- * Edit time:     392 min
+ * Last modified: Mon Apr 14 19:06:17 2014 mstenber
+ * Edit time:     393 min
  *
  */
 
@@ -355,7 +355,7 @@ static void _tlv_cb(hncp_subscriber s,
 
   L_NOTICE("_tlv_cb %s %s %s",
            add ? "add" : "remove",
-           HNCP_NODE_REPR(n),
+           n == g->hncp->own_node ? "local" : HNCP_NODE_REPR(n),
            TLV_REPR(tlv));
 
   /* Ignore our own TLV changes (otherwise bad things might happen) */

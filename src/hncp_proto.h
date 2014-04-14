@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Mon Apr 14 19:05:19 2014 mstenber
- * Edit time:     63 min
+ * Last modified: Mon Apr 14 19:06:08 2014 mstenber
+ * Edit time:     64 min
  *
  */
 
@@ -40,8 +40,11 @@
  */
 #define HNCP_INTERVAL_RETRIES 3
 
-/* Don't do node pruning more often than this. */
-#define HNCP_MINIMUM_PRUNE_INTERVAL (1*HNETD_TIME_PER_SECOND)
+/* Don't do node pruning more often than this. This should be less
+ * than minimum Trickle interval, as currently non-valid state will
+ * not be used to respond to node data requests about anyone except
+ * self. */
+#define HNCP_MINIMUM_PRUNE_INTERVAL (HNETD_TIME_PER_SECOND / 50)
 
 /* 0 = reserved link id. note it somewhere. */
 
