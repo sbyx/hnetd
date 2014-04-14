@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Apr 14 17:12:22 2014 mstenber
- * Edit time:     344 min
+ * Last modified: Mon Apr 14 20:28:27 2014 mstenber
+ * Edit time:     352 min
  *
  */
 
@@ -202,6 +202,8 @@ static void raw_bird14(net_sim s)
   int sent_unicast = s->sent_unicast;
   hnetd_time_t convergence_time = hnetd_time();
 
+  s->should_be_stable_topology = true;
+  L_DEBUG("assume stable topology");
   SIM_WHILE(s, 100000, !net_sim_is_converged(s) ||
             (hnetd_time() - convergence_time) < (HNCP_INTERVAL_WORRIED * 2 *
                                                  HNCP_INTERVAL_RETRIES));
@@ -216,6 +218,9 @@ static void raw_bird14(net_sim s)
                    "should stay converged");
   sput_fail_unless(s->converged_count > converged_count,
                    "converged count rising");
+
+  L_DEBUG("assume unstable topology");
+  s->should_be_stable_topology = false;
 
   /* Make sure it will converge after remove + re-add in reasonable
    * timeframe too. */

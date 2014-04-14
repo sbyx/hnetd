@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Wed Mar 19 14:04:05 2014 mstenber
- * Edit time:     70 min
+ * Last modified: Mon Apr 14 20:21:19 2014 mstenber
+ * Edit time:     77 min
  *
  */
 
@@ -83,6 +83,10 @@ typedef struct {
   /* When is it scheduled to run? */
   struct uloop_timeout run_to;
 
+  /* Debug subscriber we use just to make sure there are no changes
+   * when the topology should be stable. */
+  hncp_subscriber_s debug_subscriber;
+
 } net_node_s, *net_node;
 
 typedef struct net_sim_t {
@@ -94,6 +98,7 @@ typedef struct net_sim_t {
   bool assume_bidirectional_reachability;
   bool disable_sd;
 
+  bool should_be_stable_topology;
   hnetd_time_t start;
 
   int sent_unicast;
@@ -207,6 +212,20 @@ bool net_sim_is_converged(net_sim s)
   return true;
 }
 
+void net_sim_local_tlv_callback(hncp_subscriber sub,
+                                struct tlv_attr *tlv, bool add)
+{
+  net_node n = container_of(sub, net_node_s, debug_subscriber);
+  net_sim s = n->s;
+
+  if (s->should_be_stable_topology)
+    if (tlv_id(tlv) == HNCP_T_NODE_DATA_NEIGHBOR)
+      {
+        sput_fail_unless(false, "got change when topology stable");
+      }
+}
+
+
 hncp net_sim_find_hncp(net_sim s, const char *name)
 {
   net_node n;
@@ -252,6 +271,8 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
                                  NULL, NULL)))
       return NULL;
 #endif /* !DISABLE_HNCP_SD */
+  n->debug_subscriber.local_tlv_change_callback = net_sim_local_tlv_callback;
+  hncp_subscribe(&n->n, &n->debug_subscriber);
   return &n->n;
 }
 
