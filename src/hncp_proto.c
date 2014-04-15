@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Mon Apr 14 20:04:17 2014 mstenber
- * Edit time:     334 min
+ * Last modified: Tue Apr 15 13:39:14 2014 mstenber
+ * Edit time:     336 min
  *
  */
 
@@ -370,6 +370,11 @@ handle_message(hncp_link l,
    * recently. */
   if (!multicast && ne)
     {
+      if (!o->assume_bidirectional_reachability && !ne->last_response)
+        {
+          o->links_dirty = true;
+          hncp_schedule(o);
+        }
       ne->last_response = hncp_time(l->hncp);
       ne->ping_count = 0;
     }

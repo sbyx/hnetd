@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Apr 14 21:47:06 2014 mstenber
- * Edit time:     462 min
+ * Last modified: Tue Apr 15 13:37:41 2014 mstenber
+ * Edit time:     463 min
  *
  */
 
@@ -536,6 +536,13 @@ void hncp_self_flush(hncp_node n)
         {
           vlist_for_each_element(&l->neighbors, ne, in_neighbors)
             {
+              /* If we don't assume bidirectional reachability, only
+               * advertise routers that _do_ respond to our unicast at
+               * least once. */
+              if (!o->assume_bidirectional_reachability &&
+                  !ne->last_response)
+                continue;
+
               unsigned char buf[TLV_SIZE + sizeof(hncp_t_node_data_neighbor_s)];
               struct tlv_attr *nt = (struct tlv_attr *)buf;
 
