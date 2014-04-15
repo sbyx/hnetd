@@ -31,7 +31,7 @@ struct platform_iface {
 	pid_t dhcpv6;
 };
 
-int platform_init(const char *pd_socket)
+int platform_init(__unused struct pa_data *data, const char *pd_socket)
 {
 	hnetd_pd_socket = pd_socket;
 	return 0;
@@ -90,6 +90,16 @@ void platform_set_internal(struct iface *c, bool internal)
 
 	char *argv[] = {backend, (internal) ? "setfilter" : "unsetfilter",
 			c->ifname, NULL};
+	platform_call(argv);
+}
+
+
+void platform_filter_prefix(struct iface *c, const struct prefix *p, bool enable)
+{
+	char abuf[PREFIX_MAXBUFFLEN];
+	prefix_ntop(abuf, sizeof(abuf), p, true);
+	char *argv[] = {backend, (enable) ? "newblocked" : "delblocked",
+			c->ifname, abuf, NULL};
 	platform_call(argv);
 }
 

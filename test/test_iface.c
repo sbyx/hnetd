@@ -12,11 +12,12 @@
 
 void pa_data_subscribe(__unused struct pa_data *data, __unused struct pa_data_user *user) {}
 void platform_set_owner(__unused struct iface *c, __unused bool enable) {}
-int platform_init(__unused const char *pd_socket) { return 0; }
+int platform_init(__unused struct pa_data *data, __unused const char *pd_socket) { return 0; }
 void platform_set_address(__unused struct iface *c, __unused struct iface_addr *addr, __unused bool enable) {}
 void platform_set_route(__unused struct iface *c, __unused struct iface_route *addr, __unused bool enable) {}
 void platform_iface_free(__unused struct iface *c) {}
 void platform_set_internal(__unused struct iface *c, __unused bool internal) {}
+void platform_filter_prefix(__unused struct iface *c, __unused const struct prefix *p, __unused bool enable) {}
 void platform_iface_new(__unused struct iface *c, __unused const char *handle) { c->platform = (void*)1; }
 void platform_set_dhcpv6_send(__unused struct iface *c, __unused const void *dhcpv6_data, __unused size_t len,
 		__unused const void *dhcp_data, __unused size_t len4) {}

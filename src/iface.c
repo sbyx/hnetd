@@ -43,6 +43,7 @@ static bool iface_discover_border(struct iface *c);
 
 static struct list_head interfaces = LIST_HEAD_INIT(interfaces);
 static struct list_head users = LIST_HEAD_INIT(users);
+static struct pa_data *pa_data_p = NULL;
 static struct pa_data_user pa_data_cb = {
 	.cps = iface_pa_cps,
 	.aas = iface_pa_aas,
@@ -54,11 +55,21 @@ void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 		struct pa_dp *dp, uint32_t flags)
 {
 	if(flags & PADF_DP_CREATED) {
+		struct iface *c;
+		list_for_each_entry(c, &interfaces, head)
+			if (c->flags & IFACE_FLAG_GUEST)
+				platform_filter_prefix(c, &dp->prefix, true);
+
 		if(!prefix_is_ipv4(&dp->prefix)) {
 			L_DEBUG("Pushing to platform "PA_DP_L, PA_DP_LA(dp));
 			platform_set_prefix_route(&dp->prefix, true);
 		}
 	} else if(flags & PADF_DP_TODELETE) {
+		struct iface *c;
+		list_for_each_entry(c, &interfaces, head)
+			if (c->flags & IFACE_FLAG_GUEST)
+				platform_filter_prefix(c, &dp->prefix, false);
+
 		if(!prefix_is_ipv4(&dp->prefix)) {
 			L_DEBUG("Removing from platform "PA_DP_L, PA_DP_LA(dp));
 			platform_set_prefix_route(&dp->prefix, false);
@@ -315,7 +326,8 @@ int iface_init(struct pa_data *pa_data, const char *pd_socket)
 #endif /* __linux__ */
 
 	pa_data_subscribe(pa_data, &pa_data_cb);
-	return platform_init(pd_socket);
+	pa_data_p = pa_data;
+	return platform_init(pa_data, pd_socket);
 }
 
 
@@ -602,8 +614,15 @@ void iface_remove(struct iface *c)
 	vlist_flush_all(&c->delegated);
 	vlist_flush_all(&c->routes);
 
-	if (c->platform)
+	if (c->platform) {
+		if (c->flags & IFACE_FLAG_GUEST) {
+			struct pa_dp *dp;
+			pa_for_each_dp(dp, pa_data_p)
+				platform_filter_prefix(c, &dp->prefix, false);
+		}
+
 		platform_iface_free(c);
+	}
 
 	if (c->dhcpv6_len_in)
 		free(c->dhcpv6_data_in);
@@ -675,7 +694,8 @@ static bool iface_discover_border(struct iface *c)
 		return false;
 
 	// Perform border-discovery (border on DHCPv4 assignment or DHCPv6-PD)
-	bool internal = avl_is_empty(&c->delegated.avl) && !c->v4uplink && c->carrier;
+	bool internal = c->carrier && ((c->flags & IFACE_FLAG_GUEST) ||
+			(avl_is_empty(&c->delegated.avl) && !c->v4uplink));
 	if (c->internal != internal) {
 		L_INFO("iface: %s border discovery detected state %s",
 				c->ifname, (internal) ? "internal" : "external");
