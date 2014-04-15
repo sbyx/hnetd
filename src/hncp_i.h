@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Apr 15 12:49:25 2014 mstenber
- * Edit time:     147 min
+ * Last modified: Tue Apr 15 18:37:41 2014 mstenber
+ * Edit time:     152 min
  *
  */
 
@@ -21,9 +21,11 @@
 /* Rough approximation - should think of real figure. */
 #define HNCP_MAXIMUM_PAYLOAD_SIZE 65536
 
-/* Pretty arbitrary. I wonder if all links can really guarantee MTU size
- * packets going through.. */
-#define HNCP_MAXIMUM_MULTICAST_SIZE 1280
+/* Pretty arbitrary. I wonder if all links can really guarantee MTU
+ * size packets going through. However, IPv6 minimum MTU - size of
+ * IPv6 header - size of UDP header (we consider only the payload
+ * here) should work.  */
+#define HNCP_MAXIMUM_MULTICAST_SIZE (1280-40-8)
 
 #define HNCP_UPDATE_COLLISIONS_IN_N 3
 

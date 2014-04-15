@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Tue Apr 15 14:42:10 2014 mstenber
- * Edit time:     82 min
+ * Last modified: Tue Apr 15 18:40:19 2014 mstenber
+ * Edit time:     87 min
  *
  */
 
@@ -610,11 +610,14 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
   net_neigh n;
 
   if (!l)
-    return -1;
+    return - 1;
 
   sanity_check_buf(buf, len);
   if (is_multicast)
-    s->sent_multicast++;
+    {
+      s->sent_multicast++;
+      sput_fail_unless(len <= HNCP_MAXIMUM_MULTICAST_SIZE, "not too long multicast");
+    }
   else
     {
       s->sent_unicast++;
