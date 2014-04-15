@@ -59,6 +59,7 @@ static inline void fu_init()
 static inline void fu_set_hnetd_time(hnetd_time_t v)
 {
   sput_fail_unless(v >= _fu_time, "time cannot move to past");
+  L_DEBUG("fu_set_hnetd_time=%lld", (long long) v);
   _fu_time = v;
 }
 

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Mon Apr 14 20:21:19 2014 mstenber
- * Edit time:     77 min
+ * Last modified: Tue Apr 15 14:42:10 2014 mstenber
+ * Edit time:     82 min
  *
  */
 
@@ -168,6 +168,24 @@ bool net_sim_is_converged(net_sim s)
   bool first = true;
   hncp_hash h = NULL;
   hncp_node hn;
+
+#if L_LEVEL >= 7
+  /* Dump # of nodes in each node */
+  int n_nodes = 0;
+  list_for_each_entry(n, &s->nodes, h)
+    n_nodes++;
+
+  char *buf = alloca(4 * n_nodes), *c = buf;
+  list_for_each_entry(n, &s->nodes, h)
+    {
+      int count = 0;
+
+      hncp_for_each_node(&n->n, hn)
+        count++;
+      c += sprintf(c, "%d ", count);
+    }
+  L_DEBUG("net_sim_is_converged: %s", buf);
+#endif /* L_LEVEL >= 7 */
 
   list_for_each_entry(n, &s->nodes, h)
     {
