@@ -27,6 +27,7 @@
 static struct ubus_context *ubus = NULL;
 static struct ubus_subscriber netifd;
 static uint32_t ubus_network_interface = 0;
+static struct pa_data *pa_data = NULL;
 
 static int handle_update(__unused struct ubus_context *ctx,
 		__unused struct ubus_object *obj, __unused struct ubus_request_data *req,
@@ -88,7 +89,7 @@ static void handle_event(__unused struct ubus_context *ctx, __unused struct ubus
 static struct ubus_event_handler event_handler = { .cb = handle_event };
 static const char *hnetd_pd_socket = NULL;
 
-int platform_init(const char *pd_socket)
+int platform_init(struct pa_data *data, const char *pd_socket)
 {
 	if (!(ubus = ubus_connect(NULL))) {
 		L_ERR("Failed to connect to ubus: %s", strerror(errno));
@@ -104,6 +105,7 @@ int platform_init(const char *pd_socket)
 		sync_netifd(true);
 
 	hnetd_pd_socket = pd_socket;
+	pa_data = data;
 	return 0;
 }
 
@@ -175,6 +177,13 @@ void platform_set_dhcpv6_send(struct iface *c,
 }
 
 
+void platform_filter_prefix(struct iface *c,
+		__unused const struct prefix *p, __unused bool enable)
+{
+	platform_set_internal(c, false);
+}
+
+
 void platform_set_prefix_route(const struct prefix *p, bool enable)
 {
 	iface_set_unreachable_route(p, enable);
@@ -203,7 +212,7 @@ static void platform_commit(struct uloop_timeout *t)
 
 	L_DEBUG("platform: *** begin interface update %s (%s)", iface->handle, c->ifname);
 
-	void *k, *l;
+	void *k, *l, *m;
 	struct iface_addr *a;
 	struct iface_route *r;
 
@@ -451,6 +460,52 @@ static void platform_commit(struct uloop_timeout *t)
 		blobmsg_close_array(&b, l);
 	}
 
+	if (c->flags & IFACE_FLAG_GUEST) {
+		if (dns_cnt || dns4_cnt) {
+			l = blobmsg_open_array(&b, "dns");
+
+			for (size_t i = 0; i < dns_cnt; ++i) {
+				char *buf = blobmsg_alloc_string_buffer(&b, NULL, INET6_ADDRSTRLEN);
+				inet_ntop(AF_INET6, &dns[i], buf, INET6_ADDRSTRLEN);
+				blobmsg_add_string_buffer(&b);
+				L_DEBUG("	DNS: %s", buf);
+			}
+
+			for (size_t i = 0; i < dns4_cnt; ++i) {
+				char *buf = blobmsg_alloc_string_buffer(&b, NULL, INET_ADDRSTRLEN);
+				inet_ntop(AF_INET, &dns4[i], buf, INET_ADDRSTRLEN);
+				blobmsg_add_string_buffer(&b);
+				L_DEBUG("	DNS: %s", buf);
+			}
+
+			blobmsg_close_array(&b, l);
+		}
+
+		l = blobmsg_open_array(&b, "firewall");
+		struct pa_dp *dp;
+		pa_for_each_dp(dp, pa_data) {
+			for (int i = 0; i <= 1; ++i) {
+				m = blobmsg_open_table(&b, NULL);
+
+				blobmsg_add_string(&b, "type", "rule");
+				blobmsg_add_string(&b, "src", (i) ? zone : "*");
+				blobmsg_add_string(&b, "dest", (i) ? "*" : zone);
+				blobmsg_add_string(&b, "direction", (i) ? "in" : "out");
+				blobmsg_add_string(&b, "target", "REJECT");
+
+				const char *family = IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix) ? "inet" : "inet6";
+				blobmsg_add_string(&b, "family", family);
+
+				char *buf = blobmsg_alloc_string_buffer(&b, (i) ? "dest_ip" : "src_ip", PREFIX_MAXBUFFLEN);
+				prefix_ntop(buf, PREFIX_MAXBUFFLEN, &dp->prefix, true);
+				blobmsg_add_string_buffer(&b);
+
+				blobmsg_close_table(&b, m);
+			}
+		}
+		blobmsg_close_array(&b, l);
+	}
+
 	blobmsg_close_table(&b, k);
 
 	L_DEBUG("platform: *** end interface update %s (%s)", iface->handle, c->ifname);
@@ -526,7 +581,7 @@ static const struct blobmsg_policy iface_attrs[IFACE_ATTR_MAX] = {
 	[IFACE_ATTR_DELEGATION] = { .name = "delegation", .type = BLOBMSG_TYPE_BOOL },
 	[IFACE_ATTR_DNS] = { .name = "dns-server", .type = BLOBMSG_TYPE_ARRAY },
 	[IFACE_ATTR_UP] = { .name = "up", .type = BLOBMSG_TYPE_BOOL },
-	[IFACE_ATTR_DATA] = { .name = "data", .type = BLOBMSG_TYPE_ARRAY },
+	[IFACE_ATTR_DATA] = { .name = "data", .type = BLOBMSG_TYPE_TABLE },
 };
 
 static const struct blobmsg_policy route_attrs[ROUTE_ATTR_MAX] = {

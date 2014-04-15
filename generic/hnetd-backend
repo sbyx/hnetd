@@ -39,6 +39,26 @@ newprefixroute|delprefixroute)
 	ip -6 route "$act" unreachable "$2"
 	;;
 
+newblocked|delblocked)
+	[ "$1" = "newblocked" ] && act="-A" || act="-D"
+	case "$3" in
+		*.*)
+			cmd="iptables"
+			reject="icmp-port-unreachable"
+		;;
+		*)
+			cmd="ip6tables"
+			reject="icmp6-port-unreachable"
+		;;
+	esac
+
+	$cmd $act FORWARD -i "$2" -d "$3" -p tcp -j REJECT --reject-with tcp-reset
+	$cmd $act FORWARD -i "$2" -d "$3" -j REJECT --reject-with "$reject"
+
+	$cmd $act FORWARD -o "$2" -s "$3" -p tcp -j REJECT --reject-with tcp-reset
+	$cmd $act FORWARD -o "$2" -s "$3" -j REJECT --reject-with "$reject"
+	;;
+
 startdhcp)
 	uci batch <<-EOF
 	set dhcp.$2=dhcp
