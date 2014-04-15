@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Apr 14 20:28:27 2014 mstenber
- * Edit time:     352 min
+ * Last modified: Tue Apr 15 10:08:28 2014 mstenber
+ * Edit time:     357 min
  *
  */
 
@@ -20,6 +20,8 @@
 #endif /* L_LEVEL */
 
 #define L_LEVEL 5
+
+#include <unistd.h>
 
 /* Test utilities */
 #include "net_sim.h"
@@ -309,6 +311,19 @@ void hncp_tube_beyond_multicast(void)
 
 int main(__unused int argc, __unused char **argv)
 {
+#ifdef hnetd_time
+#undef hnetd_time
+#endif /* hnetd_time */
+  int seed = (int)hnetd_time();
+  int c;
+
+  while ((c = getopt(argc, argv, "r:")) > 0)
+    {
+      if (c == 'r')
+        seed = atoi(optarg);
+    }
+  srand(seed);
+
   setbuf(stdout, NULL); /* so that it's in sync with stderr when redirected */
   openlog("test_hncp_net", LOG_CONS | LOG_PERROR, LOG_DAEMON);
   sput_start_testing();
