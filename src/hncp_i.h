@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Apr 14 20:03:55 2014 mstenber
- * Edit time:     136 min
+ * Last modified: Tue Apr 15 12:49:25 2014 mstenber
+ * Edit time:     147 min
  *
  */
 
@@ -352,6 +352,44 @@ hncp_tlv_neighbor(const struct tlv_attr *a)
       || tlv_len(a) != sizeof(hncp_t_node_data_neighbor_s))
     return NULL;
   return tlv_data(a);
+}
+
+
+static inline hncp_node
+hncp_node_find_neigh_bidir2(hncp_node n,
+                            iid_t n_iid,
+                            iid_t o_iid,
+                            hncp_hash oh)
+{
+  if (!n)
+    return NULL;
+  hncp_node n2 = hncp_find_node_by_hash(n->hncp, oh, false);
+  if (!n2)
+    return NULL;
+  struct tlv_attr *a, *tlvs = hncp_node_get_tlvs(n2);
+  hncp_t_node_data_neighbor ne;
+
+  tlv_for_each_attr(a, tlvs)
+    if ((ne = hncp_tlv_neighbor(a)))
+      {
+        if (n_iid == ne->neighbor_link_id
+            && o_iid == ne->link_id &&
+            !memcmp(&ne->neighbor_node_identifier_hash,
+                    &n->node_identifier_hash, sizeof(n->node_identifier_hash)))
+          return n2;
+      }
+
+  return NULL;
+}
+
+
+static inline hncp_node
+hncp_node_find_neigh_bidir(hncp_node n, hncp_t_node_data_neighbor ne)
+{
+  return hncp_node_find_neigh_bidir2(n,
+                                     ne->link_id,
+                                     ne->neighbor_link_id,
+                                     &ne->neighbor_node_identifier_hash);
 }
 
 

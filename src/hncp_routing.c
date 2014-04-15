@@ -164,22 +164,6 @@ void hncp_routing_destroy(hncp_bfs bfs)
 	free(bfs);
 }
 
-static bool hncp_routing_neighbors_are_mutual(hncp_node node, hncp_hash node_identifier_hash,
-		uint32_t link_id, uint32_t neighbor_link_id)
-{
-	struct tlv_attr *a, *tlvs = hncp_node_get_tlvs(node);
-	tlv_for_each_attr(a, tlvs) {
-		hncp_t_node_data_neighbor ne;
-		if ((ne = hncp_tlv_neighbor(a))) {
-			if (ne->link_id == neighbor_link_id && ne->neighbor_link_id == link_id &&
-					!memcmp(&ne->neighbor_node_identifier_hash,
-							node_identifier_hash, sizeof(*node_identifier_hash)))
-				return true;
-		}
-	}
-	return false;
-}
-
 static void hncp_routing_callback(hncp_subscriber s, __unused hncp_node n,
 		__unused struct tlv_attr *tlv, __unused bool add)
 {
@@ -266,12 +250,12 @@ static void hncp_routing_run(struct uloop_timeout *t)
 				n = hncp_find_node_by_hash(hncp,
 					&ne->neighbor_node_identifier_hash, false);
 
-				if (!n || n->bfs.next_hop || n == hncp->own_node)
+				if (!(n = hncp_node_find_neigh_bidir(c, ne)))
+					continue; // Connection not mutual
+
+				if (n->bfs.next_hop || n == hncp->own_node)
 					continue; // Already visited
 
-				if (!hncp_routing_neighbors_are_mutual(n, &c->node_identifier_hash,
-						ne->link_id, ne->neighbor_link_id))
-					continue; // Connection not mutual
 
 				if (c == hncp->own_node) { // We are at the start, lookup neighbor
 					hncp_link link = hncp_find_link_by_id(hncp, be32_to_cpu(ne->link_id));

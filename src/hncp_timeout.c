@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Mon Apr 14 20:04:32 2014 mstenber
- * Edit time:     114 min
+ * Last modified: Tue Apr 15 12:53:42 2014 mstenber
+ * Edit time:     138 min
  *
  */
 
@@ -74,20 +74,10 @@ static void hncp_prune_rec(hncp_node n)
   tlv_for_each_attr(a, tlvs)
     if ((ne = hncp_tlv_neighbor(a)))
       {
-        if (tlv_len(a) == sizeof(hncp_t_node_data_neighbor_s))
-          {
-            ne = tlv_data(a);
-            n2 = hncp_find_node_by_hash(n->hncp,
-                                        &ne->neighbor_node_identifier_hash,
-                                        false);
-            if (n2)
-              hncp_prune_rec(n2);
-            else
-              {
-                L_DEBUG("unable to find node %llx -> ignoring",
-                        hncp_hash64(&ne->neighbor_node_identifier_hash));
-              }
-          }
+        /* Ignore if it's not _bidirectional_ neighbor. Unidirectional
+         * ones lead to graph not settling down. */
+        if ((n2 = hncp_node_find_neigh_bidir(n, ne)))
+          hncp_prune_rec(n2);
       }
 }
 
@@ -107,25 +97,26 @@ static void hncp_prune(hncp o)
     {
       hncp_link l;
       hncp_neighbor ne;
-      hncp_node n = o->own_node;
+      hncp_node n = o->own_node, n2;
 
       /* We're always reachable. */
       vlist_add(&o->nodes, &n->in_nodes, n);
 
       /* Only neighbors we believe to be reachable are the ones we can
-       * find in our own link -> nei ghbor relations, with non-zero
+       * find in our own link -> neighbor relations, with non-zero
        * last_response. */
       vlist_for_each_element(&o->links, l, in_links)
         {
           vlist_for_each_element(&l->neighbors, ne, in_neighbors)
             {
-              if (ne->last_response)
-                {
-                  /* Ok, this is clearly reachable neighbor. */
-                  n = hncp_find_node_by_hash(o,
-                                             &ne->node_identifier_hash, false);
-                  hncp_prune_rec(n);
-                }
+              if (!ne->last_response)
+                  continue;
+              n2 = hncp_node_find_neigh_bidir2(n,
+                                               cpu_to_be32(l->iid),
+                                               cpu_to_be32(ne->iid),
+                                               &ne->node_identifier_hash);
+              if (n2)
+                hncp_prune_rec(n2);
             }
         }
     }
