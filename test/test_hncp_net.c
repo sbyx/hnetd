@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Tue Apr 15 10:08:28 2014 mstenber
- * Edit time:     357 min
+ * Last modified: Tue Apr 15 19:57:13 2014 mstenber
+ * Edit time:     366 min
  *
  */
 
@@ -235,7 +235,7 @@ static void raw_bird14(net_sim s)
 
   SIM_WHILE(s, 10000, !net_sim_is_converged(s));
 
-
+  net_sim_uninit(s);
 }
 
 void hncp_bird14()
@@ -244,7 +244,6 @@ void hncp_bird14()
 
   net_sim_init(&s);
   raw_bird14(&s);
-  net_sim_uninit(&s);
 }
 
 void hncp_bird14_bidir()
@@ -254,28 +253,34 @@ void hncp_bird14_bidir()
   net_sim_init(&s);
   s.assume_bidirectional_reachability = true;
   raw_bird14(&s);
-  net_sim_uninit(&s);
 }
 
-static void raw_hncp_tube(unsigned int num_nodes)
+void hncp_bird14_unique()
+{
+  net_sim_s s;
+
+  net_sim_init(&s);
+  s.use_global_iids = true;
+  raw_bird14(&s);
+}
+
+static void raw_hncp_tube(net_sim s, unsigned int num_nodes)
 {
   /* A LOT of routers connected in a tube (R1 R2 R3 .. RN). */
   unsigned int i;
-  net_sim_s s;
   hncp_hash_s h1;
   hncp_hash_s h2;
 
   memset(&h1, 0, sizeof(h1));
   memset(&h2, 1, sizeof(h2));
 
-  net_sim_init(&s);
-  s.disable_sd = true;
+  s->disable_sd = true;
   for (i = 0 ; i < num_nodes-1 ; i++)
     {
       char buf[128];
 
       sprintf(buf, "node%d", i);
-      hncp n1 = net_sim_find_hncp(&s, buf);
+      hncp n1 = net_sim_find_hncp(s, buf);
       /* Add intentional router ID collisions at nodes 0, 1,3 and 2 and 4 */
       if (i == 0 || i == 1 || i == 3)
         hncp_set_own_hash(n1, &h1);
@@ -283,30 +288,49 @@ static void raw_hncp_tube(unsigned int num_nodes)
         hncp_set_own_hash(n1, &h2);
 
       sprintf(buf, "node%d", i+1);
-      hncp n2 = net_sim_find_hncp(&s, buf);
+      hncp n2 = net_sim_find_hncp(s, buf);
 
       hncp_link l1 = net_sim_hncp_find_link_by_name(n1, "down");
       hncp_link l2 = net_sim_hncp_find_link_by_name(n2, "up");
       net_sim_set_connected(l1, l2, true);
       net_sim_set_connected(l2, l1, true);
     }
-  SIM_WHILE(&s, 100000, !net_sim_is_converged(&s));
+  SIM_WHILE(s, 100000, !net_sim_is_converged(s));
 
-  sput_fail_unless(net_sim_find_hncp(&s, "node0")->nodes.avl.count == num_nodes,
+  sput_fail_unless(net_sim_find_hncp(s, "node0")->nodes.avl.count == num_nodes,
                    "enough nodes");
 
-  net_sim_uninit(&s);
-  L_NOTICE("finished in %lld ms", hnetd_time() - s.start);
+  net_sim_uninit(s);
+  L_NOTICE("finished in %lld ms", hnetd_time() - s->start);
 }
 
 void hncp_tube_small(void)
 {
-  raw_hncp_tube(6);
+  net_sim_s s;
+
+  net_sim_init(&s);
+  raw_hncp_tube(&s, 6);
 }
 
 void hncp_tube_beyond_multicast(void)
 {
-  raw_hncp_tube(1400 / (HNCP_HASH_LEN * 2 + TLV_SIZE));
+  net_sim_s s;
+
+  net_sim_init(&s);
+  /* Intentionally pick a number that is >>
+     IPv6 MTU / (HNCP_HASH_LEN * 2 + 2 * 4 + TLV_SIZE) =~ 28 */
+  raw_hncp_tube(&s, 60);
+}
+
+void hncp_tube_beyond_multicast_unique(void)
+{
+  net_sim_s s;
+
+  net_sim_init(&s);
+  s.use_global_iids = true;
+  /* Intentionally pick a number that is >>
+     IPv6 MTU / (HNCP_HASH_LEN * 2 + 2 * 4 + TLV_SIZE) =~ 28 */
+  raw_hncp_tube(&s, 60);
 }
 
 int main(__unused int argc, __unused char **argv)
@@ -331,8 +355,10 @@ int main(__unused int argc, __unused char **argv)
   sput_run_test(hncp_two);
   sput_run_test(hncp_bird14);
   sput_run_test(hncp_bird14_bidir);
+  sput_run_test(hncp_bird14_unique);
   sput_run_test(hncp_tube_small);
   sput_run_test(hncp_tube_beyond_multicast);
+  sput_run_test(hncp_tube_beyond_multicast_unique);
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();

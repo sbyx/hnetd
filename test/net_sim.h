@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Tue Apr 15 18:40:19 2014 mstenber
- * Edit time:     87 min
+ * Last modified: Tue Apr 15 19:50:36 2014 mstenber
+ * Edit time:     95 min
  *
  */
 
@@ -107,6 +107,9 @@ typedef struct net_sim_t {
 
   int converged_count;
   int not_converged_count;
+
+  bool use_global_iids;
+  int next_free_iid;
 } net_sim_s, *net_sim;
 
 int pa_update_eap(net_node node, const struct prefix *prefix,
@@ -125,7 +128,7 @@ int pa_update_edp(net_node node, const struct prefix *prefix,
 void net_sim_pa_dps(struct pa_data_user *user, struct pa_dp *dp, uint32_t flags)
 {
 	bool todelete = !!(flags & PADF_DP_TODELETE);
-	if(!dp->local && flags) {
+	if (!dp->local && flags) {
 		struct pa_edp *edp = container_of(dp, struct pa_edp, dp);
 		pa_update_edp(container_of(user, net_node_s, pa_data_user), &dp->prefix,
 				&edp->rid, todelete?0:dp->valid_until, todelete?0:dp->preferred_until,
@@ -160,6 +163,7 @@ void net_sim_init(net_sim s)
   INIT_LIST_HEAD(&s->messages);
   uloop_init();
   s->start = hnetd_time();
+  s->next_free_iid = 100;
 }
 
 bool net_sim_is_converged(net_sim s)
@@ -296,6 +300,7 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
 
 hncp_link net_sim_hncp_find_link_by_name(hncp o, const char *name)
 {
+  net_node n = container_of(o, net_node_s, n);
   hncp_link l;
 
   l = hncp_find_link_by_name(o, name, false);
@@ -315,14 +320,18 @@ hncp_link net_sim_hncp_find_link_by_name(hncp o, const char *name)
       int i;
 
       hncp_calculate_hash(name, strlen(name), &h1);
-      for (i = 0 ; i < HNCP_HASH_LEN ; i++)
+      for (i = 0; i < HNCP_HASH_LEN; i++)
         h.buf[i] = h1.buf[i] ^ o->own_node->node_identifier_hash.buf[i];
       h.buf[0] = 0xFE;
       h.buf[1] = 0x80;
       /* Let's pretend it's /64; clear out 2-7 */
-      for (i = 2 ; i < 8 ; i++)
+      for (i = 2; i < 8; i++)
         h.buf[i] = 0;
       hncp_link_set_ipv6_address(l, (struct in6_addr *)&h);
+
+      /* Override the iid to be unique. */
+      if (n->s->use_global_iids)
+        l->iid = n->s->next_free_iid++;
     }
   return l;
 }
