@@ -1,0 +1,50 @@
+-*- outline -*-
+ 
+Few notes about the implementation (best viewed in Emacs outline mode):
+
+* (Local) TLVs (in a tree, sorted by HNCP TLV sort order)
+
+** hncp->tlvs
+
+vlist (sorted and versioned tree structure)
+
+The version=-1 (=any) is used for HNCP API user supplied TLVs; versioning is used just to handle within-HNCP-implementation things (notably neighbor TLVs)
+
+** hncp->tlvs_dirty 
+
+The flag indicates that local TLV tree has not yet been published to HNCP in
+general.
+
+* Links (in a tree)
+
+** hncp->links
+
+vlist of local links for which HNCP is enabled.
+
+** hncp->links_dirty 
+
+The flag indicates that neighbor TLVs from link+neighbor structures to
+local TLV tree should be republished (which then becomes dirty, and is
+dumped eventually to the local node object).
+
+* Neighbors (within links) (in a tree)
+
+** link->neighbors
+
+* Nodes (in a tree, sorted by node id hash)
+
+** hncp->nodes
+
+These are _all_ nodes within HNCP graph, including our own. They all have also published TLV state (ours possibly somewhat delayed as publishing is handled via tlvs_dirty).
+
+* Network hash
+
+** hncp->network_hash
+
+Current network hash.
+
+** hncp->network_hash_dirty 
+
+The flag indicates that the current structure within the data structure is
+NOT up to date and new one should be calculated based on contents of
+hncp->nodes.
