@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Tue Apr 15 19:50:36 2014 mstenber
- * Edit time:     95 min
+ * Last modified: Tue Apr 15 20:43:06 2014 mstenber
+ * Edit time:     109 min
  *
  */
 
@@ -23,6 +23,10 @@
 #include "fake_uloop.h"
 
 #include "pa_data.c"
+#ifdef L_PREFIX
+#undef L_PREFIX
+#endif /* L_PREFIX */
+#define L_PREFIX ""
 
 /* Lots of stubs here, rather not put __unused all over the place. */
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -203,7 +207,8 @@ bool net_sim_is_converged(net_sim s)
         }
       if (memcmp(h, &n->n.network_hash, sizeof(hncp_hash_s)))
         {
-          L_DEBUG("not converged, network hash mismatch %llx <> %llx",
+          L_DEBUG("network hash mismatch first<>%s [%llx <> %llx]",
+                  n->name,
                   hncp_hash64(h), hncp_hash64(&n->n.network_hash));
           s->not_converged_count++;
           return false;
@@ -295,6 +300,8 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
 #endif /* !DISABLE_HNCP_SD */
   n->debug_subscriber.local_tlv_change_callback = net_sim_local_tlv_callback;
   hncp_subscribe(&n->n, &n->debug_subscriber);
+  L_DEBUG("[%s] %s net_sim_find_hncp added",
+          HNCP_NODE_REPR(n->n.own_node), n->name);
   return &n->n;
 }
 
@@ -500,6 +507,7 @@ bool hncp_io_get_ipv6(struct in6_addr *addr, char *prefer_ifname)
 static void _node_run_cb(struct uloop_timeout *t)
 {
   net_node node = container_of(t, net_node_s, run_to);
+  L_DEBUG("%s: hncp_run", node->name);
   hncp_run(&node->n);
 }
 
@@ -529,9 +537,10 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
       list_del(&m->h);
       free(m->buf);
       free(m);
+      L_DEBUG("%s: hncp_io_recvfrom %d bytes", node->name, s);
       return s;
     }
-  return -1;
+  return - 1;
 }
 
 void
