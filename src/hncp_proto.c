@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue Apr 15 13:39:14 2014 mstenber
- * Edit time:     336 min
+ * Last modified: Wed Apr 16 10:13:16 2014 mstenber
+ * Edit time:     345 min
  *
  */
 
@@ -243,7 +243,7 @@ _handle_collision(hncp o)
       int i;
 
       for (i = 0 ; i < HNCP_HASH_LEN ; i++)
-        h.buf[i] = rand() % 256;
+        h.buf[i] = random() % 256;
       hncp_set_own_hash(o, &h);
       return true;
     }
