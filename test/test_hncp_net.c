@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Apr 16 11:33:39 2014 mstenber
+ * Last modified: Wed Apr 16 14:34:41 2014 mstenber
  * Edit time:     384 min
  *
  */
@@ -295,7 +295,7 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes)
                    "enough nodes");
 
   net_sim_uninit(s);
-  L_NOTICE("finished in %lld ms", hnetd_time() - s->start);
+  L_NOTICE("finished in %lld ms", (long long)hnetd_time() - s->start);
 }
 
 void hncp_tube_small(void)

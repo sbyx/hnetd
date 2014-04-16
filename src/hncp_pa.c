@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Wed Apr 16 14:24:32 2014 mstenber
- * Edit time:     395 min
+ * Last modified: Wed Apr 16 14:33:45 2014 mstenber
+ * Edit time:     396 min
  *
  */
 
@@ -606,7 +606,7 @@ static void _refresh_ec(hncp_glue g, bool publish)
                           dhcp_options, dhcp_options_len);
 
   L_DEBUG("set %d bytes of DHCPv6 options: %s",
-          dhcpv6_options_len, c, HEX_REPR(dhcpv6_options, dhcpv6_options_len));
+          dhcpv6_options_len, HEX_REPR(dhcpv6_options, dhcpv6_options_len));
  oom:
   if (dhcpv6_options)
     free(dhcpv6_options);
