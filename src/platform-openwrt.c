@@ -482,12 +482,25 @@ static void platform_commit(struct uloop_timeout *t)
 		}
 
 		l = blobmsg_open_array(&b, "firewall");
+
+		m = blobmsg_open_table(&b, NULL);
+
+		blobmsg_add_string(&b, "type", "rule");
+		blobmsg_add_string(&b, "proto", "all");
+		blobmsg_add_string(&b, "src", zone);
+		blobmsg_add_string(&b, "direction", "in");
+		blobmsg_add_string(&b, "target", "REJECT");
+		blobmsg_add_string(&b, "family", "any");
+
+		blobmsg_close_table(&b, m);
+
 		struct pa_dp *dp;
 		pa_for_each_dp(dp, pa_data) {
 			for (int i = 0; i <= 1; ++i) {
 				m = blobmsg_open_table(&b, NULL);
 
 				blobmsg_add_string(&b, "type", "rule");
+				blobmsg_add_string(&b, "proto", "all");
 				blobmsg_add_string(&b, "src", (i) ? zone : "*");
 				blobmsg_add_string(&b, "dest", (i) ? "*" : zone);
 				blobmsg_add_string(&b, "direction", (i) ? "in" : "out");
