@@ -21,6 +21,12 @@ endif(${VERSION})
 
 OPTION(COVERAGE "build with coverage" OFF)
 
+if(${APPLE})
+  # Xcode 4.* target breaks because it doesn't add 'system-ish' include paths
+  include_directories(/usr/local/include /opt/local/include)
+  link_directories(/usr/local/lib /opt/local/lib)
+endif(${APPLE})
+
 if (${COVERAGE})
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage")
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
