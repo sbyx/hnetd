@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Apr 16 10:13:16 2014 mstenber
- * Edit time:     345 min
+ * Last modified: Wed Apr 16 10:45:01 2014 mstenber
+ * Edit time:     355 min
  *
  */
 
@@ -242,7 +242,7 @@ _handle_collision(hncp o)
       hncp_hash_s h;
       int i;
 
-      for (i = 0 ; i < HNCP_HASH_LEN ; i++)
+      for (i = 0; i < HNCP_HASH_LEN; i++)
         h.buf[i] = random() % 256;
       hncp_set_own_hash(o, &h);
       return true;
@@ -416,20 +416,17 @@ handle_message(hncp_link l,
             ns = tlv_data(a);
             n = hncp_find_node_by_hash(o, &ns->node_identifier_hash, false);
             new_update_number = be32_to_cpu(ns->update_number);
-            if (n == o->own_node)
-              {
-                if (new_update_number > n->update_number
+            bool interesting = !n || n->update_number < new_update_number;
+            if (n == o->own_node
+                && (new_update_number > n->update_number
                     || (new_update_number == n->update_number
                         && memcmp(&n->node_data_hash,
                                   &ns->node_data_hash,
-                                  sizeof(n->node_data_hash)) != 0))
-                  {
-                    L_ERR("detected conflicting node state update %d>=%d",
-                          new_update_number, n->update_number);
-                    _handle_collision(o);
-                    return;
-                  }
-                continue;
+                                  sizeof(n->node_data_hash)) != 0)))
+              {
+                L_DEBUG("potential conflicting node state update %d>=%d",
+                        new_update_number, n->update_number);
+                interesting = true;
               }
             if (!n || n->update_number < new_update_number)
               {
@@ -526,9 +523,8 @@ handle_message(hncp_link l,
       /* Don't accept updates to 'self' from network. Instead,
        * increment own update number. */
       n->update_number = new_update_number + 1;
-      n->node_data_hash_dirty = true;
-      o->network_hash_dirty = true;
-      n->origination_time = hncp_time(o);
+      o->tlvs_dirty = true;
+      hncp_node_set_tlvs(n, NULL);
       hncp_schedule(o);
       return;
     }
