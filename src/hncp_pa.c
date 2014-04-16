@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Wed Apr 16 11:36:27 2014 mstenber
+ * Last modified: Wed Apr 16 14:24:32 2014 mstenber
  * Edit time:     395 min
  *
  */
@@ -602,16 +602,10 @@ static void _refresh_ec(hncp_glue g, bool publish)
           }
     }
 
-  hncp_link l;
-  int c = 0;
-  vlist_for_each_element(&o->links, l, in_links)
-    {
-      c++;
-      iface_set_dhcp_send(l->ifname,
-                            dhcpv6_options, dhcpv6_options_len,
-                            dhcp_options, dhcp_options_len);
-    }
-  L_DEBUG("set %d bytes of DHCPv6 options on %d internal link(s): %s",
+  iface_all_set_dhcp_send(dhcpv6_options, dhcpv6_options_len,
+                          dhcp_options, dhcp_options_len);
+
+  L_DEBUG("set %d bytes of DHCPv6 options: %s",
           dhcpv6_options_len, c, HEX_REPR(dhcpv6_options, dhcpv6_options_len));
  oom:
   if (dhcpv6_options)

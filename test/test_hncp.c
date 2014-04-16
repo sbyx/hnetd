@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Mon Apr 14 20:36:47 2014 mstenber
+ * Last modified: Wed Apr 16 14:26:16 2014 mstenber
  * Edit time:     75 min
  *
  */
@@ -33,9 +33,8 @@ struct iface* iface_get(const char *ifname )
   return NULL;
 }
 
-void iface_set_dhcp_send(const char *ifname,
-                           const void *dhcpv6_data, size_t dhcpv6_len,
-                           const void *dhcp_data, size_t dhcp_len)
+void iface_all_set_dhcp_send(const void *dhcpv6_data, size_t dhcpv6_len,
+                             const void *dhcp_data, size_t dhcp_len)
 {
 }
 

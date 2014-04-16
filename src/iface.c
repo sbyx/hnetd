@@ -364,6 +364,13 @@ void iface_set_dhcp_send(const char *ifname, const void *dhcpv6_data, size_t dhc
 	platform_set_dhcpv6_send(c, c->dhcpv6_data_out, c->dhcpv6_len_out, c->dhcp_data_out, c->dhcp_len_out);
 }
 
+void iface_all_set_dhcp_send(const void *dhcpv6_data, size_t dhcpv6_len, const void *dhcp_data, size_t dhcp_len)
+{
+	struct iface *c;
+	list_for_each_entry(c, &interfaces, head)
+		iface_set_dhcp_send(c->ifname, dhcpv6_data, dhcpv6_len, dhcp_data, dhcp_len);
+}
+
 // Begin route update cycle
 void iface_update_routes(void)
 {
