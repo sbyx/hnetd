@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Tue Apr 15 19:57:13 2014 mstenber
- * Edit time:     366 min
+ * Last modified: Wed Apr 16 10:46:58 2014 mstenber
+ * Edit time:     383 min
  *
  */
 
@@ -333,6 +333,29 @@ void hncp_tube_beyond_multicast_unique(void)
   raw_hncp_tube(&s, 60);
 }
 
+#define test_setup() srandom(seed)
+
+#define maybe_run_test(fun)             \
+do {                                    \
+  int i;                                \
+  const char *fname = #fun;             \
+  if (!argc)                            \
+    {                                   \
+      test_setup();                     \
+      sput_run_test(fun);               \
+    }                                   \
+  else                                  \
+  for (i = 0; i < argc; i++)            \
+    {                                   \
+      if (strcmp(fname, argv[i]) == 0)  \
+        {                               \
+          test_setup();                 \
+          sput_run_test(fun);           \
+          break;                        \
+        }                               \
+    }                                   \
+ } while (0)
+
 int main(__unused int argc, __unused char **argv)
 {
 #ifdef hnetd_time
@@ -346,19 +369,22 @@ int main(__unused int argc, __unused char **argv)
       if (c == 'r')
         seed = atoi(optarg);
     }
-  srand(seed);
+  argc -= optind;
+  argv += optind;
 
   setbuf(stdout, NULL); /* so that it's in sync with stderr when redirected */
   openlog("test_hncp_net", LOG_CONS | LOG_PERROR, LOG_DAEMON);
+
+  L_INFO("starting with random seed %d", seed);
   sput_start_testing();
   sput_enter_suite("hncp_net"); /* optional */
-  sput_run_test(hncp_two);
-  sput_run_test(hncp_bird14);
-  sput_run_test(hncp_bird14_bidir);
-  sput_run_test(hncp_bird14_unique);
-  sput_run_test(hncp_tube_small);
-  sput_run_test(hncp_tube_beyond_multicast);
-  sput_run_test(hncp_tube_beyond_multicast_unique);
+  maybe_run_test(hncp_two);
+  maybe_run_test(hncp_bird14);
+  maybe_run_test(hncp_bird14_bidir);
+  maybe_run_test(hncp_bird14_unique);
+  maybe_run_test(hncp_tube_small);
+  maybe_run_test(hncp_tube_beyond_multicast);
+  maybe_run_test(hncp_tube_beyond_multicast_unique);
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();
