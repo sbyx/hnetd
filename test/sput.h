@@ -152,21 +152,34 @@ static struct
                 __sput.check.cond, __sput.check.line);                     \
     }
 
+#if L_LEVEL >= 5
 
-#define _sput_check_succeeded()                                            \
-    {                                                                      \
-        _sput_die_unless_initialized();                                    \
-        _sput_die_unless_suite_set();                                      \
-        \
-        __sput.suite.ok++;                                                 \
-        \
-        fprintf(__sput.out,                                                \
-                "[%lu:%lu]  %s:#%lu  \"%s\"  pass\n",                      \
-                __sput.suite.nr, __sput.suite.checks,                      \
-                __sput.test.name,                                          \
-                __sput.test.nr,                                            \
-                __sput.check.name);                                        \
+#define _sput_check_succeeded()                         \
+    {                                                   \
+        _sput_die_unless_initialized();                 \
+        _sput_die_unless_suite_set();                   \
+                                                        \
+        __sput.suite.ok++;                              \
+                                                        \
+        fprintf(__sput.out,                             \
+                "[%lu:%lu]  %s:#%lu  \"%s\"  pass\n",   \
+                __sput.suite.nr, __sput.suite.checks,   \
+                __sput.test.name,                       \
+                __sput.test.nr,                         \
+                __sput.check.name);                     \
     }
+
+#else
+
+#define _sput_check_succeeded()         \
+    {                                   \
+        _sput_die_unless_initialized(); \
+        _sput_die_unless_suite_set();   \
+                                        \
+        __sput.suite.ok++;              \
+    }
+
+#endif /* L_LEVEL >= 5 */
 
 
 /* =======================================================================
