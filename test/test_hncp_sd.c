@@ -6,10 +6,14 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Wed Mar 19 14:02:14 2014 mstenber
+ * Last modified: Wed Apr 16 12:17:17 2014 mstenber
  * Edit time:     47 min
  *
  */
+
+#ifdef L_LEVEL
+#undef L_LEVEL
+#endif /* L_LEVEL */
 #define L_LEVEL 7
 #define DISABLE_HNCP_PA
 

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Feb 11 12:01:19 2014 mstenber
- * Edit time:     237 min
+ * Last modified: Wed Apr 16 12:16:38 2014 mstenber
+ * Edit time:     238 min
  *
  */
 
@@ -258,6 +258,7 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
   dst.sin6_addr = *to;
   r = sendto(o->udp_socket, buf, len, flags,
              (struct sockaddr *)&dst, sizeof(dst));
+#if L_LEVEL >= 3
   if (r < 0)
     {
       char buf[128];
@@ -265,6 +266,7 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
       L_ERR("unable to send to %s%%%s - sendto:%s",
             c ? c : "?", ifname, strerror(errno));
     }
+#endif /* L_LEVEL >= 3 */
   return r;
 }
 

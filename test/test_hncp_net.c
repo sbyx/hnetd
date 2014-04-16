@@ -6,20 +6,14 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Apr 16 10:46:58 2014 mstenber
- * Edit time:     383 min
+ * Last modified: Wed Apr 16 11:33:39 2014 mstenber
+ * Edit time:     384 min
  *
  */
 
 /*
  * This is N-node version of the testsuite which leverages net_sim.h.
  */
-
-#ifdef L_LEVEL
-#undef L_LEVEL
-#endif /* L_LEVEL */
-
-#define L_LEVEL 5
 
 #include <unistd.h>
 
