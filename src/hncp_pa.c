@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Mon Apr 14 19:06:17 2014 mstenber
- * Edit time:     393 min
+ * Last modified: Wed Apr 16 11:36:27 2014 mstenber
+ * Edit time:     395 min
  *
  */
 
@@ -432,13 +432,13 @@ void hncp_pa_set_dhcpv6_data_in_dirty(hncp_glue g)
 #define APPEND_BUF(buf, len, ibuf, ilen)        \
 do                                              \
   {                                             \
-  if (ilen) \
+  if (ilen)                                     \
     {                                           \
       buf = realloc(buf, len + ilen);           \
       if (!buf)                                 \
         {                                       \
           L_ERR("oom gathering buf");           \
-          return;                               \
+          goto oom;                             \
         }                                       \
       memcpy(buf + len, ibuf, ilen);            \
       len += ilen;                              \
@@ -613,6 +613,7 @@ static void _refresh_ec(hncp_glue g, bool publish)
     }
   L_DEBUG("set %d bytes of DHCPv6 options on %d internal link(s): %s",
           dhcpv6_options_len, c, HEX_REPR(dhcpv6_options, dhcpv6_options_len));
+ oom:
   if (dhcpv6_options)
     free(dhcpv6_options);
   if (dhcp_options)
