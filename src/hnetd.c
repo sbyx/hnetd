@@ -51,8 +51,8 @@ void hncp_iface_intiface_callback(struct iface_user *u,
 								  const char *ifname, bool enabled)
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
-
-	hncp_set_link_enabled(hiu->hncp, ifname, enabled);
+	struct iface *c = iface_get(ifname);
+	hncp_set_link_enabled(hiu->hncp, ifname, enabled && !(c->flags & IFACE_FLAG_GUEST));
 }
 
 
