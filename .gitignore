@@ -3,6 +3,11 @@
 config.log
 CMakeCache.txt
 CMakeFiles
+CMakeScripts
+Debug
+Release
+hnetd.build
+hnetd.xcodeproj
 CTestTestfile.cmake
 CPackConfig.cmake
 CPackSourceConfig.cmake
