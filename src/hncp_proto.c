@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Apr 16 10:45:01 2014 mstenber
- * Edit time:     355 min
+ * Last modified: Wed Apr 16 11:08:36 2014 mstenber
+ * Edit time:     356 min
  *
  */
 
@@ -428,7 +428,7 @@ handle_message(hncp_link l,
                         new_update_number, n->update_number);
                 interesting = true;
               }
-            if (!n || n->update_number < new_update_number)
+            if (interesting)
               {
                 L_DEBUG("saw something new for %llx/%p (update number %d)",
                         hncp_hash64(&ns->node_identifier_hash),
