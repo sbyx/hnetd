@@ -82,6 +82,8 @@ enum {
   HNCP_T_DNS_DOMAIN_NAME = 52, /* non-default domain (very optional) */
 
   HNCP_T_ROUTING_PROTOCOL = 60,
+  
+  HNCP_T_TRUST_LIST = 70,
 
   HNCP_T_SIGNATURE = 0xFFFF /* not implemented */
 };
@@ -119,7 +121,8 @@ typedef struct __packed {
 } hncp_t_node_data_header_s, *hncp_t_node_data_header;
 
 /* HNCP_T_NODE_DATA_KEY has only raw public key (perhaps it should
- * have more information though? TBD */
+ * have more information though? 
+ * We may want to specify the hash type/salt here */
 
 /* HNCP_T_NODE_DATA_NEIGHBOR */
 typedef struct __packed {
@@ -192,6 +195,24 @@ typedef struct __packed {
   uint8_t preference;
 } hncp_t_routing_protocol_s, *hncp_t_routing_protocol;
 
+typedef struct __packed {
+  /* relative time of validity of the trust link */
+  uint32_t timeout;
+  /* Node trusted */
+  hncp_hash_s node;
+} hncp_t_trust_link_s, *hncp_t_trust_link;
+
+/* HNCP_T_TRUST_LIST
+ * List of the nodes trusted by the emitter
+ * Only an array of hncp_t_trust_link
+ */
+
+
+typedef struct __packed {
+  /* Type (algorithm + variant) of the signature) */
+  uint32_t type;
+  uint32_t signature[];
+} hncp_t_signature_s, *hncp_t_signature;
 
 /**************************************************************** Addressing */
 
