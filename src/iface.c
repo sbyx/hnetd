@@ -347,7 +347,7 @@ void iface_set_dhcp_send(const char *ifname, const void *dhcpv6_data, size_t dhc
 {
 	struct iface *c = iface_get(ifname);
 
-	if (!c)
+	if (!c || !c->platform)
 		return;
 	if (c->dhcp_len_out == dhcp_len && (!dhcp_len || memcmp(c->dhcp_data_out, dhcp_data, dhcp_len) == 0) && 
 	    c->dhcpv6_len_out == dhcpv6_len && (!dhcpv6_len || memcmp(c->dhcpv6_data_out, dhcpv6_data, dhcpv6_len) == 0))
