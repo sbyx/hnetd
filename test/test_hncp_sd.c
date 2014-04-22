@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Wed Apr 16 12:17:17 2014 mstenber
- * Edit time:     47 min
+ * Last modified: Tue Apr 22 16:51:44 2014 mstenber
+ * Edit time:     77 min
  *
  */
 
@@ -27,22 +27,30 @@
 #include <sys/wait.h>
 
 /* Stub out the code that calls things */
-#define execv(cmd, argv) do {                           \
-    int i;                                              \
-    L_DEBUG("execv: '%s'", cmd);                        \
-    smock_pull_string_is("execv_cmd", cmd);             \
-    for (i = 1 ; argv[i] ; i++)                         \
-      {                                                 \
-        L_DEBUG(" arg#%d: '%s'", i, argv[i]);           \
-        smock_pull_string_is("execv_arg", argv[i]);     \
-      }                                                 \
-  } while(0)
+#define execv(cmd, argv) do                             \
+{                                                       \
+  if (check_exec)                                       \
+    {                                                   \
+      int i;                                            \
+      L_DEBUG("execv: '%s'", cmd);                      \
+      smock_pull_string_is("execv_cmd", cmd);           \
+      for (i = 1; argv[i]; i++)                         \
+        {                                               \
+          L_DEBUG(" arg#%d: '%s'", i, argv[i]);         \
+          smock_pull_string_is("execv_arg", argv[i]);   \
+        }                                               \
+    }                                                   \
+  else                                                  \
+    execs++;                                            \
+} while (0)
+
+bool check_exec;
+int execs;
 
 #define vfork() 0
 #define waitpid(pid, x, y)
 #define _exit(code)
 
-#undef uloop_timeout_set
 #include "hncp_sd.c"
 
 
@@ -69,27 +77,86 @@ int pa_update_eaa(net_node node, const struct in6_addr *addr,
  *
  */
 
+void _file_contains(const char *filename, const char *string, bool has)
+{
+  /* Rather lazy implementation; we know the files aren't very big. */
+  char buf[4096];
+  int c;
+  FILE *f;
+
+  f = fopen(filename, "r");
+  sput_fail_unless(f, "fopen in file_contains");
+  if (f)
+    {
+      c = fread(buf, 1, sizeof(buf), f);
+      sput_fail_unless(c > 0, "fread in file_contains");
+      if (c > 0)
+        {
+          buf[c] = 0;
+          sput_fail_unless(!has == !strstr(buf, string), string);
+        }
+      fclose(f);
+    }
+}
+
+void file_contains(const char *filename, const char *string)
+{
+  _file_contains(filename, string, true);
+}
+
+void file_does_not_contain(const char *filename, const char *string)
+{
+  _file_contains(filename, string, false);
+}
+
+bool net_sim_is_busy(net_sim s)
+{
+  net_node n;
+
+  list_for_each_entry(n, &s->nodes, h)
+    {
+      if (n->n.immediate_scheduled)
+        return true;
+#ifndef DISABLE_HNCP_SD
+      if (!s->disable_sd && n->sd->should_update)
+        return true;
+#endif /* !DISABLE_HNCP_SD */
+    }
+  return false;
+}
+
 void test_hncp_sd(void)
 {
   net_sim_s s;
-  hncp n1, n2;
-  hncp_link l1, l2, l21 __unused;
-  net_node node1, node2;
+  hncp n1, n2, n3;
+  hncp_link l1, l2, l21 __unused, l3;
+  net_node node1, node2, node3;
   struct prefix p;
   bool rv;
 
+  check_exec = false;
+  execs = 0;
   net_sim_init(&s);
   n1 = net_sim_find_hncp(&s, "n1");
-  n2 = net_sim_find_hncp(&s, "n2");
   node1 = container_of(n1, net_node_s, n);
-  node2 = container_of(n2, net_node_s, n);
   l1 = net_sim_hncp_find_link_by_name(n1, "eth0.0");
+  sput_fail_unless(prefix_pton("2001:dead:beef::/64", &p), "prefix_pton");
+  hncp_tlv_ap_update(n1, &p, "eth0.0", false, 0, true);
+
+  /* Make sure .home shows up even with zero conf and no TLV traffic */
+  SIM_WHILE(&s, 100, !net_sim_is_converged(&s));
+  rv = hncp_sd_write_dnsmasq_conf(node1->sd, "/tmp/n0.conf");
+  sput_fail_unless(rv, "write 0 works");
+  smock_is_empty();
+  file_contains("/tmp/n0.conf", "r.home");
+
+  n2 = net_sim_find_hncp(&s, "n2");
+  node2 = container_of(n2, net_node_s, n);
   l2 = net_sim_hncp_find_link_by_name(n2, "eth1");
   l21 = net_sim_hncp_find_link_by_name(n2, "eth2");
   net_sim_set_connected(l1, l2, true);
   net_sim_set_connected(l2, l1, true);
-  sput_fail_unless(prefix_pton("2001:dead:beef::/64", &p), "prefix_pton");
-  hncp_tlv_ap_update(n1, &p, "eth0.0", false, 0, true);
+
   sput_fail_unless(prefix_pton("1.2.3.4/24", &p), "prefix_pton");
   sput_fail_unless(prefix_is_ipv4(&p), "IPv4 prefix parsing failed");
   hncp_tlv_ap_update(n1, &p, "eth0.0", false, 0, true);
@@ -104,6 +171,8 @@ void test_hncp_sd(void)
   rv = hncp_sd_write_dnsmasq_conf(node1->sd, "/tmp/n1.conf");
   sput_fail_unless(rv, "write 1 works");
   smock_is_empty();
+  file_contains("/tmp/n1.conf", "r.home");
+  file_contains("/tmp/n1.conf", "r1.home");
 
   rv = hncp_sd_write_dnsmasq_conf(node1->sd, "/tmp/n1.conf");
   sput_fail_unless(!rv, "write 1 'fails'");
@@ -112,7 +181,10 @@ void test_hncp_sd(void)
   rv = hncp_sd_write_dnsmasq_conf(node2->sd, "/tmp/n2.conf");
   sput_fail_unless(rv, "write 2 works");
   smock_is_empty();
+  file_contains("/tmp/n2.conf", "r.home");
+  file_contains("/tmp/n2.conf", "r1.home");
 
+  check_exec = true;
   smock_push("execv_cmd", "/bin/yes");
   smock_push("execv_arg", "restart");
   rv = hncp_sd_restart_dnsmasq(node1->sd);
@@ -127,6 +199,7 @@ void test_hncp_sd(void)
   smock_push("execv_arg", "-p");
   smock_push("execv_arg", "54");
   smock_push("execv_arg", "eth0.0=eth0_0.r.home.");
+  memset(&node1->sd->ohp_state, 0, HNCP_HASH_LEN);
   rv = hncp_sd_reconfigure_ohp(node1->sd);
   sput_fail_unless(rv, "reconfigure ohp works");
   smock_is_empty();
@@ -144,6 +217,7 @@ void test_hncp_sd(void)
   smock_push("execv_arg", "54");
   smock_push("execv_arg", "eth1=eth1.r1.home.");
   smock_push("execv_arg", "eth2=eth2.r1.home.");
+  memset(&node2->sd->ohp_state, 0, HNCP_HASH_LEN);
   rv = hncp_sd_reconfigure_ohp(node2->sd);
   sput_fail_unless(rv, "reconfigure ohp works");
   smock_is_empty();
@@ -152,6 +226,32 @@ void test_hncp_sd(void)
   rv = hncp_sd_reconfigure_ohp(node2->sd);
   sput_fail_unless(rv, "reconfigure ohp works");
   smock_is_empty();
+
+  /* Add third node, with hardcoded .domain (yay). It should result in
+   * .home disappearing from n1 eventually. */
+  check_exec = false;
+  s.disable_sd = true;
+  n3 = net_sim_find_hncp(&s, "n3");
+  node3 = container_of(n3, net_node_s, n);
+  node3->sd = hncp_sd_create(&node3->n,
+                             "/bin/yes",
+                             "/tmp/dnsmasq.conf",
+                             "/bin/no",
+                             "xorbo", "domain.");
+  s.disable_sd = false;
+  l3 = net_sim_hncp_find_link_by_name(n3, "eth0");
+  net_sim_set_connected(l2, l3, true);
+  net_sim_set_connected(l3, l2, true);
+  SIM_WHILE(&s, 1000, !net_sim_is_converged(&s) || net_sim_is_busy(&s));
+
+  memset(&node1->sd->dnsmasq_state, 0, HNCP_HASH_LEN);
+  rv = hncp_sd_write_dnsmasq_conf(node1->sd, "/tmp/n12.conf");
+  sput_fail_unless(rv, "write 12 works");
+  smock_is_empty();
+  file_contains("/tmp/n12.conf", "r.domain");
+  file_contains("/tmp/n12.conf", "r1.domain");
+  file_contains("/tmp/n12.conf", "xorbo.domain");
+  file_does_not_contain("/tmp/n12.conf", "home");
 
   net_sim_uninit(&s);
 }

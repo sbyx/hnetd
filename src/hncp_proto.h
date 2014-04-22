@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Mon Apr 14 19:06:08 2014 mstenber
+ * Last modified: Tue Apr 22 15:21:30 2014 mstenber
  * Edit time:     64 min
  *
  */
@@ -47,6 +47,8 @@
 #define HNCP_MINIMUM_PRUNE_INTERVAL (HNETD_TIME_PER_SECOND / 50)
 
 /* 0 = reserved link id. note it somewhere. */
+
+#define HNCP_SD_DEFAULT_DOMAIN "home."
 
 /******************************************************************* TLV T's */
 

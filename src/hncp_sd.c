@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Wed Apr  9 13:07:56 2014 mstenber
- * Edit time:     426 min
+ * Last modified: Tue Apr 22 16:33:44 2014 mstenber
+ * Edit time:     462 min
  *
  */
 
@@ -41,9 +41,10 @@
 #define OHP_ARGS_MAX_COUNT 64
 
 #define UPDATE_FLAG_DNSMASQ 1
-#define UPDATE_FLAG_OHP 2
-#define UPDATE_FLAG_DDZ 4
-#define UPDATE_FLAG_ALL 7
+#define UPDATE_FLAG_OHP     2
+#define UPDATE_FLAG_DDZ     4
+#define UPDATE_FLAG_DOMAIN  8
+#define UPDATE_FLAG_ALL  0x0F
 
 /* How long a timeout we schedule for the actual update (that occurs
  * in a timeout). This effectively sets an upper bound on how
@@ -487,8 +488,9 @@ _tlv_ddz_matches(hncp_sd sd, struct tlv_attr *a)
           int len2 = tlv_len(a) - sizeof(*ddz);
           /* XXX - do we want len2 == len, or len2 >= len?  len2 >=
            * len also matches 'well behaved' routers with subdomain
-           * names, so I'm tempted to keep the equality to defend just
-           * the router name using this logic. */
+           * names but no own router name TLV for some reason, so I'm
+           * tempted to keep the equality to defend just the router
+           * name using this logic. */
           if (len2 == len && memcmp(tbuf2 + (len2 - len), tbuf, len) == 0)
             return true;
         }
@@ -528,6 +530,7 @@ _change_router_name(hncp_sd sd)
         {
           L_DEBUG("renamed to %s", sd->router_name);
           _set_router_name(sd, true);
+          _should_update(sd, UPDATE_FLAG_DDZ);
           return;
         }
     }
@@ -583,7 +586,23 @@ static void _get_dns_domain(hncp o, char *dest, int dest_len)
 
   if (a && ll2escaped(tlv_data(a), tlv_len(a), dest, dest_len) > 0)
     return;
-  *dest = 0;
+  strncpy(dest, HNCP_SD_DEFAULT_DOMAIN, dest_len);
+}
+
+
+static void _refresh_domain(hncp_sd sd)
+{
+  hncp o = sd->hncp;
+  char new_domain[DNS_MAX_ESCAPED_LEN];
+
+  _get_dns_domain(o, new_domain, sizeof(new_domain));
+  L_DEBUG("_refresh_domain:%s", new_domain);
+  if (strcmp(new_domain, sd->domain))
+    {
+      L_DEBUG("set sd domain to %s", new_domain);
+      strcpy(sd->domain, new_domain);
+      _should_update(sd, UPDATE_FLAG_ALL);
+    }
 }
 
 static void _tlv_cb(hncp_subscriber s,
@@ -597,9 +616,19 @@ static void _tlv_cb(hncp_subscriber s,
   if (tlv_id(tlv) == HNCP_T_DNS_ROUTER_NAME)
     {
       if (add
-          && _tlv_router_name_matches(sd, tlv)
-          && hncp_node_cmp(n, o->own_node) > 0)
-        _change_router_name(sd);
+          && n != o->own_node
+          && _tlv_router_name_matches(sd, tlv))
+        {
+          if (hncp_node_cmp(n, o->own_node) > 0)
+            {
+              L_DEBUG("router name conflict, we're lower, renaming");
+              _change_router_name(sd);
+            }
+          else
+            {
+              L_DEBUG("router name conflict, we're higher, ignoring");
+            }
+        }
       /* Router name itself should not trigger reconfiguration unless
        * local; however, remote DDZ changes should. */
     }
@@ -620,21 +649,23 @@ static void _tlv_cb(hncp_subscriber s,
       _should_update(sd, UPDATE_FLAG_DNSMASQ);
     }
 
+  /* As the TLVs aren't _yet_ valid on the node, there's a race
+   * condition potential here. So we just do things after a
+   * timeout. */
   if (tlv_id(tlv) == HNCP_T_DNS_DOMAIN_NAME)
     {
-      char new_domain[DNS_MAX_ESCAPED_LEN];
-      _get_dns_domain(o, new_domain, sizeof(new_domain));
-      if (strcmp(new_domain, sd->domain))
-        {
-          strcpy(sd->domain, new_domain);
-          _should_update(sd, UPDATE_FLAG_ALL);
-        }
+      _should_update(sd, UPDATE_FLAG_DOMAIN);
     }
 }
 
 void hncp_sd_update(hncp_sd sd)
 {
   L_DEBUG("hncp_sd_update:%d", sd->should_update);
+  if (sd->should_update & UPDATE_FLAG_DOMAIN)
+    {
+      sd->should_update &= ~UPDATE_FLAG_DOMAIN;
+      _refresh_domain(sd);
+    }
   _publish_ddzs(sd);
   if (sd->should_update & UPDATE_FLAG_DNSMASQ)
     {
@@ -675,17 +706,22 @@ hncp_sd hncp_sd_create(hncp h,
     abort();
 
   /* Handle domain name */
-  if (!domain_name)
-    domain_name = "home.";
-  uint8_t ll[DNS_MAX_LL_LEN];
-  int len;
-  len = escaped2ll(domain_name, ll, sizeof(ll));
-  if (len<0)
+  if (domain_name)
     {
-      L_ERR("invalid domain:%s", domain_name);
-      abort();
+      uint8_t ll[DNS_MAX_LL_LEN];
+      int len;
+      len = escaped2ll(domain_name, ll, sizeof(ll));
+      if (len < 0)
+        {
+          L_ERR("invalid domain:%s", domain_name);
+          abort();
+        }
+      hncp_add_tlv_raw(h, HNCP_T_DNS_DOMAIN_NAME, ll, len);
+
+      strncpy(sd->domain, domain_name, DNS_MAX_ESCAPED_LEN);
     }
-  hncp_add_tlv_raw(h, HNCP_T_DNS_DOMAIN_NAME, ll, len);
+  else
+    strcpy(sd->domain, HNCP_SD_DEFAULT_DOMAIN);
 
   /* Handle router name */
   if (router_name)
@@ -714,4 +750,3 @@ void hncp_sd_destroy(hncp_sd sd)
   free(sd->ohp_script);
   free(sd);
 }
-
