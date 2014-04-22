@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Wed Apr 16 14:33:45 2014 mstenber
- * Edit time:     396 min
+ * Last modified: Tue Apr 22 17:07:07 2014 mstenber
+ * Edit time:     403 min
  *
  */
 
@@ -528,27 +528,29 @@ static void _refresh_ec(hncp_glue g, bool publish)
   struct tlv_attr *a, *a2;
 
   /* add the SD domain always to search path (if present) */
-  a = hncp_get_dns_domain_tlv(o);
-  if (a)
+  if (o->domain[0])
     {
-      char domainbuf[256];
-      uint16_t fake_header[2];
-      uint8_t fake4_header[2];
-      uint8_t *data = tlv_data(a);
-      int l = tlv_len(a);
+      /* domain is _ascii_ representation of domain (same as what
+       * DHCPv4 expects). DHCPv6 needs ll-escaped string, though. */
+      uint8_t ll[DNS_MAX_LL_LEN];
+      int len;
+      len = escaped2ll(o->domain, ll, sizeof(ll));
+      if (len > 0)
+        {
+          uint16_t fake_header[2];
+          uint8_t fake4_header[2];
 
-      fake_header[0] = cpu_to_be16(DHCPV6_OPT_DNS_DOMAIN);
-      fake_header[1] = cpu_to_be16(l);
-      APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
-                 &fake_header[0], 4);
-      APPEND_BUF(dhcpv6_options, dhcpv6_options_len, data, l);
+          fake_header[0] = cpu_to_be16(DHCPV6_OPT_DNS_DOMAIN);
+          fake_header[1] = cpu_to_be16(len);
+          APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
+                     &fake_header[0], 4);
+          APPEND_BUF(dhcpv6_options, dhcpv6_options_len, ll, len);
 
-      if (ll2escaped(data, l, domainbuf, sizeof(domainbuf)) >= 0) {
-        fake4_header[0] = DHCPV4_OPT_DOMAIN;
-        fake4_header[1] = strlen(domainbuf);
-        APPEND_BUF(dhcp_options, dhcp_options_len, fake4_header, 2);
-        APPEND_BUF(dhcp_options, dhcp_options_len, domainbuf, fake4_header[1]);
-      }
+          fake4_header[0] = DHCPV4_OPT_DOMAIN;
+          fake4_header[1] = strlen(o->domain);
+          APPEND_BUF(dhcp_options, dhcp_options_len, fake4_header, 2);
+          APPEND_BUF(dhcp_options, dhcp_options_len, o->domain, fake4_header[1]);
+        }
     }
 
   hncp_for_each_node(o, n)

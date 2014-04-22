@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Apr 15 18:37:41 2014 mstenber
- * Edit time:     152 min
+ * Last modified: Tue Apr 22 17:07:24 2014 mstenber
+ * Edit time:     153 min
  *
  */
 
@@ -15,6 +15,8 @@
 #define HNCP_I_H
 
 #include "hncp.h"
+
+#include "dns_util.h"
 
 #include <libubox/uloop.h>
 
@@ -110,6 +112,9 @@ struct hncp_struct {
   /* Collision tracking - when to rename. */
   int last_collision;
   hnetd_time_t collisions[HNCP_UPDATE_COLLISIONS_IN_N];
+
+  /* search domain provided to clients. */
+  char domain[DNS_MAX_ESCAPED_LEN];
 };
 
 typedef struct hncp_link_struct hncp_link_s, *hncp_link;
@@ -299,7 +304,6 @@ void hncp_tlv_ap_update(hncp o,
                         bool authoritative,
                         unsigned int preference,
                         bool add);
-struct tlv_attr *hncp_get_dns_domain_tlv(hncp o);
 
 /* Inlined utilities. */
 static inline hnetd_time_t hncp_time(hncp o)
