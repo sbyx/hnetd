@@ -144,6 +144,11 @@ target_link_libraries(test_pa_data ubox)
 add_test(pa_data test_pa_data)
 add_dependencies(check test_pa_data)
 
+add_executable(test_btrie test/test_btrie.c ${PU})
+target_link_libraries(test_btrie ubox)
+add_test(btrie test_btrie)
+add_dependencies(check test_btrie)
+
 # Packaging rules
 set(CPACK_PACKAGE_VERSION "1")
 set(CPACK_PACKAGE_CONTACT "Steven Barth <steven@midlink.org>")
