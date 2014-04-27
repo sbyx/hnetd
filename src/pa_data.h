@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "btrie.h"
 #include "hnetd.h"
 #include "prefix_utils.h"
 
@@ -73,10 +74,10 @@ struct pa_iface {
 	bool internal;         /* Whether the iface is internal */
 	bool do_dhcp;          /* Whether router should do dhcp on that iface. */
 
-	struct list_head aps;   /* assigned prefixes on that iface */
-	struct list_head cpls;/* chosen prefixes on that iface */
-	struct list_head ldps;  /* ldps on that iface */
-	struct list_head eaas;  /* eaas on that iface */
+	struct btrie aps;      /* assigned prefixes on that iface */
+	struct btrie cpls;     /* chosen prefixes on that iface */
+	struct btrie ldps;     /* ldps on that iface */
+	struct btrie eaas;     /* eaas on that iface */
 
 	size_t sp_count;
 	struct list_head sps;   /* stored prefixes for that iface */
@@ -101,13 +102,13 @@ struct pa_iface {
 
 /* Delegated prefix generic element. */
 struct pa_dp {
-	struct list_head le;          /* Linked in pa_data's lists */
+	struct btrie_element be;      /* Linked in pa_data's lists */
 	struct prefix prefix;         /* The delegated prefix */
 	hnetd_time_t valid_until;     /* Valid until (zero means not valid) */
 	hnetd_time_t preferred_until; /* Preferred until */
 	size_t dhcp_len;              /* dhcp data length (or 0) */
 	void *dhcp_data;     	      /* dhcp data (or NULL) */
-	struct list_head cps;         /* cps that are associated to that dp */
+	struct btrie cps;             /* cps that are associated to that dp */
 	bool local;                   /* Whether it is ldp or edp */
 
 	/* The ignore flag is introduced in order to avoid recomputing it everytime
@@ -149,7 +150,7 @@ struct pa_edp {
 struct pa_ldp {
 	struct pa_dp dp;
 	struct pa_iface *iface;       /* Iface for that dp or null if no interface */
-	struct list_head if_le;       /* Linked in iface list */
+	struct btrie_element if_be;   /* Linked in iface list */
 	struct {
 		bool valid;
 		struct prefix excluded;
@@ -158,15 +159,15 @@ struct pa_ldp {
 };
 
 struct pa_ap {
-	struct avl_node avl_node; /* Put in pa_data's ap tree */
+	struct btrie_element be;   /* Put in pa_data's ap tree */
 	struct prefix prefix;	  /* The assigned prefix */
 	struct pa_rid rid;        /* Sender's router id */
 
 	bool authoritative;       /* Authority bit */
 	uint8_t priority;         /* Priority value */
 
-	struct pa_iface *iface;   /* Iface for that cp or null if no interface */
-	struct list_head if_le;   /* If iface not null, linked in iface's interface */
+	struct pa_iface *iface;     /* Iface for that cp or null if no interface */
+	struct btrie_element if_be; /* If iface not null, linked in iface's interface */
 
 #define PADF_AP_CREATED   PADF_ALL_CREATED
 #define PADF_AP_TODELETE  PADF_ALL_TODELETE
@@ -185,7 +186,7 @@ struct pa_ap {
  * 2) Advertise assignments
  * A chosen prefix MUST always be part of an existing delegated prefix. */
 struct pa_cp {
-	struct list_head le;      /* Put in pa_data's cp list */
+	struct btrie_element be;      /* Put in pa_data's cp list */
 	struct prefix prefix;	  /* The assigned prefix */
 
 	bool advertised;          /* Whether it must be advertised */
@@ -196,8 +197,8 @@ struct pa_cp {
 	/* A chosen prefix is -most of the time- associated to a dp.
 	 * During short lapses of time, it may be NULL. But it has to be
 	 * updated shortly. */
-	struct pa_dp *dp;         /* The dp associated to that cp */
-	struct list_head dp_le;   /* Linked in dp's list */
+	struct pa_dp *dp;           /* The dp associated to that cp */
+	struct btrie_element dp_be; /* Linked in dp's list */
 
 	struct pa_data *pa_data;        /* Used by pa algo */
 	struct uloop_timeout apply_to;  /* Used by pa algo */
@@ -233,10 +234,10 @@ struct pa_cp {
  * It is managed by pa_core.c */
 struct pa_cpl {
 	struct pa_cp cp;
-	struct pa_iface *iface;   /* Iface for that cp or null if no interface */
-	struct list_head if_le;   /* Linked in iface list */
-	struct pa_laa *laa;       /* A local address assignment for the router */
-	bool invalid;             /* Used by pa algo */
+	struct pa_iface *iface;      /* Iface for that cp or null if no interface */
+	struct btrie_element if_be;  /* Linked in iface list */
+	struct pa_laa *laa;          /* A local address assignment for the router */
+	bool invalid;                /* Used by pa algo */
 };
 
 /* Chosen prefix for exclusion
@@ -286,9 +287,9 @@ struct pa_laa {
 struct pa_eaa {
 	struct pa_aa aa;
 	struct pa_rid rid;
-	struct list_head le;      /* Put in pa_data's eaa list */
-	struct pa_iface *iface;   /* An associated iface */
-	struct list_head if_le;   /* When iface not null, put in iface's list */
+	struct btrie_element be;    /* Put in pa_data's eaa list */
+	struct pa_iface *iface;     /* An associated iface */
+	struct btrie_element if_be; /* When iface not null, put in iface's list */
 };
 
 struct pa_flood {
@@ -348,10 +349,10 @@ struct pa_data {
 	struct pa_flood  flood; /* Information from flooding */
 	struct pa_ipv4   ipv4;  /* IPv4 global connectivity */
 	struct list_head ifs;   /* Ifaces */
-	struct list_head dps;   /* Delegated prefixes */
-	struct avl_tree  aps;   /* Assigned prefixes */
-	struct list_head cps;   /* Chosen prefixes */
-	struct list_head eaas;  /* Externally Address assignments */
+	struct btrie dps;       /* Delegated prefixes */
+	struct btrie aps;       /* Assigned prefixes */
+	struct btrie cps;       /* Chosen prefixes */
+	struct btrie eaas;      /* Externally Address assignments */
 	struct list_head users; /* List of subscribed users */
 
 	size_t sp_count;
@@ -396,25 +397,22 @@ void pa_iface_set_dodhcp(struct pa_iface *, bool dodhcp);
 void pa_iface_notify(struct pa_data *, struct pa_iface *);
 
 
-#define pa_for_each_dp(pa_dp, pa_data) list_for_each_entry(pa_dp, &(pa_data)->dps, le)
+#define pa_for_each_dp(pa_dp, pa_data) btrie_for_each_down_entry(pa_dp, &(pa_data)->dps, NULL, 0, be)
 void pa_dp_set_dhcp(struct pa_dp *, const void *dhcp_data, size_t dhcp_len);
 void pa_dp_set_lifetime(struct pa_dp *, hnetd_time_t preferred, hnetd_time_t valid);
 #define pa_dp_todelete(dp) (dp)->__flags |= PADF_DP_TODELETE
 void pa_dp_notify(struct pa_data *data, struct pa_dp *dp);
 
 
-#define pa_for_each_ldp_in_iface(pa_ldp, pa_iface) list_for_each_entry(pa_ldp, &(pa_iface)->ldps, if_le)
+#define pa_for_each_ldp_in_iface(pa_ldp, pa_iface) btrie_for_each_down_entry(pa_ldp, &(pa_iface)->ldps, NULL, 0, if_be)
 struct pa_ldp *pa_ldp_get(struct pa_data *, const struct prefix *, bool goc);
 void pa_ldp_set_excluded(struct pa_ldp *, const struct prefix *excluded);
 void pa_ldp_set_iface(struct pa_ldp *, struct pa_iface *);
 
 struct pa_edp *pa_edp_get(struct pa_data *, const struct prefix *, const struct pa_rid *rid, bool goc);
 
-#define pa_for_each_ap(pa_ap, pa_data) \
-		avl_for_element_range(avl_first_element(&(pa_data)->aps, pa_ap, avl_node), \
-		                        avl_last_element(&(pa_data)->aps, pa_ap,  avl_node), \
-		                        pa_ap, avl_node)
-#define pa_for_each_ap_in_iface(pa_ap, pa_iface) list_for_each_entry(pa_ap, &(pa_iface)->aps, if_le)
+#define pa_for_each_ap(pa_ap, pa_data) btrie_for_each_down_entry(pa_ap, &(pa_data)->aps, NULL, 0, be)
+#define pa_for_each_ap_in_iface(pa_ap, pa_iface) btrie_for_each_down_entry(pa_ap, &(pa_iface)->aps, NULL, 0, if_be)
 struct pa_ap *pa_ap_get(struct pa_data *, const struct prefix *, const struct pa_rid *rid, bool goc);
 void pa_ap_set_iface(struct pa_ap *ap, struct pa_iface *iface);
 void pa_ap_set_priority(struct pa_ap *ap, uint8_t priority);
@@ -423,11 +421,11 @@ void pa_ap_set_authoritative(struct pa_ap *ap, bool authoritative);
 void pa_ap_notify(struct pa_data *data, struct pa_ap *ap);
 
 
-#define pa_for_each_cp(pa_cp, pa_data) list_for_each_entry(pa_cp, &(pa_data)->cps, le)
-#define pa_for_each_cp_safe(pa_cp, cp2, pa_data) list_for_each_entry_safe(pa_cp, cp2, &(pa_data)->cps, le)
-#define pa_for_each_cpl_in_iface(pa_cpl, pa_iface) list_for_each_entry(pa_cpl, &(pa_iface)->cpls, if_le)
-#define pa_for_each_cp_in_dp(pa_cp, pa_dp) list_for_each_entry(pa_cp, &(pa_dp)->cps, dp_le)
-#define pa_for_each_cp_in_dp_safe(pa_cp, cp2, pa_dp) list_for_each_entry_safe(pa_cp, cp2, &(pa_dp)->cps, dp_le)
+#define pa_for_each_cp(pa_cp, pa_data) btrie_for_each_down_entry(pa_cp, &(pa_data)->cps, NULL, 0, be)
+#define pa_for_each_cp_safe(pa_cp, cp2, pa_data) btrie_for_each_down_entry_safe(pa_cp, cp2, &(pa_data)->cps, NULL, 0, be)
+#define pa_for_each_cpl_in_iface(pa_cpl, pa_iface) btrie_for_each_down_entry(pa_cpl, &(pa_iface)->cpls, NULL, 0, if_be)
+#define pa_for_each_cp_in_dp(pa_cp, pa_dp) btrie_for_each_down_entry(pa_cp, &(pa_dp)->cps, NULL, 0, dp_be)
+#define pa_for_each_cp_in_dp_safe(pa_cp, cp2, pa_dp) btrie_for_each_down_entry_safe(pa_cp, cp2, &(pa_dp)->cps, NULL, 0, dp_be)
 #define _pa_cpl(_cp) ((struct pa_cpl *)((_cp && (_cp)->type == PA_CPT_L)?container_of(_cp, struct pa_cpl, cp):NULL))
 #define _pa_cpx(_cp) ((struct pa_cpx *)((_cp && (_cp)->type == PA_CPT_X)?container_of(_cp, struct pa_cpx, cp):NULL))
 #define _pa_cpd(_cp) ((struct pa_cpd *)((_cp && (_cp)->type == PA_CPT_D)?container_of(_cp, struct pa_cpd, cp):NULL))
@@ -451,9 +449,9 @@ void pa_laa_set_applied(struct pa_laa *, bool applied);
 void pa_laa_set_apply_to(struct pa_laa *laa, hnetd_time_t delay);
 
 #define pa_for_each_eaa(pa_eaa, pa_data) \
-		list_for_each_entry(pa_eaa, &(pa_data)->eaas, le)
+		btrie_for_each_down_entry(pa_eaa, &(pa_data)->eaas, NULL, 0, be)
 #define pa_for_each_eaa_in_iface(pa_eaa, pa_iface) \
-		list_for_each_entry(pa_eaa, &(pa_iface)->eaas, if_le)
+		btrie_for_each_down_entry(pa_eaa, &(pa_iface)->eaas, NULL, 0, if_be)
 struct pa_eaa *pa_eaa_get(struct pa_data *, const struct in6_addr *, const struct pa_rid *, bool goc);
 void pa_eaa_set_iface(struct pa_eaa *, struct pa_iface *);
 
