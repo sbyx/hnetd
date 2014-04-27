@@ -86,13 +86,14 @@ void btrie_get_key(struct btrie_element *e, btrie_key_t *key);
 #define btrie_empty(root) (list_empty(&(root)->elements.l) && !(root)->child[0] && !(root)->child[0])
 
 /***** Private to iterators -- see below ****/
+extern void *__bt_p;
 #define __bt_e(el, e, field) (container_of(el, typeof(*(e)), field))
 #define __bt_next_e(e, field, next, key, len) (__bt_e(next(&(e)->field, key, len), e, field))
 #define __bt_null_e(e, field) (e == __bt_e(NULL, e, field))
 #define __bt_next(el, key, len) (btrie_next(el))
 #define __bt_next_down(el, key, len) (btrie_next_down(el, len))
 #define __bt_next_up(el, key, len) (btrie_next_up(el))
-#define __bt_first_entry(e, root, key, len, first, field) ((__bt_null_e((e = __bt_e(first(root, key, len), e, field)), field))?NULL:e)
+#define __bt_first_entry(e, root, key, len, first, field) (typeof(e))((__bt_null_e((typeof(e))(__bt_p = __bt_e(first(root, key, len), e, field)), field))?NULL:__bt_p)
 #define __bt_fe(el, root, key, len, first, next) \
 	for(el = first(root, key, len); el != NULL; el = next(el, key, len))
 #define __bt_fe_s(el, el2, root, key, len, first, next) \

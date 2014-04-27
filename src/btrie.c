@@ -70,6 +70,8 @@ typedef btrie_plen_t plen_t;
 #define mask(i) ((full_mask >> (BTRIE_KEY - 1 - (i))) << (BTRIE_KEY - 1 - (i)))
 #define nthbit(key, i) ((key) & (first_bit_mask >> (i)))
 
+void *__bt_p; //Helper for iterators
+
 static struct btrie *btrie_node_lookup(struct btrie *n, const pkey_t *key, plen_t plen)
 {
 	while(n->plen <= plen &&

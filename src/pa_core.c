@@ -246,10 +246,10 @@ static bool pa_core_iface_is_designated(struct pa_core *core, struct pa_iface *i
 	struct pa_cpl *cpl, *best_cpl;
 	struct pa_ap *ap;
 
-	if(list_empty(&iface->aps))
+	if(btrie_empty(&iface->aps))
 		return true;
 
-	if(list_empty(&iface->cpls))
+	if(btrie_empty(&iface->cpls))
 		return false;
 
 	/* Get cp with lowest auth. and priority. */
@@ -401,9 +401,9 @@ void paa_algo_do(struct pa_core *core)
 
 	/* Remove invalid cps */
 	struct pa_cp *cpsafe;
-	list_for_each_entry_safe(cp, cpsafe, &data->cps, le) {
+	pa_for_each_cp_safe(cp, cpsafe, data) {
 		if((cpl = _pa_cpl(cp)) && cpl->invalid)
-			pa_core_destroy_cpl(core, cpl);
+					pa_core_destroy_cpl(core, cpl);
 	}
 
 	/* Evaluate dodhcp ofr all iface */

@@ -78,6 +78,7 @@ void test_term_pa()
 
 void test_1()
 {
+	struct pa_cp *cp;
 	struct pa_cpl *cpl1;
 	struct pa_cpd *cpd;
 	struct pa_pd_dp_req *req;
@@ -271,7 +272,7 @@ void test_1()
 	pa_cp_notify(&cpd->cp);
 	fr_md5_push(&p1_10);
 	fu_loop(1); //Execute pd
-	cpd = container_of(list_first_entry(&ldp1->dp.cps, struct pa_cp, dp_le), struct pa_cpd, cp);
+	cpd = container_of(btrie_first_down_entry(&cpd->cp, (&ldp1->dp.cps), NULL, 0, dp_be), struct pa_cpd, cp);
 	delegated = p1_10;
 	delegated.plen = PA_PD_DFLT_MIN_LEN;
 	sput_fail_unless(!prefix_cmp(&delegated, &cpd->cp.prefix), "Correct delegated prefix");
