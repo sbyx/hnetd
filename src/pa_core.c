@@ -461,6 +461,14 @@ static int __aaa_find_random(struct pa_core *core, struct pa_cpl *cpl, struct in
 		return -1;
 	}
 
+	//todo: prefix_increment can't manipulate more than 32 bits
+	if(rpool.plen < 96) {
+		result.plen = 96;
+		prefix_canonical(&rpool, &result);
+		result.plen = 128;
+	}
+	L_DEBUG("Trying to find an address in %s", PREFIX_REPR(&rpool));
+
 	while(1) {
 		if((!prefix_is_ipv4(&rpool)
 				|| memcmp(&rpool.prefix, &result.prefix, sizeof(struct in6_addr)))
