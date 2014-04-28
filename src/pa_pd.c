@@ -111,44 +111,41 @@ static int pa_pd_create_cpd(struct pa_pd_dp_req *req, struct prefix *p)
 static int pa_pd_find_prefix_plen(struct pa_pd_dp_req *req, const struct prefix *seed,
 		struct prefix *dst)
 {
-	uint32_t rounds;
-	int res;
 	struct pa_dp *dp = req->dp;
 	struct pa_pd *pd = req->lease->pd;
+	const struct prefix *collision;
+	const struct prefix *first_collision = NULL;
 	prefix_cpy(dst, seed);
 
-	if(seed->plen - dp->prefix.plen >= 32 || (rounds = 1 << (seed->plen - dp->prefix.plen)) >= PA_PD_PREFIX_SEARCH_MAX_ROUNDS) {
-		rounds = PA_PD_PREFIX_SEARCH_MAX_ROUNDS;
-	}
+	L_DEBUG("Trying with plen %d", (int) seed->plen);
 
-	L_DEBUG("Trying with plen %d for a max of %u rounds", (int) seed->plen, (unsigned int) rounds);
-
-	const struct prefix *collision;
-	for(; rounds; rounds--) {
+	while(1) {
 		if(!(collision = pa_prefix_getcollision(pd_pa(pd), dst)))
 			return 0;
 
-		if(prefix_contains(dst, collision)) {
-			if((res = prefix_increment(dst, dst, dp->prefix.plen)) == -1)
-				goto err;
-		} else { //prefix_contains(collision, new_prefix)
-			if((res = prefix_increment(dst, collision, dp->prefix.plen)) == -1)
-				goto err;
-			dst->plen = seed->plen;
-		}
+		L_DEBUG("Prefix %s can't be used", PREFIX_REPR(dst));
 
-		//todo: That approach may be more clever that what is done in pa_core.
-		if(!prefix_cmp(dst, seed)) {
-			// We looped
+		if(!first_collision) {
+			first_collision = collision;
+		} else if(!prefix_cmp(collision, first_collision)) { //We looped
+			L_INFO("No more available prefix can be found in %s", PREFIX_REPR(&dp->prefix));
 			return -1;
 		}
+
+		if(dst->plen <= collision->plen) {
+			if(prefix_increment(dst, dst, dp->prefix.plen) == -1) {
+				L_ERR("Error incrementing %s with protected length %d", PREFIX_REPR(dst), dp->prefix.plen);
+				return -1;
+			}
+		} else {
+			if(prefix_increment(dst, collision, dp->prefix.plen) == -1) {
+				L_ERR("Error incrementing %s with protected length %d", PREFIX_REPR(collision), dp->prefix.plen);
+				return -1;
+			}
+			dst->plen = seed->plen;
+		}
 	}
-
-
-	return -1;
-err:
-	L_ERR("Critical error in prefix increment");
-	return -1;
+	return -1; //avoid warning
 }
 
 static int pa_pd_find_prefix(struct pa_pd_dp_req *req, struct prefix *dst,
@@ -279,24 +276,21 @@ static void pa_pd_dp_schedule(struct pa_pd *pd, struct pa_dp *dp)
 
 static void pa_pd_aps_cb(struct pa_data_user *user, struct pa_ap *ap, uint32_t flags)
 {
-	struct pa_dp *dp_cont, *dp;
+	struct pa_dp *dp;
 	struct pa_cpd *cpd, *cpd2;
 	struct pa_pd_lease *lease;
 	struct pa_pd *pd = container_of(user, struct pa_pd, data_user);
+
+	if(prefix_is_ipv4(&ap->prefix))
+		return;
+
 	if(flags & PADF_AP_TODELETE) { //More space is available in this dp
-		//aps are not associated with any dp. So this search is not very optimal.
-		dp_cont = NULL;
-		pa_for_each_dp(dp, pd_p(pd, data)) {
-			if(!list_empty(&dp->lease_reqs) &&
-					prefix_contains(&dp->prefix, &ap->prefix) &&
-					!prefix_is_ipv4(&dp->prefix) &&
-					!dp->ignore) {
-				dp_cont = dp;
+		pa_for_each_dp_updown(dp, pd_p(pd, data), &ap->prefix) {
+			if(!list_empty(&dp->lease_reqs) && !dp->ignore) {
+				pa_pd_dp_schedule(pd, dp);
 				break;
 			}
 		}
-		if(dp_cont)
-			pa_pd_dp_schedule(pd, dp_cont);
 	} else if (flags & PADF_AP_CREATED) {
 		//Check for collisions. That should delete cpd whenever an ap forbids its use
 		pa_pd_for_each_lease(lease, pd) {
@@ -318,26 +312,25 @@ static void pa_pd_aps_cb(struct pa_data_user *user, struct pa_ap *ap, uint32_t f
 static void pa_pd_cps_cb(struct pa_data_user *user, struct pa_cp *cp, uint32_t flags)
 {
 	struct pa_cpd *cpd;
-	struct pa_dp *dp_cont, *dp;
+	struct pa_dp *dp;
 	struct pa_pd *pd = container_of(user, struct pa_pd, data_user);
+	if(prefix_is_ipv4(&cp->prefix))
+		return;
+
 	if(flags & PADF_CP_TODELETE) { //Schedule dp if new space is made
 		if(cp->dp) {
-			dp_cont = (list_empty(&cp->dp->lease_reqs))?NULL:cp->dp;
+			if(!list_empty(&cp->dp->lease_reqs)) {
+				pa_pd_dp_schedule(pd, cp->dp);
+			}
 		} else {
-			dp_cont = NULL;
-			pa_for_each_dp(dp, pd_p(pd, data)) {
-				L_DEBUG("Looking for the dp (this is not optimal)");
+			pa_for_each_dp_updown(dp, pd_p(pd, data), &cp->prefix) {
 				if(!list_empty(&dp->lease_reqs) &&
-						prefix_contains(&dp->prefix, &cp->prefix) &&
-						!prefix_is_ipv4(&dp->prefix) &&
 						!dp->ignore) {
-					dp_cont = dp;
+					pa_pd_dp_schedule(pd, dp);
 					break;
 				}
 			}
 		}
-		if(dp_cont)
-			pa_pd_dp_schedule(pd, dp_cont);
 	}
 
 	if(!(cpd = _pa_cpd(cp)) || !cpd->lease ) // if !cpd->lease, it will be deleted afterward anyway
