@@ -35,9 +35,8 @@ static struct prefix PAL_CONF_DFLT_V4_PREFIX = {
 static bool __pa_has_globalv6(struct pa_local *local)
 {
 	struct pa_dp *dp;
-	pa_for_each_dp(dp, local_p(local, data)) {
-		if(!prefix_is_ipv4(&dp->prefix) && !prefix_is_ipv6_ula(&dp->prefix))
-					return true;
+	pa_for_each_dp_down(dp, local_p(local, data), &ipv6_global_prefix) {
+		return true;
 	}
 	return false;
 }
@@ -79,14 +78,13 @@ static uint8_t pa_local_ula_get_status(struct pa_local *local, struct pa_local_e
 		return 0;
 
 	struct pa_dp *dp;
-	pa_for_each_dp(dp, local_p(local, data)) {
-		if(!prefix_is_ipv6_ula(&dp->prefix))
-			continue;
-
+	bool has_other = false;
+	pa_for_each_dp_down(dp, local_p(local, data), &ipv6_ula_prefix) {
 		if(dp->local) {
 			if(dp != &elem->ldp->dp)
 				return 0;
 		} else {
+			has_other = true;
 			struct pa_edp *edp = container_of(dp, struct pa_edp, dp);
 			if(PA_RIDCMP(&edp->rid, &local_p(local, data.flood)->rid) > 0)
 				return 0;
@@ -94,7 +92,7 @@ static uint8_t pa_local_ula_get_status(struct pa_local *local, struct pa_local_e
 	}
 
 	uint8_t status = PA_LOCAL_CAN_KEEP;
-	if(__pa_has_highest_rid(local))
+	if(!has_other && __pa_has_highest_rid(local))
 		status |= PA_LOCAL_CAN_CREATE;
 
 	return status;
@@ -141,21 +139,20 @@ static uint8_t pa_local_ipv4_get_status(struct pa_local *local, struct pa_local_
 		return 0;
 
 	struct pa_dp *dp;
-	pa_for_each_dp(dp, local_p(local, data)) {
-		if(!prefix_is_ipv4(&dp->prefix))
-			continue;
-
+	bool has_other = false;
+	pa_for_each_dp_down(dp, local_p(local, data), &ipv4_in_ipv6_prefix) {
 		if(dp->local) {
 			if(dp != &elem->ldp->dp)
 				return 0;
 		} else {
+			has_other = true;
 			struct pa_edp *edp = container_of(dp, struct pa_edp, dp);
 			if(PA_RIDCMP(&edp->rid, &local_p(local, data.flood)->rid) > 0)
 				return 0;
 		}
 	}
 
-	return PA_LOCAL_CAN_KEEP | PA_LOCAL_CAN_CREATE;
+	return PA_LOCAL_CAN_KEEP | ((has_other)?0:(PA_LOCAL_CAN_CREATE));
 }
 
 static void pa_local_ipv4_create(struct pa_local *local, struct pa_local_elem *elem)

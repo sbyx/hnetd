@@ -398,6 +398,7 @@ void pa_iface_notify(struct pa_data *, struct pa_iface *);
 
 
 #define pa_for_each_dp(pa_dp, pa_data) btrie_for_each_down_entry(pa_dp, &(pa_data)->dps, NULL, 0, be)
+#define pa_for_each_dp_down(pa_dp, pa_data, p) btrie_for_each_down_entry(pa_dp, &(pa_data)->dps, (btrie_key_t *)&(p)->prefix, (p)->plen, be)
 void pa_dp_set_dhcp(struct pa_dp *, const void *dhcp_data, size_t dhcp_len);
 void pa_dp_set_lifetime(struct pa_dp *, hnetd_time_t preferred, hnetd_time_t valid);
 #define pa_dp_todelete(dp) (dp)->__flags |= PADF_DP_TODELETE
