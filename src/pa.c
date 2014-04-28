@@ -182,19 +182,14 @@ static void __pa_ifu_ipv4(struct iface_user *u, const char *ifname,
 const struct prefix *pa_prefix_getcollision(struct pa *pa, const struct prefix *prefix)
 {
 	struct pa_ap *ap;
-	pa_for_each_ap(ap, &pa->data) {
-		if(prefix_contains(prefix, &ap->prefix) || prefix_contains(&ap->prefix, prefix)) {
-			return &ap->prefix;
-		}
+	pa_for_each_ap_updown(ap, &pa->data, prefix) {
+		return &ap->prefix;
 	}
 
 	struct pa_cp *cp;
-	pa_for_each_cp(cp, &pa->data) {
-		if(prefix_contains(prefix, &cp->prefix) || prefix_contains(&cp->prefix, prefix)) {
-			return &cp->prefix;
-		}
+	pa_for_each_cp_updown(cp, &pa->data, prefix) {
+		return &cp->prefix;
 	}
-
 	return NULL;
 }
 
