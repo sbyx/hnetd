@@ -129,14 +129,11 @@ static void pa_core_create_cpl(struct pa_core *core, const struct prefix *p,
 }
 
 static int pa_getprefix_random(struct pa_core *core,
-		struct pa_dp *dp, struct pa_iface *iface, struct prefix *new_prefix) {
-
-	int res;
-	bool looped;
-	uint32_t rounds;
+		struct pa_dp *dp, struct pa_iface *iface, struct prefix *new_prefix)
+{
 	uint8_t plen;
 	const struct prefix *collision;
-
+	const struct prefix *first_collision = NULL;
 
 	/* Selecting required prefix length */
 	if(dp->prefix.plen < 64) {
@@ -164,37 +161,33 @@ static int pa_getprefix_random(struct pa_core *core,
 		return -1;
 	}
 
-	/* The router first choose a random prefix. Then it iterates over all
-	 * the next prefixes, with a limit of PA_PREFIX_SEARCH_MAX_ROUNDS iterations. */
-	if(plen - dp->prefix.plen >= 32 || (rounds = 1 << (plen - dp->prefix.plen)) >= PA_CORE_PREFIX_SEARCH_MAX_ROUNDS) {
-		rounds = PA_CORE_PREFIX_SEARCH_MAX_ROUNDS;
-	}
-
-	looped = false;
-	for(; rounds; rounds--) {
-
+	while(1) {
 		if(!(collision = pa_prefix_getcollision(core_pa(core), new_prefix)))
 			return 0;
 
 		L_DEBUG("Prefix %s can't be used", PREFIX_REPR(new_prefix));
 
-		if(prefix_contains(new_prefix, collision)) {
-			if((res = prefix_increment(new_prefix, new_prefix, dp->prefix.plen)) == -1)
+		if(!first_collision) {
+			first_collision = collision;
+		} else if(!prefix_cmp(collision, first_collision)) { //We looped
+			L_INFO("No more available prefix can be found in %s", PREFIX_REPR(&dp->prefix));
+			return -1;
+		}
+
+		if(new_prefix->plen <= collision->plen) {
+			if(prefix_increment(new_prefix, new_prefix, dp->prefix.plen) == -1) {
+				L_ERR("Error incrementing %s with protected length %d", PREFIX_REPR(new_prefix), dp->prefix.plen);
 				return -1;
-		} else { //prefix_contains(collision, new_prefix)
-			if((res = prefix_increment(new_prefix, collision, dp->prefix.plen)) == -1)
+			}
+		} else {
+			if(prefix_increment(new_prefix, collision, dp->prefix.plen) == -1) {
+				L_ERR("Error incrementing %s with protected length %d", PREFIX_REPR(collision), dp->prefix.plen);
 				return -1;
+			}
 			new_prefix->plen = plen;
 		}
-
-		if(res) {
-			if(looped)
-				return -1;
-			looped = true;
-		}
 	}
-
-	return -1;
+	return -1; //avoid warning
 }
 
 static const struct prefix * pa_getprefix_storage(struct pa_core *core, struct pa_iface *iface,
@@ -280,9 +273,8 @@ static bool pa_core_iface_is_designated(struct pa_core *core, struct pa_iface *i
 static struct pa_cpl *pa_core_getcpl(struct pa_dp *dp, struct pa_iface *iface)
 {
 	struct pa_cpl *cpl;
-
-	pa_for_each_cpl_in_iface(cpl, iface) {
-		if(cpl->cp.dp == dp || prefix_contains(&dp->prefix, &cpl->cp.prefix))
+	pa_for_each_cpl_in_iface_down(cpl, iface, &dp->prefix) {
+		if(cpl->cp.dp == dp)
 			return cpl;
 	}
 
@@ -296,9 +288,8 @@ static struct pa_ap *pa_core_getap(struct pa_core *core, struct pa_dp *dp, struc
 	struct pa_ap *ap_iter;
 
 	/* Get the highest priority on that interface */
-	pa_for_each_ap_in_iface(ap_iter, iface) {
-		if(prefix_contains(&dp->prefix, &ap_iter->prefix)
-				&& (!ap || pa_precedence_apap(ap_iter, ap) > 0)
+	pa_for_each_ap_in_iface_down(ap_iter, iface, &dp->prefix) {
+		if((!ap || pa_precedence_apap(ap_iter, ap) > 0)
 				&& pa_ap_isvalid(core_pa(core), ap_iter))
 				ap = ap_iter;
 	}
@@ -442,12 +433,11 @@ static inline int __aaa_do_slaac(struct pa_cpl *cpl, struct in6_addr *addr)
 	return 0;
 }
 
-static inline int __aaa_find_random(struct pa_core *core, struct pa_cpl *cpl, struct in6_addr *addr)
+static int __aaa_find_random(struct pa_core *core, struct pa_cpl *cpl, struct in6_addr *addr)
 {
-	uint32_t rounds;
-	uint8_t diff;
 	struct prefix rpool, result;
-	int res;
+	bool first = true;
+	struct in6_addr first_addr;
 
 	/* Get routers pool */
 	prefix_canonical(&rpool, &cpl->cp.prefix);
@@ -471,29 +461,27 @@ static inline int __aaa_find_random(struct pa_core *core, struct pa_cpl *cpl, st
 		return -1;
 	}
 
-	/* Selecting rounds duration */
-	diff = 128 - rpool.plen;
-	if(diff >= 32 || (rounds = 1 << diff) >= PA_CORE_PREFIX_SEARCH_MAX_ROUNDS)
-		rounds = PA_CORE_PREFIX_SEARCH_MAX_ROUNDS;
-
-	bool looped = false;
-	for(; rounds; rounds--) {
-
-		/* The first condition is intended to forbid the use of the network address
-		 * in the case of IPv4. */
+	while(1) {
 		if((!prefix_is_ipv4(&rpool)
-					|| memcmp(&rpool.prefix, &result.prefix, sizeof(struct in6_addr)))
+				|| memcmp(&rpool.prefix, &result.prefix, sizeof(struct in6_addr)))
 				&& pa_addr_available(core_pa(core), cpl->iface, &result.prefix)) {
 			memcpy(addr, &result.prefix, sizeof(struct in6_addr));
 			return 0;
 		}
-		if((res = prefix_increment(&result, &result, rpool.plen)) == -1)
-			return -1;
 
-		if(res) {
-			if(looped)
-				return -1;
-			looped = true;
+		L_DEBUG("Address %s can't be used", ADDR_REPR(&result.prefix));
+
+		if(first) {
+			memcpy(&first_addr, &result.prefix,  sizeof(struct in6_addr));
+			first = false;
+		} else if (!memcmp(&first_addr, &result.prefix, sizeof(struct in6_addr))) {
+			L_WARN("No address available in "PA_CP_L, PA_CP_LA(&cpl->cp));
+			return -1;
+		}
+
+		if(prefix_increment(&result, &result, rpool.plen) == -1) {
+			L_ERR("Can't increment address %s in "PA_CP_L, ADDR_REPR(&result.prefix), PA_CP_LA(&cpl->cp));
+			return -1;
 		}
 	}
 	return -1;
@@ -502,8 +490,8 @@ static inline int __aaa_find_random(struct pa_core *core, struct pa_cpl *cpl, st
 static bool __aaa_valid(struct pa_core *core, struct in6_addr *addr)
 {
 	struct pa_eaa *eaa;
-	pa_for_each_eaa(eaa, core_p(core, data)) {
-		if(!memcmp(&eaa->aa.address, addr, sizeof(struct in6_addr)) && PA_RIDCMP(&eaa->rid, &core_p(core, data)->flood.rid) > 0)
+	pa_for_each_eaa_down(eaa, core_p(core, data), addr, 128) {
+		if(PA_RIDCMP(&eaa->rid, &core_p(core, data)->flood.rid) > 0)
 			return false;
 	}
 	/* No need to check for local because we only give one per cp (won't be true if too much authoritary... )*/
@@ -666,8 +654,8 @@ static void __pad_cb_dps(struct pa_data_user *user, struct pa_dp *dp, uint32_t f
 
 	if((flags & PADF_DP_CREATED) && !dp->ignore) {
 		/* Remove orphans if possible */
-		pa_for_each_cp(cp, core_p(core, data)) {
-			if((cp->type == PA_CPT_L) && !cp->dp && prefix_contains(&dp->prefix, &cp->prefix)) {
+		pa_for_each_cp_down(cp,  core_p(core, data), &dp->prefix) {
+			if((cp->type == PA_CPT_L) && !cp->dp) {
 				pa_cp_set_dp(cp, dp);
 				pa_cp_notify(cp);
 			}

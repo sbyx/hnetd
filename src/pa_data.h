@@ -414,6 +414,7 @@ struct pa_edp *pa_edp_get(struct pa_data *, const struct prefix *, const struct 
 #define pa_for_each_ap(pa_ap, pa_data) btrie_for_each_down_entry(pa_ap, &(pa_data)->aps, NULL, 0, be)
 #define pa_for_each_ap_updown(ap, data, p) btrie_for_each_updown_entry(ap, &(data)->aps, (btrie_key_t *)&(p)->prefix, (p)->plen, be)
 #define pa_for_each_ap_in_iface(pa_ap, pa_iface) btrie_for_each_down_entry(pa_ap, &(pa_iface)->aps, NULL, 0, if_be)
+#define pa_for_each_ap_in_iface_down(pa_ap, pa_iface, p) btrie_for_each_down_entry(pa_ap, &(pa_iface)->aps, (btrie_key_t *)&(p)->prefix, (p)->plen, if_be)
 struct pa_ap *pa_ap_get(struct pa_data *, const struct prefix *, const struct pa_rid *rid, bool goc);
 void pa_ap_set_iface(struct pa_ap *ap, struct pa_iface *iface);
 void pa_ap_set_priority(struct pa_ap *ap, uint8_t priority);
@@ -423,10 +424,12 @@ void pa_ap_notify(struct pa_data *data, struct pa_ap *ap);
 
 
 #define pa_for_each_cp(pa_cp, pa_data) btrie_for_each_down_entry(pa_cp, &(pa_data)->cps, NULL, 0, be)
+#define pa_for_each_cp_down(pa_cp, pa_data, p) btrie_for_each_down_entry(pa_cp, &(pa_data)->cps, (btrie_key_t *)&(p)->prefix, (p)->plen, be)
 #define pa_for_each_cp_up(pa_cp, pa_data, key, len) btrie_for_each_up_entry(pa_cp, &(pa_data)->cps, (btrie_key_t *)(key), len, be)
 #define pa_for_each_cp_updown(pa_cp, pa_data, p) btrie_for_each_updown_entry(pa_cp, &(pa_data)->cps, (btrie_key_t *)&(p)->prefix, (p)->plen, be)
 #define pa_for_each_cp_safe(pa_cp, cp2, pa_data) btrie_for_each_down_entry_safe(pa_cp, cp2, &(pa_data)->cps, NULL, 0, be)
 #define pa_for_each_cpl_in_iface(pa_cpl, pa_iface) btrie_for_each_down_entry(pa_cpl, &(pa_iface)->cpls, NULL, 0, if_be)
+#define pa_for_each_cpl_in_iface_down(pa_cpl, pa_iface, p) btrie_for_each_down_entry(pa_cpl, &(pa_iface)->cpls, (btrie_key_t *)&(p)->prefix, (p)->plen, if_be)
 #define pa_for_each_cp_in_dp(pa_cp, pa_dp) btrie_for_each_down_entry(pa_cp, &(pa_dp)->cps, NULL, 0, dp_be)
 #define pa_for_each_cp_in_dp_safe(pa_cp, cp2, pa_dp) btrie_for_each_down_entry_safe(pa_cp, cp2, &(pa_dp)->cps, NULL, 0, dp_be)
 #define _pa_cpl(_cp) ((struct pa_cpl *)((_cp && (_cp)->type == PA_CPT_L)?container_of(_cp, struct pa_cpl, cp):NULL))

@@ -179,6 +179,8 @@ static void __pa_ifu_ipv4(struct iface_user *u, const char *ifname,
 /************************************/
 /******** Other generic fcts ********/
 /************************************/
+/* For prefix generation to work properly, getcollision must return the bigger prefix in aps,
+ * or bigger prefix in cps. See pa_core.c. */
 const struct prefix *pa_prefix_getcollision(struct pa *pa, const struct prefix *prefix)
 {
 	struct pa_ap *ap;
