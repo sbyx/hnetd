@@ -78,7 +78,6 @@ void test_term_pa()
 
 void test_1()
 {
-	struct pa_cp *cp;
 	struct pa_cpl *cpl1;
 	struct pa_cpd *cpd;
 	struct pa_pd_dp_req *req;
