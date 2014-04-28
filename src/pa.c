@@ -202,20 +202,18 @@ bool pa_addr_available(struct pa *pa, struct pa_iface *iface, const struct in6_a
 {
 	struct pa_eaa *eaa;
 	if(pa->data.flood.aa_ll_enabled && iface) {
-		pa_for_each_eaa_in_iface(eaa, iface) {
-			if(!memcmp(&eaa->aa.address, addr, sizeof(struct in6_addr)))
+		pa_for_each_eaa_in_iface_down(eaa, iface, addr, 128) {
 				return false;
 		}
 	} else {
-		pa_for_each_eaa(eaa, &pa->data) {
-			if(!memcmp(&eaa->aa.address, addr, sizeof(struct in6_addr)))
+		pa_for_each_eaa_down(eaa, &pa->data, addr, 128) {
 				return false;
 		}
 	}
 
 	struct pa_cp *cp;
 	struct pa_cpl *cpl;
-	pa_for_each_cp(cp, &pa->data) {
+	pa_for_each_cp_up(cp, &pa->data, addr, 128) {
 		if((cpl = _pa_cpl(cp)) && cpl->laa && !memcmp(&cpl->laa->aa.address, addr, sizeof(struct in6_addr)))
 			return false;
 	}
@@ -255,11 +253,10 @@ int pa_precedence_apcp(struct pa_ap *ap, struct pa_cp *cp)
 bool pa_ap_isvalid(struct pa *pa, struct pa_ap *ap)
 {
 	struct pa_ap *ap_iter;
-	pa_for_each_ap(ap_iter, &pa->data) {
-		if(ap != ap_iter
-				&& pa_precedence_apap(ap_iter, ap) > 0
-				&& (prefix_contains(&ap_iter->prefix, &ap->prefix) || prefix_contains(&ap->prefix, &ap_iter->prefix)))
+	pa_for_each_ap_updown(ap_iter, &pa->data, &ap->prefix) {
+		if(ap != ap_iter && pa_precedence_apap(ap_iter, ap) > 0) {
 			return false;
+		}
 	}
 	return true;
 }
@@ -267,11 +264,10 @@ bool pa_ap_isvalid(struct pa *pa, struct pa_ap *ap)
 bool pa_cp_isvalid(struct pa *pa, struct pa_cp *cp)
 {
 	struct pa_ap *ap_iter;
-	pa_for_each_ap(ap_iter, &pa->data) {
-		if(pa_precedence_apcp(ap_iter, cp) > 0
-				&& (prefix_contains(&ap_iter->prefix, &cp->prefix) ||
-						prefix_contains(&cp->prefix, &ap_iter->prefix)))
+	pa_for_each_ap_updown(ap_iter, &pa->data, &cp->prefix) {
+		if(pa_precedence_apcp(ap_iter, cp) > 0) {
 			return false;
+		}
 	}
 	return true;
 }
