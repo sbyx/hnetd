@@ -429,6 +429,7 @@ void pa_ap_notify(struct pa_data *data, struct pa_ap *ap);
 #define pa_for_each_cp_down(pa_cp, pa_data, p) btrie_for_each_down_entry(pa_cp, &(pa_data)->cps, (btrie_key_t *)&(p)->prefix, (p)->plen, be)
 #define pa_for_each_cp_up(pa_cp, pa_data, key, len) btrie_for_each_up_entry(pa_cp, &(pa_data)->cps, (btrie_key_t *)(key), len, be)
 #define pa_for_each_cp_updown(pa_cp, pa_data, p) btrie_for_each_updown_entry(pa_cp, &(pa_data)->cps, (btrie_key_t *)&(p)->prefix, (p)->plen, be)
+#define pa_for_each_cp_updown_safe(pa_cp, cp2, pa_data, p) btrie_for_each_updown_entry_safe(pa_cp, cp2, &(pa_data)->cps, (btrie_key_t *)&(p)->prefix, (p)->plen, be)
 #define pa_for_each_cp_safe(pa_cp, cp2, pa_data) btrie_for_each_down_entry_safe(pa_cp, cp2, &(pa_data)->cps, NULL, 0, be)
 #define pa_for_each_cpl_in_iface(pa_cpl, pa_iface) btrie_for_each_down_entry(pa_cpl, &(pa_iface)->cpls, NULL, 0, if_be)
 #define pa_for_each_cpl_in_iface_down(pa_cpl, pa_iface, p) btrie_for_each_down_entry(pa_cpl, &(pa_iface)->cpls, (btrie_key_t *)&(p)->prefix, (p)->plen, if_be)

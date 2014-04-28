@@ -560,15 +560,14 @@ void pa_core_update_excluded(struct pa_core *core, struct pa_ldp *ldp)
 
 	if(ldp->excluded.valid) {
 		/* Invalidate all contained cps */
-		pa_for_each_cp_safe(cp, cp2, core_p(core, data)) {
-			if(!cp->authoritative &&
-					(prefix_contains(&cp->prefix, &ldp->excluded.excluded) ||
-							prefix_contains(&ldp->excluded.excluded, &cp->prefix))) {
+		pa_for_each_cp_updown_safe(cp, cp2, core_p(core, data), &ldp->excluded.excluded) {
+			if(!cp->authoritative) {
 				pa_cp_todelete(cp);
 				pa_cp_notify(cp); /* No loop... Hopefully */
 				__pa_paa_schedule(core);
 			}
 		}
+
 		//todo: When no cp is deleted, we don't need to execute paa, but in case of scarcity, it may be usefull
 		/* Creating new cp */
 		ldp->excluded.cpx = _pa_cpx(pa_cp_get(core_p(core, data), &ldp->excluded.excluded, PA_CPT_X, true));
