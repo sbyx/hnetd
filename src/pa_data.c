@@ -89,36 +89,6 @@ static int __pa_set_dhcp(void **dhcp_data, size_t *dhcp_len,
 	return 1;
 }
 
-static bool __pad_dp_compute_ignore(struct pa_data *data, struct pa_dp *dp)
-{
-	struct pa_dp *dp2;
-	bool seen = false;
-	pa_for_each_dp(dp2, data) {
-		if(dp2 == dp) {
-			seen = true;
-			continue;
-		}
-
-		if(dp2->__flags & PADF_DP_TODELETE)
-			continue;
-
-		bool eq = !prefix_cmp(&dp->prefix, &dp2->prefix);
-
-		if((!seen && eq)
-#ifdef PAD_DP_IGNORE_INCLUDED
-				|| (!eq && prefix_contains(&dp2->prefix, &dp->prefix))
-#endif
-#ifdef PAD_DP_IGNORE_INCLUDER
-				|| (!eq && prefix_contains(&dp->prefix, &dp2->prefix))
-#endif
-		)
-			return true;
-
-	}
-	return false;
-}
-
-
 void pa_dp_init(struct pa_data *data, struct pa_dp *dp, const struct prefix *p)
 {
 	dp->dhcp_data = NULL;
@@ -188,23 +158,29 @@ void pa_dp_notify(struct pa_data *data, struct pa_dp *dp)
 {
 	struct pa_dp *dp2;
 	// For ignore computation
-	if(dp->__flags & PADF_DP_TODELETE) {
-		pa_for_each_dp(dp2, data) {
-			if(dp2->ignore &&
-					(prefix_contains(&dp2->prefix, &dp->prefix) ||
-							prefix_contains(&dp->prefix, &dp2->prefix))) {
-				__pa_dp_set_ignore(dp2, __pad_dp_compute_ignore(data, dp2));
+	if((dp->__flags & PADF_DP_TODELETE) && !dp->ignore) {
+		pa_for_each_dp_down(dp2, data, &dp->prefix) {
+			if(dp != dp2) {
+				__pa_dp_set_ignore(dp2, false);
+				btrie_skip_down_entry(dp2, dp->prefix.plen, be);
 			}
 		}
-	} else if (dp->__flags & PADF_DP_CREATED){
-		pa_for_each_dp(dp2, data) {
-			if(!dp2->ignore &&
-					(prefix_contains(&dp2->prefix, &dp->prefix) ||
-							prefix_contains(&dp->prefix, &dp2->prefix))) {
-				__pa_dp_set_ignore(dp2, __pad_dp_compute_ignore(data, dp2));
+	} else if (dp->__flags & PADF_DP_CREATED) {
+		bool found = false;
+		pa_for_each_dp_updown(dp2, data, &dp->prefix) {
+			if(!found) {
+				if(dp2 == dp) {
+					__pa_dp_set_ignore(dp, false);
+					found = true;
+				} else {
+					__pa_dp_set_ignore(dp, true);
+					break;
+				}
+			} else {
+				__pa_dp_set_ignore(dp2, true);
+				btrie_skip_down_entry(dp2, dp->prefix.plen, be);
 			}
 		}
-		__pa_dp_set_ignore(dp, __pad_dp_compute_ignore(data, dp));
 	}
 
 	PA_NOTIFY(data, dps, dp, pa_dp_destroy(dp));
