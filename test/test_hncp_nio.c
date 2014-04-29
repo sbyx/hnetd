@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Fri Apr  4 13:49:09 2014 mstenber
- * Edit time:     166 min
+ * Last modified: Tue Apr 29 22:18:15 2014 mstenber
+ * Edit time:     168 min
  *
  */
 
@@ -458,7 +458,7 @@ static void hncp_ok(void)
   printf("last run starting\n");
   smock_push_int("time", t);
   smock_push_int("random", 0);
-  smock_push_int("schedule", HNCP_TRICKLE_IMIN / 2);
+  smock_push_int("schedule", 0);
 
   /* Should get notification about two added TLVs. */
   smock_push_int("tlv_callback", TLV_ID_A);

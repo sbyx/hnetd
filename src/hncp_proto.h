@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Tue Apr 22 15:21:30 2014 mstenber
- * Edit time:     64 min
+ * Last modified: Tue Apr 29 22:37:24 2014 mstenber
+ * Edit time:     66 min
  *
  */
 
@@ -31,6 +31,9 @@
 
 /* 64 bit version of the hash */
 #define HNCP_HASH64_LEN 8
+
+/* How recently the node has to be reachable before prune kills it for real. */
+#define HNCP_PRUNE_GRACE_PERIOD (60 * HNETD_TIME_PER_SECOND)
 
 /* When do we start to worry about the other side.. */
 #define HNCP_INTERVAL_WORRIED (60 * HNETD_TIME_PER_SECOND)

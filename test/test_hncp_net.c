@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Tue Apr 29 13:35:59 2014 mstenber
+ * Last modified: Tue Apr 29 22:21:31 2014 mstenber
  * Edit time:     389 min
  *
  */
@@ -296,7 +296,7 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes)
     }
   SIM_WHILE(s, 100000, !net_sim_is_converged(s));
 
-  sput_fail_unless(net_sim_find_hncp(s, "node0")->nodes.avl.count == num_nodes,
+  sput_fail_unless(net_sim_find_hncp(s, "node0")->nodes.avl.count >= num_nodes,
                    "enough nodes");
 
   net_sim_uninit(s);

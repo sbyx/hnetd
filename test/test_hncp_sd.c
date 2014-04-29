@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Tue Apr 29 17:13:22 2014 mstenber
+ * Last modified: Tue Apr 29 22:12:36 2014 mstenber
  * Edit time:     85 min
  *
  */
@@ -190,6 +190,7 @@ void test_hncp_sd(void)
   sput_fail_unless(!rv, "write 1 'fails'");
   smock_is_empty();
 
+  memset(&node2->sd->dnsmasq_state, 0, HNCP_HASH_LEN);
   rv = hncp_sd_write_dnsmasq_conf(node2->sd, "/tmp/n2.conf");
   sput_fail_unless(rv, "write 2 works");
   smock_is_empty();

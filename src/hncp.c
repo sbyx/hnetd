@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Apr 29 12:21:58 2014 mstenber
- * Edit time:     473 min
+ * Last modified: Tue Apr 29 22:26:18 2014 mstenber
+ * Edit time:     502 min
  *
  */
 
@@ -47,18 +47,15 @@ bool hncp_node_set_tlvs(hncp_node n, struct tlv_attr *a)
 {
   L_DEBUG("hncp_node_set_tlvs %llx/%p %p",
           hncp_hash64(&n->node_identifier_hash), n, a);
-  if (n->tlv_container)
+  if (n->tlv_container && a && tlv_attr_equal(n->tlv_container, a))
     {
-      if (a && tlv_attr_equal(n->tlv_container, a))
-        {
-          free(a);
-          return false;
-        }
-      hncp_notify_subscribers_tlvs_changed(n, n->tlv_container, a);
-      free(n->tlv_container);
+      free(a);
+      return false;
     }
-  else
-    hncp_notify_subscribers_tlvs_changed(n, NULL, a);
+  if (n->last_reachable_prune == n->hncp->last_prune)
+    hncp_notify_subscribers_tlvs_changed(n, n->tlv_container, a);
+  if (n->tlv_container)
+    free(n->tlv_container);
   n->tlv_container = a;
   n->hncp->network_hash_dirty = true;
   n->node_data_hash_dirty = true;
@@ -113,13 +110,12 @@ static void update_node(__unused struct vlist_tree *t,
   if (n_old)
     {
       hncp_node_set_tlvs(n_old, NULL);
-      hncp_notify_subscribers_node_changed(n_old, false);
       free(n_old);
     }
   if (n_new)
     {
       n_new->node_data_hash_dirty = true;
-      hncp_notify_subscribers_node_changed(n_new, true);
+      n_new->last_reachable_prune = 0;
     }
   o->network_hash_dirty = true;
   o->graph_dirty = true;
@@ -226,9 +222,11 @@ static void update_neighbor(struct vlist_tree *t,
     free(t_old);
   else if (t_new && !o->assume_bidirectional_reachability)
     {
+#ifdef HNCP_PROBE_NEW_NEIGHBORS_IN_UNIDIRECTIONAL_MODE_IMMEDIATELY
       /* Provisional neighbor; on add, try to send single network
        * state request via unicast. */
       (void)hncp_link_send_req_network_state(l, &t_new->last_address);
+#endif /* HNCP_PROBE_NEW_NEIGHBORS_IN_UNIDIRECTIONAL_MODE_IMMEDIATELY */
       return;
     }
   /* Real new neighbor change(?). */
@@ -280,6 +278,8 @@ bool hncp_init(hncp o, const void *node_identifier, int len)
     return false;
   }
   o->first_free_iid = 1;
+  o->last_prune = 1;
+  /* this way new nodes with last_prune=0 won't be reachable */
   return hncp_set_own_hash(o, &h);
 }
 
@@ -298,6 +298,7 @@ bool hncp_set_own_hash(hncp o, hncp_hash h)
     }
   o->own_node = n;
   o->tlvs_dirty = true; /* by default, they are, even if no neighbors yet. */
+  n->last_reachable_prune = o->last_prune; /* we're always reachable */
   hncp_schedule(o);
   return true;
 }
@@ -374,8 +375,12 @@ hncp_node hncp_get_first_node(hncp o)
 {
   hncp_node n;
 
-  return avl_is_empty(&o->nodes.avl) ? NULL :
-    avl_first_element(&o->nodes.avl, n, in_nodes.avl);
+  if (avl_is_empty(&o->nodes.avl))
+    return NULL;
+  n = avl_first_element(&o->nodes.avl, n, in_nodes.avl);
+  if (n->last_reachable_prune == o->last_prune)
+    return n;
+  return hncp_node_get_next(n);
 }
 
 static hncp_tlv _add_tlv(hncp o, struct tlv_attr *tlv)
@@ -516,9 +521,17 @@ hncp_node hncp_node_get_next(hncp_node n)
 {
   hncp o = n->hncp;
   hncp_node last = avl_last_element(&o->nodes.avl, n, in_nodes.avl);
+
   if (!n || n == last)
     return NULL;
-  return avl_next_element(n, in_nodes.avl);
+  while (1)
+    {
+      n = avl_next_element(n, in_nodes.avl);
+      if (n->last_reachable_prune == o->last_prune)
+        return n;
+      if (n == last)
+        return NULL;
+    }
 }
 
 void hncp_self_flush(hncp_node n)
@@ -651,7 +664,7 @@ void hncp_calculate_network_hash(hncp o)
   if (!o->network_hash_dirty)
     return;
   md5_begin(&ctx);
-  vlist_for_each_element(&o->nodes, n, in_nodes)
+  hncp_for_each_node(o, n)
     {
       hncp_calculate_node_data_hash(n);
       md5_hash(&n->node_data_hash, HNCP_HASH_LEN, &ctx);
