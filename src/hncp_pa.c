@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Tue Apr 22 17:07:07 2014 mstenber
+ * Last modified: Tue Apr 29 17:19:46 2014 mstenber
  * Edit time:     403 min
  *
  */
@@ -353,7 +353,7 @@ static void _tlv_cb(hncp_subscriber s,
 {
   hncp_glue g = container_of(s, hncp_glue_s, subscriber);
 
-  L_NOTICE("_tlv_cb %s %s %s",
+  L_NOTICE("[pa]_tlv_cb %s %s %s",
            add ? "add" : "remove",
            n == g->hncp->own_node ? "local" : HNCP_NODE_REPR(n),
            TLV_REPR(tlv));
