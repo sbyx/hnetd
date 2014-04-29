@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Apr 15 13:37:41 2014 mstenber
- * Edit time:     463 min
+ * Last modified: Tue Apr 29 12:05:53 2014 mstenber
+ * Edit time:     466 min
  *
  */
 
@@ -65,11 +65,11 @@ bool hncp_node_set_tlvs(hncp_node n, struct tlv_attr *a)
   n->hncp->graph_dirty = true;
   hncp_schedule(n->hncp);
 
-  uint32_t version = 0;
-  const char *agent = NULL;
-  int agent_len = 0;
   if (a)
     {
+      uint32_t version = 0;
+      const char *agent = NULL;
+      int agent_len = 0;
       struct tlv_attr *va;
 
       tlv_for_each_attr(va, a)
@@ -84,18 +84,18 @@ bool hncp_node_set_tlvs(hncp_node n, struct tlv_attr *a)
               break;
             }
         }
+      if (n->version != version)
+        {
+          hncp_node on = n->hncp->own_node;
+          if (on && on->version && version != on->version)
+            L_ERR("Incompatible node: %s version %u (%.*s) != %u",
+                  HNCP_NODE_REPR(n), version, agent_len, agent, on->version);
+          else if (!n->version)
+            L_INFO("%s runs %.*s",
+                   HNCP_NODE_REPR(n), agent_len, agent);
+        }
+      n->version = version;
     }
-  if (n->version != version)
-    {
-      hncp_node on = n->hncp->own_node;
-      if (on && on->version && version != on->version)
-        L_ERR("Incompatible node: %s version %u (%.*s) != %u",
-              HNCP_NODE_REPR(n), version, agent_len, agent, on->version);
-      else if (!n->version)
-        L_INFO("%s runs %.*s",
-               HNCP_NODE_REPR(n), agent_len, agent);
-    }
-  n->version = version;
   return true;
 }
 
