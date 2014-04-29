@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Apr 16 14:34:41 2014 mstenber
- * Edit time:     384 min
+ * Last modified: Tue Apr 29 13:35:59 2014 mstenber
+ * Edit time:     389 min
  *
  */
 
@@ -258,6 +258,8 @@ void hncp_bird14_unique()
   raw_bird14(&s);
 }
 
+bool no_conflicts = false;
+
 static void raw_hncp_tube(net_sim s, unsigned int num_nodes)
 {
   /* A LOT of routers connected in a tube (R1 R2 R3 .. RN). */
@@ -276,10 +278,13 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes)
       sprintf(buf, "node%d", i);
       hncp n1 = net_sim_find_hncp(s, buf);
       /* Add intentional router ID collisions at nodes 0, 1,3 and 2 and 4 */
-      if (i == 0 || i == 1 || i == 3)
-        hncp_set_own_hash(n1, &h1);
-      else if (i == 2 || i == 4)
-        hncp_set_own_hash(n1, &h2);
+      if (!no_conflicts)
+        {
+          if (i == 0 || i == 1 || i == 3)
+            hncp_set_own_hash(n1, &h1);
+          else if (i == 2 || i == 4)
+            hncp_set_own_hash(n1, &h2);
+        }
 
       sprintf(buf, "node%d", i+1);
       hncp n2 = net_sim_find_hncp(s, buf);
@@ -358,10 +363,17 @@ int main(__unused int argc, __unused char **argv)
   int seed = (int)hnetd_time();
   int c;
 
-  while ((c = getopt(argc, argv, "r:")) > 0)
+  while ((c = getopt(argc, argv, "nr:")) > 0)
     {
-      if (c == 'r')
-        seed = atoi(optarg);
+      switch (c)
+        {
+        case 'r':
+          seed = atoi(optarg);
+          break;
+        case 'n':
+          no_conflicts = true;
+          break;
+        }
     }
   argc -= optind;
   argv += optind;
