@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Apr 29 12:05:53 2014 mstenber
- * Edit time:     466 min
+ * Last modified: Tue Apr 29 12:21:58 2014 mstenber
+ * Edit time:     473 min
  *
  */
 
@@ -220,10 +220,18 @@ static void update_neighbor(struct vlist_tree *t,
   hncp_link l = container_of(t, hncp_link_s, neighbors);
   hncp o = l->hncp;
   hncp_neighbor t_old = container_of(node_old, hncp_neighbor_s, in_neighbors);
-  __unused hncp_neighbor t_new = container_of(node_new, hncp_neighbor_s, in_neighbors);
+  hncp_neighbor t_new = container_of(node_new, hncp_neighbor_s, in_neighbors);
 
   if (t_old)
     free(t_old);
+  else if (t_new && !o->assume_bidirectional_reachability)
+    {
+      /* Provisional neighbor; on add, try to send single network
+       * state request via unicast. */
+      (void)hncp_link_send_req_network_state(l, &t_new->last_address);
+      return;
+    }
+  /* Real new neighbor change(?). */
   o->links_dirty = true;
   hncp_schedule(o);
 }

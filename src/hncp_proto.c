@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Apr 16 11:08:36 2014 mstenber
- * Edit time:     356 min
+ * Last modified: Tue Apr 29 12:23:38 2014 mstenber
+ * Edit time:     357 min
  *
  */
 
@@ -305,7 +305,7 @@ handle_message(hncp_link l,
   /* We cannot simply ignore same node identifier; it might be someone
    * with duplicated node identifier (hash). */
   if (memcmp(&lid->node_identifier_hash,
-             &l->hncp->own_node->node_identifier_hash,
+             &o->own_node->node_identifier_hash,
              HNCP_HASH_LEN) != 0)
     {
       ne = _heard(l, lid, src);
@@ -375,7 +375,7 @@ handle_message(hncp_link l,
           o->links_dirty = true;
           hncp_schedule(o);
         }
-      ne->last_response = hncp_time(l->hncp);
+      ne->last_response = hncp_time(o);
       ne->ping_count = 0;
     }
 
