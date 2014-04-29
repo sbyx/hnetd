@@ -804,6 +804,46 @@ static int handle_update(__unused struct ubus_context *ctx, __unused struct ubus
 }
 
 
+void platform_restart_dhcpv4(struct iface *c)
+{
+	struct platform_iface *iface = c->platform;
+	if (!iface)
+		return;
+
+	struct blob_buf b = {NULL, NULL, 0, NULL};
+
+	blob_buf_init(&b, 0);
+	char *buf = blobmsg_alloc_string_buffer(&b, "interface", 32);
+	snprintf(buf, 32, "%s_4", iface->handle);
+	blobmsg_add_string_buffer(&b);
+	ubus_invoke(ubus, ubus_network_interface, "down", b.head, NULL, NULL, 1000);
+
+	blob_buf_init(&b, 0);
+	buf = blobmsg_alloc_string_buffer(&b, "name", 32);
+	snprintf(buf, 32, "%s_4", iface->handle);
+	blobmsg_add_string_buffer(&b);
+	buf = blobmsg_alloc_string_buffer(&b, "ifname", 32);
+	snprintf(buf, 32, "@%s", iface->handle);
+	blobmsg_add_string_buffer(&b);
+	blobmsg_add_string(&b, "proto", "dhcp");
+	blobmsg_add_string(&b, "sendopts", "0x4d:07484f4d454e4554");
+	buf = blobmsg_alloc_string_buffer(&b, "iface6rd", 32);
+	snprintf(buf, 32, "%s_6rd", iface->handle);
+	blobmsg_add_string_buffer(&b);
+	blobmsg_add_u8(&b, "delegate", 0);
+	blobmsg_add_string(&b, "zone6rd", "wan");
+
+	bool allow_default = true; // TODO
+	blobmsg_add_u8(&b, "defaultroute", allow_default);
+
+	uint32_t ubus_network = 0;
+	ubus_lookup_id(ubus, "network", &ubus_network);
+	ubus_invoke(ubus, ubus_network, "add_dynamic", b.head, NULL, NULL, 1000);
+
+	blob_buf_free(&b);
+}
+
+
 enum {
 	DUMP_ATTR_INTERFACE,
 	DUMP_ATTR_MAX
