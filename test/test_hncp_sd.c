@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Tue Apr 22 16:51:44 2014 mstenber
- * Edit time:     77 min
+ * Last modified: Tue Apr 29 17:13:22 2014 mstenber
+ * Edit time:     85 min
  *
  */
 
@@ -113,13 +113,24 @@ bool net_sim_is_busy(net_sim s)
 {
   net_node n;
 
+  if (!list_empty(&s->messages))
+    {
+      L_DEBUG("net_sim_is_busy: messages pending");
+      return true;
+    }
   list_for_each_entry(n, &s->nodes, h)
     {
       if (n->n.immediate_scheduled)
-        return true;
+        {
+          L_DEBUG("net_sim_is_busy: immediate scheduled");
+          return true;
+        }
 #ifndef DISABLE_HNCP_SD
       if (!s->disable_sd && n->sd->should_update)
-        return true;
+        {
+          L_DEBUG("net_sim_is_busy: should update sd");
+          return true;
+        }
 #endif /* !DISABLE_HNCP_SD */
     }
   return false;
@@ -168,6 +179,7 @@ void test_hncp_sd(void)
   smock_is_empty();
 
   /* Play with dnsmasq utilities */
+  memset(&node1->sd->dnsmasq_state, 0, HNCP_HASH_LEN);
   rv = hncp_sd_write_dnsmasq_conf(node1->sd, "/tmp/n1.conf");
   sput_fail_unless(rv, "write 1 works");
   smock_is_empty();
@@ -235,14 +247,14 @@ void test_hncp_sd(void)
   node3 = container_of(n3, net_node_s, n);
   node3->sd = hncp_sd_create(&node3->n,
                              "/bin/yes",
-                             "/tmp/dnsmasq.conf",
+                             "/tmp/n3.conf",
                              "/bin/no",
                              "xorbo", "domain.");
   s.disable_sd = false;
   l3 = net_sim_hncp_find_link_by_name(n3, "eth0");
   net_sim_set_connected(l2, l3, true);
   net_sim_set_connected(l3, l2, true);
-  SIM_WHILE(&s, 1000, !net_sim_is_converged(&s) || net_sim_is_busy(&s));
+  SIM_WHILE(&s, 1000, net_sim_is_busy(&s) || !net_sim_is_converged(&s));
 
   memset(&node1->sd->dnsmasq_state, 0, HNCP_HASH_LEN);
   rv = hncp_sd_write_dnsmasq_conf(node1->sd, "/tmp/n12.conf");
