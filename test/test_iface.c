@@ -22,7 +22,7 @@ void platform_iface_new(__unused struct iface *c, __unused const char *handle) {
 void platform_set_dhcpv6_send(__unused struct iface *c, __unused const void *dhcpv6_data, __unused size_t len,
 		__unused const void *dhcp_data, __unused size_t len4) {}
 void platform_set_prefix_route(__unused const struct prefix *p, __unused bool enable) {}
-
+void platform_restart_dhcpv4(__unused struct iface *c) {}
 
 void intiface_mock(__unused struct iface_user *u, __unused const char *ifname, bool enabled)
 {

@@ -63,6 +63,14 @@ void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 		if(!prefix_is_ipv4(&dp->prefix)) {
 			L_DEBUG("Pushing to platform "PA_DP_L, PA_DP_LA(dp));
 			platform_set_prefix_route(&dp->prefix, true);
+		} else if (!dp->local) {
+			struct iface *c;
+			list_for_each_entry(c, &interfaces, head) {
+				if (c->designatedv4) {
+					c->designatedv4 = false;
+					platform_restart_dhcpv4(c);
+				}
+			}
 		}
 	} else if(flags & PADF_DP_TODELETE) {
 		struct iface *c;
@@ -73,6 +81,20 @@ void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 		if(!prefix_is_ipv4(&dp->prefix)) {
 			L_DEBUG("Removing from platform "PA_DP_L, PA_DP_LA(dp));
 			platform_set_prefix_route(&dp->prefix, false);
+		} else {
+			bool ipv4_edp = false;
+			struct pa_dp *dp;
+			pa_for_each_dp(dp, pa_data_p)
+				if (!dp->local && IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
+					ipv4_edp = true;
+
+			struct iface *c;
+			list_for_each_entry(c, &interfaces, head) {
+				if (c->designatedv4 != !ipv4_edp) {
+					c->designatedv4 = !ipv4_edp;
+					platform_restart_dhcpv4(c);
+				}
+			}
 		}
 	} else if(flags & (PADF_DP_DHCP | PADF_DP_LIFETIME)) {
 		struct pa_cp *cp;
@@ -754,6 +776,12 @@ struct iface* iface_create(const char *ifname, const char *handle, enum iface_fl
 		vlist_init(&c->routes, compare_routes, update_route);
 		c->transition.cb = iface_announce_border;
 		c->preferred.cb = iface_announce_preferred;
+
+		c->designatedv4 = true;
+		struct pa_dp *dp;
+		pa_for_each_dp(dp, pa_data_p)
+			if (!dp->local && IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
+				c->designatedv4 = false;
 
 #ifdef __linux__
 		struct {

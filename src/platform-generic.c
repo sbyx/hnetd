@@ -186,9 +186,8 @@ void platform_restart_dhcpv4(struct iface *c)
 		if (iface->dhcpv4 > 0)
 			kill(iface->dhcpv4, SIGTERM);
 
-		bool allow_default = true; // TODO
 		char *argv_dhcpv4[] = {backend, "dhcpv4client", c->ifname,
-				(allow_default) ? "0" : "1", NULL};
+				(c->designatedv4) ? "0" : "1", NULL};
 
 		iface->dhcpv4 = platform_run(argv_dhcpv4);
 	}

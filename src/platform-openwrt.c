@@ -833,8 +833,7 @@ void platform_restart_dhcpv4(struct iface *c)
 	blobmsg_add_u8(&b, "delegate", 0);
 	blobmsg_add_string(&b, "zone6rd", "wan");
 
-	bool allow_default = true; // TODO
-	blobmsg_add_u8(&b, "defaultroute", allow_default);
+	blobmsg_add_u8(&b, "defaultroute", c->designatedv4);
 
 	uint32_t ubus_network = 0;
 	ubus_lookup_id(ubus, "network", &ubus_network);
