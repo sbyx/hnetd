@@ -879,6 +879,7 @@ void iface_update(void)
 	list_for_each_entry(c, &interfaces, head) {
 		iface_update_ipv6_uplink(c);
 		iface_update_ipv4_uplink(c);
+		c->unused = true;
 	}
 }
 
@@ -890,7 +891,7 @@ void iface_commit(void)
 		iface_commit_ipv6_uplink(c);
 		iface_commit_ipv4_uplink(c);
 
-		if (!c->platform && !c->v4uplink && avl_is_empty(&c->delegated.avl))
+		if ((!c->platform || c->unused) && !c->v4uplink && avl_is_empty(&c->delegated.avl))
 			iface_remove(c);
 	}
 }

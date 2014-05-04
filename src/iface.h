@@ -105,6 +105,7 @@ struct iface {
 	void *platform;
 
 	// Interface status
+	bool unused;
 	bool linkowner;
 	bool internal;
 	bool v4uplink;
