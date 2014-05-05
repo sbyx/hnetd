@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Tue Apr 29 22:10:31 2014 mstenber
- * Edit time:     205 min
+ * Last modified: Mon May  5 14:51:28 2014 mstenber
+ * Edit time:     209 min
  *
  */
 
@@ -275,24 +275,16 @@ void hncp_run(hncp o)
           hnetd_time_t next_time = HNCP_INTERVAL_WORRIED
             + (o->assume_bidirectional_reachability
                ? n->last_heard
-               : n->last_response);
+               : n->last_response)
+            + (HNCP_INTERVAL_BASE << n->ping_count);
 
-          /* Maybe we're not worried yet.. */
+          /* No cause to do anything right now. */
           if (next_time > now)
             {
               next = TMIN(next, next_time);
               continue;
             }
 
-          /* We _are_ worried. But should we ping right now? */
-          next_time = HNCP_INTERVAL_WORRIED + n->last_ping;
-          if (next_time > now)
-            {
-              next = TMIN(next, next_time);
-              continue;
-            }
-
-          /* Yes, we should! */
           if (n->ping_count++ == HNCP_INTERVAL_RETRIES)
             {
               /* Zap the neighbor */
@@ -303,7 +295,6 @@ void hncp_run(hncp o)
             }
 
           /* Send a ping */
-          n->last_ping = now;
           L_DEBUG("pinging neighbor %llx", hncp_hash64(&n->node_identifier_hash));
           hncp_link_send_req_network_state(l, &n->last_address);
         }

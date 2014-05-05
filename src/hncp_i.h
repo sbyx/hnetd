@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Apr 29 15:56:36 2014 mstenber
+ * Last modified: Mon May  5 14:51:08 2014 mstenber
  * Edit time:     164 min
  *
  */
@@ -170,9 +170,7 @@ struct hncp_neighbor_struct {
   /* When did they last respond to our message? */
   hnetd_time_t last_response;
 
-  /* If proactive mode is enabled, when did we last try to ping this
-   * one. */
-  hnetd_time_t last_ping;
+  /* How many pings we have sent that haven't been responded to. */
   int ping_count;
 };
 
