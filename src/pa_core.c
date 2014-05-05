@@ -221,15 +221,13 @@ static void pa_core_make_new_assignment(struct pa_core *core, struct pa_dp *dp, 
 
 static void pa_core_destroy_cpl(struct pa_core *core, struct pa_cpl *cpl)
 {
-	L_INFO("Removing "PA_CP_L, PA_CP_LA(&cpl->cp));
-
 	/* Remove the address if needed */
 	if(cpl->laa) {
 		pa_aa_todelete(&cpl->laa->aa);
 		pa_aa_notify(core_p(core, data), &cpl->laa->aa);
 	}
 
-	/* Delete the cp */
+	L_INFO("Removing "PA_CP_L, PA_CP_LA(&cpl->cp));
 	pa_cp_todelete(&cpl->cp);
 	pa_cp_notify(&cpl->cp);
 }
@@ -352,7 +350,7 @@ void paa_algo_do(struct pa_core *core)
 
 	/* Mark all prefixes as invalid */
 	pa_for_each_cp(cp, data) {
-		if((cpl = _pa_cpl(cp)))
+		if((cpl = _pa_cpl(cp)) && !cpl->cp.authoritative)
 			cpl->invalid = true;
 	}
 
@@ -393,14 +391,8 @@ void paa_algo_do(struct pa_core *core)
 	/* Remove invalid cps */
 	struct pa_cp *cpsafe;
 	pa_for_each_cp_safe(cp, cpsafe, data) {
-		if((cpl = _pa_cpl(cp)) && cpl->invalid) {
-			if(cpl->cp.authoritative) {
-				pa_cp_set_advertised(&cpl->cp, false);
-				pa_cp_notify(&cpl->cp);
-			} else {
-				pa_core_destroy_cpl(core, cpl);
-			}
-		}
+		if((cpl = _pa_cpl(cp)) && cpl->invalid)
+			pa_core_destroy_cpl(core, cpl);
 	}
 
 	/* Evaluate dodhcp ofr all iface */
@@ -651,15 +643,19 @@ struct pa_cpl *__pa_cpl_get_in_iface(struct prefix *prefix, struct pa_iface *ifa
 int pa_core_static_prefix_add(struct pa_core *core, struct prefix *prefix, struct pa_iface *iface)
 {
 	struct pa_cpl *cpl = __pa_cpl_get_in_iface(prefix, iface);
+	bool created = false;
 	if(!cpl) {
 		cpl = _pa_cpl(pa_cp_create(core_p(core, data), prefix, PA_CPT_L));
 		if(!cpl)
 			return -1;
 		pa_cpl_set_iface(cpl, iface);
+		created = true;
 	}
 
 	if(!cpl->cp.authoritative) {
-		__pa_paa_schedule(core);
+		L_INFO("Adding static assignment "PA_CP_L" on "PA_IF_L, PA_CP_LA(&cpl->cp), PA_IF_LA(iface));
+		if(created)
+			__pa_paa_schedule(core);
 		pa_cp_set_authoritative(&cpl->cp, true);
 	}
 	pa_cp_notify(&cpl->cp);
@@ -668,6 +664,7 @@ int pa_core_static_prefix_add(struct pa_core *core, struct prefix *prefix, struc
 	struct pa_cp *cp, *cp2;
 	pa_for_each_cp_updown_safe(cp,cp2, core_p(core, data), prefix) {
 		if(cp != &cpl->cp && !cp->authoritative) {
+			__pa_paa_schedule(core);
 			pa_cp_todelete(cp);
 			pa_cp_notify(cp);
 		}
@@ -682,6 +679,7 @@ int pa_core_static_prefix_remove(struct pa_core *core, struct prefix *prefix, st
 	if(!cpl || !cpl->cp.authoritative)
 		return -1;
 
+	L_INFO("Removing static assignment "PA_CP_L" on "PA_IF_L, PA_CP_LA(&cpl->cp), PA_IF_LA(iface));
 	__pa_paa_schedule(core);
 	pa_cp_set_authoritative(&cpl->cp, false);
 	pa_cp_notify(&cpl->cp);
