@@ -779,9 +779,11 @@ struct iface* iface_create(const char *ifname, const char *handle, enum iface_fl
 
 		c->designatedv4 = true;
 		struct pa_dp *dp;
-		pa_for_each_dp(dp, pa_data_p)
-			if (!dp->local && IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
-				c->designatedv4 = false;
+		if(pa_data_p) { //This is just for test cases
+			pa_for_each_dp(dp, pa_data_p)
+					if (!dp->local && IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
+						c->designatedv4 = false;
+		}
 
 #ifdef __linux__
 		struct {
