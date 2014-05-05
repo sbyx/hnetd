@@ -466,7 +466,7 @@ void test_pa_static()
 	hnetd_time_t valid, preferred;
 	struct pa_ap *ap;
 	struct pa_iface *i;
-	struct pa_cp *cp, *cp2;
+	struct pa_cp *cp;
 	int res;
 
 	//INIT
@@ -541,9 +541,9 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 	sput_start_testing();
 
 	sput_enter_suite("Prefix assignment tests"); /* optional */
-	/*sput_run_test(test_pa_initial);
+	sput_run_test(test_pa_initial);
 	sput_run_test(test_pa_ipv4);
-	sput_run_test(test_pa_network);*/
+	sput_run_test(test_pa_network);
 	sput_run_test(test_pa_static);
 	sput_leave_suite(); /* optional */
 	sput_finish_testing();
