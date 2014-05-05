@@ -196,8 +196,8 @@ void pa_dp_notify(struct pa_data *data, struct pa_dp *dp)
 struct pa_ldp *__pa_ldp_get(struct pa_data *data, const struct prefix *p)
 {
 	struct pa_dp *dp;
-	pa_for_each_dp(dp, data) {
-		if(dp->local && !prefix_cmp(p, &dp->prefix))
+	pa_for_each_dp_p(dp, data, p) {
+		if(dp->local)
 			return container_of(dp, struct pa_ldp, dp);
 	}
 	return NULL;
@@ -246,11 +246,11 @@ struct pa_edp *__pa_edp_get(struct pa_data *data, const struct prefix *p, const 
 {
 	struct pa_dp *dp;
 	struct pa_edp *edp;
-	pa_for_each_dp(dp, data) {
+	pa_for_each_dp_p(dp, data, p) {
 		if(dp->local)
 			continue;
 		edp = container_of(dp, struct pa_edp, dp);
-		if(!prefix_cmp(p, &dp->prefix) && !PA_RIDCMP(rid, &edp->rid))
+		if(!PA_RIDCMP(rid, &edp->rid))
 			return edp;
 	}
 	return NULL;
@@ -422,8 +422,8 @@ static void _pa_cp_apply_to(struct uloop_timeout *to)
 struct pa_cp *pa_cp_get(struct pa_data *data, const struct prefix *prefix, uint8_t type, bool goc)
 {
 	struct pa_cp *cp;
-	pa_for_each_cp(cp, data) {
-		if(!prefix_cmp(prefix, &cp->prefix) && (type == PA_CPT_ANY || (cp->type == type)))
+	pa_for_each_cp_p(cp, data, prefix) {
+		if(type == PA_CPT_ANY || (cp->type == type))
 			return cp;
 	}
 
