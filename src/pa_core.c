@@ -272,10 +272,8 @@ static struct pa_cpl *pa_core_getcpl(struct pa_dp *dp, struct pa_iface *iface)
 {
 	struct pa_cpl *cpl;
 	pa_for_each_cpl_in_iface_down(cpl, iface, &dp->prefix) {
-		if(cpl->cp.dp == dp)
-			return cpl;
+		return cpl;
 	}
-
 	return NULL;
 }
 
@@ -545,6 +543,17 @@ static void aaa_algo_do(struct pa_core *core)
 	}
 }
 
+void pa_core_delete_cp(struct pa_core *core, struct pa_cp *cp)
+{
+	struct pa_cpl *cpl;
+	if((cpl = _pa_cpl(cp))) {
+		pa_core_destroy_cpl(core, cpl);
+	} else {
+		pa_cp_todelete(cp);
+		pa_cp_notify(cp);
+	}
+}
+
 void pa_core_update_excluded(struct pa_core *core, struct pa_ldp *ldp)
 {
 	struct pa_cp *cp, *cp2;
@@ -560,9 +569,8 @@ void pa_core_update_excluded(struct pa_core *core, struct pa_ldp *ldp)
 		/* Invalidate all contained cps */
 		pa_for_each_cp_updown_safe(cp, cp2, core_p(core, data), &ldp->excluded.excluded) {
 			if(!cp->authoritative) {
-				pa_cp_todelete(cp);
-				pa_cp_notify(cp); /* No loop... Hopefully */
 				__pa_paa_schedule(core);
+				pa_core_delete_cp(core, cp);
 			}
 		}
 
@@ -649,6 +657,7 @@ int pa_core_static_prefix_add(struct pa_core *core, struct prefix *prefix, struc
 		if(!cpl)
 			return -1;
 		pa_cpl_set_iface(cpl, iface);
+		pa_cp_set_apply_to(&cpl->cp, 2*core_p(core, data.flood)->flooding_delay);
 		created = true;
 	}
 
@@ -665,9 +674,20 @@ int pa_core_static_prefix_add(struct pa_core *core, struct prefix *prefix, struc
 	pa_for_each_cp_updown_safe(cp,cp2, core_p(core, data), prefix) {
 		if(cp != &cpl->cp && !cp->authoritative) {
 			__pa_paa_schedule(core);
-			pa_cp_todelete(cp);
-			pa_cp_notify(cp);
+			pa_core_delete_cp(core, cp);
 		}
+	}
+
+	//Remove other chosen if different
+	struct pa_dp *dp = NULL;
+	pa_for_each_dp_updown(dp, core_p(core, data), prefix) {
+		pa_for_each_cp_updown_safe(cp, cp2, core_p(core, data), &dp->prefix) {
+			if(cp != &cpl->cp && !cp->authoritative) {
+				__pa_paa_schedule(core);
+				pa_core_delete_cp(core, cp);
+			}
+		}
+		break;
 	}
 
 	return 0;

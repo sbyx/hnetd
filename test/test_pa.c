@@ -517,16 +517,41 @@ void test_pa_static()
 	pa_ap_set_iface(ap, i);
 	pa_ap_notify(&pa.data, ap);
 
-	to_run(3); //Run PAA ,AAA and apply
+	to_run(4); //Run PAA ,AAA and apply
 
-	sput_fail_unless(cp->authoritative, "Now authoritative");
+	sput_fail_unless(cp->authoritative, "Authoritative");
 	sput_fail_unless(cp->advertised, "Advertised");
 	sput_fail_unless(cp->applied, "Applied");
+
+	pa_core_static_prefix_remove(&pa.core, &p1_1, i); //Remove authoritative assignment
+
+	to_run(4); // Run PA, AA and apply
+
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	sput_fail_unless(cp, "CP created");
+	if(cp) {
+		sput_fail_unless(!prefix_cmp(&cp->prefix, &p1_2), "Correct prefix");
+		sput_fail_unless(!cp->authoritative, "Not authoritative");
+	}
 
 	pa_ap_todelete(ap); //Remove that ap
 	pa_ap_notify(&pa.data, ap);
 
 	to_run(1); // Run PA
+
+	pa_core_static_prefix_add(&pa.core, &p1_1, i); //Create an authoritative again
+
+	to_run(4); // Run All
+
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	sput_fail_unless(cp, "CP created");
+	if(cp) {
+		sput_fail_unless(!prefix_cmp(&cp->prefix, &p1_1), "Correct prefix");
+		sput_fail_unless(cp->authoritative, "Authoritative");
+		sput_fail_unless(cp->advertised, "Advertised");
+		sput_fail_unless(cp->applied, "Applied");
+	}
+
 
 	//TERM
 	pa_stop(&pa);
