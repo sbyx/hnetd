@@ -35,9 +35,11 @@ setup_interface () {
 
 	ifconfig "$interface" "$ip" netmask "${subnet:-255.255.255.0}"
 
-	for i in $router; do
-		ip -4 route add default via "$i" dev "$interface"
-	done
+	if [ "$NODEFAULT" != 1 ]; then
+		for i in $router; do
+			ip -4 route add default via "$i" dev "$interface"
+		done
+	fi
 
 	# CIDR STATIC ROUTES (rfc3442)
 	[ -n "$staticroutes" ] && set_classless_routes $staticroutes

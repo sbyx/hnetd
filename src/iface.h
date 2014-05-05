@@ -110,6 +110,7 @@ struct iface {
 	bool internal;
 	bool v4uplink;
 	bool carrier;
+	bool designatedv4;
 
 	// Flags
 	enum iface_flags flags;
