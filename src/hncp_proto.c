@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Apr 16 11:08:36 2014 mstenber
- * Edit time:     356 min
+ * Last modified: Tue Apr 29 16:50:06 2014 mstenber
+ * Edit time:     387 min
  *
  */
 
@@ -96,15 +96,17 @@ bool hncp_link_send_network_state(hncp_link l,
   hncp_calculate_network_hash(o);
   if (!_push_network_state_tlv(&tb, o))
     goto err;
-  vlist_for_each_element(&o->nodes, n, in_nodes)
-    nn++;
+  hncp_for_each_node(o, n)
+    if (!o->graph_dirty || n == o->own_node)
+      nn++;
   if (!maximum_size
       || maximum_size >= (tlv_len(tb.head) + nn * sizeof(hncp_t_node_state_s)))
     {
-      vlist_for_each_element(&o->nodes, n, in_nodes)
+      hncp_for_each_node(o, n)
         {
-          if (!_push_node_state_tlv(&tb, n))
-            goto err;
+          if (!o->graph_dirty || n == o->own_node)
+            if (!_push_node_state_tlv(&tb, n))
+              goto err;
         }
     }
   if (maximum_size && tlv_len(tb.head) > maximum_size)
@@ -305,7 +307,7 @@ handle_message(hncp_link l,
   /* We cannot simply ignore same node identifier; it might be someone
    * with duplicated node identifier (hash). */
   if (memcmp(&lid->node_identifier_hash,
-             &l->hncp->own_node->node_identifier_hash,
+             &o->own_node->node_identifier_hash,
              HNCP_HASH_LEN) != 0)
     {
       ne = _heard(l, lid, src);
@@ -375,7 +377,7 @@ handle_message(hncp_link l,
           o->links_dirty = true;
           hncp_schedule(o);
         }
-      ne->last_response = hncp_time(l->hncp);
+      ne->last_response = hncp_time(o);
       ne->ping_count = 0;
     }
 
@@ -390,7 +392,17 @@ handle_message(hncp_link l,
       if (memcmp(nethash, &o->network_hash, HNCP_HASH_LEN) == 0)
         {
           L_DEBUG("received network state which is consistent");
+          if (multicast)
+            l->trickle_c++;
           return;
+        }
+      else if (multicast)
+        {
+          /* Reset trickle on the link */
+          L_DEBUG("received inconsistent multicast network state %s != %s",
+                  HEX_REPR(nethash, HNCP_HASH_LEN),
+                  HEX_REPR(&o->network_hash, HNCP_HASH_LEN));
+          hncp_link_reset_trickle(l);
         }
 
       /* Short form (raw network hash) */
@@ -420,6 +432,7 @@ handle_message(hncp_link l,
             if (n == o->own_node
                 && (new_update_number > n->update_number
                     || (new_update_number == n->update_number
+                        && hncp_node_is_self(n)
                         && memcmp(&n->node_data_hash,
                                   &ns->node_data_hash,
                                   sizeof(n->node_data_hash)) != 0)))
@@ -508,7 +521,12 @@ handle_message(hncp_link l,
   if (!n)
     return;
   new_update_number = be32_to_cpu(ns->update_number);
-  if (n->update_number >= new_update_number)
+  if (n->update_number > new_update_number
+      || (n->update_number == new_update_number
+          && (!hncp_node_is_self(n)
+              || !memcmp(&n->node_data_hash,
+                         &ns->node_data_hash,
+                         sizeof(n->node_data_hash)))))
     {
       L_DEBUG("received update number %d, but already have %d",
               new_update_number, n->update_number);
@@ -537,8 +555,6 @@ handle_message(hncp_link l,
       L_DEBUG("updated node %p %d -> %d",
               n, n->update_number, new_update_number);
       n->update_number = new_update_number;
-      n->node_data_hash_dirty = true;
-      o->network_hash_dirty = true;
       n->origination_time = hncp_time(o) - be32_to_cpu(ns->ms_since_origination);
       L_DEBUG("received origination time:%lld (-%d)",
               (long long)n->origination_time,

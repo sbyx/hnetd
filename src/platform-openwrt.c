@@ -712,6 +712,9 @@ static void platform_update(void *data, size_t len)
 	bool up = (a = tb[IFACE_ATTR_UP]) && blobmsg_get_bool(a);
 	bool v4uplink = false, v6uplink = false;
 
+	if (c)
+		c->unused = !up;
+
 	struct blob_attr *route;
 	unsigned rem;
 	blobmsg_for_each_attr(route, tb[IFACE_ATTR_ROUTE], rem) {

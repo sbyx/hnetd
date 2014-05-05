@@ -10,16 +10,24 @@ proto_hnet_init_config() {
     proto_config_add_string 'dhcpv6_clientid'
     proto_config_add_string 'guest'
     proto_config_add_string 'accept_cerid'
+    proto_config_add_string 'reqaddress'
 }
 
 proto_hnet_setup() {
     local interface="$1"
     local device="$2"
 
-    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid
-    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid
+    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress
+    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress
 
     logger -t proto-hnet "proto_hnet_setup $device/$interface"
+
+    if [ "$interface" = "lan" -o "$interface" = "wan" -o "$interface" = "wan6" ]; then
+        logger -t proto-hnet "Ignoring hnet on 'lan' and 'wan'. Please rename your interface to avoid conflicts."
+        proto_notify_error "$interface" "INTERFACE_CONFLICT"
+        proto_block_restart "$interface"
+        return
+    fi
 
     # It won't be 'up' before we provide first config.
     # So we provide _empty_ config here, and let pm.lua deal with
@@ -59,6 +67,7 @@ proto_hnet_setup() {
 	    json_add_string name "${interface}_6"
 	    json_add_string ifname "@${interface}"
 	    json_add_string proto dhcpv6
+            [ -n "$reqaddress" ] && json_add_string reqaddress "$reqaddress"
 	    [ -n "$dhcpv6_clientid" ] && json_add_string clientid "$dhcpv6_clientid"
 	    json_add_string iface_dslite "${interface}_dslite"
 	    json_add_string zone_dslite wan

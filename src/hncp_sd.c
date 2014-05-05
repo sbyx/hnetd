@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Tue Apr 22 17:07:44 2014 mstenber
- * Edit time:     468 min
+ * Last modified: Tue Apr 29 17:34:34 2014 mstenber
+ * Edit time:     479 min
  *
  */
 
@@ -600,7 +600,7 @@ static void _refresh_domain(hncp_sd sd)
     {
       L_DEBUG("set sd domain to %s", new_domain);
       strcpy(sd->hncp->domain, new_domain);
-      _should_update(sd, UPDATE_FLAG_ALL);
+      _should_update(sd, UPDATE_FLAG_ALL & ~UPDATE_FLAG_DOMAIN);
     }
 }
 
@@ -609,6 +609,11 @@ static void _tlv_cb(hncp_subscriber s,
 {
   hncp_sd sd = container_of(s, hncp_sd_s, subscriber);
   hncp o = sd->hncp;
+
+  L_NOTICE("[sd]_tlv_cb %s %s %s",
+           add ? "add" : "remove",
+           n == o->own_node ? "local" : HNCP_NODE_REPR(n),
+           TLV_REPR(tlv));
 
   /* Handle router name collision detection; we're interested only in
    * nodes with higher router id overriding our choice. */
@@ -677,6 +682,8 @@ void hncp_sd_update(hncp_sd sd)
       sd->should_update &= ~UPDATE_FLAG_OHP;
       hncp_sd_reconfigure_ohp(sd);
     }
+  if (sd->should_update)
+    L_DEBUG("hncp_sd_update leftovers:%d", sd->should_update);
 }
 
 static void _timeout_cb(struct uloop_timeout *t)
