@@ -404,17 +404,6 @@ void pa_aa_destroy(struct pa_aa *aa)
 	}
 }
 
-struct pa_cp *__pa_cp_get(struct pa_data *data, const struct prefix *prefix)
-{
-	struct pa_cp *cp;
-	pa_for_each_cp(cp, data) {
-		if(!prefix_cmp(prefix, &cp->prefix))
-			return cp;
-	}
-	return NULL;
-}
-
-
 void pa_cp_set_applied(struct pa_cp *cp, bool applied)
 {
 	if(!applied)
@@ -433,9 +422,20 @@ static void _pa_cp_apply_to(struct uloop_timeout *to)
 struct pa_cp *pa_cp_get(struct pa_data *data, const struct prefix *prefix, uint8_t type, bool goc)
 {
 	struct pa_cp *cp;
+	pa_for_each_cp(cp, data) {
+		if(!prefix_cmp(prefix, &cp->prefix) && (type == PA_CPT_ANY || (cp->type == type)))
+			return cp;
+	}
 
-	if((cp = __pa_cp_get(data, prefix)) || !goc)
-		return (type == PA_CPT_ANY || (cp && cp->type == type))?cp:NULL;
+	if(goc)
+		return pa_cp_create(data, prefix, type);
+
+	return NULL;
+}
+
+struct pa_cp *pa_cp_create(struct pa_data *data, const struct prefix *prefix, uint8_t type)
+{
+	struct pa_cp *cp;
 
 	L_DEBUG("Create cp from prefix %s", PREFIX_REPR(prefix));
 	switch (type) {

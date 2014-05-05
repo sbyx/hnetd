@@ -353,7 +353,7 @@ void paa_algo_do(struct pa_core *core)
 	/* Mark all prefixes as invalid */
 	pa_for_each_cp(cp, data) {
 		if((cpl = _pa_cpl(cp)))
-			cpl->invalid = !cp->authoritative;
+			cpl->invalid = true;
 	}
 
 	/* Compute designated */
@@ -393,8 +393,14 @@ void paa_algo_do(struct pa_core *core)
 	/* Remove invalid cps */
 	struct pa_cp *cpsafe;
 	pa_for_each_cp_safe(cp, cpsafe, data) {
-		if((cpl = _pa_cpl(cp)) && cpl->invalid)
-					pa_core_destroy_cpl(core, cpl);
+		if((cpl = _pa_cpl(cp)) && cpl->invalid) {
+			if(cpl->cp.authoritative) {
+				pa_cp_set_advertised(&cpl->cp, false);
+				pa_cp_notify(&cpl->cp);
+			} else {
+				pa_core_destroy_cpl(core, cpl);
+			}
+		}
 	}
 
 	/* Evaluate dodhcp ofr all iface */
@@ -626,6 +632,50 @@ static void __pa_aaa_schedule(struct pa_core *core)
 	PA_CORE_CHECK_DELAY(delay);
 	L_DEBUG("Scheduling address assignment algorithm in %d ms", (int) delay);
 	uloop_timeout_set(&core->aaa.to, (int) delay);
+}
+
+/************* Authoritative control ********************************/
+
+struct pa_cpl *__pa_cpl_get_in_iface(struct prefix *prefix, struct pa_iface *iface)
+{
+	struct pa_cpl *cpl;
+	pa_for_each_cpl_in_iface_down(cpl, iface, prefix) {
+		if(cpl->cp.prefix.plen != prefix->plen)
+			return NULL;
+		return cpl;
+	}
+	return NULL;
+}
+
+
+int pa_core_static_prefix_add(struct pa_core *core, struct prefix *prefix, struct pa_iface *iface)
+{
+	struct pa_cpl *cpl = __pa_cpl_get_in_iface(prefix, iface);
+	if(!cpl) {
+		cpl = _pa_cpl(pa_cp_create(core_p(core, data), prefix, PA_CPT_L));
+		if(!cpl)
+			return -1;
+		pa_cpl_set_iface(cpl, iface);
+	}
+
+	if(!cpl->cp.authoritative) {
+		__pa_paa_schedule(core);
+		pa_cp_set_authoritative(&cpl->cp, true);
+	}
+	pa_cp_notify(&cpl->cp);
+	return 0;
+}
+
+int pa_core_static_prefix_remove(struct pa_core *core, struct prefix *prefix, struct pa_iface *iface)
+{
+	struct pa_cpl *cpl = __pa_cpl_get_in_iface(prefix, iface);
+	if(!cpl || !cpl->cp.authoritative)
+		return -1;
+
+	__pa_paa_schedule(core);
+	pa_cp_set_authoritative(&cpl->cp, false);
+	pa_cp_notify(&cpl->cp);
+	return 0;
 }
 
 /************* Callbacks for pa_data ********************************/

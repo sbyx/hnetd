@@ -436,10 +436,12 @@ void pa_ap_notify(struct pa_data *data, struct pa_ap *ap);
 #define pa_for_each_cpl_in_iface_down(pa_cpl, pa_iface, p) btrie_for_each_down_entry(pa_cpl, &(pa_iface)->cpls, (btrie_key_t *)&(p)->prefix, (p)->plen, if_be)
 #define pa_for_each_cp_in_dp(pa_cp, pa_dp) btrie_for_each_down_entry(pa_cp, &(pa_dp)->cps, NULL, 0, dp_be)
 #define pa_for_each_cp_in_dp_safe(pa_cp, cp2, pa_dp) btrie_for_each_down_entry_safe(pa_cp, cp2, &(pa_dp)->cps, NULL, 0, dp_be)
-#define _pa_cpl(_cp) ((struct pa_cpl *)((_cp && (_cp)->type == PA_CPT_L)?container_of(_cp, struct pa_cpl, cp):NULL))
-#define _pa_cpx(_cp) ((struct pa_cpx *)((_cp && (_cp)->type == PA_CPT_X)?container_of(_cp, struct pa_cpx, cp):NULL))
-#define _pa_cpd(_cp) ((struct pa_cpd *)((_cp && (_cp)->type == PA_CPT_D)?container_of(_cp, struct pa_cpd, cp):NULL))
+struct pa_cp *__pa_cp_t;
+#define _pa_cpl(_cp) ((struct pa_cpl *)(((__pa_cp_t = _cp) && (__pa_cp_t)->type == PA_CPT_L)?container_of(__pa_cp_t, struct pa_cpl, cp):NULL))
+#define _pa_cpx(_cp) ((struct pa_cpx *)(((__pa_cp_t = _cp) && (__pa_cp_t)->type == PA_CPT_X)?container_of(__pa_cp_t, struct pa_cpx, cp):NULL))
+#define _pa_cpd(_cp) ((struct pa_cpd *)(((__pa_cp_t = _cp) && (__pa_cp_t)->type == PA_CPT_D)?container_of(__pa_cp_t, struct pa_cpd, cp):NULL))
 struct pa_cp *pa_cp_get(struct pa_data *, const struct prefix *, uint8_t type, bool goc);
+struct pa_cp *pa_cp_create(struct pa_data *, const struct prefix *, uint8_t type);
 void pa_cpl_set_iface(struct pa_cpl *, struct pa_iface *iface);
 void pa_cpd_set_lease(struct pa_cpd *, struct pa_pd_lease *lease);
 void pa_cp_set_dp(struct pa_cp *, struct pa_dp *dp);
