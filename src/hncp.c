@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Apr 29 22:26:18 2014 mstenber
+ * Last modified: Mon May  5 23:36:56 2014 mstenber
  * Edit time:     502 min
  *
  */
@@ -273,7 +273,7 @@ bool hncp_init(hncp o, const void *node_identifier, int len)
   vlist_init(&o->tlvs, compare_tlvs, update_tlv);
   vlist_init(&o->links, compare_links, update_link);
   hncp_calculate_hash(node_identifier, len, &h);
-  if (!inet_pton(AF_INET6, HNCP_MCAST_GROUP, &o->multicast_address)) {
+  if (inet_pton(AF_INET6, HNCP_MCAST_GROUP, &o->multicast_address) < 1) {
     L_ERR("unable to inet_pton multicast group address");
     return false;
   }
