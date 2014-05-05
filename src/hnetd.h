@@ -64,31 +64,31 @@ static inline hnetd_time_t hnetd_time(void) {
 
 
 // Logging macros
-#if L_LEVEL >= 3
+#if L_LEVEL >= LOG_ERR
 #define L_ERR(...)	syslog(LOG_ERR, L_PREFIX __VA_ARGS__)
 #else
 #define L_ERR(...) do {} while(0)
 #endif
 
-#if L_LEVEL >= 4
+#if L_LEVEL >= LOG_WARNING
 #define L_WARN(...)	syslog(LOG_WARNING, L_PREFIX __VA_ARGS__)
 #else
 #define L_WARN(...) do {} while(0)
 #endif
 
-#if L_LEVEL >= 5
+#if L_LEVEL >= LOG_NOTICE
 #define L_NOTICE(...)	syslog(LOG_NOTICE, L_PREFIX __VA_ARGS__)
 #else
 #define L_NOTICE(...) do {} while(0)
 #endif
 
-#if L_LEVEL >= 6
+#if L_LEVEL >= LOG_INFO
 #define L_INFO(...)	syslog(LOG_INFO, L_PREFIX __VA_ARGS__)
 #else
 #define L_INFO(...) do {} while(0)
 #endif
 
-#if L_LEVEL >= 7
+#if L_LEVEL >= LOG_DEBUG
 #define L_DEBUG(...)	syslog(LOG_DEBUG, L_PREFIX __VA_ARGS__)
 #else
 #define L_DEBUG(...) do {} while(0)
