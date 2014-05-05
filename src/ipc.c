@@ -113,9 +113,12 @@ int ipc_ifupdown(int argc, char *argv[])
 	blob_buf_init(&b, 0);
 
 	bool external = false;
+	void *p;
+	char *buf;
+	char *entry;
 
 	int c;
-	while ((c = getopt(argc, argv, "ecg")) > 0) {
+	while ((c = getopt(argc, argv, "ecgp:")) > 0) {
 		switch(c) {
 		case 'e':
 			external = true;
@@ -127,6 +130,15 @@ int ipc_ifupdown(int argc, char *argv[])
 
 		case 'g':
 			blobmsg_add_u8(&b, "guest", 1);
+			break;
+
+		case 'p':
+			buf = strdup(optarg);
+			p = blobmsg_open_array(&b, "prefix");
+			for (entry = strtok(buf, ", "); entry; entry = strtok(NULL, ", "))
+				blobmsg_add_string(&b, NULL, entry);
+			blobmsg_close_array(&b, p);
+			free(buf);
 			break;
 		}
 	}
@@ -171,8 +183,20 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			if (tb[OPT_GUEST] && blobmsg_get_bool(tb[OPT_GUEST]))
 				flags |= IFACE_FLAG_GUEST;
 
-			iface_create(ifname, tb[OPT_HANDLE] == NULL ? NULL :
+			struct iface *iface = iface_create(ifname, tb[OPT_HANDLE] == NULL ? NULL :
 					blobmsg_get_string(tb[OPT_HANDLE]), flags);
+
+			if (iface && tb[OPT_PREFIX]) {
+				struct blob_attr *k;
+				unsigned rem;
+
+				blobmsg_for_each_attr(k, tb[OPT_PREFIX], rem) {
+					struct prefix p;
+					if (blobmsg_type(k) == BLOBMSG_TYPE_STRING &&
+							prefix_pton(blobmsg_get_string(k), &p) == 1)
+						iface_add_chosen_prefix(iface, &p);
+				}
+			}
 		} else if (!strcmp(cmd, "ifdown")) {
 			iface_remove(c);
 		} else if (!strcmp(cmd, "enable_ipv4_uplink")) {

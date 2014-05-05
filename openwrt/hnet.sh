@@ -11,14 +11,15 @@ proto_hnet_init_config() {
     proto_config_add_string 'guest'
     proto_config_add_string 'accept_cerid'
     proto_config_add_string 'reqaddress'
+    proto_config_add_string 'prefix'
 }
 
 proto_hnet_setup() {
     local interface="$1"
     local device="$2"
 
-    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress
-    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress
+    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix
+    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix
 
     logger -t proto-hnet "proto_hnet_setup $device/$interface"
 
@@ -37,6 +38,11 @@ proto_hnet_setup() {
     proto_add_data
     [ "$guest" = "1" ] && json_add_boolean guest 1
     [ "$accept_cerid" = "1" ] && json_add_boolean accept_cerid 1
+    json_add_array prefix
+    for p in $prefix; do
+    	json_add_string "" "$p"
+    done
+    json_close_array
     proto_close_data
 
     proto_send_update "$interface"
