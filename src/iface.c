@@ -43,7 +43,7 @@ static bool iface_discover_border(struct iface *c);
 
 static struct list_head interfaces = LIST_HEAD_INIT(interfaces);
 static struct list_head users = LIST_HEAD_INIT(users);
-static struct pa_data *pa_data_p = NULL;
+static struct pa *pa_p = NULL;
 static struct pa_data_user pa_data_cb = {
 	.cps = iface_pa_cps,
 	.aas = iface_pa_aas,
@@ -84,7 +84,7 @@ void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 		} else {
 			bool ipv4_edp = false;
 			struct pa_dp *dp;
-			pa_for_each_dp(dp, pa_data_p)
+			pa_for_each_dp(dp, &pa_p->data)
 				if (!dp->local && IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
 					ipv4_edp = true;
 
@@ -329,7 +329,7 @@ void iface_set_unreachable_route(const struct prefix *p, bool enable)
 
 #endif /* __linux__ */
 
-int iface_init(struct pa_data *pa_data, const char *pd_socket)
+int iface_init(struct pa *pa, const char *pd_socket)
 {
 #ifdef __linux__
 	rtnl_fd.fd = socket(AF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, NETLINK_ROUTE);
@@ -347,9 +347,9 @@ int iface_init(struct pa_data *pa_data, const char *pd_socket)
 	uloop_fd_add(&rtnl_fd, ULOOP_READ | ULOOP_EDGE_TRIGGER);
 #endif /* __linux__ */
 
-	pa_data_subscribe(pa_data, &pa_data_cb);
-	pa_data_p = pa_data;
-	return platform_init(pa_data, pd_socket);
+	pa_data_subscribe(&pa->data, &pa_data_cb);
+	pa_p = pa;
+	return platform_init(&pa->data, pd_socket);
 }
 
 
@@ -646,7 +646,7 @@ void iface_remove(struct iface *c)
 	if (c->platform) {
 		if (c->flags & IFACE_FLAG_GUEST) {
 			struct pa_dp *dp;
-			pa_for_each_dp(dp, pa_data_p)
+			pa_for_each_dp(dp, &pa_p->data)
 				platform_filter_prefix(c, &dp->prefix, false);
 		}
 
@@ -779,8 +779,8 @@ struct iface* iface_create(const char *ifname, const char *handle, enum iface_fl
 
 		c->designatedv4 = true;
 		struct pa_dp *dp;
-		if(pa_data_p) { //This is just for test cases
-			pa_for_each_dp(dp, pa_data_p)
+		if(pa_p) { //This is just for test cases
+			pa_for_each_dp(dp, &pa_p->data)
 					if (!dp->local && IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
 						c->designatedv4 = false;
 		}
@@ -900,6 +900,14 @@ void iface_add_dhcpv6_received(struct iface *c, const void *data, size_t len)
 	c->dhcpv6_data_stage = realloc(c->dhcpv6_data_stage, c->dhcpv6_len_stage + len);
 	memcpy(((uint8_t*)c->dhcpv6_data_stage) + c->dhcpv6_len_stage, data, len);
 	c->dhcpv6_len_stage += len;
+}
+
+
+void iface_add_chosen_prefix(struct iface *c, const struct prefix *p)
+{
+	struct pa_iface *iface = pa_iface_get(&pa_p->data, c->ifname, false);
+	if (iface)
+		pa_core_static_prefix_add(&pa_p->core, (struct prefix*)p, iface);
 }
 
 

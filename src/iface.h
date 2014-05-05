@@ -9,7 +9,6 @@
 
 #include "hnetd.h"
 #include "prefix_utils.h"
-#include "pa_data.h"
 
 #include <libubox/list.h>
 #include <libubox/uloop.h>
@@ -148,8 +147,10 @@ struct iface {
 	char ifname[];
 };
 
+#include "pa.h"
+
 // Generic initializer to be called by main()
-int iface_init(struct pa_data *pa_data, const char *pd_socket);
+int iface_init(struct pa *pa, const char *pd_socket);
 
 // Get an interface by name
 struct iface* iface_get(const char *ifname);
@@ -186,6 +187,10 @@ void iface_add_dhcp_received(struct iface *c, const void *data, size_t len);
 
 // Set DHCPv6 data received
 void iface_add_dhcpv6_received(struct iface *c, const void *data, size_t len);
+
+
+// Add prefix
+void iface_add_chosen_prefix(struct iface *c, const struct prefix *p);
 
 
 // Flush uplinks

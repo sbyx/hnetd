@@ -570,6 +570,7 @@ enum {
 	DATA_ATTR_ACCEPT_CERID,
 	DATA_ATTR_CER,
 	DATA_ATTR_GUEST,
+	DATA_ATTR_PREFIX,
 	DATA_ATTR_MAX
 };
 
@@ -594,6 +595,7 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_ACCEPT_CERID] = { .name = "accept_cerid", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_CER] = { .name = "cer", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_GUEST] = { .name = "guest", .type = BLOBMSG_TYPE_BOOL },
+	[DATA_ATTR_PREFIX] = { .name = "prefix", .type = BLOBMSG_TYPE_ARRAY },
 };
 
 
@@ -732,8 +734,10 @@ static void platform_update(void *data, size_t len)
 
 	enum iface_flags flags = 0;
 	struct in6_addr cer = IN6ADDR_ANY_INIT;
+
+	struct blob_attr *dtb[DATA_ATTR_MAX];
+	memset(dtb, 0, sizeof(dtb));
 	if (tb[IFACE_ATTR_DATA]) {
-		struct blob_attr *dtb[DATA_ATTR_MAX];
 		blobmsg_parse(data_attrs, DATA_ATTR_MAX, dtb,
 				blobmsg_data(tb[IFACE_ATTR_DATA]), blobmsg_len(tb[IFACE_ATTR_DATA]));
 
@@ -751,8 +755,22 @@ static void platform_update(void *data, size_t len)
 	if ((a = tb[IFACE_ATTR_PROTO]))
 		proto = blobmsg_get_string(a);
 
-	if (!c && up && !strcmp(proto, "hnet") && (a = tb[IFACE_ATTR_HANDLE]))
+	if (!c && up && !strcmp(proto, "hnet") && (a = tb[IFACE_ATTR_HANDLE])) {
 		c = iface_create(ifname, blobmsg_get_string(a), flags);
+
+		if (c && dtb[DATA_ATTR_PREFIX]) {
+			struct blob_attr *k;
+			unsigned rem;
+
+			blobmsg_for_each_attr(k, dtb[DATA_ATTR_PREFIX], rem) {
+				if (blobmsg_type(k) == BLOBMSG_TYPE_STRING) {
+					struct prefix p;
+					if (prefix_pton(blobmsg_get_string(k), &p) == 1)
+						iface_add_chosen_prefix(c, &p);
+				}
+			}
+		}
+	}
 
 	if (c)
 		c->cer = cer;

@@ -11,6 +11,8 @@
 #include "iface.c"
 
 void pa_data_subscribe(__unused struct pa_data *data, __unused struct pa_data_user *user) {}
+struct pa_iface* pa_iface_get(__unused struct pa_data *d, __unused const char *ifname, __unused bool goc){ return NULL; }
+int pa_core_static_prefix_add(__unused struct pa_core *d, __unused struct prefix *p, __unused struct pa_iface *iface) { return 0; }
 void platform_set_owner(__unused struct iface *c, __unused bool enable) {}
 int platform_init(__unused struct pa_data *data, __unused const char *pd_socket) { return 0; }
 void platform_set_address(__unused struct iface *c, __unused struct iface_addr *addr, __unused bool enable) {}
