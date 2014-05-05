@@ -663,6 +663,16 @@ int pa_core_static_prefix_add(struct pa_core *core, struct prefix *prefix, struc
 		pa_cp_set_authoritative(&cpl->cp, true);
 	}
 	pa_cp_notify(&cpl->cp);
+
+	//Remove colliding cps
+	struct pa_cp *cp, *cp2;
+	pa_for_each_cp_updown_safe(cp,cp2, core_p(core, data), prefix) {
+		if(cp != &cpl->cp && !cp->authoritative) {
+			pa_cp_todelete(cp);
+			pa_cp_notify(cp);
+		}
+	}
+
 	return 0;
 }
 
