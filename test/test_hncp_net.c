@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Tue Apr 29 22:21:31 2014 mstenber
- * Edit time:     389 min
+ * Last modified: Mon May  5 17:13:50 2014 mstenber
+ * Edit time:     390 min
  *
  */
 
@@ -195,7 +195,9 @@ static void raw_bird14(net_sim s)
    * NOT converged. */
   int converged_count = s->converged_count;
   int not_converged_count = s->not_converged_count;
+#if L_LEVEL >= LOG_NOTICE
   int sent_unicast = s->sent_unicast;
+#endif /* L_LEVEL >= LOG_NOTICE */
   hnetd_time_t convergence_time = hnetd_time();
 
   s->should_be_stable_topology = true;

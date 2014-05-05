@@ -449,7 +449,7 @@ struct pa_cp *pa_cp_create(struct pa_data *data, const struct prefix *prefix, ui
 			cp = malloc(sizeof(struct pa_cpd));
 			break;
 		case PA_CPT_ANY: //Can't happend but here because of warning
-			break;
+			return NULL; // break causes another warning..
 	}
 
 	if(!cp) {

@@ -1,4 +1,6 @@
+#ifndef L_LEVEL
 #define L_LEVEL 7
+#endif /* !L_LEVEL */
 
 #include "hnetd.h"
 #include "sput.h"
