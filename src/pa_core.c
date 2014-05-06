@@ -607,54 +607,24 @@ void pa_core_update_excluded(struct pa_core *core, struct pa_ldp *ldp)
 	}
 }
 
-static void __pa_paa_to_cb(struct uloop_timeout *to)
+static void __pa_paa_to_cb(struct pa_timer *t)
 {
-	struct pa_core *core = container_of(to, struct pa_core, paa.to);
-	core->paa.scheduled = false;
-	paa_algo_do(core);
+	paa_algo_do(container_of(t, struct pa_core, paa_to));
 }
 
-static void __pa_aaa_to_cb(struct uloop_timeout *to)
+static void __pa_aaa_to_cb(struct pa_timer *t)
 {
-	struct pa_core *core = container_of(to, struct pa_core, aaa.to);
-	core->aaa.scheduled = false;
-	aaa_algo_do(core);
+	aaa_algo_do(container_of(t, struct pa_core, aaa_to));
 }
 
 static void __pa_paa_schedule(struct pa_core *core)
 {
-	if(core->paa.scheduled)
-		return;
-
-	core->paa.scheduled = true;
-	if(!core->start_time || core->paa.to.pending)
-		return;
-
-	hnetd_time_t flood = core_p(core, data)->flood.flooding_delay;
-	hnetd_time_t delay = flood / PA_CORE_DELAY_FACTOR;
-	hnetd_time_t now = hnetd_time();
-
-	if(now + delay < core->start_time + flood)
-		delay = core->start_time + flood - now;
-
-	PA_CORE_CHECK_DELAY(delay);
-	L_DEBUG("Scheduling prefix assignment algorithm in %d ms", (int) delay);
-	uloop_timeout_set(&core->paa.to, (int) delay);
+	pa_timer_set_earlier(&core->paa_to, core_p(core, data)->flood.flooding_delay / PA_CORE_DELAY_FACTOR, true);
 }
 
 static void __pa_aaa_schedule(struct pa_core *core)
 {
-	if(core->aaa.scheduled)
-		return;
-
-	core->aaa.scheduled = true;
-	if(!core->start_time || core->aaa.to.pending)
-		return;
-
-	hnetd_time_t delay = core_p(core, data)->flood.flooding_delay_ll / PA_CORE_DELAY_FACTOR;
-	PA_CORE_CHECK_DELAY(delay);
-	L_DEBUG("Scheduling address assignment algorithm in %d ms", (int) delay);
-	uloop_timeout_set(&core->aaa.to, (int) delay);
+	pa_timer_set_earlier(&core->aaa_to, core_p(core, data)->flood.flooding_delay_ll / PA_CORE_DELAY_FACTOR, true);
 }
 
 /************* Authoritative control ********************************/
@@ -820,15 +790,8 @@ void pa_core_init(struct pa_core *core)
 {
 	L_INFO("Initializing pa core structure");
 
-	core->start_time = 0;
-
-	core->paa.scheduled = false;
-	core->paa.to.pending = false;
-	core->paa.to.cb = __pa_paa_to_cb;
-
-	core->aaa.scheduled = false;
-	core->aaa.to.pending = false;
-	core->aaa.to.cb = __pa_aaa_to_cb;
+	pa_timer_init(&core->paa_to, __pa_paa_to_cb, "Prefix Assignment Algorithm");
+	pa_timer_init(&core->aaa_to, __pa_aaa_to_cb, "Address Assignment Algorithm");
 
 	memset(&core->data_user, 0, sizeof(struct pa_data_user));
 	core->data_user.aas = __pad_cb_aas;
@@ -841,38 +804,32 @@ void pa_core_init(struct pa_core *core)
 
 void pa_core_start(struct pa_core *core)
 {
-	if(core->start_time)
+	if(core->started)
 		return;
 
 	L_INFO("Starting pa core structure");
 	pa_data_subscribe(core_p(core, data), &core->data_user);
 	pa_data_register_cp(core_p(core, data), PA_CPT_X, pa_core_destroy_cpx);
 	pa_data_register_cp(core_p(core, data), PA_CPT_L, pa_core_destroy_cpl);
-	core->start_time = hnetd_time();
+	core->started = true;
 
 	/* Always schedule when started */
-	core->paa.scheduled = false;
+	pa_timer_set_not_before(&core->paa_to, core_p(core, data)->flood.flooding_delay, true);
+	pa_timer_enable(&core->paa_to);
+	pa_timer_enable(&core->aaa_to);
 	__pa_paa_schedule(core);
-
-	core->aaa.scheduled = false;
 	__pa_aaa_schedule(core);
 }
 
 void pa_core_stop(struct pa_core *core)
 {
-	if(!core->start_time)
+	if(!core->started)
 		return;
 
 	L_INFO("Stopping pa core structure");
-	core->start_time = 0;
-	core->paa.scheduled = false;
-	core->aaa.scheduled = false;
-	if(core->paa.to.pending)
-		uloop_timeout_cancel(&core->paa.to);
-
-	if(core->aaa.to.pending)
-		uloop_timeout_cancel(&core->aaa.to);
-
+	core->started = 0;
+	pa_timer_disable(&core->paa_to);
+	pa_timer_disable(&core->aaa_to);
 	pa_data_unsubscribe(&core->data_user);
 }
 

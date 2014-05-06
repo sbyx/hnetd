@@ -58,6 +58,7 @@ static struct iface* pa_test_iface_get(__attribute__((unused))const char *ifname
 
 /* Masked sources */
 #include "prefix_utils.c"
+#include "pa_timer.c"
 #include "pa.c"
 #include "pa_core.c"
 #include "pa_local.c"
@@ -109,8 +110,8 @@ void test_pa_initial()
 	sput_fail_unless(iface.user == &pa.ifu, "Iface registered");
 
 	/* Testing initial schedules */
-	sput_fail_unless(to_check(&pa.core.paa.to, now_time + PA_TEST_FLOOD), "Correct paa timeout");
-	sput_fail_unless(to_check(&pa.core.aaa.to, now_time + PA_TEST_FLOOD_LL / PA_CORE_DELAY_FACTOR), "Correct aaa timeout");
+	sput_fail_unless(to_check(&pa.core.paa_to.t, now_time + PA_TEST_FLOOD), "Correct paa timeout");
+	sput_fail_unless(to_check(&pa.core.aaa_to.t, now_time + PA_TEST_FLOOD_LL / PA_CORE_DELAY_FACTOR), "Correct aaa timeout");
 	sput_fail_unless(to_check(&pa.local.timeout, now_time + PA_TEST_FLOOD), "Correct local timeout");
 
 	sput_fail_unless(!to_run(3) && !to_getfirst(), "Run three timeouts");
@@ -119,19 +120,19 @@ void test_pa_initial()
 
 	/* Create a new internal interface */
 	iface.user->cb_intiface(iface.user, PL_IFNAME1, true);
-	sput_fail_unless(to_check(&pa.core.paa.to, now_time + PA_TEST_FLOOD / PA_CORE_DELAY_FACTOR), "Correct paa timeout");
+	sput_fail_unless(to_check(&pa.core.paa_to.t, now_time + PA_TEST_FLOOD / PA_CORE_DELAY_FACTOR), "Correct paa timeout");
 	sput_fail_unless(!to_run(1) && !to_getfirst(), "Run one timeouts");
 
 	/* Create a new ldp */
 	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, now_time + 100000, now_time + 50000, NULL, 0);
-	sput_fail_unless(to_check(&pa.core.paa.to, now_time + PA_TEST_FLOOD / PA_CORE_DELAY_FACTOR), "Correct paa timeout");
+	sput_fail_unless(to_check(&pa.core.paa_to.t, now_time + PA_TEST_FLOOD / PA_CORE_DELAY_FACTOR), "Correct paa timeout");
 	sput_fail_unless(to_check(&pa.local.timeout, now_time + PA_LOCAL_MIN_DELAY), "Correct paa timeout");
 	when = now_time + PA_TEST_FLOOD / PA_CORE_DELAY_FACTOR + 2*PA_TEST_FLOOD;
 
 	fr_md5_push_prefix(&p1_1);
 	sput_fail_unless(!to_run(2), "Run two timeouts (remains the new cp apply and aaa)");
 
-	sput_fail_unless(to_check(&pa.core.aaa.to, now_time + PA_TEST_FLOOD_LL / PA_CORE_DELAY_FACTOR), "Correct aaa timeout");
+	sput_fail_unless(to_check(&pa.core.aaa_to.t, now_time + PA_TEST_FLOOD_LL / PA_CORE_DELAY_FACTOR), "Correct aaa timeout");
 
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
 	sput_fail_unless(cp, "One cp");
@@ -203,7 +204,7 @@ void test_pa_ipv4()
 	}
 
 	fr_md5_push_prefix(&pv4_1);
-	sput_fail_unless(to_getfirst() == &pa.core.paa.to && !to_run(1), "Run paa");
+	sput_fail_unless(to_getfirst() == &pa.core.paa_to.t && !to_run(1), "Run paa");
 
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
 	sput_fail_unless(cp, "One cp");
@@ -213,7 +214,7 @@ void test_pa_ipv4()
 	}
 
 	fr_md5_push_prefix(&pv4_1_1);
-	sput_fail_unless(to_getfirst() == &pa.core.aaa.to && !to_run(1), "Run aaa");
+	sput_fail_unless(to_getfirst() == &pa.core.aaa_to.t && !to_run(1), "Run aaa");
 	sput_fail_unless(_pa_cpl(cp)->laa, "Created laa");
 	if(_pa_cpl(cp)->laa)
 		sput_fail_unless(!memcmp(&_pa_cpl(cp)->laa->aa.address, &pv4_1_1.prefix, sizeof(struct in6_addr)), "Correct ipv4 laa");
@@ -347,11 +348,11 @@ void test_pa_network()
 	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, &p1_excluded, valid, preferred, NULL, 0);
 	/* That should trigger paa only */
 	fr_md5_push_prefix(&p1_2); // <-this one is in excluded
-	sput_fail_unless(to_getfirst() == &pa.core.paa.to, "Paa is to be run");
+	sput_fail_unless(to_getfirst() == &pa.core.paa_to.t, "Paa is to be run");
 	res = to_run(1);
 	sput_fail_unless(!res, "Run paa");
 
-	sput_fail_unless(to_getfirst() == &pa.core.aaa.to, "Aaa is to be run");
+	sput_fail_unless(to_getfirst() == &pa.core.aaa_to.t, "Aaa is to be run");
 	res = to_run(1);
 	sput_fail_unless(!res, "Run aaa");
 
@@ -369,7 +370,7 @@ void test_pa_network()
 	pa_ap_notify(&pa.data, ap);
 
 	//Running paa
-	sput_fail_unless(to_getfirst() == &pa.core.paa.to, "Paa is to be run");
+	sput_fail_unless(to_getfirst() == &pa.core.paa_to.t, "Paa is to be run");
 	res = to_run(1);
 	sput_fail_unless(!res, "Run paa");
 
@@ -378,7 +379,7 @@ void test_pa_network()
 	pa_ap_notify(&pa.data, ap);
 
 	//Running paa
-	sput_fail_unless(to_getfirst() == &pa.core.paa.to, "Paa is to be run");
+	sput_fail_unless(to_getfirst() == &pa.core.paa_to.t, "Paa is to be run");
 	res = to_run(1);
 	sput_fail_unless(!res, "Run paa");
 
@@ -395,7 +396,7 @@ void test_pa_network()
 
 	pa_ap_todelete(ap);
 	pa_ap_notify(&pa.data, ap);
-	sput_fail_unless(to_getfirst() == &pa.core.paa.to, "Paa is to be run");
+	sput_fail_unless(to_getfirst() == &pa.core.paa_to.t, "Paa is to be run");
 	res = to_run(1);
 	sput_fail_unless(!res, "Run paa");
 	sput_fail_if(to_getfirst(), "No more schedule");
@@ -444,7 +445,7 @@ void test_pa_network()
 	pa_ap_notify(&pa.data, ap);
 
 	/* The router stops from beeing designated and stops advertising cp2 */
-	sput_fail_unless(to_getfirst() == &pa.core.paa.to, "Paa is to be run");
+	sput_fail_unless(to_getfirst() == &pa.core.paa_to.t, "Paa is to be run");
 	res = to_run(1);
 	sput_fail_unless(!res && !to_getfirst(), "Run paa");
 
