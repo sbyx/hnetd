@@ -112,7 +112,7 @@ void test_pa_initial()
 	/* Testing initial schedules */
 	sput_fail_unless(to_check(&pa.core.paa_to.t, now_time + PA_TEST_FLOOD), "Correct paa timeout");
 	sput_fail_unless(to_check(&pa.core.aaa_to.t, now_time + PA_TEST_FLOOD_LL / PA_CORE_DELAY_FACTOR), "Correct aaa timeout");
-	sput_fail_unless(to_check(&pa.local.timeout, now_time + PA_TEST_FLOOD), "Correct local timeout");
+	sput_fail_unless(to_check(&pa.local.t.t, now_time + PA_TEST_FLOOD), "Correct local timeout");
 
 	sput_fail_unless(!to_run(3) && !to_getfirst(), "Run three timeouts");
 
@@ -126,7 +126,7 @@ void test_pa_initial()
 	/* Create a new ldp */
 	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, now_time + 100000, now_time + 50000, NULL, 0);
 	sput_fail_unless(to_check(&pa.core.paa_to.t, now_time + PA_TEST_FLOOD / PA_CORE_DELAY_FACTOR), "Correct paa timeout");
-	sput_fail_unless(to_check(&pa.local.timeout, now_time + PA_LOCAL_MIN_DELAY), "Correct paa timeout");
+	sput_fail_unless(to_check(&pa.local.t.t, now_time + PA_LOCAL_MIN_DELAY), "Correct paa timeout");
 	when = now_time + PA_TEST_FLOOD / PA_CORE_DELAY_FACTOR + 2*PA_TEST_FLOOD;
 
 	fr_md5_push_prefix(&p1_1);
@@ -184,11 +184,11 @@ void test_pa_ipv4()
 	iface.user->cb_intiface(iface.user, PL_IFNAME1, true);
 	iface.user->cb_ext4data(iface.user, PL_IFNAME2, PL_DHCP_DATA, PL_DHCP_LEN);
 
-	sput_fail_unless(to_check(&pa.local.timeout, now_time + PA_TEST_FLOOD), "Correct local timeout");
+	sput_fail_unless(to_check(&pa.local.t.t, now_time + PA_TEST_FLOOD), "Correct local timeout");
 	when = now_time + PA_TEST_FLOOD + 2*PA_TEST_FLOOD;
 	sput_fail_unless(!to_run(3), "Run paa, aaa and local");
-	sput_fail_unless(to_check(&pa.local.timeout, when), "Correct local timeout");
-	sput_fail_unless(to_getfirst() == &pa.local.timeout, "Local to be run");
+	sput_fail_unless(to_check(&pa.local.t.t, when), "Correct local timeout");
+	sput_fail_unless(to_getfirst() == &pa.local.t.t, "Local to be run");
 	res = to_run(1);
 	sput_fail_if(res, "Correctly run");
 
@@ -223,7 +223,7 @@ void test_pa_ipv4()
 
 
 	/* Renew ipv4 dp validity */
-	sput_fail_unless(to_getfirst() == &pa.local.timeout && !to_run(1), "Renew");
+	sput_fail_unless(to_getfirst() == &pa.local.t.t && !to_run(1), "Renew");
 
 	/* Test if the same address is used again */
 	iface.user->cb_intiface(iface.user, PL_IFNAME1, false);

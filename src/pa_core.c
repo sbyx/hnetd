@@ -20,13 +20,6 @@
 #define core_rid(core) (&((core_pa(core))->flood.rid))
 #define core_p(core, field) (&(core_pa(core)->field))
 
-#define PA_CORE_CHECK_DELAY(delay) do { \
-	if(delay < PA_CORE_MIN_DELAY) \
-		delay = PA_CORE_MIN_DELAY; \
-	else if(delay > UINT32_MAX) \
-		delay = UINT32_MAX; \
-	} while(0)
-
 static void __pa_aaa_schedule(struct pa_core *core);
 static void __pa_paa_schedule(struct pa_core *core);
 
@@ -791,7 +784,9 @@ void pa_core_init(struct pa_core *core)
 	L_INFO("Initializing pa core structure");
 
 	pa_timer_init(&core->paa_to, __pa_paa_to_cb, "Prefix Assignment Algorithm");
+	core->paa_to.min_delay = PA_CORE_MIN_DELAY;
 	pa_timer_init(&core->aaa_to, __pa_aaa_to_cb, "Address Assignment Algorithm");
+	core->aaa_to.min_delay = PA_CORE_MIN_DELAY;
 
 	memset(&core->data_user, 0, sizeof(struct pa_data_user));
 	core->data_user.aas = __pad_cb_aas;
