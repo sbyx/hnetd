@@ -209,42 +209,9 @@ err:
 	return -1;
 }
 
-//todo: I think those macros may be useful in other pa_foo files
-#define pa_pd_to_schedule(to, started, delay, do_also) do { \
-	if(!(to)->pending) { \
-		do_also; \
-		if(started) { \
-			uloop_timeout_set(to, delay); \
-		} else { \
-			(to)->pending = true; \
-		}\
-	}\
-} while(0)
-
-#define pa_pd_to_stop(to) do { \
-	if((to)->pending) { \
-		uloop_timeout_cancel(to);\
-		(to)->pending = true; \
-	} \
-} while(0)
-
-#define pa_pd_to_start(to, delay) do { \
-		if((to)->pending) { \
-			(to)->pending = false; \
-			uloop_timeout_set(to, delay);\
-		} \
-} while(0)
-
-static void pa_pd_lease_schedule(struct pa_pd *pd, struct pa_pd_lease *lease)
+static void pa_pd_lease_schedule(struct pa_pd_lease *lease)
 {
-	pa_pd_to_schedule(&lease->cb_to, pd->started, PA_PD_LEASE_CB_DELAY,
-			L_DEBUG("Scheduling lease callback "PA_PDL_L, PA_PDL_LA(lease)));
-}
-
-static void pa_pd_schedule(struct pa_pd *pd)
-{
-	pa_pd_to_schedule(&pd->update, pd->started, PA_PD_UPDATE_DELAY,
-			L_DEBUG("Scheduling pd computation in %d ms", (int) PA_PD_UPDATE_DELAY));
+	pa_timer_set_earlier(&lease->timer, PA_PD_LEASE_CB_DELAY, true);
 }
 
 static void pa_pd_dp_schedule(struct pa_pd *pd, struct pa_dp *dp)
@@ -260,20 +227,7 @@ static void pa_pd_dp_schedule(struct pa_pd *pd, struct pa_dp *dp)
 		delay = dp->compute_leases_last + PA_PD_UPDATE_RATE_DELAY - hnetd_time();
 	}
 
-	if(delay < PA_PD_UPDATE_DELAY)
-		delay = PA_PD_UPDATE_DELAY;
-
-	if(delay != -1) {
-		if(!pd->started) {
-			pa_pd_schedule(pd);
-		} else if (!pd->update.pending) {
-			L_DEBUG("Scheduling pd computation in %d ms", (int) delay);
-			uloop_timeout_set(&pd->update, (int) delay);
-		} else if (uloop_timeout_remaining(&pd->update) > (int) (delay + PA_PD_UPDATE_TOLERANCE)) {
-			L_DEBUG("Scheduling pd computation in %d ms", (int) delay);
-			uloop_timeout_set(&pd->update, (int) delay);
-		}
-	}
+	pa_timer_set_earlier(&pd->timer, delay, true);
 }
 
 static void pa_pd_destroy_cpd(struct pa_data *data, struct pa_cp *cp, void *owner)
@@ -364,7 +318,7 @@ static void pa_pd_cps_cb(struct pa_data_user *user, struct pa_cp *cp, uint32_t f
 	}
 #else
 	if(flags & (PADF_CP_APPLIED | PADF_CP_CREATED | PADF_CP_DP)) {
-		pa_pd_lease_schedule(pd, cpd->lease);
+		pa_pd_lease_schedule(cpd->lease);
 	}
 #endif
 }
@@ -400,7 +354,8 @@ static void pa_pd_dps_cb(struct pa_data_user *user, struct pa_dp *dp, uint32_t f
 			pa_pd_req_create(lease, dp);
 
 		dp->compute_leases_last = 0;
-		pa_pd_dp_schedule(pd, dp);
+		if(!list_empty(&pd->leases))
+			pa_pd_dp_schedule(pd, dp);
 	} else if(flags & (PADF_DP_LIFETIME | PADF_DP_DHCP)) {
 		/* Just schedule cb call for concerned leases */
 		pa_for_each_cp_in_dp(cp, dp) {
@@ -412,9 +367,9 @@ static void pa_pd_dps_cb(struct pa_data_user *user, struct pa_dp *dp, uint32_t f
 	}
 }
 
-static void pa_pd_update_cb(struct uloop_timeout *to)
+static void pa_pd_update_cb(struct pa_timer *t)
 {
-	struct pa_pd *pd = container_of(to, struct pa_pd, update);
+	struct pa_pd *pd = container_of(t, struct pa_pd, timer);
 	struct pa_dp *dp;
 	struct pa_pd_lease *lease;
 	struct pa_cp *cp, *cp2;
@@ -489,7 +444,7 @@ static void pa_pd_update_cb(struct uloop_timeout *to)
 
 			/* If all failed, better tell the requester (or it could wait forever... ) */
 			if(btrie_empty(&lease->cpds))
-				pa_pd_lease_schedule(pd, lease);
+				pa_pd_lease_schedule(lease);
 
 			lease->just_created = false;
 		}
@@ -498,9 +453,9 @@ static void pa_pd_update_cb(struct uloop_timeout *to)
 	L_DEBUG("Updating prefix delegation done");
 }
 
-static void pa_pd_lease_cb(struct uloop_timeout *to)
+static void pa_pd_lease_cb(struct pa_timer *t)
 {
-	struct pa_pd_lease *lease = container_of(to, struct pa_pd_lease, cb_to);
+	struct pa_pd_lease *lease = container_of(t, struct pa_pd_lease, timer);
 	struct pa_cpd *cpd, *cpd2;
 
 	L_INFO("Lease callback for "PA_PDL_L, PA_PDL_LA(lease));
@@ -539,8 +494,10 @@ int pa_pd_lease_init(struct pa_pd *pd, struct pa_pd_lease *lease,
 		return -1;
 	}
 
-	lease->cb_to.cb = pa_pd_lease_cb;
-	lease->cb_to.pending = false;
+	pa_timer_init(&lease->timer, pa_pd_lease_cb, "Prefix Delegation Lease");
+	if(pd->started)
+		pa_timer_enable(&lease->timer);
+
 	lease->pd = pd;
 	lease->preferred_len = preferred_len;
 	lease->max_len = max_len;
@@ -559,17 +516,17 @@ int pa_pd_lease_init(struct pa_pd *pd, struct pa_pd_lease *lease,
 	}
 
 	/* Schedule the pd */
-	pa_pd_schedule(pd);
+	pa_timer_set_earlier(&pd->timer, PA_PD_UPDATE_DELAY, true);
 
 	return 0;
 }
 
-void pa_pd_lease_term(struct pa_pd *pd, struct pa_pd_lease *lease)
+void pa_pd_lease_term(__attribute__((unused))struct pa_pd *pd, struct pa_pd_lease *lease)
 {
 	struct pa_cpd *cpd, *cpd2;
 	struct pa_pd_dp_req *req, *req2;
-	if(lease->cb_to.pending && pd->started)
-		uloop_timeout_cancel(&lease->cb_to);
+
+	pa_timer_disable(&lease->timer);
 
 	L_INFO("Terminating "PA_PDL_L, PA_PDL_LA(lease));
 
@@ -608,8 +565,8 @@ void pa_pd_init(struct pa_pd *pd, const struct pa_pd_conf *conf)
 	pd->data_user.dps = pa_pd_dps_cb;
 	pd->data_user.cps = pa_pd_cps_cb;
 	pd->data_user.aps = pa_pd_aps_cb;
-	pd->update.cb = pa_pd_update_cb;
-	pd->update.pending = false;
+
+	pa_timer_init(&pd->timer, pa_pd_update_cb, "Prefix Delegation");
 	pd->started = false;
 }
 
@@ -619,11 +576,16 @@ void pa_pd_start(struct pa_pd *pd)
 	if(!pd->started) {
 		L_NOTICE("Starting pa_pd");
 		pd->started = true;
-		pa_pd_to_start(&pd->update, PA_PD_UPDATE_DELAY);
+		pa_timer_enable(&pd->timer);
+		if(!list_empty(&pd->leases))
+			pa_timer_set_earlier(&pd->timer, PA_PD_UPDATE_DELAY, true);
+
 		pa_data_subscribe(&pd_pa(pd)->data, &pd->data_user);
 		pa_data_register_cp(&pd_pa(pd)->data, PA_CPT_D, pa_pd_destroy_cpd);
-		list_for_each_entry(lease, &pd->leases, le)
-			pa_pd_to_start(&lease->cb_to, PA_PD_LEASE_CB_DELAY);
+		list_for_each_entry(lease, &pd->leases, le) {
+			pa_timer_enable(&lease->timer);
+			pa_timer_set_earlier(&lease->timer, PA_PD_LEASE_CB_DELAY, true);
+		}
 	}
 }
 
@@ -633,10 +595,10 @@ void pa_pd_stop(struct pa_pd *pd)
 	if(pd->started) {
 		L_NOTICE("Stopping pa_pd");
 		list_for_each_entry(lease, &pd->leases, le)
-			pa_pd_to_stop(&lease->cb_to);
+			pa_timer_disable(&lease->timer);
 
 		pa_data_unsubscribe(&pd->data_user);
-		pa_pd_to_stop(&pd->update);
+		pa_timer_disable(&pd->timer);
 		pd->started = false;
 	}
 }

@@ -287,6 +287,8 @@ void pa_local_init(struct pa_local *local, const struct pa_local_conf *conf)
 	local->data_user.flood = __pa_local_flood_cb;
 	local->data_user.ipv4 = __pa_local_ipv4_cb;
 	local->data_user.dps = __pa_local_dps_cb;
+
+	local->started = false;
 	//todo: DO not generate if no internal interface ?
 }
 
