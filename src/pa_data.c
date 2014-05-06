@@ -515,9 +515,9 @@ void pa_cpd_set_lease(struct pa_cpd *cpd, struct pa_pd_lease *lease)
 	if(cpd->lease == lease)
 		return;
 	if(cpd->lease)
-		list_del(&cpd->lease_le);
+		btrie_remove(&cpd->lease_be);
 	if(lease)
-		list_add(&cpd->lease_le, &lease->cpds);
+		btrie_add(&lease->cpds, &cpd->lease_be, (btrie_key_t *)&cpd->cp.prefix.prefix, cpd->cp.prefix.plen);
 	cpd->lease = lease;
 }
 

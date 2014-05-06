@@ -25,15 +25,15 @@ struct pa_pd_dp_req {
 	struct pa_dp *dp;
 	struct pa_pd_lease *lease;
 	struct list_head dp_le; /* reqed in dps reqs list. */
-	struct list_head lease_le;
+	struct btrie_element lease_be;
 	uint8_t min_len;
 	uint8_t max_len;
 };
 
 #define pa_for_each_req_in_dp(req, dp) list_for_each_entry(req, &(dp)->lease_reqs, dp_le)
 #define pa_for_each_req_in_dp_safe(req, req2, dp) list_for_each_entry_safe(req, req2, &(dp)->lease_reqs, dp_le)
-#define pa_for_each_req_in_lease(req, lease) list_for_each_entry(req, &(lease)->dp_reqs, lease_le)
-#define pa_for_each_req_in_lease_safe(req, req2, lease) list_for_each_entry_safe(req, req2, &(lease)->dp_reqs, lease_le)
+#define pa_for_each_req_in_lease(req, lease) btrie_for_each_down_entry(req, &(lease)->dp_reqs, NULL, 0, lease_be)
+#define pa_for_each_req_in_lease_safe(req, req2, lease) btrie_for_each_down_entry_safe(req, req2, &(lease)->dp_reqs, NULL, 0, lease_be)
 
 /* This is used to tweek requests into reasonable ones. */
 static int pa_pd_filter_lengths(struct pa_pd_lease *lease, struct pa_dp *dp,
@@ -68,13 +68,13 @@ static int pa_pd_req_create(struct pa_pd_lease *lease, struct pa_dp *dp)
 	req->dp = dp;
 	req->lease = lease;
 	list_add(&req->dp_le, &dp->lease_reqs);
-	list_add(&req->lease_le, &lease->dp_reqs);
+	btrie_add(&lease->dp_reqs, &req->lease_be, (btrie_key_t *)&dp->prefix.prefix, dp->prefix.plen);
 	return 0;
 }
 
 static void pa_pd_req_destroy(struct pa_pd_dp_req *req)
 {
-	list_del(&req->lease_le);
+	btrie_remove(&req->lease_be);
 	list_del(&req->dp_le);
 	free(req);
 }
@@ -488,7 +488,7 @@ static void pa_pd_update_cb(struct uloop_timeout *to)
 			}
 
 			/* If all failed, better tell the requester (or it could wait forever... ) */
-			if(list_empty(&lease->cpds))
+			if(btrie_empty(&lease->cpds))
 				pa_pd_lease_schedule(pd, lease);
 
 			lease->just_created = false;
@@ -545,8 +545,8 @@ int pa_pd_lease_init(struct pa_pd *pd, struct pa_pd_lease *lease,
 	lease->preferred_len = preferred_len;
 	lease->max_len = max_len;
 	lease->just_created = true;
-	INIT_LIST_HEAD(&lease->cpds);
-	INIT_LIST_HEAD(&lease->dp_reqs);
+	btrie_init(&lease->cpds);
+	btrie_init(&lease->dp_reqs);
 	list_add(&lease->le, &pd->leases);
 
 	L_INFO("Initializing "PA_PDL_L, PA_PDL_LA(lease));
@@ -566,25 +566,22 @@ int pa_pd_lease_init(struct pa_pd *pd, struct pa_pd_lease *lease,
 
 void pa_pd_lease_term(struct pa_pd *pd, struct pa_pd_lease *lease)
 {
-	struct pa_cpd *cpd;
-	struct pa_pd_dp_req *req;
+	struct pa_cpd *cpd, *cpd2;
+	struct pa_pd_dp_req *req, *req2;
 	if(lease->cb_to.pending && pd->started)
 		uloop_timeout_cancel(&lease->cb_to);
 
 	L_INFO("Terminating "PA_PDL_L, PA_PDL_LA(lease));
 
-	while(!list_empty(&lease->cpds)) {
-		cpd = list_first_entry(&lease->cpds, struct pa_cpd, lease_le);
-		list_del(&cpd->lease_le); // This is just for safety in case somebody look at it somewhere...
+	pa_pd_for_each_cpd_safe(cpd, cpd2, lease) {
+		btrie_remove(&cpd->lease_be);
 		cpd->lease = NULL;
 		pa_cp_todelete(&cpd->cp);
 		pa_cpd_set_lease(cpd, NULL); //Important to differentiate local deletes
 		pa_cp_notify(&cpd->cp);
 	}
 
-	while(!list_empty(&lease->dp_reqs)) {
-		/* Unreqing all dps that lease is unsatisfied with */
-		req = list_first_entry(&lease->dp_reqs, struct pa_pd_dp_req, lease_le);
+	pa_for_each_req_in_lease_safe(req, req2, lease) {
 		pa_pd_req_destroy(req);
 	}
 

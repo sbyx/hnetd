@@ -105,8 +105,8 @@ void test_1()
 	sput_fail_unless(uloop_timeout_remaining(&tl1.lease.cb_to) == PA_PD_LEASE_CB_DELAY, "Correct timeout value");
 	fu_loop(1); //Calling lease
 	sput_fail_unless(tl1.update_calls == 1, "One lease update call");
-	sput_fail_unless(list_empty(&tl1.lease.cpds), "No cpds");
-	sput_fail_unless(list_empty(&tl1.lease.dp_reqs), "No requests");
+	sput_fail_unless(btrie_empty(&tl1.lease.cpds), "No cpds");
+	sput_fail_unless(btrie_empty(&tl1.lease.dp_reqs), "No requests");
 	sput_fail_unless(fu_next() == NULL, "No next schedule");
 	pa_pd_lease_term(pd, &tl1.lease);
 
@@ -137,8 +137,8 @@ void test_1()
 	fu_loop(1);
 	/* Checking if tl1 call is correct */
 	sput_fail_unless(tl1.update_calls == 1, "One lease update call");
-	sput_fail_unless(list_empty(&tl1.lease.cpds), "No cpds");
-	sput_fail_unless((req = list_first_entry(&tl1.lease.dp_reqs, struct pa_pd_dp_req, lease_le)), "One remaining request");
+	sput_fail_unless(btrie_empty(&tl1.lease.cpds), "No cpds");
+	sput_fail_unless((req = btrie_first_down_entry(req, &tl1.lease.dp_reqs, NULL, 0, lease_be)), "One remaining request");
 	sput_fail_unless(fu_next() == NULL, "No next schedule");
 	/* Let's remove the blocking cp : that should trigger a schedule*/
 	pa_cp_todelete(&cpl1->cp);
@@ -149,10 +149,10 @@ void test_1()
 	fr_md5_push(&p1_01); //It will be used to give a /62
 	fu_loop(1);
 	/* A cpds should have been created, but it is not applied for now */
-	sput_fail_unless(list_empty(&tl1.lease.dp_reqs), "No requests in lease");
+	sput_fail_unless(btrie_empty(&tl1.lease.dp_reqs), "No requests in lease");
 	sput_fail_unless(list_empty(&ldp1->dp.lease_reqs), "No requests in dp");
-	sput_fail_unless(!list_empty(&tl1.lease.cpds), "There is a cpd");
-	cpd = list_first_entry(&tl1.lease.cpds, struct pa_cpd, lease_le);
+	sput_fail_unless(!btrie_empty(&tl1.lease.cpds), "There is a cpd");
+	cpd = btrie_first_down_entry(cpd, &tl1.lease.cpds, NULL, 0, lease_be);
 	sput_fail_unless(cpd->cp.dp == &ldp1->dp, "Correct associated dp");
 	delegated = p1_01;
 	delegated.plen = PA_PD_DFLT_MIN_LEN;
@@ -182,10 +182,10 @@ void test_1()
 	sput_fail_unless(uloop_timeout_remaining(&pd->update) == PA_PD_UPDATE_DELAY, "Correct timeout value");
 	fr_md5_push(&p1_01); //Will be used when trying to get a md5 for the lease: That will make a collision and p1_08 should be used
 	fu_loop(1);
-	sput_fail_unless(list_empty(&tl2.lease.dp_reqs), "No requests in lease");
+	sput_fail_unless(btrie_empty(&tl2.lease.dp_reqs), "No requests in lease");
 	sput_fail_unless(list_empty(&ldp1->dp.lease_reqs), "No requests in dp");
-	sput_fail_unless(!list_empty(&tl2.lease.cpds), "There is a cpd");
-	cpd = list_first_entry(&tl2.lease.cpds, struct pa_cpd, lease_le);
+	sput_fail_unless(!btrie_empty(&tl2.lease.cpds), "There is a cpd");
+	cpd = btrie_first_down_entry(cpd, &tl2.lease.cpds, NULL, 0, lease_be);
 	sput_fail_unless(cpd->cp.dp == &ldp1->dp, "Correct associated dp");
 	delegated = p1_04;
 	delegated.plen = 63;
@@ -213,10 +213,10 @@ void test_1()
 	sput_fail_unless(uloop_timeout_remaining(&pd->update) == PA_PD_UPDATE_DELAY, "Correct timeout value");
 	fr_md5_push(&p2_01);
 	fu_loop(1);
-	sput_fail_unless(list_empty(&tl1.lease.dp_reqs), "No requests in lease");
+	sput_fail_unless(btrie_empty(&tl1.lease.dp_reqs), "No requests in lease");
 	sput_fail_unless(list_empty(&ldp2->dp.lease_reqs), "No requests in dp");
-	sput_fail_unless(!list_empty(&tl1.lease.cpds), "There is a cpd");
-	cpd = list_first_entry(&tl1.lease.cpds, struct pa_cpd, lease_le);
+	sput_fail_unless(!btrie_empty(&tl1.lease.cpds), "There is a cpd");
+	cpd = btrie_first_down_entry(cpd, &tl1.lease.cpds, (btrie_key_t *)&p2.prefix, p2.plen, lease_be);
 	delegated = p2_01;
 	delegated.plen = PA_PD_DFLT_MIN_LEN;
 	sput_fail_unless(!prefix_cmp(&delegated, &cpd->cp.prefix), "Correct delegated prefix");
@@ -237,13 +237,13 @@ void test_1()
 	pa_ap_notify(&pa.data, ap);
 	fu_loop(1); //Lease cb that will destroy the cpd and schedule the pd algorithm
 	sput_fail_unless(fu_next() != NULL, "There is a next schedule");
-	sput_fail_unless(!list_empty(&tl1.lease.dp_reqs), "There is a request in lease");
+	sput_fail_unless(!btrie_empty(&tl1.lease.dp_reqs), "There is a request in lease");
 	sput_fail_unless(!list_empty(&ldp1->dp.lease_reqs), "There is a request in lease");
 	fr_md5_push(&p1_01);
 	fu_loop(1); //Execute algorithm. p1_01 should not be used. And p1_04 should be used instead.
-	sput_fail_unless(list_empty(&tl1.lease.dp_reqs), "No requests in lease");
+	sput_fail_unless(btrie_empty(&tl1.lease.dp_reqs), "No requests in lease");
 	sput_fail_unless(list_empty(&ldp1->dp.lease_reqs), "No requests in dp");
-	cpd = list_first_entry(&tl1.lease.cpds, struct pa_cpd, lease_le);
+	cpd = btrie_first_down_entry(cpd, &tl1.lease.cpds, NULL, 0, lease_be);
 	delegated = p1_04;
 	delegated.plen = PA_PD_DFLT_MIN_LEN;
 	sput_fail_unless(!prefix_cmp(&delegated, &cpd->cp.prefix), "Correct delegated prefix");
@@ -266,7 +266,7 @@ void test_1()
 	sput_fail_unless(fu_next() == NULL, "No next schedule");
 
 	/* Externally destroy the cpd */
-	cpd = list_first_entry(&tl1.lease.cpds, struct pa_cpd, lease_le);
+	cpd = btrie_first_down_entry(cpd, &tl1.lease.cpds, NULL, 0, lease_be);
 	cpd->cp.destroy(&pa.data, &cpd->cp, (void *)1);
 	fr_md5_push(&p1_10);
 	fu_loop(1); //Execute pd

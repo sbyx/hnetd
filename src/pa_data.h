@@ -263,7 +263,7 @@ struct pa_cpx {
  * It is managed by pa_pd.c */
 struct pa_cpd {
 	struct pa_cp cp;
-	struct list_head lease_le;
+	struct btrie_element lease_be;
 	struct pa_pd_lease *lease;
 };
 
