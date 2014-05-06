@@ -274,6 +274,28 @@ static void pa_pd_dp_schedule(struct pa_pd *pd, struct pa_dp *dp)
 	}
 }
 
+static void pa_pd_destroy_cpd(struct pa_data *data, struct pa_cp *cp, void *owner)
+{
+	struct pa_pd *pd = &container_of(data, struct pa, data)->pd;
+	struct pa_cpd *cpd = _pa_cpd(cp);
+	struct pa_dp *dp;
+
+	if(owner != pd) {
+		if(cpd->lease->update_cb) {
+			dp = cpd->cp.dp;
+			if(dp) {
+				pa_cp_set_dp(&cpd->cp, NULL);
+				pa_pd_req_create(cpd->lease, dp); // Add to unsatisfied
+				pa_pd_dp_schedule(pd, dp); // Schedule the dp for recomputation
+			}
+			cpd->lease->update_cb(cpd->lease);
+		}
+	}
+
+	pa_cp_todelete(&cpd->cp);
+	pa_cp_notify(&cpd->cp);
+}
+
 static void pa_pd_aps_cb(struct pa_data_user *user, struct pa_ap *ap, uint32_t flags)
 {
 	struct pa_dp *dp;
@@ -333,19 +355,8 @@ static void pa_pd_cps_cb(struct pa_data_user *user, struct pa_cp *cp, uint32_t f
 		}
 	}
 
-	if(!(cpd = _pa_cpd(cp)) || !cpd->lease ) // if !cpd->lease, it will be deleted afterward anyway
+	if(!(cpd = _pa_cpd(cp)) || (flags & (PADF_CP_TODELETE)) ) // if !cpd->lease, it will be deleted afterward anyway
 		return;
-
-	if((flags & PADF_CP_TODELETE) && cpd->lease && cpd->lease->update_cb) { //todo: Better do it with applied, maybe...
-		dp = cpd->cp.dp;
-		if(dp) {
-			pa_cp_set_dp(&cpd->cp, NULL);
-			pa_pd_req_create(cpd->lease, dp); // Add to unsatisfied
-			pa_pd_dp_schedule(pd, dp); // Schedule the dp for recomputation
-		}
-		cpd->lease->update_cb(cpd->lease);
-		return;
-	}
 
 #ifdef PA_PD_RIGOUROUS_LEASES
 	if((flags & (PADF_CP_APPLIED)) || (cp->applied && (flags & PADF_CP_DP))) {
@@ -511,10 +522,11 @@ static void pa_pd_lease_cb(struct uloop_timeout *to)
 	/* Remove orphan cpds */
 	pa_pd_for_each_cpd_safe(cpd, cpd2, lease) {
 		if(!cpd->cp.dp) {
-			pa_cp_todelete(&cpd->cp);
-			pa_cpd_set_lease(cpd, NULL); //Important to differentiate local deletes
+			struct pa_pd *pd = lease->pd;
+			cpd->cp.destroy(pd_p(pd, data), &cpd->cp, pd);
+		} else {
+			pa_cp_notify(&cpd->cp); //Do for all because maybe dp was removed before
 		}
-		pa_cp_notify(&cpd->cp); //Do for all because maybe dp was removed before
 	}
 }
 
@@ -612,6 +624,7 @@ void pa_pd_start(struct pa_pd *pd)
 		pd->started = true;
 		pa_pd_to_start(&pd->update, PA_PD_UPDATE_DELAY);
 		pa_data_subscribe(&pd_pa(pd)->data, &pd->data_user);
+		pa_data_register_cp(&pd_pa(pd)->data, PA_CPT_D, pa_pd_destroy_cpd);
 		list_for_each_entry(lease, &pd->leases, le)
 			pa_pd_to_start(&lease->cb_to, PA_PD_LEASE_CB_DELAY);
 	}

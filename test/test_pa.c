@@ -506,10 +506,10 @@ void test_pa_static()
 	sput_fail_unless(cp->authoritative, "Now authoritative");
 	sput_fail_unless(!cp->advertised, "Not advertised");
 
-	pa_ap_destroy(ap); //Destroy the other ap
+	pa_ap_todelete(ap); //Destroy the other ap
 	pa_ap_notify(&pa.data, ap);
 
-	res = to_run(1); //Run paa
+	res = to_run(4); //Run paa
 	sput_fail_unless(cp->authoritative, "Now authoritative");
 	sput_fail_unless(cp->advertised, "Advertised");
 

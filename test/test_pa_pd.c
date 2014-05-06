@@ -267,8 +267,7 @@ void test_1()
 
 	/* Externally destroy the cpd */
 	cpd = list_first_entry(&tl1.lease.cpds, struct pa_cpd, lease_le);
-	pa_cp_todelete(&cpd->cp);
-	pa_cp_notify(&cpd->cp);
+	cpd->cp.destroy(&pa.data, &cpd->cp, (void *)1);
 	fr_md5_push(&p1_10);
 	fu_loop(1); //Execute pd
 	cpd = container_of(btrie_first_down_entry(&cpd->cp, (&ldp1->dp.cps), NULL, 0, dp_be), struct pa_cpd, cp);

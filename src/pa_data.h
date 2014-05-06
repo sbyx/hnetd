@@ -180,6 +180,9 @@ struct pa_ap {
 #define PA_AP_LA(ap)    PREFIX_REPR(&(ap)->prefix), PA_IFNAME_LA((ap)->iface), PA_RID_LA(&(ap)->rid), !!(ap)->authoritative, (ap)->priority
 };
 
+struct pa_cp;
+typedef void (*cp_destructor)(struct pa_data *, struct pa_cp *, void *owner);
+
 /* Generic part of chosen prefixes structure.
  * That generic part is used for:
  * 1) Check for assignment's validity
@@ -204,11 +207,16 @@ struct pa_cp {
 	struct uloop_timeout apply_to;  /* Used by pa algo */
 
 	enum pa_cp_type {
-		PA_CPT_ANY,		/* NO TYPE - ONLY IN FUNCTION CALL */
 		PA_CPT_L,		/* Assignment made on some link */
 		PA_CPT_X,		/* Assignment made to exclude it */
-		PA_CPT_D		/* Assignment made to give it */
+		PA_CPT_D,		/* Assignment made to give it */
+		PA_CPT_ANY		/* NO TYPE - ONLY IN FUNCTION CALL */
+#define PA_CPT_SIZE PA_CPT_ANY
 	} type;
+
+	/* Owner's destroy function. Must not be NULL.
+	   Owner pointer identifies the caller. */
+	cp_destructor destroy;
 
 #define PADF_CP_CREATED   PADF_ALL_CREATED
 #define PADF_CP_TODELETE  PADF_ALL_TODELETE
@@ -246,6 +254,7 @@ struct pa_cpl {
  * It is not associated to any particular interface. */
 struct pa_cpx {
 	struct pa_cp cp;
+	struct pa_ldp *ldp;
 };
 
 /* Chosen prefix for Prefix Delegation
@@ -360,6 +369,8 @@ struct pa_data {
 
 	size_t sa_count;
 	struct list_head sas;   /* Stored addresses */
+
+	cp_destructor cp_destructors[PA_CPT_SIZE]; /* cp destructors used for init */
 };
 
 /* Subscription to data events */
@@ -377,6 +388,7 @@ struct pa_data_user {
 void pa_data_conf_defaults(struct pa_data_conf *);
 void pa_data_init(struct pa_data *, const struct pa_data_conf *);
 void pa_data_term(struct pa_data *);
+#define pa_data_register_cp(data, type, destructor) (data)->cp_destructors[type] = destructor
 
 void pa_flood_set_rid(struct pa_data *, const struct pa_rid *rid);
 void pa_flood_set_flooddelays(struct pa_data *, hnetd_time_t delay, hnetd_time_t ll_delay);

@@ -219,8 +219,12 @@ static void pa_core_make_new_assignment(struct pa_core *core, struct pa_dp *dp, 
 		pa_core_create_cpl(core, p, dp, iface, 0, PA_PRIORITY_DEFAULT);
 }
 
-static void pa_core_destroy_cpl(struct pa_core *core, struct pa_cpl *cpl)
+/* cpl destructor */
+static void pa_core_destroy_cpl(struct pa_data *data, struct pa_cp *cp, void *owner)
 {
+	struct pa_core *core = &container_of(data, struct pa, data)->core;
+	struct pa_cpl *cpl = _pa_cpl(cp);
+
 	/* Remove the address if needed */
 	if(cpl->laa) {
 		pa_aa_todelete(&cpl->laa->aa);
@@ -230,6 +234,28 @@ static void pa_core_destroy_cpl(struct pa_core *core, struct pa_cpl *cpl)
 	L_INFO("Removing "PA_CP_L, PA_CP_LA(&cpl->cp));
 	pa_cp_todelete(&cpl->cp);
 	pa_cp_notify(&cpl->cp);
+
+	if(owner != core)
+		__pa_paa_schedule(core);
+}
+
+static void pa_core_destroy_cp(struct pa_core *core, struct pa_cp *cp)
+{
+	L_DEBUG("Calling "PA_CP_L" destructor %p", PA_CP_LA(cp), cp->destroy);
+	cp->destroy(core_p(core, data), cp, core);
+}
+
+static int pa_core_invalidate_cps(struct pa_core *core, struct prefix *prefix, bool delete_auth)
+{
+	struct pa_cp *cp, *cp2;
+	int ret = 0;
+	pa_for_each_cp_updown_safe(cp, cp2, core_p(core, data), prefix) {
+		if(delete_auth || !cp->authoritative) {
+			pa_core_destroy_cp(core, cp);
+			ret = 1;
+		}
+	}
+	return ret;
 }
 
 static bool pa_core_iface_is_designated(struct pa_core *core, struct pa_iface *iface)
@@ -315,7 +341,7 @@ static inline void pa_core_case3(struct pa_core *core, struct pa_iface *iface, s
 		pa_cp_set_dp(&cpl->cp, dp);
 		pa_cp_notify(&cpl->cp);
 	} else {
-		pa_core_destroy_cpl(core, cpl);
+		pa_core_destroy_cp(core, &cpl->cp);
 		pa_core_case1(core, iface, dp);
 	}
 }
@@ -325,10 +351,11 @@ static inline void pa_core_case4(struct pa_core *core, struct pa_iface *iface,
 {
 	if(prefix_cmp(&ap->prefix, &cpl->cp.prefix)) {
 		if(!cpl->cp.authoritative) {
-			pa_core_destroy_cpl(core, cpl);
+			pa_core_destroy_cp(core, &cpl->cp);
 			pa_core_case2(core, iface, dp, ap);
+		} else {
+			pa_core_case3(core, iface, dp, cpl);
 		}
-		//Valid otherwise
 	} else {
 		pa_core_update_cpl(dp, ap, cpl, iface->designated);
 		cpl->invalid = false;
@@ -390,7 +417,7 @@ void paa_algo_do(struct pa_core *core)
 	struct pa_cp *cpsafe;
 	pa_for_each_cp_safe(cp, cpsafe, data) {
 		if((cpl = _pa_cpl(cp)) && cpl->invalid)
-			pa_core_destroy_cpl(core, cpl);
+			pa_core_destroy_cp(core, &cpl->cp);
 	}
 
 	/* Evaluate dodhcp ofr all iface */
@@ -543,43 +570,39 @@ static void aaa_algo_do(struct pa_core *core)
 	}
 }
 
-void pa_core_delete_cp(struct pa_core *core, struct pa_cp *cp)
+void pa_core_destroy_cpx(struct pa_data *data, struct pa_cp *cp, void *owner)
 {
-	struct pa_cpl *cpl;
-	if((cpl = _pa_cpl(cp))) {
-		pa_core_destroy_cpl(core, cpl);
-	} else {
-		pa_cp_todelete(cp);
-		pa_cp_notify(cp);
+	struct pa_core *core = &container_of(data, struct pa, data)->core;
+	struct pa_cpx *cpx = _pa_cpx(cp);
+
+	cpx->ldp->excluded.cpx = NULL;
+	pa_cp_todelete(&cpx->cp);
+	pa_cp_notify(&cpx->cp);
+
+	if(owner != core) {
+		L_WARN("CPXs are not intended to be removed by anybody else than pa_core");
 	}
 }
 
 void pa_core_update_excluded(struct pa_core *core, struct pa_ldp *ldp)
 {
-	struct pa_cp *cp, *cp2;
-
-	if(ldp->excluded.cpx) {
-		/* Destroying previous cp */
-		pa_cp_todelete(&ldp->excluded.cpx->cp);
-		pa_cp_notify(&ldp->excluded.cpx->cp);
-		ldp->excluded.cpx = NULL;
-	}
+	if(ldp->excluded.cpx)
+		pa_core_destroy_cp(core, &ldp->excluded.cpx->cp);
 
 	if(ldp->excluded.valid) {
 		/* Invalidate all contained cps */
-		pa_for_each_cp_updown_safe(cp, cp2, core_p(core, data), &ldp->excluded.excluded) {
-			if(!cp->authoritative) {
-				__pa_paa_schedule(core);
-				pa_core_delete_cp(core, cp);
-			}
-		}
+		if (pa_core_invalidate_cps(core, &ldp->excluded.excluded, false))
+			__pa_paa_schedule(core);
 
 		//todo: When no cp is deleted, we don't need to execute paa, but in case of scarcity, it may be usefull
 		/* Creating new cp */
 		ldp->excluded.cpx = _pa_cpx(pa_cp_get(core_p(core, data), &ldp->excluded.excluded, PA_CPT_X, true));
 		if(ldp->excluded.cpx) {
+			ldp->excluded.cpx->ldp = ldp;
 			pa_cp_set_authoritative(&ldp->excluded.cpx->cp, true);
 			pa_cp_notify(&ldp->excluded.cpx->cp);
+		} else {
+			L_ERR("Could not create CPX for "PA_DP_L, PA_DP_LA(&ldp->dp));
 		}
 	}
 }
@@ -650,7 +673,12 @@ struct pa_cpl *__pa_cpl_get_in_iface(struct prefix *prefix, struct pa_iface *ifa
 
 int pa_core_static_prefix_add(struct pa_core *core, struct prefix *prefix, struct pa_iface *iface)
 {
-	struct pa_cpl *cpl = __pa_cpl_get_in_iface(prefix, iface);
+	struct pa_cpl *cpl;
+	struct pa_dp *dp;
+	struct prefix *clean_prefix = prefix;
+
+	//Create authoritative cpl
+	cpl = __pa_cpl_get_in_iface(prefix, iface);
 	bool created = false;
 	if(!cpl) {
 		cpl = _pa_cpl(pa_cp_create(core_p(core, data), prefix, PA_CPT_L));
@@ -667,28 +695,20 @@ int pa_core_static_prefix_add(struct pa_core *core, struct prefix *prefix, struc
 			__pa_paa_schedule(core);
 		pa_cp_set_authoritative(&cpl->cp, true);
 	}
-	pa_cp_notify(&cpl->cp);
+
+	// Look for a dp
+	pa_for_each_dp_up(dp, core_p(core, data), prefix) {
+		if(!dp->ignore) {
+			clean_prefix = &dp->prefix;
+			break;
+		}
+	}
 
 	//Remove colliding cps
-	struct pa_cp *cp, *cp2;
-	pa_for_each_cp_updown_safe(cp,cp2, core_p(core, data), prefix) {
-		if(cp != &cpl->cp && !cp->authoritative) {
-			__pa_paa_schedule(core);
-			pa_core_delete_cp(core, cp);
-		}
-	}
+	if(pa_core_invalidate_cps(core, clean_prefix, false))
+		__pa_paa_schedule(core);
 
-	//Remove other chosen if different
-	struct pa_dp *dp = NULL;
-	pa_for_each_dp_updown(dp, core_p(core, data), prefix) {
-		pa_for_each_cp_updown_safe(cp, cp2, core_p(core, data), &dp->prefix) {
-			if(cp != &cpl->cp && !cp->authoritative) {
-				__pa_paa_schedule(core);
-				pa_core_delete_cp(core, cp);
-			}
-		}
-		break;
-	}
+	pa_cp_notify(&cpl->cp);
 
 	return 0;
 }
@@ -826,6 +846,8 @@ void pa_core_start(struct pa_core *core)
 
 	L_INFO("Starting pa core structure");
 	pa_data_subscribe(core_p(core, data), &core->data_user);
+	pa_data_register_cp(core_p(core, data), PA_CPT_X, pa_core_destroy_cpx);
+	pa_data_register_cp(core_p(core, data), PA_CPT_L, pa_core_destroy_cpl);
 	core->start_time = hnetd_time();
 
 	/* Always schedule when started */

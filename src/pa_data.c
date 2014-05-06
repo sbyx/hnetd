@@ -438,6 +438,7 @@ struct pa_cp *pa_cp_create(struct pa_data *data, const struct prefix *prefix, ui
 	struct pa_cp *cp;
 
 	L_DEBUG("Create cp from prefix %s", PREFIX_REPR(prefix));
+
 	switch (type) {
 		case PA_CPT_L:
 			cp = malloc(sizeof(struct pa_cpl));
@@ -467,6 +468,7 @@ struct pa_cp *pa_cp_create(struct pa_data *data, const struct prefix *prefix, ui
 		break;
 	case PA_CPT_X:
 		container_of(cp, struct pa_cpx, cp)->cp.type = PA_CPT_X;
+		_pa_cpx(cp)->ldp = NULL;
 		cp = &_pa_cpx(cp)->cp;
 		break;
 	case PA_CPT_D:
@@ -480,6 +482,10 @@ struct pa_cp *pa_cp_create(struct pa_data *data, const struct prefix *prefix, ui
 
 	prefix_cpy(&cp->prefix, prefix);
 	cp->pa_data = data;
+
+	if(!(cp->destroy = data->cp_destructors[type])) {
+		L_ERR("Type %s has no associated destructor", PA_CP_TYPE(type));
+	}
 
 	cp->advertised = false;
 	cp->applied = false;
@@ -924,6 +930,8 @@ void pa_data_init(struct pa_data *data, const struct pa_data_conf *conf)
 
 	data->sp_count = 0;
 	data->sa_count = 0;
+
+	memset(data->cp_destructors, 0, sizeof(data->cp_destructors));
 }
 
 void pa_data_term(struct pa_data *data)
