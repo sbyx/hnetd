@@ -34,6 +34,8 @@ struct pa_pd_dp_req {
 #define pa_for_each_req_in_dp_safe(req, req2, dp) list_for_each_entry_safe(req, req2, &(dp)->lease_reqs, dp_le)
 #define pa_for_each_req_in_lease(req, lease) btrie_for_each_down_entry(req, &(lease)->dp_reqs, NULL, 0, lease_be)
 #define pa_for_each_req_in_lease_safe(req, req2, lease) btrie_for_each_down_entry_safe(req, req2, &(lease)->dp_reqs, NULL, 0, lease_be)
+#define pa_pd_for_each_cpd_updown(pa_cpd, lease, p) btrie_for_each_updown_entry(pa_cpd, &(lease)->cpds, (btrie_key_t *)&(p)->prefix, (p)->plen, lease_be)
+#define pa_pd_for_each_cpd_down(pa_cpd, lease, p) btrie_for_each_down_entry(pa_cpd, &(lease)->cpds, (btrie_key_t *)&(p)->prefix, (p)->plen, lease_be)
 
 /* This is used to tweek requests into reasonable ones. */
 static int pa_pd_filter_lengths(struct pa_pd_lease *lease, struct pa_dp *dp,
@@ -299,7 +301,7 @@ static void pa_pd_destroy_cpd(struct pa_data *data, struct pa_cp *cp, void *owne
 static void pa_pd_aps_cb(struct pa_data_user *user, struct pa_ap *ap, uint32_t flags)
 {
 	struct pa_dp *dp;
-	struct pa_cpd *cpd, *cpd2;
+	struct pa_cpd *cpd;
 	struct pa_pd_lease *lease;
 	struct pa_pd *pd = container_of(user, struct pa_pd, data_user);
 
@@ -316,10 +318,8 @@ static void pa_pd_aps_cb(struct pa_data_user *user, struct pa_ap *ap, uint32_t f
 	} else if (flags & PADF_AP_CREATED) {
 		//Check for collisions. That should delete cpd whenever an ap forbids its use
 		pa_pd_for_each_lease(lease, pd) {
-			pa_pd_for_each_cpd_safe(cpd, cpd2, lease) {
-				if((prefix_contains(&cpd->cp.prefix, &ap->prefix) ||
-						prefix_contains(&ap->prefix, &cpd->cp.prefix)) &&
-						(pa_precedence_apcp(ap, &cpd->cp) > 0)) {
+			pa_pd_for_each_cpd_updown(cpd, lease, &ap->prefix) {
+				if((pa_precedence_apcp(ap, &cpd->cp) > 0)) {
 					pa_cp_set_applied(&cpd->cp, false);    //Unapplied if ever applied
 					pa_cp_set_advertised(&cpd->cp, false); //Do not advertise because invalid
 					pa_cp_notify(&cpd->cp);
@@ -451,8 +451,8 @@ static void pa_pd_update_cb(struct uloop_timeout *to)
 
 				bool found = false;
 				/* find orphans */
-				pa_pd_for_each_cpd(cpd, req->lease) {
-					if(!cpd->cp.dp && prefix_contains(&dp->prefix, &cpd->cp.prefix)) {
+				pa_pd_for_each_cpd_down(cpd, req->lease, &dp->prefix) {
+					if(!cpd->cp.dp) {
 						pa_pd_cpd_adopt(req, cpd);
 						found = true;
 						break;
