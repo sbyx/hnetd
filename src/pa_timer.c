@@ -10,6 +10,7 @@ static hnetd_time_t __pat_t;
 
 static void pa_timer_cb(struct uloop_timeout *t) {
 	struct pa_timer *timer = container_of(t, struct pa_timer, t);
+	L_INFO("Timer callback for %s", timer->name);
 	timer->when = -1;
 	if(timer->cb)
 		timer->cb(timer);
@@ -24,6 +25,7 @@ void pa_timer_init(struct pa_timer *t, void (*cb)(struct pa_timer *), const char
 	t->cb = cb;
 	t->when = -1;
 	t->name = name;
+	t->min_delay = 0;
 }
 
 static inline void pa_timer_update_to(struct pa_timer *t)
@@ -70,8 +72,14 @@ void pa_timer_disable(struct pa_timer *t)
 
 void pa_timer_set_earlier(struct pa_timer *t, hnetd_time_t time, bool relative)
 {
-	if(relative)
-		time += hnetd_time();
+	hnetd_time_t now = hnetd_time();
+	if(relative) {
+		if(time < t->min_delay)
+			time = t->min_delay;
+		time += now;
+	} else if(time - now < t->min_delay) {
+		time = now + t->min_delay;
+	}
 
 	if(t->when < 0 || t->when > time)
 		pa_timer_set_when(t, time);

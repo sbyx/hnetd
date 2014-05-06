@@ -16,6 +16,7 @@
 
 #include "prefix_utils.h"
 #include "hnetd.h"
+#include "pa_timer.h"
 #include "pa_data.h"
 
 struct pa_local;
@@ -80,15 +81,11 @@ struct pa_local_conf
 };
 
 struct pa_local {
+	bool started;
 	struct pa_local_conf conf;
-
 	struct pa_local_elem ula;
 	struct pa_local_elem ipv4;
-
-	hnetd_time_t start_time;
-	hnetd_time_t current_timeout;
-	struct uloop_timeout timeout;
-
+	struct pa_timer t;
 	struct pa_data_user data_user;
 };
 

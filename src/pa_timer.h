@@ -16,6 +16,7 @@ struct pa_timer {
 	bool enabled;
 	hnetd_time_t when;
 	hnetd_time_t not_before;
+	hnetd_time_t min_delay;
 	void (*cb)(struct pa_timer *);
 	const char *name;
 };

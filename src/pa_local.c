@@ -194,63 +194,29 @@ destroy:
 	return;
 }
 
-static void pa_local_schedule(struct pa_local *local, hnetd_time_t when, hnetd_time_t now)
-{
-	if(!local->start_time) {
-		if(!local->current_timeout || local->current_timeout > when)
-			/* Save the value for when it starts */
-			local->current_timeout = when;
-		return;
-	}
-
-	if(when < now)
-		when = now;
-
-	hnetd_time_t min = local->start_time + local_p(local, data.flood)->flooding_delay;
-
-	if(min > when)
-		when = min;
-
-	hnetd_time_t delay = when - now;
-
-	if(delay < PA_LOCAL_MIN_DELAY)
-		delay = PA_LOCAL_MIN_DELAY;
-	if(delay > INT32_MAX)
-		delay = INT32_MAX;
-
-	if(!local->current_timeout || local->current_timeout > now + delay) {
-		local->current_timeout = now + delay;
-		L_DEBUG("Scheduling spontaneous prefix generation algorithm in %d ms", (int) delay);
-		uloop_timeout_set(&local->timeout, (int) delay);
-	}
-}
-
 static void __pa_local_do(struct pa_local *local)
 {
 	L_INFO("Executing spontaneous prefix generation algorithm");
 	hnetd_time_t now = hnetd_time();
-	local->current_timeout = 0;
 	pa_local_algo(local, &local->ula, now);
 	pa_local_algo(local, &local->ipv4, now);
 	if(local->ipv4.timeout)
-		pa_local_schedule(local, local->ipv4.timeout, now);
+		pa_timer_set_earlier(&local->t, local->ipv4.timeout, false);
 	if(local->ula.timeout)
-		pa_local_schedule(local, local->ula.timeout, now);
+		pa_timer_set_earlier(&local->t, local->ula.timeout, false);
 }
 
-static void __pa_local_do_cb(struct uloop_timeout *to)
+static void __pa_local_do_cb(struct pa_timer *t)
 {
-	__pa_local_do(container_of(to, struct pa_local, timeout));
+	__pa_local_do(container_of(t, struct pa_local, t));
 }
 
 static void __pa_local_flood_cb(struct pa_data_user *user,
 		__attribute__((unused))struct pa_flood *flood, uint32_t flags)
 {
 	struct pa_local *local = container_of(user, struct pa_local, data_user);
-	if(flags & (PADF_FLOOD_RID | PADF_FLOOD_DELAY)) {
-		hnetd_time_t now = hnetd_time();
-		pa_local_schedule(local, now, now);
-	}
+	if(flags & (PADF_FLOOD_RID | PADF_FLOOD_DELAY))
+		pa_timer_set_earlier(&local->t, 0, true);
 }
 
 static void __pa_local_ipv4_cb(struct pa_data_user *user,
@@ -258,10 +224,9 @@ static void __pa_local_ipv4_cb(struct pa_data_user *user,
 {
 	struct pa_local *local = container_of(user, struct pa_local, data_user);
 	if(flags & PADF_IPV4_IFACE) {
-		hnetd_time_t now = hnetd_time();
 		//Not best way to do it (destroyes the ldp), but changing interface should not happen so often
 		__pa_local_elem_term(local, &local->ipv4);
-		pa_local_schedule(local, now, now);
+		pa_timer_set_earlier(&local->t, 0, true);
 	} else if(flags & PADF_IPV4_DHCP) { /* If only dhcp is changed, just update it */
 		if(local->ipv4.ldp) {
 			pa_dp_set_dhcp(&local->ipv4.ldp->dp, local_p(local, data.ipv4)->dhcp_data, local_p(local, data.ipv4)->dhcp_len);
@@ -274,10 +239,8 @@ static void __pa_local_dps_cb(struct pa_data_user *user, struct pa_dp *dp, uint3
 {
 	struct pa_local *local = container_of(user, struct pa_local, data_user);
 	if((flags & (PADF_DP_CREATED | PADF_DP_TODELETE)) && (!local->ipv4.ldp || &local->ipv4.ldp->dp != dp) &&
-			(!local->ula.ldp || &local->ula.ldp->dp != dp)) {
-		hnetd_time_t now = hnetd_time();
-		pa_local_schedule(local, now, now);
-	}
+			(!local->ula.ldp || &local->ula.ldp->dp != dp))
+		pa_timer_set_earlier(&local->t, 0, true);
 }
 
 void pa_local_conf_defaults(struct pa_local_conf *conf)
@@ -303,10 +266,8 @@ void pa_local_init(struct pa_local *local, const struct pa_local_conf *conf)
 	else
 		pa_local_conf_defaults(&local->conf);
 
-	local->start_time = 0;
-	local->current_timeout = 0;
-	local->timeout.pending = false;
-	local->timeout.cb = __pa_local_do_cb;
+	pa_timer_init(&local->t, __pa_local_do_cb, "Spontaneous Prefix Generation");
+	local->t.min_delay = PA_LOCAL_MIN_DELAY;
 
 	local->ula.ldp = NULL;
 	local->ula.create = pa_local_ula_create;
@@ -331,34 +292,29 @@ void pa_local_init(struct pa_local *local, const struct pa_local_conf *conf)
 
 void pa_local_start(struct pa_local *local)
 {
-	if(local->start_time)
+	if(local->started)
 		return;
 
-	local->start_time = hnetd_time();
-	/*if(local->current_timeout) {
-		hnetd_time_t to = local->current_timeout;
-		local->current_timeout = 0;
-		pa_local_schedule(local, to, local->start_time);
-	}*/
-	local->current_timeout = 0;
-	pa_local_schedule(local, local->start_time, local->start_time);
+	local->started = true;
+	pa_timer_enable(&local->t);
+	pa_timer_set_not_before(&local->t, local_p(local, data.flood)->flooding_delay, true);
+	pa_timer_set_earlier(&local->t, 0, true);
 
 	pa_data_subscribe(local_p(local, data), &local->data_user);
 }
 
 void pa_local_stop(struct pa_local *local)
 {
-	if(!local->start_time)
+	if(!local->started)
 		return;
 
 	pa_data_unsubscribe(&local->data_user);
 	__pa_local_elem_term(local, &local->ipv4);
 	__pa_local_elem_term(local, &local->ula);
 
-	local->start_time = 0;
-	local->current_timeout = 0;
-	if(local->timeout.pending)
-		uloop_timeout_cancel(&local->timeout);
+	pa_timer_disable(&local->t);
+
+	local->started = false;
 }
 
 void pa_local_term(struct pa_local *local)
