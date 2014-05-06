@@ -13,19 +13,13 @@
 #define PA_CORE_H_
 
 #include "pa_data.h"
+#include "pa_timer.h"
 #include "hnetd.h"
 
 struct pa_core {
-	hnetd_time_t start_time;
-	struct {
-		bool scheduled;
-		struct uloop_timeout to;
-	} paa;
-
-	struct {
-		bool scheduled;
-		struct uloop_timeout to;
-	} aaa;
+	bool started;
+	struct pa_timer paa_to;
+	struct pa_timer aaa_to;
 	struct pa_data_user data_user;
 };
 
