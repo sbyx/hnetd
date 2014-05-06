@@ -795,6 +795,8 @@ void pa_core_init(struct pa_core *core)
 	core->data_user.ifs = __pad_cb_ifs;
 	core->data_user.flood = __pad_cb_flood;
 	core->data_user.cps = __pad_cb_cps;
+
+	core->started = false;
 }
 
 void pa_core_start(struct pa_core *core)

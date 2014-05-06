@@ -14,6 +14,7 @@
 #define PA_PD_H_
 
 #include "pa_data.h"
+#include "pa_timer.h"
 
 //#define PA_PD_RIGOUROUS_LEASES
 
@@ -29,7 +30,7 @@ struct pa_pd {
 	struct pa_data_user data_user; /* Used to receive data updates */
 	bool started;
 	struct pa_pd_conf conf;        /* The current pa_pd conf */
-	struct uloop_timeout update;   /* Update leases with new dps or retry for other dps */
+	struct pa_timer timer;         /* Update leases with new dps or retry for other dps */
 };
 
 /* This structure keeps track of a given delegation lease. */
@@ -53,7 +54,7 @@ struct pa_pd_lease {
 	char *lease_id;
 	struct list_head le;            /* Linked in pa_pd structure */
 	struct btrie dp_reqs;           /* Linked with dp lease_links tree (n:n relation)*/
-	struct uloop_timeout cb_to;
+	struct pa_timer timer;
 	bool just_created;          /* If true, missing prefixes will be computed for all dps */
 	struct pa_pd *pd;
 	uint8_t preferred_len;

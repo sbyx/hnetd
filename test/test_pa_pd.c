@@ -11,6 +11,7 @@
 
 #include "prefix_utils.c"
 #include "pa_data.c"
+#include "pa_timer.c"
 #include "pa_pd.c"
 #include "pa.c"
 
@@ -98,11 +99,11 @@ void test_1()
 	/* A lease with no dp is immediatly called with empty list */
 	tl1.update_calls = 0;
 	pa_pd_lease_init(pd, &tl1.lease, LEASE_ID_1, 0, 64);
-	sput_fail_unless(pd->update.pending, "pd algo is pending");
-	sput_fail_unless(uloop_timeout_remaining(&pd->update) == PA_PD_UPDATE_DELAY, "Correct timeout value");
+	sput_fail_unless(pd->timer.t.pending, "pd algo is pending");
+	sput_fail_unless(uloop_timeout_remaining(&pd->timer.t) == PA_PD_UPDATE_DELAY, "Correct timeout value");
 	fu_loop(1); //Execute pd algorithm
-	sput_fail_unless(tl1.lease.cb_to.pending, "Lease timeout is pending");
-	sput_fail_unless(uloop_timeout_remaining(&tl1.lease.cb_to) == PA_PD_LEASE_CB_DELAY, "Correct timeout value");
+	sput_fail_unless(tl1.lease.timer.t.pending, "Lease timeout is pending");
+	sput_fail_unless(uloop_timeout_remaining(&tl1.lease.timer.t) == PA_PD_LEASE_CB_DELAY, "Correct timeout value");
 	fu_loop(1); //Calling lease
 	sput_fail_unless(tl1.update_calls == 1, "One lease update call");
 	sput_fail_unless(btrie_empty(&tl1.lease.cpds), "No cpds");
@@ -128,12 +129,12 @@ void test_1()
 	/* Create a request */
 	tl1.update_calls = 0;
 	pa_pd_lease_init(pd, &tl1.lease, LEASE_ID_1, 0, 64);
-	sput_fail_unless(pd->update.pending, "pd algo is pending");
-	sput_fail_unless(uloop_timeout_remaining(&pd->update) == PA_PD_UPDATE_DELAY, "Correct timeout value");
+	sput_fail_unless(pd->timer.t.pending, "pd algo is pending");
+	sput_fail_unless(uloop_timeout_remaining(&pd->timer.t) == PA_PD_UPDATE_DELAY, "Correct timeout value");
 	fr_md5_push(&p1_01); //Will be used when trying to get a md5 for the lease
 	fu_loop(1);
-	sput_fail_unless(tl1.lease.cb_to.pending, "Lease timeout is pending");
-	sput_fail_unless(uloop_timeout_remaining(&tl1.lease.cb_to) == PA_PD_LEASE_CB_DELAY, "Correct timeout value");
+	sput_fail_unless(tl1.lease.timer.t.pending, "Lease timeout is pending");
+	sput_fail_unless(uloop_timeout_remaining(&tl1.lease.timer.t) == PA_PD_LEASE_CB_DELAY, "Correct timeout value");
 	fu_loop(1);
 	/* Checking if tl1 call is correct */
 	sput_fail_unless(tl1.update_calls == 1, "One lease update call");
@@ -143,8 +144,8 @@ void test_1()
 	/* Let's remove the blocking cp : that should trigger a schedule*/
 	pa_cp_todelete(&cpl1->cp);
 	pa_cp_notify(&cpl1->cp);
-	sput_fail_unless(pd->update.pending, "pd algo is pending");
-	sput_fail_unless(uloop_timeout_remaining(&pd->update) ==
+	sput_fail_unless(pd->timer.t.pending, "pd algo is pending");
+	sput_fail_unless(uloop_timeout_remaining(&pd->timer.t) ==
 			ldp1->dp.compute_leases_last + PA_PD_UPDATE_RATE_DELAY - hnetd_time(), "Timeout value is bounded");
 	fr_md5_push(&p1_01); //It will be used to give a /62
 	fu_loop(1);
@@ -160,8 +161,8 @@ void test_1()
 
 #ifndef PA_PD_RIGOUROUS_LEASES
 	/* Called once after creation */
-	sput_fail_unless(tl1.lease.cb_to.pending, "Lease timeout is pending");
-	sput_fail_unless(uloop_timeout_remaining(&tl1.lease.cb_to) == PA_PD_LEASE_CB_DELAY, "Correct timeout value");
+	sput_fail_unless(tl1.lease.timer.t.pending, "Lease timeout is pending");
+	sput_fail_unless(uloop_timeout_remaining(&tl1.lease.timer.t) == PA_PD_LEASE_CB_DELAY, "Correct timeout value");
 	fu_loop(1);
 	sput_fail_unless(tl1.update_calls == 2, "Second lease update call");
 	tl1.update_calls--;
@@ -169,8 +170,8 @@ void test_1()
 
 	/* Now let's apply the prefix */
 	fu_loop(1); //This is the apply callback
-	sput_fail_unless(tl1.lease.cb_to.pending, "Lease timeout is pending");
-	sput_fail_unless(uloop_timeout_remaining(&tl1.lease.cb_to) == PA_PD_LEASE_CB_DELAY, "Correct timeout value");
+	sput_fail_unless(tl1.lease.timer.t.pending, "Lease timeout is pending");
+	sput_fail_unless(uloop_timeout_remaining(&tl1.lease.timer.t) == PA_PD_LEASE_CB_DELAY, "Correct timeout value");
 	fu_loop(1);
 	sput_fail_unless(tl1.update_calls == 2, "Second lease update call");
 	sput_fail_unless(fu_next() == NULL, "No next schedule");
@@ -178,8 +179,8 @@ void test_1()
 	/* Now let's add a new lease */
 	tl2.update_calls = 0;
 	pa_pd_lease_init(pd, &tl2.lease, LEASE_ID_2, 63, 64);
-	sput_fail_unless(pd->update.pending, "pd algo is pending");
-	sput_fail_unless(uloop_timeout_remaining(&pd->update) == PA_PD_UPDATE_DELAY, "Correct timeout value");
+	sput_fail_unless(pd->timer.t.pending, "pd algo is pending");
+	sput_fail_unless(uloop_timeout_remaining(&pd->timer.t) == PA_PD_UPDATE_DELAY, "Correct timeout value");
 	fr_md5_push(&p1_01); //Will be used when trying to get a md5 for the lease: That will make a collision and p1_08 should be used
 	fu_loop(1);
 	sput_fail_unless(btrie_empty(&tl2.lease.dp_reqs), "No requests in lease");
@@ -209,8 +210,8 @@ void test_1()
 	sput_fail_unless((ldp2 = pa_ldp_get(&pa.data, &p2, true)), "Created new ldp");
 	pa_ldp_set_iface(ldp2, iface1);
 	pa_dp_notify(&pa.data, &ldp2->dp);
-	sput_fail_unless(pd->update.pending, "pd algo is pending");
-	sput_fail_unless(uloop_timeout_remaining(&pd->update) == PA_PD_UPDATE_DELAY, "Correct timeout value");
+	sput_fail_unless(pd->timer.t.pending, "pd algo is pending");
+	sput_fail_unless(uloop_timeout_remaining(&pd->timer.t) == 0, "Correct timeout value");
 	fr_md5_push(&p2_01);
 	fu_loop(1);
 	sput_fail_unless(btrie_empty(&tl1.lease.dp_reqs), "No requests in lease");
