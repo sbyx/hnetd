@@ -179,6 +179,21 @@ void platform_set_owner(struct iface *c, bool enable)
 }
 
 
+void platform_restart_dhcpv4(struct iface *c)
+{
+	struct platform_iface *iface = c->platform;
+	if (iface) {
+		if (iface->dhcpv4 > 0)
+			kill(iface->dhcpv4, SIGTERM);
+
+		char *argv_dhcpv4[] = {backend, "dhcpv4client", c->ifname,
+				(c->designatedv4) ? "0" : "1", NULL};
+
+		iface->dhcpv4 = platform_run(argv_dhcpv4);
+	}
+}
+
+
 void platform_set_prefix_route(const struct prefix *p, bool enable)
 {
 	char buf[PREFIX_MAXBUFFLEN];

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Apr 15 18:37:41 2014 mstenber
- * Edit time:     152 min
+ * Last modified: Mon May  5 14:51:08 2014 mstenber
+ * Edit time:     164 min
  *
  */
 
@@ -15,6 +15,8 @@
 #define HNCP_I_H
 
 #include "hncp.h"
+
+#include "dns_util.h"
 
 #include <libubox/uloop.h>
 
@@ -31,6 +33,9 @@
 
 /* in hnetd_time */
 #define HNCP_UPDATE_COLLISION_N 60000
+
+/* Do we want to do unicast exchange immediately with new neighbors? */
+#undef HNCP_PROBE_NEW_NEIGHBORS_IN_UNIDIRECTIONAL_MODE_IMMEDIATELY
 
 #include <libubox/vlist.h>
 
@@ -110,6 +115,9 @@ struct hncp_struct {
   /* Collision tracking - when to rename. */
   int last_collision;
   hnetd_time_t collisions[HNCP_UPDATE_COLLISIONS_IN_N];
+
+  /* search domain provided to clients. */
+  char domain[DNS_MAX_ESCAPED_LEN];
 };
 
 typedef struct hncp_link_struct hncp_link_s, *hncp_link;
@@ -134,10 +142,10 @@ struct hncp_link_struct {
   bool join_pending;
 
   /* Trickle state */
-  int i; /* trickle interval size */
-  hnetd_time_t send_time; /* when do we send if c < k*/
-  hnetd_time_t interval_end_time; /* when does current interval end */
-  int c; /* counter */
+  int trickle_i; /* trickle interval size */
+  hnetd_time_t trickle_send_time; /* when do we send if c < k*/
+  hnetd_time_t trickle_interval_end_time; /* when does current interval end */
+  int trickle_c; /* counter */
 
   /* 'Best' address (if any) */
   bool has_ipv6_address;
@@ -162,9 +170,7 @@ struct hncp_neighbor_struct {
   /* When did they last respond to our message? */
   hnetd_time_t last_response;
 
-  /* If proactive mode is enabled, when did we last try to ping this
-   * one. */
-  hnetd_time_t last_ping;
+  /* How many pings we have sent that haven't been responded to. */
   int ping_count;
 };
 
@@ -196,6 +202,9 @@ struct hncp_node_struct {
   uint32_t update_number;
 
   uint32_t version;
+
+  /* When was the last prune during which this node was reachable */
+  hnetd_time_t last_reachable_prune;
 
   /* Node state stuff */
   hncp_hash_s node_data_hash;
@@ -236,6 +245,8 @@ hncp_link hncp_find_link_by_id(hncp o, uint32_t link_id);
 hncp_node hncp_find_node_by_hash(hncp o, const hncp_hash h, bool create);
 
 /* Private utility - shouldn't be used by clients. */
+void hncp_link_reset_trickle(hncp_link l);
+
 bool hncp_node_set_tlvs(hncp_node n, struct tlv_attr *a);
 int hncp_node_cmp(hncp_node n1, hncp_node n2);
 
@@ -299,7 +310,6 @@ void hncp_tlv_ap_update(hncp o,
                         bool authoritative,
                         unsigned int preference,
                         bool add);
-struct tlv_attr *hncp_get_dns_domain_tlv(hncp o);
 
 /* Inlined utilities. */
 static inline hnetd_time_t hncp_time(hncp o)

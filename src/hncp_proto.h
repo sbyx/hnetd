@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Mon Apr 14 19:06:08 2014 mstenber
- * Edit time:     64 min
+ * Last modified: Mon May  5 14:46:15 2014 mstenber
+ * Edit time:     70 min
  *
  */
 
@@ -32,13 +32,8 @@
 /* 64 bit version of the hash */
 #define HNCP_HASH64_LEN 8
 
-/* When do we start to worry about the other side.. */
-#define HNCP_INTERVAL_WORRIED (60 * HNETD_TIME_PER_SECOND)
-
-/* Exponentially backed off retries to 'ping' other side somehow
- * ( either within protocol or without protocol ) to hear from them.
- */
-#define HNCP_INTERVAL_RETRIES 3
+/* How recently the node has to be reachable before prune kills it for real. */
+#define HNCP_PRUNE_GRACE_PERIOD (60 * HNETD_TIME_PER_SECOND)
 
 /* Don't do node pruning more often than this. This should be less
  * than minimum Trickle interval, as currently non-valid state will
@@ -47,6 +42,8 @@
 #define HNCP_MINIMUM_PRUNE_INTERVAL (HNETD_TIME_PER_SECOND / 50)
 
 /* 0 = reserved link id. note it somewhere. */
+
+#define HNCP_SD_DEFAULT_DOMAIN "home."
 
 /******************************************************************* TLV T's */
 
@@ -238,5 +235,17 @@ typedef struct __packed {
 #define HNCP_TRICKLE_K 1
 
 
+/* When do we want to consider unicast ping to make sure other end is
+ * reachable? */
+#define HNCP_INTERVAL_WORRIED HNCP_TRICKLE_IMAX
+
+/* Exponentially backed off retries to 'ping' other side somehow
+ * ( either within protocol or without protocol ) to hear from them
+ */
+#define HNCP_INTERVAL_RETRIES 3
+
+/* First attempt is done at HNCP_INTERVAL_WORRIED + HNCP_INTERVAL_BASE.
+   Nth one at HNCP_INTERVAL_WORRIED + 2^(N-1) * HNCP_INTERVAL_BASE  */
+#define HNCP_INTERVAL_BASE HNETD_TIME_PER_SECOND
 
 #endif /* HNCP_PROTO_H */

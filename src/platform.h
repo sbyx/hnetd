@@ -28,6 +28,9 @@ void platform_set_route(struct iface *c, struct iface_route *route, bool enable)
 // Set owner status
 void platform_set_owner(struct iface *c, bool enable);
 
+// Restart dhcpv4 client
+void platform_restart_dhcpv4(struct iface *c);
+
 // Set DHCPv6 data
 void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t len, const void *dhcp_data, size_t len4);
 

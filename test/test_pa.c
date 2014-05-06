@@ -1,4 +1,6 @@
+#ifndef L_LEVEL
 #define L_LEVEL 7
+#endif /* !L_LEVEL */
 
 #include "hnetd.h"
 #include "sput.h"
@@ -131,7 +133,7 @@ void test_pa_initial()
 
 	sput_fail_unless(to_check(&pa.core.aaa.to, now_time + PA_TEST_FLOOD_LL / PA_CORE_DELAY_FACTOR), "Correct aaa timeout");
 
-	cp = list_first_entry(&pa.data.cps, struct pa_cp, le);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
 	sput_fail_unless(cp, "One cp");
 	if(cp) {
 		sput_fail_unless(cp->type == PA_CPT_L, "CP local");
@@ -203,7 +205,7 @@ void test_pa_ipv4()
 	fr_md5_push_prefix(&pv4_1);
 	sput_fail_unless(to_getfirst() == &pa.core.paa.to && !to_run(1), "Run paa");
 
-	cp = list_first_entry(&pa.data.cps, struct pa_cp, le);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
 	sput_fail_unless(cp, "One cp");
 	if(cp) {
 		sput_fail_unless(cp->type == PA_CPT_L, "Local cp");
@@ -230,7 +232,7 @@ void test_pa_ipv4()
 	res = to_run(2);
 	sput_fail_unless(!res, "Run paa and laa");
 
-	cp = list_first_entry(&pa.data.cps, struct pa_cp, le);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
 	sput_fail_unless(cp, "One cp");
 	if(cp) {
 		sput_fail_unless(cp->type == PA_CPT_L, "Local cp");
@@ -290,7 +292,7 @@ void test_pa_network()
 	res = to_run(6);
 	sput_fail_unless(!res && !to_getfirst(), "Run and apply everything");
 
-	cp = list_first_entry(&pa.data.cps, struct pa_cp, le);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
 	test_pa_checkcpl(_pa_cpl(cp), &p1_1, &p1_1_addr.prefix, PL_IFNAME1);
 
 	/* Lower ID, Lower priority */
@@ -298,7 +300,7 @@ void test_pa_network()
 	pa_ap_set_priority(ap, PA_PRIORITY_AUTO_MIN);
 	pa_ap_notify(&pa.data, ap);
 	sput_fail_unless(!to_run(1) && !to_getfirst(), "Run paa");
-	sput_fail_if(list_empty(&pa.data.cps), "The cp remains");
+	sput_fail_if(btrie_empty(&pa.data.cps), "The cp remains");
 	pa_ap_todelete(ap);
 	pa_ap_notify(&pa.data, ap);
 
@@ -308,7 +310,7 @@ void test_pa_network()
 	pa_ap_notify(&pa.data, ap);
 	res = to_run(1);
 	sput_fail_unless(!res && !to_getfirst(), "Run paa");
-	sput_fail_if(list_empty(&pa.data.cps), "The cp remains");
+	sput_fail_if(btrie_empty(&pa.data.cps), "The cp remains");
 	pa_ap_todelete(ap);
 	pa_ap_notify(&pa.data, ap);
 
@@ -319,10 +321,10 @@ void test_pa_network()
 	fr_md5_push_prefix(&p1_1); /* This one should be ignored and the second one should be chosen */
 	res = to_run(1);
 	sput_fail_unless(!res, "Run paa");
-	sput_fail_if(list_empty(&pa.data.cps), "The cp remains");
+	sput_fail_if(btrie_empty(&pa.data.cps), "The cp remains");
 	res = to_run(3);
 	sput_fail_unless(!res && !to_getfirst(), "Run aaa and apply");
-	cp = list_first_entry(&pa.data.cps, struct pa_cp, le);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
 	test_pa_checkcpl(_pa_cpl(cp), &p1_2, &p1_2_addr.prefix, PL_IFNAME1);
 	pa_ap_todelete(ap);
 	pa_ap_notify(&pa.data, ap);
@@ -384,7 +386,7 @@ void test_pa_network()
 	res = to_run(3);
 	sput_fail_unless(!res && !to_getfirst(), "Run everything");
 
-	cp = list_first_entry(&pa.data.cps, struct pa_cp, le);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
 	sput_fail_unless(!prefix_cmp(&cp->prefix, &p1_1), "Correct accepted prefix");
 	sput_fail_unless(cp->authoritative == false, "Authoritative is false");
 	sput_fail_unless(cp->advertised == true, "We advertises it");
@@ -461,6 +463,104 @@ void test_pa_network()
 	sput_fail_unless(list_empty(&timeouts), "No more timeout");
 }
 
+void test_pa_static()
+{
+	hnetd_time_t valid, preferred;
+	struct pa_ap *ap;
+	struct pa_iface *i;
+	struct pa_cp *cp;
+	int res;
+
+	//INIT
+	uloop_init();
+	pa_init(&pa, NULL);
+	pa.local.conf.use_ipv4 = false;
+	pa.local.conf.use_ula = false;
+	pa_flood_set_flooddelays(&pa.data, PA_TEST_FLOOD, PA_TEST_FLOOD_LL);
+	pa_flood_set_rid(&pa.data, &rid);
+	pa_flood_notify(&pa.data);
+	pa_start(&pa);
+
+	//Add interface and prefix
+	iface.user->cb_intiface(iface.user, PL_IFNAME1, true);
+	valid = now_time + 100000;
+	preferred = now_time + 50000;
+	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, valid , preferred, NULL, 0);
+
+	ap = pa_ap_get(&pa.data, &p1_1, &rid_lower, true);
+	i = pa_iface_get(&pa.data, PL_IFNAME1, false);
+	sput_fail_unless(i, "Iface was there");
+	pa_ap_set_iface(ap, i);
+	pa_ap_notify(&pa.data, ap);
+	res = to_run(6);
+	sput_fail_unless(!res && !to_getfirst(), "Run and apply everything");
+
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	sput_fail_unless(cp, "CP created");
+	if(cp) {
+		sput_fail_unless(!prefix_cmp(&cp->prefix, &p1_1), "Correct prefix");
+		sput_fail_unless(!cp->authoritative, "Not authoritative");
+	}
+
+	pa_core_static_prefix_add(&pa.core, &p1_1, i); //Put existing as authoritative
+	sput_fail_unless(cp->authoritative, "Now authoritative");
+	sput_fail_unless(!cp->advertised, "Not advertised");
+
+	pa_ap_todelete(ap); //Destroy the other ap
+	pa_ap_notify(&pa.data, ap);
+
+	res = to_run(4); //Run paa
+	sput_fail_unless(cp->authoritative, "Now authoritative");
+	sput_fail_unless(cp->advertised, "Advertised");
+
+	//Another AP will send an authoritative (bug situation).
+	ap = pa_ap_get(&pa.data, &p1_2, &rid_higher, true);
+	pa_ap_set_authoritative(ap, true);
+	pa_ap_set_iface(ap, i);
+	pa_ap_notify(&pa.data, ap);
+
+	to_run(4); //Run PAA ,AAA and apply
+
+	sput_fail_unless(cp->authoritative, "Authoritative");
+	sput_fail_unless(cp->advertised, "Advertised");
+	sput_fail_unless(cp->applied, "Applied");
+
+	pa_core_static_prefix_remove(&pa.core, &p1_1, i); //Remove authoritative assignment
+
+	to_run(4); // Run PA, AA and apply
+
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	sput_fail_unless(cp, "CP created");
+	if(cp) {
+		sput_fail_unless(!prefix_cmp(&cp->prefix, &p1_2), "Correct prefix");
+		sput_fail_unless(!cp->authoritative, "Not authoritative");
+	}
+
+	pa_ap_todelete(ap); //Remove that ap
+	pa_ap_notify(&pa.data, ap);
+
+	to_run(1); // Run PA
+
+	pa_core_static_prefix_add(&pa.core, &p1_1, i); //Create an authoritative again
+
+	to_run(4); // Run All
+
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	sput_fail_unless(cp, "CP created");
+	if(cp) {
+		sput_fail_unless(!prefix_cmp(&cp->prefix, &p1_1), "Correct prefix");
+		sput_fail_unless(cp->authoritative, "Authoritative");
+		sput_fail_unless(cp->advertised, "Advertised");
+		sput_fail_unless(cp->applied, "Applied");
+	}
+
+
+	//TERM
+	pa_stop(&pa);
+	pa_term(&pa);
+	sput_fail_unless(list_empty(&timeouts), "No more timeout");
+}
+
 int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 {
 	openlog("hnetd_test_pa", LOG_PERROR | LOG_PID, LOG_DAEMON);
@@ -471,6 +571,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 	sput_run_test(test_pa_initial);
 	sput_run_test(test_pa_ipv4);
 	sput_run_test(test_pa_network);
+	sput_run_test(test_pa_static);
 	sput_leave_suite(); /* optional */
 	sput_finish_testing();
 	return sput_get_return_value();

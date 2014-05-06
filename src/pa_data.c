@@ -40,13 +40,13 @@
         }                                               \
 	if(f & PADF_ALL_TODELETE)	{ destroy; }
 
-#define PA_SET_IFACE(object, iface, listname, flags)  \
+#define PA_SET_IFACE(object, iface, treename, key, len, flags)  \
 	if((object)->iface == iface) \
 		return; \
 	if((object)->iface) \
-		list_del(&(object)->if_le); \
+		btrie_remove(&(object)->if_be); \
 	if(iface) \
-		list_add(&(object)->if_le, &(iface)->listname); \
+		btrie_add(&(iface)->treename, &(object)->if_be, key, len); \
 	(object)->iface = iface; \
 	flags |= PADF_ALL_IFACE;
 
@@ -89,46 +89,6 @@ static int __pa_set_dhcp(void **dhcp_data, size_t *dhcp_len,
 	return 1;
 }
 
-
-static int pa_data_avl_prefix_cmp (const void *k1, const void *k2,
-		__attribute__((unused))void *ptr)
-{
-	int i = prefix_cmp((struct prefix *)k1, (struct prefix *)k2);
-	if(!i)
-		return 0;
-	return (i>0)?1:-1;
-}
-
-static bool __pad_dp_compute_ignore(struct pa_data *data, struct pa_dp *dp)
-{
-	struct pa_dp *dp2;
-	bool seen = false;
-	pa_for_each_dp(dp2, data) {
-		if(dp2 == dp) {
-			seen = true;
-			continue;
-		}
-
-		if(dp2->__flags & PADF_DP_TODELETE)
-			continue;
-
-		bool eq = !prefix_cmp(&dp->prefix, &dp2->prefix);
-
-		if((!seen && eq)
-#ifdef PAD_DP_IGNORE_INCLUDED
-				|| (!eq && prefix_contains(&dp2->prefix, &dp->prefix))
-#endif
-#ifdef PAD_DP_IGNORE_INCLUDER
-				|| (!eq && prefix_contains(&dp->prefix, &dp2->prefix))
-#endif
-		)
-			return true;
-
-	}
-	return false;
-}
-
-
 void pa_dp_init(struct pa_data *data, struct pa_dp *dp, const struct prefix *p)
 {
 	dp->dhcp_data = NULL;
@@ -138,9 +98,9 @@ void pa_dp_init(struct pa_data *data, struct pa_dp *dp, const struct prefix *p)
 	dp->ignore = false;
 	dp->compute_leases_last = 0;
 	prefix_cpy(&dp->prefix, p);
-	INIT_LIST_HEAD(&dp->cps);
+	btrie_init(&dp->cps);
 	INIT_LIST_HEAD(&dp->lease_reqs);
-	list_add(&dp->le, &data->dps);
+	btrie_add(&data->dps, &dp->be, (btrie_key_t *)&(p)->prefix, (p)->plen);
 	dp->__flags = PADF_DP_CREATED;
 	L_DEBUG("Initialized "PA_DP_L, PA_DP_LA(dp));
 }
@@ -168,18 +128,19 @@ void pa_dp_set_lifetime(struct pa_dp *dp, hnetd_time_t preferred, hnetd_time_t v
 void pa_dp_destroy(struct pa_dp *dp)
 {
 	L_DEBUG("Terminating "PA_DP_L, PA_DP_LA(dp));
-	while(!(list_empty(&dp->cps))) {
-		pa_cp_set_dp(list_first_entry(&dp->cps, struct pa_cp, dp_le), NULL);
+	struct pa_cp *cp, *cp2;
+	pa_for_each_cp_in_dp_safe(cp, cp2, dp) {
+		pa_cp_set_dp(cp, NULL);
 	}
 	if(!list_empty(&dp->lease_reqs)) {
 		L_ERR("Lease links list from "PA_DP_L" is not empty", PA_DP_LA(dp));
 	}
 	pa_dp_set_dhcp(dp, NULL, 0);
-	list_del(&dp->le);
+	btrie_remove(&dp->be);
 	if(dp->local) {
 		struct pa_ldp *ldp = container_of(dp, struct pa_ldp, dp);
 		if(ldp->iface)
-			list_del(&ldp->if_le);
+			btrie_remove(&ldp->if_be);
 		free(ldp);
 	} else {
 		struct pa_edp *edp = container_of(dp, struct pa_edp, dp);
@@ -197,23 +158,29 @@ void pa_dp_notify(struct pa_data *data, struct pa_dp *dp)
 {
 	struct pa_dp *dp2;
 	// For ignore computation
-	if(dp->__flags & PADF_DP_TODELETE) {
-		pa_for_each_dp(dp2, data) {
-			if(dp2->ignore &&
-					(prefix_contains(&dp2->prefix, &dp->prefix) ||
-							prefix_contains(&dp->prefix, &dp2->prefix))) {
-				__pa_dp_set_ignore(dp2, __pad_dp_compute_ignore(data, dp2));
+	if((dp->__flags & PADF_DP_TODELETE) && !dp->ignore) {
+		pa_for_each_dp_down(dp2, data, &dp->prefix) {
+			if(dp != dp2) {
+				__pa_dp_set_ignore(dp2, false);
+				btrie_skip_down_entry(dp2, dp->prefix.plen, be);
 			}
 		}
-	} else if (dp->__flags & PADF_DP_CREATED){
-		pa_for_each_dp(dp2, data) {
-			if(!dp2->ignore &&
-					(prefix_contains(&dp2->prefix, &dp->prefix) ||
-							prefix_contains(&dp->prefix, &dp2->prefix))) {
-				__pa_dp_set_ignore(dp2, __pad_dp_compute_ignore(data, dp2));
+	} else if (dp->__flags & PADF_DP_CREATED) {
+		bool found = false;
+		pa_for_each_dp_updown(dp2, data, &dp->prefix) {
+			if(!found) {
+				if(dp2 == dp) {
+					__pa_dp_set_ignore(dp, false);
+					found = true;
+				} else {
+					__pa_dp_set_ignore(dp, true);
+					break;
+				}
+			} else {
+				__pa_dp_set_ignore(dp2, true);
+				btrie_skip_down_entry(dp2, dp->prefix.plen, be);
 			}
 		}
-		__pa_dp_set_ignore(dp, __pad_dp_compute_ignore(data, dp));
 	}
 
 	PA_NOTIFY(data, dps, dp, pa_dp_destroy(dp));
@@ -229,8 +196,8 @@ void pa_dp_notify(struct pa_data *data, struct pa_dp *dp)
 struct pa_ldp *__pa_ldp_get(struct pa_data *data, const struct prefix *p)
 {
 	struct pa_dp *dp;
-	pa_for_each_dp(dp, data) {
-		if(dp->local && !prefix_cmp(p, &dp->prefix))
+	pa_for_each_dp_p(dp, data, p) {
+		if(dp->local)
 			return container_of(dp, struct pa_ldp, dp);
 	}
 	return NULL;
@@ -272,18 +239,18 @@ void pa_ldp_set_excluded(struct pa_ldp *ldp, const struct prefix *excluded)
 
 void pa_ldp_set_iface(struct pa_ldp *ldp, struct pa_iface *iface)
 {
-	PA_SET_IFACE(ldp, iface, ldps, ldp->dp.__flags);
+	PA_SET_IFACE(ldp, iface, ldps, (btrie_key_t *)&ldp->dp.prefix.prefix, ldp->dp.prefix.plen, ldp->dp.__flags);
 }
 
 struct pa_edp *__pa_edp_get(struct pa_data *data, const struct prefix *p, const struct pa_rid *rid)
 {
 	struct pa_dp *dp;
 	struct pa_edp *edp;
-	pa_for_each_dp(dp, data) {
+	pa_for_each_dp_p(dp, data, p) {
 		if(dp->local)
 			continue;
 		edp = container_of(dp, struct pa_edp, dp);
-		if(!prefix_cmp(p, &dp->prefix) && !PA_RIDCMP(rid, &edp->rid))
+		if(!PA_RIDCMP(rid, &edp->rid))
 			return edp;
 	}
 	return NULL;
@@ -310,19 +277,11 @@ struct pa_edp *pa_edp_get(struct pa_data *data, const struct prefix *p,
 
 struct pa_ap *__pa_ap_get(struct pa_data *data, const struct prefix *p, const struct pa_rid *rid)
 {
-	struct pa_ap *ap, *first, *last;
-
-	first = avl_find_ge_element(&data->aps, p, ap, avl_node);
-	last = avl_find_le_element(&data->aps, p, ap, avl_node);
-
-	if(!(first && last))
-		return NULL;
-
-	avl_for_element_range(first, last, ap, avl_node) {
+	struct pa_ap *ap;
+	btrie_for_each_entry(ap, &data->aps, (btrie_key_t *)&p->prefix, p->plen, be) {
 		if(!PA_RIDCMP(rid, &ap->rid))
 			return ap;
 	}
-
 	return NULL;
 }
 
@@ -340,9 +299,8 @@ struct pa_ap *pa_ap_get(struct pa_data *data, const struct prefix *p,
 	ap->iface = NULL;
 	prefix_cpy(&ap->prefix, p);
 	PA_RIDCPY(&ap->rid, rid);
-	ap->avl_node.key = &ap->prefix;
-	if(avl_insert(&data->aps, &ap->avl_node)) {
-		L_ERR("Could not insert "PA_AP_L" in avl_tree", PA_AP_LA(ap));
+	if(btrie_add(&data->aps, &ap->be, (btrie_key_t *)&p->prefix, p->plen)) {
+		L_ERR("Could not insert "PA_AP_L" in btrie", PA_AP_LA(ap));
 		free(ap);
 		return NULL;
 	}
@@ -352,7 +310,7 @@ struct pa_ap *pa_ap_get(struct pa_data *data, const struct prefix *p,
 
 void pa_ap_set_iface(struct pa_ap *ap, struct pa_iface *iface)
 {
-	PA_SET_IFACE(ap, iface, aps, ap->__flags);
+	PA_SET_IFACE(ap, iface, aps, (btrie_key_t *)&ap->prefix.prefix, ap->prefix.plen, ap->__flags);
 }
 
 void pa_ap_set_priority(struct pa_ap *ap, uint8_t priority)
@@ -365,11 +323,11 @@ void pa_ap_set_authoritative(struct pa_ap *ap, bool authoritative)
 	PA_SET_SCALAR(ap->authoritative, authoritative, ap->__flags, PADF_AP_AUTHORITY);
 }
 
-void pa_ap_destroy(struct pa_data *data, struct pa_ap *ap)
+void pa_ap_destroy(struct pa_ap *ap)
 {
 	L_DEBUG("Destroying "PA_AP_L, PA_AP_LA(ap));
 	pa_ap_set_iface(ap, NULL);
-	avl_delete(&data->aps, &ap->avl_node);
+	btrie_remove(&ap->be);
 	free(ap);
 }
 
@@ -378,7 +336,7 @@ void pa_ap_notify(struct pa_data *data, struct pa_ap *ap)
 	if(ap->__flags & PADF_AP_CREATED) {
 		L_INFO("Created "PA_AP_L, PA_AP_LA(ap));
 	}
-	PA_NOTIFY(data, aps, ap, pa_ap_destroy(data, ap));
+	PA_NOTIFY(data, aps, ap, pa_ap_destroy(ap));
 }
 
 void pa_laa_set_applied(struct pa_laa *laa, bool applied)
@@ -441,21 +399,10 @@ void pa_aa_destroy(struct pa_aa *aa)
 	} else {
 		struct pa_eaa *eaa = container_of(aa, struct pa_eaa, aa);
 		pa_eaa_set_iface(eaa, NULL);
-		list_del(&eaa->le);
+		btrie_remove(&eaa->be);
 		free(eaa);
 	}
 }
-
-struct pa_cp *__pa_cp_get(struct pa_data *data, const struct prefix *prefix)
-{
-	struct pa_cp *cp;
-	pa_for_each_cp(cp, data) {
-		if(!prefix_cmp(prefix, &cp->prefix))
-			return cp;
-	}
-	return NULL;
-}
-
 
 void pa_cp_set_applied(struct pa_cp *cp, bool applied)
 {
@@ -475,11 +422,23 @@ static void _pa_cp_apply_to(struct uloop_timeout *to)
 struct pa_cp *pa_cp_get(struct pa_data *data, const struct prefix *prefix, uint8_t type, bool goc)
 {
 	struct pa_cp *cp;
+	pa_for_each_cp_p(cp, data, prefix) {
+		if(type == PA_CPT_ANY || (cp->type == type))
+			return cp;
+	}
 
-	if((cp = __pa_cp_get(data, prefix)) || !goc)
-		return (type == PA_CPT_ANY || (cp && cp->type == type))?cp:NULL;
+	if(goc)
+		return pa_cp_create(data, prefix, type);
+
+	return NULL;
+}
+
+struct pa_cp *pa_cp_create(struct pa_data *data, const struct prefix *prefix, uint8_t type)
+{
+	struct pa_cp *cp;
 
 	L_DEBUG("Create cp from prefix %s", PREFIX_REPR(prefix));
+
 	switch (type) {
 		case PA_CPT_L:
 			cp = malloc(sizeof(struct pa_cpl));
@@ -491,7 +450,7 @@ struct pa_cp *pa_cp_get(struct pa_data *data, const struct prefix *prefix, uint8
 			cp = malloc(sizeof(struct pa_cpd));
 			break;
 		case PA_CPT_ANY: //Can't happend but here because of warning
-			break;
+			return NULL; // break causes another warning..
 	}
 
 	if(!cp) {
@@ -509,6 +468,7 @@ struct pa_cp *pa_cp_get(struct pa_data *data, const struct prefix *prefix, uint8
 		break;
 	case PA_CPT_X:
 		container_of(cp, struct pa_cpx, cp)->cp.type = PA_CPT_X;
+		_pa_cpx(cp)->ldp = NULL;
 		cp = &_pa_cpx(cp)->cp;
 		break;
 	case PA_CPT_D:
@@ -523,11 +483,15 @@ struct pa_cp *pa_cp_get(struct pa_data *data, const struct prefix *prefix, uint8
 	prefix_cpy(&cp->prefix, prefix);
 	cp->pa_data = data;
 
+	if(!(cp->destroy = data->cp_destructors[type])) {
+		L_ERR("Type %s has no associated destructor", PA_CP_TYPE(type));
+	}
+
 	cp->advertised = false;
 	cp->applied = false;
 	cp->authoritative = false;
 	cp->priority = PAD_PRIORITY_DEFAULT;
-	list_add(&cp->le, &data->cps);
+	btrie_add(&data->cps, &cp->be, (btrie_key_t *)&cp->prefix.prefix, cp->prefix.plen);
 	cp->apply_to.pending = false;
 	cp->apply_to.cb = _pa_cp_apply_to;
 	cp->dp = NULL;
@@ -540,9 +504,9 @@ void pa_cpl_set_iface(struct pa_cpl *cpl, struct pa_iface *iface)
 	if(cpl->iface == iface)
 		return;
 	if(cpl->iface)
-		list_del(&cpl->if_le);
+		btrie_remove(&cpl->if_be);
 	if(iface)
-		list_add(&cpl->if_le, &iface->cpls);
+		btrie_add(&iface->cpls, &cpl->if_be, (btrie_key_t *)&cpl->cp.prefix.prefix, cpl->cp.prefix.plen);
 	cpl->iface = iface;
 }
 
@@ -551,9 +515,9 @@ void pa_cpd_set_lease(struct pa_cpd *cpd, struct pa_pd_lease *lease)
 	if(cpd->lease == lease)
 		return;
 	if(cpd->lease)
-		list_del(&cpd->lease_le);
+		btrie_remove(&cpd->lease_be);
 	if(lease)
-		list_add(&cpd->lease_le, &lease->cpds);
+		btrie_add(&lease->cpds, &cpd->lease_be, (btrie_key_t *)&cpd->cp.prefix.prefix, cpd->cp.prefix.plen);
 	cpd->lease = lease;
 }
 
@@ -561,13 +525,10 @@ void pa_cp_set_dp(struct pa_cp *cp, struct pa_dp *dp)
 {
 	if(cp->dp == dp)
 		return;
-
 	if(cp->dp)
-		list_del(&cp->dp_le);
-
+		btrie_remove(&cp->dp_be);
 	if(dp)
-		list_add(&cp->dp_le, &dp->cps);
-
+		btrie_add(&dp->cps, &cp->dp_be, (btrie_key_t *)&cp->prefix.prefix, cp->prefix.plen);
 	cp->dp = dp;
 	cp->__flags |= PADF_CP_DP;
 }
@@ -619,7 +580,7 @@ void pa_cp_destroy(struct pa_cp *cp)
 
 	if(cp->apply_to.pending)
 		uloop_timeout_cancel(&cp->apply_to);
-	list_del(&cp->le);
+	btrie_remove(&cp->be);
 	free(cp);
 }
 
@@ -656,13 +617,13 @@ struct pa_eaa *pa_eaa_get(struct pa_data *data, const struct in6_addr *addr, con
 	eaa->aa.local = false;
 	eaa->aa.__flags = PADF_AA_CREATED;
 	eaa->iface = NULL;
-	list_add(&eaa->le, &data->eaas);
+	btrie_add(&data->eaas, &eaa->be, (btrie_key_t *)addr, 128);
 	return eaa;
 }
 
 void pa_eaa_set_iface(struct pa_eaa *eaa, struct pa_iface *iface)
 {
-	PA_SET_IFACE(eaa, iface, eaas, eaa->aa.__flags);
+	PA_SET_IFACE(eaa, iface, eaas, (btrie_key_t *)&eaa->aa.address, 128, eaa->aa.__flags);
 }
 
 void pa_aa_notify(struct pa_data *data, struct pa_aa *aa)
@@ -803,10 +764,10 @@ struct pa_iface *pa_iface_get(struct pa_data *data, const char *ifname, bool goc
 
 	PA_P_ALLOC(iface);
 	strcpy(iface->ifname, ifname);
-	INIT_LIST_HEAD(&iface->aps);
-	INIT_LIST_HEAD(&iface->cpls);
-	INIT_LIST_HEAD(&iface->eaas);
-	INIT_LIST_HEAD(&iface->ldps);
+	btrie_init(&iface->aps);
+	btrie_init(&iface->cpls);
+	btrie_init(&iface->eaas);
+	btrie_init(&iface->ldps);
 	INIT_LIST_HEAD(&iface->sps);
 	iface->designated = false;
 	iface->do_dhcp = false;
@@ -838,17 +799,25 @@ void pa_iface_destroy(struct pa_data *data, struct pa_iface *iface)
 	if(data->ipv4.iface == iface)
 		data->ipv4.iface = NULL;
 
-	while(!list_empty(&iface->aps))
-		pa_ap_destroy(data, list_first_entry(&iface->aps, struct pa_ap, if_le));
+	struct pa_ap *ap, *ap2;
+	btrie_for_each_down_entry_safe(ap, ap2, &iface->aps, NULL, 0, if_be) {
+		pa_ap_destroy(ap);
+	}
 
-	while(!list_empty(&iface->cpls))
-		pa_cp_destroy(&(list_first_entry(&iface->cpls, struct pa_cpl, if_le))->cp);
+	struct pa_cpl *cpl, *cpl2;
+	btrie_for_each_down_entry_safe(cpl, cpl2, &iface->cpls, NULL, 0, if_be) {
+		pa_cp_destroy(&cpl->cp);
+	}
 
-	while(!list_empty(&iface->ldps))
-		pa_dp_destroy(&(list_first_entry(&iface->ldps, struct pa_ldp, if_le))->dp);
+	struct pa_ldp *ldp, *ldp2;
+	btrie_for_each_down_entry_safe(ldp, ldp2, &iface->ldps, NULL, 0, if_be) {
+		pa_dp_destroy(&ldp->dp);
+	}
 
-	while(!list_empty(&iface->eaas))
-		pa_aa_destroy(&(list_first_entry(&iface->eaas, struct pa_eaa, if_le))->aa);
+	struct pa_eaa *eaa, *eaa2;
+	btrie_for_each_down_entry_safe(eaa, eaa2, &iface->eaas, NULL, 0, if_be) {
+		pa_aa_destroy(&eaa->aa);
+	}
 
 	while(!list_empty(&iface->sps))
 		pa_sp_destroy(data, list_first_entry(&iface->sps, struct pa_sp, if_le));
@@ -939,11 +908,11 @@ void pa_data_init(struct pa_data *data, const struct pa_data_conf *conf)
 	else
 		pa_data_conf_defaults(&data->conf);
 
-	avl_init(&data->aps, pa_data_avl_prefix_cmp, true, NULL);
+	btrie_init(&data->aps);
 	INIT_LIST_HEAD(&data->ifs);
-	INIT_LIST_HEAD(&data->eaas);
-	INIT_LIST_HEAD(&data->dps);
-	INIT_LIST_HEAD(&data->cps);
+	btrie_init(&data->eaas);
+	btrie_init(&data->dps);
+	btrie_init(&data->cps);
 	INIT_LIST_HEAD(&data->sps);
 	INIT_LIST_HEAD(&data->sas);
 	INIT_LIST_HEAD(&data->users);
@@ -961,6 +930,8 @@ void pa_data_init(struct pa_data *data, const struct pa_data_conf *conf)
 
 	data->sp_count = 0;
 	data->sa_count = 0;
+
+	memset(data->cp_destructors, 0, sizeof(data->cp_destructors));
 }
 
 void pa_data_term(struct pa_data *data)
@@ -973,18 +944,25 @@ void pa_data_term(struct pa_data *data)
 		data->ipv4.dhcp_len = 0;
 	}
 
-	struct pa_ap *ap;
-	while(!avl_is_empty(&data->aps))
-		pa_ap_destroy(data, avl_first_element(&data->aps, ap, avl_node));
+	struct pa_ap *ap, *ap2;
+	btrie_for_each_down_entry_safe(ap, ap2, &data->aps, NULL, 0, be) {
+		pa_ap_destroy(ap);
+	}
 
-	while(!list_empty(&data->cps))
-		pa_cp_destroy( list_first_entry(&data->cps, struct pa_cp, le));
+	struct pa_cp *cp, *cp2;
+	btrie_for_each_down_entry_safe(cp, cp2, &data->cps, NULL, 0, be) {
+		pa_cp_destroy(cp);
+	}
 
-	while(!list_empty(&data->dps))
-		pa_dp_destroy(list_first_entry(&data->dps, struct pa_dp, le));
+	struct pa_dp *dp, *dp2;
+	btrie_for_each_down_entry_safe(dp, dp2, &data->dps, NULL, 0, be) {
+		pa_dp_destroy(dp);
+	}
 
-	while(!list_empty(&data->eaas))
-		pa_aa_destroy(&(list_first_entry(&data->eaas, struct pa_eaa, le))->aa);
+	struct pa_eaa *eaa, *eaa2;
+	btrie_for_each_down_entry_safe(eaa, eaa2, &data->eaas, NULL, 0, be) {
+		pa_aa_destroy(&eaa->aa);
+	}
 
 	while(!list_empty(&data->sps))
 		pa_sp_destroy(data, list_first_entry(&data->sps, struct pa_sp, le));

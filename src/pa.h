@@ -23,6 +23,8 @@
 #include "pa_store.h"
 #include "pa_pd.h"
 
+struct pa;
+
 #include "iface.h"
 
 #define PA_PRIORITY_MIN              0

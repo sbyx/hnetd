@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Tue Apr 15 12:53:42 2014 mstenber
- * Edit time:     138 min
+ * Last modified: Mon May  5 14:51:28 2014 mstenber
+ * Edit time:     209 min
  *
  */
 
@@ -18,14 +18,15 @@ static void trickle_set_i(hncp_link l, int i)
 {
   hnetd_time_t now = hncp_time(l->hncp);
 
-  l->i = i;
-  l->send_time = now + l->i * (1000 + random() % 1000) / 2000;
-  l->interval_end_time = now + l->i;
+  l->trickle_i = i;
+  l->trickle_send_time = now + i * (1000 + random() % 1000) / 2000;
+  l->trickle_interval_end_time = now + i;
+  l->trickle_c = 0;
 }
 
 static void trickle_upgrade(hncp_link l)
 {
-  int i = l->i * 2;
+  int i = l->trickle_i * 2;
 
   i = i < HNCP_TRICKLE_IMIN ? HNCP_TRICKLE_IMIN
     : i > HNCP_TRICKLE_IMAX ? HNCP_TRICKLE_IMAX : i;
@@ -34,13 +35,34 @@ static void trickle_upgrade(hncp_link l)
 
 static void trickle_send(hncp_link l)
 {
-  if (l->c < HNCP_TRICKLE_K)
+  if (l->trickle_c < HNCP_TRICKLE_K)
     {
       if (!hncp_link_send_network_state(l, &l->hncp->multicast_address,
                                         HNCP_MAXIMUM_MULTICAST_SIZE))
         return;
     }
-  l->send_time = 0;
+  l->trickle_send_time = 0;
+}
+
+static void _node_set_reachable(hncp_node n, bool value)
+{
+  hncp o = n->hncp;
+  bool is_reachable = o->last_prune == n->last_reachable_prune;
+
+  if (is_reachable != value)
+    {
+      o->network_hash_dirty = true;
+
+      if (!value)
+        hncp_notify_subscribers_tlvs_changed(n, n->tlv_container, NULL);
+
+      hncp_notify_subscribers_node_changed(n, value);
+
+      if (value)
+        hncp_notify_subscribers_tlvs_changed(n, NULL, n->tlv_container);
+    }
+  if (value)
+    n->last_reachable_prune = hncp_time(o);
 }
 
 static void hncp_prune_rec(hncp_node n)
@@ -69,6 +91,7 @@ static void hncp_prune_rec(hncp_node n)
 
   /* Refresh the entry - we clearly did reach it. */
   vlist_add(&n->hncp->nodes, &n->in_nodes, n);
+  _node_set_reachable(n, true);
 
   /* Look at it's neighbors. */
   tlv_for_each_attr(a, tlvs)
@@ -83,6 +106,9 @@ static void hncp_prune_rec(hncp_node n)
 
 static void hncp_prune(hncp o)
 {
+  hnetd_time_t now = hncp_time(o);
+  hnetd_time_t grace_after = now - HNCP_PRUNE_GRACE_PERIOD;
+
   L_DEBUG("hncp_prune %p", o);
   /* Prune the node graph. IOW, start at own node, flood fill, and zap
    * anything that didn't seem appropriate. */
@@ -101,6 +127,7 @@ static void hncp_prune(hncp o)
 
       /* We're always reachable. */
       vlist_add(&o->nodes, &n->in_nodes, n);
+      _node_set_reachable(n, true);
 
       /* Only neighbors we believe to be reachable are the ones we can
        * find in our own link -> neighbor relations, with non-zero
@@ -120,7 +147,30 @@ static void hncp_prune(hncp o)
             }
         }
     }
+
+  hncp_node n;
+  vlist_for_each_element(&o->nodes, n, in_nodes)
+    {
+      if (n->in_nodes.version != o->nodes.version)
+        {
+          if (!n->last_reachable_prune)
+            n->last_reachable_prune = now - 1;
+          else if (n->last_reachable_prune < grace_after)
+            continue;
+          vlist_add(&o->nodes, &n->in_nodes, n);
+          _node_set_reachable(n, false);
+        }
+    }
   vlist_flush(&o->nodes);
+  o->last_prune = now;
+}
+
+void hncp_link_reset_trickle(hncp_link l)
+{
+  if (l->join_pending)
+    return;
+  trickle_set_i(l, HNCP_TRICKLE_IMIN);
+  hncp_schedule(l->hncp);
 }
 
 void hncp_run(hncp o)
@@ -135,8 +185,8 @@ void hncp_run(hncp o)
    * all the way. */
   o->now = now;
 
-  /* If we weren't before, we are now; processing within timeout (no
-   * sense scheduling extra timeouts within hncp_self_flush). */
+  /* If we weren't before, we are now processing within timeout (no
+   * sense scheduling extra timeouts within hncp_self_flush or hncp_prune). */
   o->immediate_scheduled = true;
 
   /* Refresh locally originated data; by doing this, we can avoid
@@ -153,9 +203,11 @@ void hncp_run(hncp o)
         }
       else
         {
-          hncp_prune(o);
+          /* Prune may re-set graph dirty, if it removes nodes.
+           * So mark graph non-dirty before the call. */
           o->graph_dirty = false;
-          o->last_prune = now;
+
+          hncp_prune(o);
         }
     }
 
@@ -179,8 +231,7 @@ void hncp_run(hncp o)
            * trickle (that is actually running; join_pending ones
            * don't really count). */
           vlist_for_each_element(&o->links, l, in_links)
-            if (!l->join_pending)
-              trickle_set_i(l, HNCP_TRICKLE_IMIN);
+            hncp_link_reset_trickle(l);
         }
     }
 
@@ -199,24 +250,23 @@ void hncp_run(hncp o)
               continue;
             }
         }
-      if (l->interval_end_time <= now)
+
+      if (l->trickle_interval_end_time <= now)
         {
           trickle_upgrade(l);
-          next = TMIN(next, l->send_time);
-          continue;
+          next = TMIN(next, l->trickle_send_time);
         }
-
-      if (l->send_time)
+      else
         {
-          if (l->send_time > now)
+          next = TMIN(next, l->trickle_interval_end_time);
+          if (l->trickle_send_time)
             {
-              next = TMIN(next, l->send_time);
-              continue;
+              if (l->trickle_send_time > now)
+                next = TMIN(next, l->trickle_send_time);
+              else
+                trickle_send(l);
             }
-
-          trickle_send(l);
         }
-      next = TMIN(next, l->interval_end_time);
 
       /* Look at neighbors we should be worried about.. */
       /* vlist_for_each_element(&l->neighbors, n, in_neighbors) */
@@ -225,24 +275,16 @@ void hncp_run(hncp o)
           hnetd_time_t next_time = HNCP_INTERVAL_WORRIED
             + (o->assume_bidirectional_reachability
                ? n->last_heard
-               : n->last_response);
+               : n->last_response)
+            + (HNCP_INTERVAL_BASE << n->ping_count);
 
-          /* Maybe we're not worried yet.. */
+          /* No cause to do anything right now. */
           if (next_time > now)
             {
               next = TMIN(next, next_time);
               continue;
             }
 
-          /* We _are_ worried. But should we ping right now? */
-          next_time = HNCP_INTERVAL_WORRIED + n->last_ping;
-          if (next_time > now)
-            {
-              next = TMIN(next, next_time);
-              continue;
-            }
-
-          /* Yes, we should! */
           if (n->ping_count++ == HNCP_INTERVAL_RETRIES)
             {
               /* Zap the neighbor */
@@ -253,7 +295,6 @@ void hncp_run(hncp o)
             }
 
           /* Send a ping */
-          n->last_ping = now;
           L_DEBUG("pinging neighbor %llx", hncp_hash64(&n->node_identifier_hash));
           hncp_link_send_req_network_state(l, &n->last_address);
         }

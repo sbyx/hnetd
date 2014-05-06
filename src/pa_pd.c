@@ -25,15 +25,17 @@ struct pa_pd_dp_req {
 	struct pa_dp *dp;
 	struct pa_pd_lease *lease;
 	struct list_head dp_le; /* reqed in dps reqs list. */
-	struct list_head lease_le;
+	struct btrie_element lease_be;
 	uint8_t min_len;
 	uint8_t max_len;
 };
 
 #define pa_for_each_req_in_dp(req, dp) list_for_each_entry(req, &(dp)->lease_reqs, dp_le)
 #define pa_for_each_req_in_dp_safe(req, req2, dp) list_for_each_entry_safe(req, req2, &(dp)->lease_reqs, dp_le)
-#define pa_for_each_req_in_lease(req, lease) list_for_each_entry(req, &(lease)->dp_reqs, lease_le)
-#define pa_for_each_req_in_lease_safe(req, req2, lease) list_for_each_entry_safe(req, req2, &(lease)->dp_reqs, lease_le)
+#define pa_for_each_req_in_lease(req, lease) btrie_for_each_down_entry(req, &(lease)->dp_reqs, NULL, 0, lease_be)
+#define pa_for_each_req_in_lease_safe(req, req2, lease) btrie_for_each_down_entry_safe(req, req2, &(lease)->dp_reqs, NULL, 0, lease_be)
+#define pa_pd_for_each_cpd_updown(pa_cpd, lease, p) btrie_for_each_updown_entry(pa_cpd, &(lease)->cpds, (btrie_key_t *)&(p)->prefix, (p)->plen, lease_be)
+#define pa_pd_for_each_cpd_down(pa_cpd, lease, p) btrie_for_each_down_entry(pa_cpd, &(lease)->cpds, (btrie_key_t *)&(p)->prefix, (p)->plen, lease_be)
 
 /* This is used to tweek requests into reasonable ones. */
 static int pa_pd_filter_lengths(struct pa_pd_lease *lease, struct pa_dp *dp,
@@ -68,13 +70,13 @@ static int pa_pd_req_create(struct pa_pd_lease *lease, struct pa_dp *dp)
 	req->dp = dp;
 	req->lease = lease;
 	list_add(&req->dp_le, &dp->lease_reqs);
-	list_add(&req->lease_le, &lease->dp_reqs);
+	btrie_add(&lease->dp_reqs, &req->lease_be, (btrie_key_t *)&dp->prefix.prefix, dp->prefix.plen);
 	return 0;
 }
 
 static void pa_pd_req_destroy(struct pa_pd_dp_req *req)
 {
-	list_del(&req->lease_le);
+	btrie_remove(&req->lease_be);
 	list_del(&req->dp_le);
 	free(req);
 }
@@ -111,44 +113,41 @@ static int pa_pd_create_cpd(struct pa_pd_dp_req *req, struct prefix *p)
 static int pa_pd_find_prefix_plen(struct pa_pd_dp_req *req, const struct prefix *seed,
 		struct prefix *dst)
 {
-	uint32_t rounds;
-	int res;
 	struct pa_dp *dp = req->dp;
 	struct pa_pd *pd = req->lease->pd;
+	const struct prefix *collision;
+	const struct prefix *first_collision = NULL;
 	prefix_cpy(dst, seed);
 
-	if(seed->plen - dp->prefix.plen >= 32 || (rounds = 1 << (seed->plen - dp->prefix.plen)) >= PA_PD_PREFIX_SEARCH_MAX_ROUNDS) {
-		rounds = PA_PD_PREFIX_SEARCH_MAX_ROUNDS;
-	}
+	L_DEBUG("Trying with plen %d", (int) seed->plen);
 
-	L_DEBUG("Trying with plen %d for a max of %u rounds", (int) seed->plen, (unsigned int) rounds);
-
-	const struct prefix *collision;
-	for(; rounds; rounds--) {
+	while(1) {
 		if(!(collision = pa_prefix_getcollision(pd_pa(pd), dst)))
 			return 0;
 
-		if(prefix_contains(dst, collision)) {
-			if((res = prefix_increment(dst, dst, dp->prefix.plen)) == -1)
-				goto err;
-		} else { //prefix_contains(collision, new_prefix)
-			if((res = prefix_increment(dst, collision, dp->prefix.plen)) == -1)
-				goto err;
-			dst->plen = seed->plen;
-		}
+		L_DEBUG("Prefix %s can't be used", PREFIX_REPR(dst));
 
-		//todo: That approach may be more clever that what is done in pa_core.
-		if(!prefix_cmp(dst, seed)) {
-			// We looped
+		if(!first_collision) {
+			first_collision = collision;
+		} else if(!prefix_cmp(collision, first_collision)) { //We looped
+			L_INFO("No more available prefix can be found in %s", PREFIX_REPR(&dp->prefix));
 			return -1;
 		}
+
+		if(dst->plen <= collision->plen) {
+			if(prefix_increment(dst, dst, dp->prefix.plen) == -1) {
+				L_ERR("Error incrementing %s with protected length %d", PREFIX_REPR(dst), dp->prefix.plen);
+				return -1;
+			}
+		} else {
+			if(prefix_increment(dst, collision, dp->prefix.plen) == -1) {
+				L_ERR("Error incrementing %s with protected length %d", PREFIX_REPR(collision), dp->prefix.plen);
+				return -1;
+			}
+			dst->plen = seed->plen;
+		}
 	}
-
-
-	return -1;
-err:
-	L_ERR("Critical error in prefix increment");
-	return -1;
+	return -1; //avoid warning
 }
 
 static int pa_pd_find_prefix(struct pa_pd_dp_req *req, struct prefix *dst,
@@ -277,33 +276,50 @@ static void pa_pd_dp_schedule(struct pa_pd *pd, struct pa_dp *dp)
 	}
 }
 
+static void pa_pd_destroy_cpd(struct pa_data *data, struct pa_cp *cp, void *owner)
+{
+	struct pa_pd *pd = &container_of(data, struct pa, data)->pd;
+	struct pa_cpd *cpd = _pa_cpd(cp);
+	struct pa_dp *dp;
+
+	if(owner != pd) {
+		if(cpd->lease->update_cb) {
+			dp = cpd->cp.dp;
+			if(dp) {
+				pa_cp_set_dp(&cpd->cp, NULL);
+				pa_pd_req_create(cpd->lease, dp); // Add to unsatisfied
+				pa_pd_dp_schedule(pd, dp); // Schedule the dp for recomputation
+			}
+			cpd->lease->update_cb(cpd->lease);
+		}
+	}
+
+	pa_cp_todelete(&cpd->cp);
+	pa_cp_notify(&cpd->cp);
+}
+
 static void pa_pd_aps_cb(struct pa_data_user *user, struct pa_ap *ap, uint32_t flags)
 {
-	struct pa_dp *dp_cont, *dp;
-	struct pa_cpd *cpd, *cpd2;
+	struct pa_dp *dp;
+	struct pa_cpd *cpd;
 	struct pa_pd_lease *lease;
 	struct pa_pd *pd = container_of(user, struct pa_pd, data_user);
+
+	if(prefix_is_ipv4(&ap->prefix))
+		return;
+
 	if(flags & PADF_AP_TODELETE) { //More space is available in this dp
-		//aps are not associated with any dp. So this search is not very optimal.
-		dp_cont = NULL;
-		pa_for_each_dp(dp, pd_p(pd, data)) {
-			if(!list_empty(&dp->lease_reqs) &&
-					prefix_contains(&dp->prefix, &ap->prefix) &&
-					!prefix_is_ipv4(&dp->prefix) &&
-					!dp->ignore) {
-				dp_cont = dp;
+		pa_for_each_dp_updown(dp, pd_p(pd, data), &ap->prefix) {
+			if(!list_empty(&dp->lease_reqs) && !dp->ignore) {
+				pa_pd_dp_schedule(pd, dp);
 				break;
 			}
 		}
-		if(dp_cont)
-			pa_pd_dp_schedule(pd, dp_cont);
 	} else if (flags & PADF_AP_CREATED) {
 		//Check for collisions. That should delete cpd whenever an ap forbids its use
 		pa_pd_for_each_lease(lease, pd) {
-			pa_pd_for_each_cpd_safe(cpd, cpd2, lease) {
-				if((prefix_contains(&cpd->cp.prefix, &ap->prefix) ||
-						prefix_contains(&ap->prefix, &cpd->cp.prefix)) &&
-						(pa_precedence_apcp(ap, &cpd->cp) > 0)) {
+			pa_pd_for_each_cpd_updown(cpd, lease, &ap->prefix) {
+				if((pa_precedence_apcp(ap, &cpd->cp) > 0)) {
 					pa_cp_set_applied(&cpd->cp, false);    //Unapplied if ever applied
 					pa_cp_set_advertised(&cpd->cp, false); //Do not advertise because invalid
 					pa_cp_notify(&cpd->cp);
@@ -318,41 +334,29 @@ static void pa_pd_aps_cb(struct pa_data_user *user, struct pa_ap *ap, uint32_t f
 static void pa_pd_cps_cb(struct pa_data_user *user, struct pa_cp *cp, uint32_t flags)
 {
 	struct pa_cpd *cpd;
-	struct pa_dp *dp_cont, *dp;
+	struct pa_dp *dp;
 	struct pa_pd *pd = container_of(user, struct pa_pd, data_user);
+	if(prefix_is_ipv4(&cp->prefix))
+		return;
+
 	if(flags & PADF_CP_TODELETE) { //Schedule dp if new space is made
 		if(cp->dp) {
-			dp_cont = (list_empty(&cp->dp->lease_reqs))?NULL:cp->dp;
+			if(!list_empty(&cp->dp->lease_reqs)) {
+				pa_pd_dp_schedule(pd, cp->dp);
+			}
 		} else {
-			dp_cont = NULL;
-			pa_for_each_dp(dp, pd_p(pd, data)) {
-				L_DEBUG("Looking for the dp (this is not optimal)");
+			pa_for_each_dp_updown(dp, pd_p(pd, data), &cp->prefix) {
 				if(!list_empty(&dp->lease_reqs) &&
-						prefix_contains(&dp->prefix, &cp->prefix) &&
-						!prefix_is_ipv4(&dp->prefix) &&
 						!dp->ignore) {
-					dp_cont = dp;
+					pa_pd_dp_schedule(pd, dp);
 					break;
 				}
 			}
 		}
-		if(dp_cont)
-			pa_pd_dp_schedule(pd, dp_cont);
 	}
 
-	if(!(cpd = _pa_cpd(cp)) || !cpd->lease ) // if !cpd->lease, it will be deleted afterward anyway
+	if(!(cpd = _pa_cpd(cp)) || (flags & (PADF_CP_TODELETE)) ) // if !cpd->lease, it will be deleted afterward anyway
 		return;
-
-	if((flags & PADF_CP_TODELETE) && cpd->lease && cpd->lease->update_cb) { //todo: Better do it with applied, maybe...
-		dp = cpd->cp.dp;
-		if(dp) {
-			pa_cp_set_dp(&cpd->cp, NULL);
-			pa_pd_req_create(cpd->lease, dp); // Add to unsatisfied
-			pa_pd_dp_schedule(pd, dp); // Schedule the dp for recomputation
-		}
-		cpd->lease->update_cb(cpd->lease);
-		return;
-	}
 
 #ifdef PA_PD_RIGOUROUS_LEASES
 	if((flags & (PADF_CP_APPLIED)) || (cp->applied && (flags & PADF_CP_DP))) {
@@ -447,8 +451,8 @@ static void pa_pd_update_cb(struct uloop_timeout *to)
 
 				bool found = false;
 				/* find orphans */
-				pa_pd_for_each_cpd(cpd, req->lease) {
-					if(!cpd->cp.dp && prefix_contains(&dp->prefix, &cpd->cp.prefix)) {
+				pa_pd_for_each_cpd_down(cpd, req->lease, &dp->prefix) {
+					if(!cpd->cp.dp) {
 						pa_pd_cpd_adopt(req, cpd);
 						found = true;
 						break;
@@ -484,7 +488,7 @@ static void pa_pd_update_cb(struct uloop_timeout *to)
 			}
 
 			/* If all failed, better tell the requester (or it could wait forever... ) */
-			if(list_empty(&lease->cpds))
+			if(btrie_empty(&lease->cpds))
 				pa_pd_lease_schedule(pd, lease);
 
 			lease->just_created = false;
@@ -518,10 +522,11 @@ static void pa_pd_lease_cb(struct uloop_timeout *to)
 	/* Remove orphan cpds */
 	pa_pd_for_each_cpd_safe(cpd, cpd2, lease) {
 		if(!cpd->cp.dp) {
-			pa_cp_todelete(&cpd->cp);
-			pa_cpd_set_lease(cpd, NULL); //Important to differentiate local deletes
+			struct pa_pd *pd = lease->pd;
+			cpd->cp.destroy(pd_p(pd, data), &cpd->cp, pd);
+		} else {
+			pa_cp_notify(&cpd->cp); //Do for all because maybe dp was removed before
 		}
-		pa_cp_notify(&cpd->cp); //Do for all because maybe dp was removed before
 	}
 }
 
@@ -540,8 +545,8 @@ int pa_pd_lease_init(struct pa_pd *pd, struct pa_pd_lease *lease,
 	lease->preferred_len = preferred_len;
 	lease->max_len = max_len;
 	lease->just_created = true;
-	INIT_LIST_HEAD(&lease->cpds);
-	INIT_LIST_HEAD(&lease->dp_reqs);
+	btrie_init(&lease->cpds);
+	btrie_init(&lease->dp_reqs);
 	list_add(&lease->le, &pd->leases);
 
 	L_INFO("Initializing "PA_PDL_L, PA_PDL_LA(lease));
@@ -561,25 +566,22 @@ int pa_pd_lease_init(struct pa_pd *pd, struct pa_pd_lease *lease,
 
 void pa_pd_lease_term(struct pa_pd *pd, struct pa_pd_lease *lease)
 {
-	struct pa_cpd *cpd;
-	struct pa_pd_dp_req *req;
+	struct pa_cpd *cpd, *cpd2;
+	struct pa_pd_dp_req *req, *req2;
 	if(lease->cb_to.pending && pd->started)
 		uloop_timeout_cancel(&lease->cb_to);
 
 	L_INFO("Terminating "PA_PDL_L, PA_PDL_LA(lease));
 
-	while(!list_empty(&lease->cpds)) {
-		cpd = list_first_entry(&lease->cpds, struct pa_cpd, lease_le);
-		list_del(&cpd->lease_le); // This is just for safety in case somebody look at it somewhere...
+	pa_pd_for_each_cpd_safe(cpd, cpd2, lease) {
+		btrie_remove(&cpd->lease_be);
 		cpd->lease = NULL;
 		pa_cp_todelete(&cpd->cp);
 		pa_cpd_set_lease(cpd, NULL); //Important to differentiate local deletes
 		pa_cp_notify(&cpd->cp);
 	}
 
-	while(!list_empty(&lease->dp_reqs)) {
-		/* Unreqing all dps that lease is unsatisfied with */
-		req = list_first_entry(&lease->dp_reqs, struct pa_pd_dp_req, lease_le);
+	pa_for_each_req_in_lease_safe(req, req2, lease) {
 		pa_pd_req_destroy(req);
 	}
 
@@ -619,6 +621,7 @@ void pa_pd_start(struct pa_pd *pd)
 		pd->started = true;
 		pa_pd_to_start(&pd->update, PA_PD_UPDATE_DELAY);
 		pa_data_subscribe(&pd_pa(pd)->data, &pd->data_user);
+		pa_data_register_cp(&pd_pa(pd)->data, PA_CPT_D, pa_pd_destroy_cpd);
 		list_for_each_entry(lease, &pd->leases, le)
 			pa_pd_to_start(&lease->cb_to, PA_PD_LEASE_CB_DELAY);
 	}

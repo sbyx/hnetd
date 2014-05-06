@@ -47,12 +47,12 @@ struct pa_pd_lease {
 	 * Lifetimes may be found there: cpd->cp.dp->valid_lifetime (or preferred).
 	 * Dhcp data may be found here: cpd->cp.dp->dhcp_data/len.
 	 * Whenever one of these values are changed, the update_cb is called (after a delay). */
-	struct list_head cpds;
+	struct btrie cpds;
 
 	/****** Private *****/
 	char *lease_id;
-	struct list_head le;        /* Linked in pa_pd structure */
-	struct list_head dp_reqs;   /* Linked with dp lease_links list (n:n relation)*/
+	struct list_head le;            /* Linked in pa_pd structure */
+	struct btrie dp_reqs;           /* Linked with dp lease_links tree (n:n relation)*/
 	struct uloop_timeout cb_to;
 	bool just_created;          /* If true, missing prefixes will be computed for all dps */
 	struct pa_pd *pd;
@@ -66,8 +66,8 @@ struct pa_pd_lease {
 };
 
 #define pa_pd_for_each_lease(lease, pa_pd) list_for_each_entry(lease, &(pa_pd)->leases, le)
-#define pa_pd_for_each_cpd(pa_cpd, lease) list_for_each_entry(pa_cpd, &(lease)->cpds, lease_le)
-#define pa_pd_for_each_cpd_safe(pa_cpd, cpd2, lease) list_for_each_entry_safe(pa_cpd, cpd2, &(lease)->cpds, lease_le)
+#define pa_pd_for_each_cpd(pa_cpd, lease) btrie_for_each_down_entry(pa_cpd, &(lease)->cpds, NULL, 0, lease_be)
+#define pa_pd_for_each_cpd_safe(pa_cpd, cpd2, lease) btrie_for_each_down_entry_safe(pa_cpd, cpd2, &(lease)->cpds, NULL, 0, lease_be)
 
 /* Adds a new lease request.
  * When the function returns, the prefix list is empty. It is updated later and the.

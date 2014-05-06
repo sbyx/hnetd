@@ -501,11 +501,11 @@ void pa_data_test_cp()
 
 	bool first = true;
 	pa_for_each_cp(cp_i, data) {
-		if(first) {
+		if(!first) {
 			sput_fail_unless(cp_i == cp2, "Second cp");
-			first = false;
 		} else {
 			sput_fail_unless(cp_i == cp, "First cp");
+			first = false;
 		}
 	}
 

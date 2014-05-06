@@ -10,16 +10,25 @@ proto_hnet_init_config() {
     proto_config_add_string 'dhcpv6_clientid'
     proto_config_add_string 'guest'
     proto_config_add_string 'accept_cerid'
+    proto_config_add_string 'reqaddress'
+    proto_config_add_string 'prefix'
 }
 
 proto_hnet_setup() {
     local interface="$1"
     local device="$2"
 
-    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid
-    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid
+    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix
+    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix
 
     logger -t proto-hnet "proto_hnet_setup $device/$interface"
+
+    if [ "$interface" = "lan" -o "$interface" = "wan" -o "$interface" = "wan6" ]; then
+        logger -t proto-hnet "Ignoring hnet on 'lan' and 'wan'. Please rename your interface to avoid conflicts."
+        proto_notify_error "$interface" "INTERFACE_CONFLICT"
+        proto_block_restart "$interface"
+        return
+    fi
 
     # It won't be 'up' before we provide first config.
     # So we provide _empty_ config here, and let pm.lua deal with
@@ -29,6 +38,11 @@ proto_hnet_setup() {
     proto_add_data
     [ "$guest" = "1" ] && json_add_boolean guest 1
     [ "$accept_cerid" = "1" ] && json_add_boolean accept_cerid 1
+    json_add_array prefix
+    for p in $prefix; do
+    	json_add_string "" "$p"
+    done
+    json_close_array
     proto_close_data
 
     proto_send_update "$interface"
@@ -59,6 +73,7 @@ proto_hnet_setup() {
 	    json_add_string name "${interface}_6"
 	    json_add_string ifname "@${interface}"
 	    json_add_string proto dhcpv6
+            [ -n "$reqaddress" ] && json_add_string reqaddress "$reqaddress"
 	    [ -n "$dhcpv6_clientid" ] && json_add_string clientid "$dhcpv6_clientid"
 	    json_add_string iface_dslite "${interface}_dslite"
 	    json_add_string zone_dslite wan

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Wed Apr 16 14:26:16 2014 mstenber
- * Edit time:     75 min
+ * Last modified: Tue Apr 29 22:42:18 2014 mstenber
+ * Edit time:     77 min
  *
  */
 
@@ -151,7 +151,17 @@ void hncp_int(void)
   n = hncp_get_first_node(o);
   sput_fail_unless(n, "hncp_get_first_node");
   n = hncp_node_get_next(n);
-  sput_fail_unless(n, "hncp_node_get_next");
+  sput_fail_unless(!n, "hncp_node_get_next [before prune]");
+
+  /* Play with run; initially should increment update number */
+  sput_fail_unless(o->own_node->update_number == 0, "update number ok");
+  hncp_run(o);
+  sput_fail_unless(o->own_node->update_number == 1, "update number ok");
+
+  n = hncp_get_first_node(o);
+  sput_fail_unless(n, "hncp_get_first_node");
+  n = hncp_node_get_next(n);
+  sput_fail_unless(!n, "hncp_node_get_next [after prune]");
 
   /* Similarly, links */
   const char *ifn = "foo";
@@ -160,11 +170,6 @@ void hncp_int(void)
   l = hncp_find_link_by_name(o, ifn, true);
   sput_fail_unless(l, "hncp_find_link_by_name w/ create=false => !none");
   sput_fail_unless(hncp_find_link_by_name(o, ifn, false) == l, "still same");
-
-  /* Play with run; initially should increment update number */
-  sput_fail_unless(o->own_node->update_number == 0, "update number ok");
-  hncp_run(o);
-  sput_fail_unless(o->own_node->update_number == 1, "update number ok");
 
   /* but on second run, no */
   hncp_run(o);

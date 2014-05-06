@@ -43,7 +43,7 @@ static bool iface_discover_border(struct iface *c);
 
 static struct list_head interfaces = LIST_HEAD_INIT(interfaces);
 static struct list_head users = LIST_HEAD_INIT(users);
-static struct pa_data *pa_data_p = NULL;
+static struct pa *pa_p = NULL;
 static struct pa_data_user pa_data_cb = {
 	.cps = iface_pa_cps,
 	.aas = iface_pa_aas,
@@ -63,6 +63,14 @@ void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 		if(!prefix_is_ipv4(&dp->prefix)) {
 			L_DEBUG("Pushing to platform "PA_DP_L, PA_DP_LA(dp));
 			platform_set_prefix_route(&dp->prefix, true);
+		} else if (!dp->local) {
+			struct iface *c;
+			list_for_each_entry(c, &interfaces, head) {
+				if (c->designatedv4) {
+					c->designatedv4 = false;
+					platform_restart_dhcpv4(c);
+				}
+			}
 		}
 	} else if(flags & PADF_DP_TODELETE) {
 		struct iface *c;
@@ -73,6 +81,20 @@ void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 		if(!prefix_is_ipv4(&dp->prefix)) {
 			L_DEBUG("Removing from platform "PA_DP_L, PA_DP_LA(dp));
 			platform_set_prefix_route(&dp->prefix, false);
+		} else {
+			bool ipv4_edp = false;
+			struct pa_dp *dp;
+			pa_for_each_dp(dp, &pa_p->data)
+				if (!dp->local && IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
+					ipv4_edp = true;
+
+			struct iface *c;
+			list_for_each_entry(c, &interfaces, head) {
+				if (c->designatedv4 != !ipv4_edp) {
+					c->designatedv4 = !ipv4_edp;
+					platform_restart_dhcpv4(c);
+				}
+			}
 		}
 	} else if(flags & (PADF_DP_DHCP | PADF_DP_LIFETIME)) {
 		struct pa_cp *cp;
@@ -307,7 +329,7 @@ void iface_set_unreachable_route(const struct prefix *p, bool enable)
 
 #endif /* __linux__ */
 
-int iface_init(struct pa_data *pa_data, const char *pd_socket)
+int iface_init(struct pa *pa, const char *pd_socket)
 {
 #ifdef __linux__
 	rtnl_fd.fd = socket(AF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, NETLINK_ROUTE);
@@ -325,9 +347,9 @@ int iface_init(struct pa_data *pa_data, const char *pd_socket)
 	uloop_fd_add(&rtnl_fd, ULOOP_READ | ULOOP_EDGE_TRIGGER);
 #endif /* __linux__ */
 
-	pa_data_subscribe(pa_data, &pa_data_cb);
-	pa_data_p = pa_data;
-	return platform_init(pa_data, pd_socket);
+	pa_data_subscribe(&pa->data, &pa_data_cb);
+	pa_p = pa;
+	return platform_init(&pa->data, pd_socket);
 }
 
 
@@ -347,7 +369,7 @@ void iface_set_dhcp_send(const char *ifname, const void *dhcpv6_data, size_t dhc
 {
 	struct iface *c = iface_get(ifname);
 
-	if (!c)
+	if (!c || !c->platform)
 		return;
 	if (c->dhcp_len_out == dhcp_len && (!dhcp_len || memcmp(c->dhcp_data_out, dhcp_data, dhcp_len) == 0) && 
 	    c->dhcpv6_len_out == dhcpv6_len && (!dhcpv6_len || memcmp(c->dhcpv6_data_out, dhcpv6_data, dhcpv6_len) == 0))
@@ -624,7 +646,7 @@ void iface_remove(struct iface *c)
 	if (c->platform) {
 		if (c->flags & IFACE_FLAG_GUEST) {
 			struct pa_dp *dp;
-			pa_for_each_dp(dp, pa_data_p)
+			pa_for_each_dp(dp, &pa_p->data)
 				platform_filter_prefix(c, &dp->prefix, false);
 		}
 
@@ -755,6 +777,14 @@ struct iface* iface_create(const char *ifname, const char *handle, enum iface_fl
 		c->transition.cb = iface_announce_border;
 		c->preferred.cb = iface_announce_preferred;
 
+		c->designatedv4 = true;
+		struct pa_dp *dp;
+		if(pa_p) { //This is just for test cases
+			pa_for_each_dp(dp, &pa_p->data)
+					if (!dp->local && IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
+						c->designatedv4 = false;
+		}
+
 #ifdef __linux__
 		struct {
 			struct nlmsghdr hdr;
@@ -873,12 +903,21 @@ void iface_add_dhcpv6_received(struct iface *c, const void *data, size_t len)
 }
 
 
+void iface_add_chosen_prefix(struct iface *c, const struct prefix *p)
+{
+	struct pa_iface *iface = pa_iface_get(&pa_p->data, c->ifname, false);
+	if (iface)
+		pa_core_static_prefix_add(&pa_p->core, (struct prefix*)p, iface);
+}
+
+
 void iface_update(void)
 {
 	struct iface *c;
 	list_for_each_entry(c, &interfaces, head) {
 		iface_update_ipv6_uplink(c);
 		iface_update_ipv4_uplink(c);
+		c->unused = true;
 	}
 }
 
@@ -890,7 +929,7 @@ void iface_commit(void)
 		iface_commit_ipv6_uplink(c);
 		iface_commit_ipv4_uplink(c);
 
-		if (!c->platform && !c->v4uplink && avl_is_empty(&c->delegated.avl))
+		if ((!c->platform || c->unused) && !c->v4uplink && avl_is_empty(&c->delegated.avl))
 			iface_remove(c);
 	}
 }

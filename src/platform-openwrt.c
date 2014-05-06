@@ -570,6 +570,7 @@ enum {
 	DATA_ATTR_ACCEPT_CERID,
 	DATA_ATTR_CER,
 	DATA_ATTR_GUEST,
+	DATA_ATTR_PREFIX,
 	DATA_ATTR_MAX
 };
 
@@ -594,6 +595,7 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_ACCEPT_CERID] = { .name = "accept_cerid", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_CER] = { .name = "cer", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_GUEST] = { .name = "guest", .type = BLOBMSG_TYPE_BOOL },
+	[DATA_ATTR_PREFIX] = { .name = "prefix", .type = BLOBMSG_TYPE_ARRAY },
 };
 
 
@@ -712,6 +714,9 @@ static void platform_update(void *data, size_t len)
 	bool up = (a = tb[IFACE_ATTR_UP]) && blobmsg_get_bool(a);
 	bool v4uplink = false, v6uplink = false;
 
+	if (c)
+		c->unused = !up;
+
 	struct blob_attr *route;
 	unsigned rem;
 	blobmsg_for_each_attr(route, tb[IFACE_ATTR_ROUTE], rem) {
@@ -729,8 +734,10 @@ static void platform_update(void *data, size_t len)
 
 	enum iface_flags flags = 0;
 	struct in6_addr cer = IN6ADDR_ANY_INIT;
+
+	struct blob_attr *dtb[DATA_ATTR_MAX];
+	memset(dtb, 0, sizeof(dtb));
 	if (tb[IFACE_ATTR_DATA]) {
-		struct blob_attr *dtb[DATA_ATTR_MAX];
 		blobmsg_parse(data_attrs, DATA_ATTR_MAX, dtb,
 				blobmsg_data(tb[IFACE_ATTR_DATA]), blobmsg_len(tb[IFACE_ATTR_DATA]));
 
@@ -748,8 +755,22 @@ static void platform_update(void *data, size_t len)
 	if ((a = tb[IFACE_ATTR_PROTO]))
 		proto = blobmsg_get_string(a);
 
-	if (!c && up && !strcmp(proto, "hnet") && (a = tb[IFACE_ATTR_HANDLE]))
+	if (!c && up && !strcmp(proto, "hnet") && (a = tb[IFACE_ATTR_HANDLE])) {
 		c = iface_create(ifname, blobmsg_get_string(a), flags);
+
+		if (c && dtb[DATA_ATTR_PREFIX]) {
+			struct blob_attr *k;
+			unsigned rem;
+
+			blobmsg_for_each_attr(k, dtb[DATA_ATTR_PREFIX], rem) {
+				if (blobmsg_type(k) == BLOBMSG_TYPE_STRING) {
+					struct prefix p;
+					if (prefix_pton(blobmsg_get_string(k), &p) == 1)
+						iface_add_chosen_prefix(c, &p);
+				}
+			}
+		}
+	}
 
 	if (c)
 		c->cer = cer;
@@ -801,6 +822,45 @@ static int handle_update(__unused struct ubus_context *ctx, __unused struct ubus
 		sync_netifd(false);
 
 	return 0;
+}
+
+
+void platform_restart_dhcpv4(struct iface *c)
+{
+	struct platform_iface *iface = c->platform;
+	if (!iface)
+		return;
+
+	struct blob_buf b = {NULL, NULL, 0, NULL};
+
+	blob_buf_init(&b, 0);
+	char *buf = blobmsg_alloc_string_buffer(&b, "interface", 32);
+	snprintf(buf, 32, "%s_4", iface->handle);
+	blobmsg_add_string_buffer(&b);
+	ubus_invoke(ubus, ubus_network_interface, "down", b.head, NULL, NULL, 1000);
+
+	blob_buf_init(&b, 0);
+	buf = blobmsg_alloc_string_buffer(&b, "name", 32);
+	snprintf(buf, 32, "%s_4", iface->handle);
+	blobmsg_add_string_buffer(&b);
+	buf = blobmsg_alloc_string_buffer(&b, "ifname", 32);
+	snprintf(buf, 32, "@%s", iface->handle);
+	blobmsg_add_string_buffer(&b);
+	blobmsg_add_string(&b, "proto", "dhcp");
+	blobmsg_add_string(&b, "sendopts", "0x4d:07484f4d454e4554");
+	buf = blobmsg_alloc_string_buffer(&b, "iface6rd", 32);
+	snprintf(buf, 32, "%s_6rd", iface->handle);
+	blobmsg_add_string_buffer(&b);
+	blobmsg_add_u8(&b, "delegate", 0);
+	blobmsg_add_string(&b, "zone6rd", "wan");
+
+	blobmsg_add_u8(&b, "defaultroute", c->designatedv4);
+
+	uint32_t ubus_network = 0;
+	ubus_lookup_id(ubus, "network", &ubus_network);
+	ubus_invoke(ubus, ubus_network, "add_dynamic", b.head, NULL, NULL, 1000);
+
+	blob_buf_free(&b);
 }
 
 

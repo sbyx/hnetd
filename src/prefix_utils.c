@@ -236,7 +236,7 @@ int prefix_increment(struct prefix *dst, const struct prefix *p, uint8_t protect
 
 	bmemcpy_shift(&dst->prefix, protected_len, &current, 0, blen);
 
-	return (current)?0:1;
+	return (current && blen)?0:1;
 }
 
 int prefix_last(struct prefix *dst, const struct prefix *p, uint8_t protected_len)

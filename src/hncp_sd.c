@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Wed Apr  9 13:07:56 2014 mstenber
- * Edit time:     426 min
+ * Last modified: Tue Apr 29 17:34:34 2014 mstenber
+ * Edit time:     479 min
  *
  */
 
@@ -41,9 +41,10 @@
 #define OHP_ARGS_MAX_COUNT 64
 
 #define UPDATE_FLAG_DNSMASQ 1
-#define UPDATE_FLAG_OHP 2
-#define UPDATE_FLAG_DDZ 4
-#define UPDATE_FLAG_ALL 7
+#define UPDATE_FLAG_OHP     2
+#define UPDATE_FLAG_DDZ     4
+#define UPDATE_FLAG_DOMAIN  8
+#define UPDATE_FLAG_ALL  0x0F
 
 /* How long a timeout we schedule for the actual update (that occurs
  * in a timeout). This effectively sets an upper bound on how
@@ -67,7 +68,6 @@ struct hncp_sd_struct
   /* how many iterations we've added to routername to get our current one. */
   int router_name_iteration;
 
-  char domain[DNS_MAX_ESCAPED_LEN];
   char *dnsmasq_script;
   char *dnsmasq_bonus_file;
   char *ohp_script;
@@ -194,7 +194,7 @@ static void _publish_ddz(hncp_sd sd, hncp_link l,
   if (!hncp_get_ipv6_address(sd->hncp, l->ifname,
                              (struct in6_addr *)&dh->address))
     return;
-  sprintf(tbuf, "%s.%s.%s", REWRITE_IFNAME(l->ifname), sd->router_name, sd->domain);
+  sprintf(tbuf, "%s.%s.%s", REWRITE_IFNAME(l->ifname), sd->router_name, sd->hncp->domain);
   int r = escaped2ll(tbuf, dh->ll, DNS_MAX_ESCAPED_LEN);
   if (r < 0)
     return;
@@ -304,7 +304,7 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
    * <subdomain>'s ~NS (remote, real IP)
    * <subdomain>'s ~NS (local, LOCAL_OHP_ADDRESS)
    */
-  md5_hash(sd->domain, strlen(sd->domain), &ctx);
+  md5_hash(sd->hncp->domain, strlen(sd->hncp->domain), &ctx);
   hncp_for_each_node(sd->hncp, n)
     {
       hncp_node_for_each_tlv_i(n, a)
@@ -330,7 +330,7 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
             if (dh->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE)
               {
                 fprintf(f, "ptr-record=b._dns-sd._udp.%s,%s\n",
-                        sd->domain, buf);
+                        sd->hncp->domain, buf);
               }
             if (hncp_node_is_self(n))
               {
@@ -412,7 +412,7 @@ bool hncp_sd_reconfigure_ohp(hncp_sd sd)
     {
       /* XXX - what sort of naming scheme should we use for links? */
       sprintf(tbuf, "%s=%s.%s.%s",
-              l->ifname, REWRITE_IFNAME(l->ifname), sd->router_name, sd->domain);
+              l->ifname, REWRITE_IFNAME(l->ifname), sd->router_name, sd->hncp->domain);
       md5_hash(tbuf, strlen(tbuf), &ctx);
       if (first)
         {
@@ -475,7 +475,7 @@ _tlv_ddz_matches(hncp_sd sd, struct tlv_attr *a)
   unsigned char tbuf[DNS_MAX_L_LEN];
   int len;
 
-  sprintf(buf, "%s.%s", sd->router_name, sd->domain);
+  sprintf(buf, "%s.%s", sd->router_name, sd->hncp->domain);
   if ((len = escaped2ll(buf, tbuf, sizeof(tbuf)))<0)
     return false;
   if (tlv_id(a) == HNCP_T_DNS_DELEGATED_ZONE)
@@ -487,8 +487,9 @@ _tlv_ddz_matches(hncp_sd sd, struct tlv_attr *a)
           int len2 = tlv_len(a) - sizeof(*ddz);
           /* XXX - do we want len2 == len, or len2 >= len?  len2 >=
            * len also matches 'well behaved' routers with subdomain
-           * names, so I'm tempted to keep the equality to defend just
-           * the router name using this logic. */
+           * names but no own router name TLV for some reason, so I'm
+           * tempted to keep the equality to defend just the router
+           * name using this logic. */
           if (len2 == len && memcmp(tbuf2 + (len2 - len), tbuf, len) == 0)
             return true;
         }
@@ -528,6 +529,7 @@ _change_router_name(hncp_sd sd)
         {
           L_DEBUG("renamed to %s", sd->router_name);
           _set_router_name(sd, true);
+          _should_update(sd, UPDATE_FLAG_DDZ);
           return;
         }
     }
@@ -561,7 +563,7 @@ static void _force_republish_cb(hncp_subscriber s)
   _should_update(sd, UPDATE_FLAG_ALL);
 }
 
-struct tlv_attr *hncp_get_dns_domain_tlv(hncp o)
+static struct tlv_attr *_get_dns_domain_tlv(hncp o)
 {
   hncp_node n;
   struct tlv_attr *a, *best = NULL;
@@ -579,11 +581,27 @@ struct tlv_attr *hncp_get_dns_domain_tlv(hncp o)
 
 static void _get_dns_domain(hncp o, char *dest, int dest_len)
 {
-  struct tlv_attr *a = hncp_get_dns_domain_tlv(o);
+  struct tlv_attr *a = _get_dns_domain_tlv(o);
 
   if (a && ll2escaped(tlv_data(a), tlv_len(a), dest, dest_len) > 0)
     return;
-  *dest = 0;
+  strncpy(dest, HNCP_SD_DEFAULT_DOMAIN, dest_len);
+}
+
+
+static void _refresh_domain(hncp_sd sd)
+{
+  hncp o = sd->hncp;
+  char new_domain[DNS_MAX_ESCAPED_LEN];
+
+  _get_dns_domain(o, new_domain, sizeof(new_domain));
+  L_DEBUG("_refresh_domain:%s", new_domain);
+  if (strcmp(new_domain, sd->hncp->domain))
+    {
+      L_DEBUG("set sd domain to %s", new_domain);
+      strcpy(sd->hncp->domain, new_domain);
+      _should_update(sd, UPDATE_FLAG_ALL & ~UPDATE_FLAG_DOMAIN);
+    }
 }
 
 static void _tlv_cb(hncp_subscriber s,
@@ -592,14 +610,29 @@ static void _tlv_cb(hncp_subscriber s,
   hncp_sd sd = container_of(s, hncp_sd_s, subscriber);
   hncp o = sd->hncp;
 
+  L_NOTICE("[sd]_tlv_cb %s %s %s",
+           add ? "add" : "remove",
+           n == o->own_node ? "local" : HNCP_NODE_REPR(n),
+           TLV_REPR(tlv));
+
   /* Handle router name collision detection; we're interested only in
    * nodes with higher router id overriding our choice. */
   if (tlv_id(tlv) == HNCP_T_DNS_ROUTER_NAME)
     {
       if (add
-          && _tlv_router_name_matches(sd, tlv)
-          && hncp_node_cmp(n, o->own_node) > 0)
-        _change_router_name(sd);
+          && n != o->own_node
+          && _tlv_router_name_matches(sd, tlv))
+        {
+          if (hncp_node_cmp(n, o->own_node) > 0)
+            {
+              L_DEBUG("router name conflict, we're lower, renaming");
+              _change_router_name(sd);
+            }
+          else
+            {
+              L_DEBUG("router name conflict, we're higher, ignoring");
+            }
+        }
       /* Router name itself should not trigger reconfiguration unless
        * local; however, remote DDZ changes should. */
     }
@@ -620,21 +653,23 @@ static void _tlv_cb(hncp_subscriber s,
       _should_update(sd, UPDATE_FLAG_DNSMASQ);
     }
 
+  /* As the TLVs aren't _yet_ valid on the node, there's a race
+   * condition potential here. So we just do things after a
+   * timeout. */
   if (tlv_id(tlv) == HNCP_T_DNS_DOMAIN_NAME)
     {
-      char new_domain[DNS_MAX_ESCAPED_LEN];
-      _get_dns_domain(o, new_domain, sizeof(new_domain));
-      if (strcmp(new_domain, sd->domain))
-        {
-          strcpy(sd->domain, new_domain);
-          _should_update(sd, UPDATE_FLAG_ALL);
-        }
+      _should_update(sd, UPDATE_FLAG_DOMAIN);
     }
 }
 
 void hncp_sd_update(hncp_sd sd)
 {
   L_DEBUG("hncp_sd_update:%d", sd->should_update);
+  if (sd->should_update & UPDATE_FLAG_DOMAIN)
+    {
+      sd->should_update &= ~UPDATE_FLAG_DOMAIN;
+      _refresh_domain(sd);
+    }
   _publish_ddzs(sd);
   if (sd->should_update & UPDATE_FLAG_DNSMASQ)
     {
@@ -647,6 +682,8 @@ void hncp_sd_update(hncp_sd sd)
       sd->should_update &= ~UPDATE_FLAG_OHP;
       hncp_sd_reconfigure_ohp(sd);
     }
+  if (sd->should_update)
+    L_DEBUG("hncp_sd_update leftovers:%d", sd->should_update);
 }
 
 static void _timeout_cb(struct uloop_timeout *t)
@@ -675,17 +712,22 @@ hncp_sd hncp_sd_create(hncp h,
     abort();
 
   /* Handle domain name */
-  if (!domain_name)
-    domain_name = "home.";
-  uint8_t ll[DNS_MAX_LL_LEN];
-  int len;
-  len = escaped2ll(domain_name, ll, sizeof(ll));
-  if (len<0)
+  if (domain_name)
     {
-      L_ERR("invalid domain:%s", domain_name);
-      abort();
+      uint8_t ll[DNS_MAX_LL_LEN];
+      int len;
+      len = escaped2ll(domain_name, ll, sizeof(ll));
+      if (len < 0)
+        {
+          L_ERR("invalid domain:%s", domain_name);
+          abort();
+        }
+      hncp_add_tlv_raw(h, HNCP_T_DNS_DOMAIN_NAME, ll, len);
+
+      strncpy(sd->hncp->domain, domain_name, DNS_MAX_ESCAPED_LEN);
     }
-  hncp_add_tlv_raw(h, HNCP_T_DNS_DOMAIN_NAME, ll, len);
+  else
+    strcpy(sd->hncp->domain, HNCP_SD_DEFAULT_DOMAIN);
 
   /* Handle router name */
   if (router_name)
@@ -714,4 +756,3 @@ void hncp_sd_destroy(hncp_sd sd)
   free(sd->ohp_script);
   free(sd);
 }
-
