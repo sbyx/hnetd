@@ -45,6 +45,7 @@ static inline void trust_graph_init(hncp_trust_graph g, hncp_hash hash){
   g->hash = *hash;
   INIT_LIST_HEAD(&g->arrows);
   g->marked = false;
+  g->trusted = false;
 }
 
 /** Alloc & init */
@@ -76,8 +77,15 @@ void trust_graph_add_trust_link(hncp_trust_graph emitter, hncp_trust_graph trust
 /** Deletion of a link, true if the link existed */
 bool trust_graph_remove_trust_link(hncp_trust_graph emitter, hncp_trust_graph trusted);
 
+void trust_graph_add_trust_array(hncp_trust_graph emitter, hncp_trust_graph array[], int size);
+
 /** Deletion of _all_ the trust links from the node */
 void trust_graph_remove_trust_links(hncp_trust_graph g);
+
+static inline void trust_graph_destroy(hncp_trust_graph g){
+  trust_graph_remove_trust_links(g);
+  free(g);
+}
 
 
 #endif /* _TRUST_GRAPH_H */

@@ -1,18 +1,5 @@
 #include "trust_graph.h"
 
-/* For graph exploration*/
-struct exploration_list {
-  hncp_trust_graph g;
-  struct list_head list;
-};
-
-
-void add_graph_last(struct list_head* l, hncp_trust_graph g){
-  struct exploration_list* e = malloc(sizeof(struct exploration_list));
-  e->g = g;
-  list_add_tail(&e->list, l);
-}
-
 
 void init_explo(struct list_head* l, hncp_trust_graph g){
   INIT_LIST_HEAD(l);
@@ -69,6 +56,11 @@ void trust_graph_add_trust_link(hncp_trust_graph emitter, hncp_trust_graph trust
   struct _trusted_list *link = malloc(sizeof(struct _trusted_list));
   link->node = trusted;
   list_add(&link->list,&emitter->arrows);
+};
+
+void trust_graph_add_trust_array(hncp_trust_graph emitter, hncp_trust_graph array[], int size){
+  for(int i = 0; i<size; i++)
+    trust_graph_add_trust_link(emitter, array[i]);
 };
 
 
