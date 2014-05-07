@@ -221,12 +221,12 @@ struct pa_cp {
 #define PADF_CP_CREATED   PADF_ALL_CREATED
 #define PADF_CP_TODELETE  PADF_ALL_TODELETE
 #define PADF_CP_ERROR     PADF_ALL_ERROR    /* In case address malloc fails */
-#define PADF_CP_IFACE     PADF_ALL_IFACE    /* Not really usefull cause iface should not change in cpl */
 #define PADF_CP_AUTHORITY 0x0100
 #define PADF_CP_PRIORITY  0x0200
 #define PADF_CP_ADVERTISE 0x0400
 #define PADF_CP_APPLIED   0x0800
 #define PADF_CP_DP        0x1000
+#define PADF_CPL_IFACE    PADF_ALL_IFACE    /* Not really usefull cause iface should not change in cpl */
 	uint32_t __flags;
 
 #define PA_CP_TYPE(type)  ((type == PA_CPT_L)?"Assignment":((type == PA_CPT_X)?"Excluded":"Delegated" ))
