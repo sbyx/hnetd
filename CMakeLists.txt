@@ -1,3 +1,4 @@
+
 cmake_minimum_required(VERSION 2.8.8)
 # object library support was added in 2.8.8
 
@@ -70,6 +71,8 @@ add_library(L_HNCP_GLUE OBJECT src/hncp_pa.c src/hncp_sd.c)
 set(HNCP_WITH_GLUE ${HNCP_WITH_PROTO} $<TARGET_OBJECTS:L_HNCP_GLUE>)
 add_library(L_HNCP_IO OBJECT src/hncp_io.c)
 set(HNCP_IO $<TARGET_OBJECTS:L_HNCP_IO>)
+add_library(L_TRUST OBJECT src/hncp_trust.c src/trust_graph.c src/local_trust.c)
+set(TRUST $<TARGET_OBJECTS:L_TRUST>)
 set(HNCP ${HNCP_WITH_GLUE} ${HNCP_IO})
 add_executable(hnetd ${HNCP} src/hncp_routing.c src/hnetd.c src/iface.c src/pd.c ${PA} src/ ${BACKEND_SOURCE})
 target_link_libraries(hnetd ubox blobmsg_json resolv ${BACKEND_LINK})
@@ -150,6 +153,11 @@ add_executable(test_btrie test/test_btrie.c ${PU})
 target_link_libraries(test_btrie ubox)
 add_test(btrie test_btrie)
 add_dependencies(check test_btrie)
+
+add_executable(test_hncp_trust test/test_hncp_trust.c ${TRUST} ${HNCP} ${PA} )
+target_link_libraries(test_hncp_trust ubox ${BACKEND_LINK} blobmsg_json)
+add_test(trust_graph test_hncp_trust)
+add_dependencies(check test_hncp_trust)
 
 # Packaging rules
 set(CPACK_PACKAGE_VERSION "1")

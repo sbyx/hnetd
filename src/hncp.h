@@ -30,6 +30,9 @@ typedef struct hncp_struct hncp_s, *hncp;
    hncp. It is effectlively TLV list. */
 typedef struct hncp_node_struct hncp_node_s, *hncp_node;
 
+/* Opaque pointer for trust informations */
+typedef struct hncp_trust_struct hncp_trust_s, *hncp_trust;
+
 typedef struct hncp_subscriber_struct hncp_subscriber_s, *hncp_subscriber;
 
 /*

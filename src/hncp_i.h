@@ -90,6 +90,9 @@ struct hncp_struct {
   /* Whole network hash we consider current (based on content of 'nodes'). */
   hncp_hash_s network_hash;
 
+  /* Trust data */
+  hncp_trust trust;
+
   /* First free local interface identifier (we allocate them in
    * monotonically increasing fashion just to keep things simple). */
   int first_free_iid;
@@ -174,6 +177,7 @@ struct hncp_neighbor_struct {
   int ping_count;
 };
 
+typedef struct trust_graph_struct hncp_trust_graph_s, *hncp_trust_graph;
 
 struct hncp_bfs_head {
   /* List head for implementing BFS */
@@ -202,6 +206,10 @@ struct hncp_node_struct {
   uint32_t update_number;
 
   uint32_t version;
+
+  /* Pointer to the trust graph node. graph->trusted to know
+   * if it's trusted */
+  hncp_trust_graph graph;
 
   /* When was the last prune during which this node was reachable */
   hnetd_time_t last_reachable_prune;
