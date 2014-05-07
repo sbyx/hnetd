@@ -16,12 +16,12 @@
 #define PAC_PRAND_PRFX 0
 #define PAC_PRAND_ADDR 1
 
-#define core_pa(core) (container_of(core, struct pa, core))
+#define core_pa(c) (container_of(c, struct pa, core))
 #define core_rid(core) (&((core_pa(core))->flood.rid))
 #define core_p(core, field) (&(core_pa(core)->field))
 
-static void __pa_aaa_schedule(struct pa_core *core);
-static void __pa_paa_schedule(struct pa_core *core);
+#define __pa_paa_schedule(c) pa_timer_set_earlier(&(c)->paa_to, core_p((c), data)->flood.flooding_delay / PA_CORE_DELAY_FACTOR, true)
+#define __pa_aaa_schedule(c) pa_timer_set_earlier(&(c)->aaa_to, core_p((c), data)->flood.flooding_delay_ll / PA_CORE_DELAY_FACTOR, true)
 
 /* Generates a random or pseudo-random (based on the interface) prefix */
 int pa_prefix_prand(struct pa_iface *iface, size_t ctr_index,
@@ -518,7 +518,6 @@ static bool __aaa_valid(struct pa_core *core, struct in6_addr *addr)
 		if(PA_RIDCMP(&eaa->rid, &core_p(core, data)->flood.rid) > 0)
 			return false;
 	}
-	/* No need to check for local because we only give one per cp (won't be true if too much authoritary... )*/
 	return true;
 }
 
@@ -543,7 +542,7 @@ static void aaa_algo_do(struct pa_core *core)
 		}
 
 		/* Create new if no assigned */
-		if(!cpl->laa && cpl->iface) {
+		if(!cpl->laa) { //cpl->iface is never NULL
 			if(!__aaa_from_storage(core, cpl, &addr) || !__aaa_do_slaac(cpl, &addr) || !__aaa_find_random(core, cpl, &addr)) {
 				laa = pa_laa_create(&addr, cpl);
 				if(laa) {
@@ -551,6 +550,7 @@ static void aaa_algo_do(struct pa_core *core)
 					if(cp->prefix.plen <= 64) {
 						pa_laa_set_apply_to(laa, 0);
 					} else {
+						//todo: Maybe this delay is not that useful, or slaac needed in any case
 						pa_laa_set_apply_to(laa, 2*core_p(core, data.flood)->flooding_delay_ll);
 					}
 				} else {
@@ -573,7 +573,7 @@ void pa_core_destroy_cpx(struct pa_data *data, struct pa_cp *cp, void *owner)
 	pa_cp_notify(&cpx->cp);
 
 	if(owner != core) {
-		L_WARN("CPXs are not intended to be removed by anybody else than pa_core");
+		L_WARN("CPXs are not supposed to be removed by anybody else than pa_core");
 	}
 }
 
@@ -610,16 +610,6 @@ static void __pa_aaa_to_cb(struct pa_timer *t)
 	aaa_algo_do(container_of(t, struct pa_core, aaa_to));
 }
 
-static void __pa_paa_schedule(struct pa_core *core)
-{
-	pa_timer_set_earlier(&core->paa_to, core_p(core, data)->flood.flooding_delay / PA_CORE_DELAY_FACTOR, true);
-}
-
-static void __pa_aaa_schedule(struct pa_core *core)
-{
-	pa_timer_set_earlier(&core->aaa_to, core_p(core, data)->flood.flooding_delay_ll / PA_CORE_DELAY_FACTOR, true);
-}
-
 /************* Authoritative control ********************************/
 
 struct pa_cpl *__pa_cpl_get_in_iface(struct prefix *prefix, struct pa_iface *iface)
@@ -637,9 +627,6 @@ struct pa_cpl *__pa_cpl_get_in_iface(struct prefix *prefix, struct pa_iface *ifa
 int pa_core_static_prefix_add(struct pa_core *core, struct prefix *prefix, struct pa_iface *iface)
 {
 	struct pa_cpl *cpl;
-	struct pa_dp *dp;
-	struct prefix *clean_prefix = prefix;
-
 	//Create authoritative cpl
 	cpl = __pa_cpl_get_in_iface(prefix, iface);
 	bool created = false;
@@ -652,27 +639,32 @@ int pa_core_static_prefix_add(struct pa_core *core, struct prefix *prefix, struc
 		created = true;
 	}
 
-	if(!cpl->cp.authoritative) {
-		L_INFO("Adding static assignment "PA_CP_L" on "PA_IF_L, PA_CP_LA(&cpl->cp), PA_IF_LA(iface));
-		if(created)
-			__pa_paa_schedule(core);
-		pa_cp_set_authoritative(&cpl->cp, true);
-	}
+	pa_cp_set_authoritative(&cpl->cp, true);
+	L_INFO("Adding static assignment "PA_CP_L" on "PA_IF_L, PA_CP_LA(&cpl->cp), PA_IF_LA(iface));
 
-	// Look for a dp
+	if(!created)
+		goto end;
+
+	struct pa_dp *dp;
+	struct pa_cp *cp;
+	//Remove colliding cps
+	__pa_paa_schedule(core);
+	pa_core_invalidate_cps(core, prefix, false);
+
+	//Remove the other cpl for the same dp (if any)
 	pa_for_each_dp_up(dp, core_p(core, data), prefix) {
 		if(!dp->ignore) {
-			clean_prefix = &dp->prefix;
+			pa_for_each_cp_in_dp(cp, dp) {
+				if(cp->type == PA_CPT_L)
+					pa_core_destroy_cp(core, cp);
+				break;
+			}
 			break;
 		}
 	}
 
-	//Remove colliding cps
-	if(pa_core_invalidate_cps(core, clean_prefix, false))
-		__pa_paa_schedule(core);
-
+end:
 	pa_cp_notify(&cpl->cp);
-
 	return 0;
 }
 
@@ -770,11 +762,11 @@ static void __pad_cb_cps(struct pa_data_user *user,
 {
 	struct pa_cpl *cpl= _pa_cpl(cp);
 	struct pa_core *core = container_of(user, struct pa_core, data_user);
-	if(cpl && !(flags & PADF_CP_TODELETE) && (flags & PADF_CP_CREATED))
+	if(cpl && (flags & PADF_CP_CREATED))
 		__pa_aaa_schedule(core);
 
 	if(cpl && (flags & PADF_CP_APPLIED)) /* Update dodhcp */
-		__pa_update_dodhcp(&container_of(cp->pa_data, struct pa, data)->core, _pa_cpl(cp)->iface);
+		__pa_update_dodhcp(&container_of(cp->pa_data, struct pa, data)->core, cpl->iface);
 }
 
 /************* Control functions ********************************/
