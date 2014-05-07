@@ -52,9 +52,9 @@ bool hncp_trust_node_trusted(hncp o, hncp_hash hash);
 bool hncp_trust_node_trusts_me(hncp o, hncp_hash hash);
 
 /** Update/create the trust graph with new trust links
- * l : array of hashes
+ * trusted : array of hashes
  * size : size of the array */
-void hncp_trust_update_graph(hncp o, hncp_hash emitter, hncp_hash l, int size);
+void hncp_trust_update_graph(hncp o, hncp_hash emitter, hncp_hash trusted, int size);
 /* Checks if some trust links are obsoleted, and updates the graph accordingly */
 //void hncp_trust_time_update();
 /** Destroys all the nodes & links */
@@ -64,12 +64,12 @@ static inline void hncp_trust_destroy_nodes(hncp o){
 /** Destroys everything, frees all memory */
 static inline void hncp_trust_destroy(hncp o){
   hncp_trust_destroy_nodes(o);
-  free(o->trust->local_trust_array);
+  if(o->trust->local_trust_array)
+    free(o->trust->local_trust_array);
   free(o->trust);
 }
 /** Create the graph node, and put it into o if it doesn't exists
  * Fetch it otherwise */
 hncp_trust_graph hncp_trust_get_graph_or_create_it(hncp o, hncp_hash hash);
-
 
 #endif /* HNCP_TRUST_H */

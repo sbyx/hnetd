@@ -82,8 +82,6 @@ enum {
 
   HNCP_T_TRUST_ARRAY = 70,
 
-  HNCP_T_TRUST_LIST = 70,
-
   HNCP_T_SIGNATURE = 0xFFFF /* not implemented */
 };
 
@@ -120,11 +118,7 @@ typedef struct __packed {
 } hncp_t_node_data_header_s, *hncp_t_node_data_header;
 
 /* HNCP_T_NODE_DATA_KEY has only raw public key (perhaps it should
-<<<<<<< HEAD
  * have more information though?
-=======
- * have more information though?
->>>>>>> fc536c8da6accafbdf687d5ea9501832c9b31269
  * We may want to specify the hash type/salt here */
 
 /* HNCP_T_NODE_DATA_NEIGHBOR */
