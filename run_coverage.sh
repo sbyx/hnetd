@@ -18,5 +18,26 @@ make check
 lcov -c -d . -o coverage.info
 genhtml coverage.info --output-directory coverage
 
-# Open is OS X-ism; I'm not sure what'd be Linux-ism, sensible-browser?
-open coverage/index.html
+
+# OS-agnostic browser opening, auto-open for linux & darwin with 
+# a graphical interface
+FailOpen(){
+    echo -e "\n"See the file $1 in your favorite web browser
+}
+
+Open(){
+    "$1" "$2" || FailOpen "$2"
+}
+
+case "$(uname -s)" in
+    "Darwin")
+	OPEN="open"
+	;;
+    "Linux")
+	OPEN="xdg-open"
+	;;
+    *)
+	OPEN="FailOpen"
+esac
+
+Open "${OPEN}" coverage/index.html
