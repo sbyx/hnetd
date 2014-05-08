@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Wed Apr 16 14:25:39 2014 mstenber
- * Edit time:     109 min
+ * Last modified: Thu May  8 17:39:37 2014 mstenber
+ * Edit time:     125 min
  *
  */
 
@@ -222,13 +222,28 @@ bool net_sim_is_converged(net_sim s)
           hn = hncp_find_node_by_hash(&n->n,
                                       &n2->n.own_node->node_identifier_hash,
                                       false);
-          sput_fail_unless(hn, "hncp_find_node_by_hash failed");
+          if (!hn)
+            {
+              L_DEBUG("unable to find other node hash - %s -> %s",
+                      n->name, n2->name);
+              return false;
+            }
+          if (memcmp(&n2->n.own_node->node_data_hash,
+                     &hn->node_data_hash, HNCP_HASH_LEN))
+            {
+              L_DEBUG("node data hash mismatch w/ network hash in sync %s @%s",
+                      n2->name, n->name);
+              return false;
+            }
           if (abs(n2->n.own_node->origination_time -
                   hn->origination_time) > 5000)
             {
-              L_DEBUG("origination time mismatch %lld <> %lld",
+              L_DEBUG("origination time mismatch "
+                      "%lld !=~ %lld for %s @ %s [update number %d]",
+                      (long long) hn->origination_time,
                       (long long) n2->n.own_node->origination_time,
-                      (long long) hn->origination_time);
+                      n2->name, n->name,
+                      hn->update_number);
               s->not_converged_count++;
               return false;
             }

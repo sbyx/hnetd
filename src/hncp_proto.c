@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue Apr 29 16:50:06 2014 mstenber
- * Edit time:     387 min
+ * Last modified: Thu May  8 17:43:54 2014 mstenber
+ * Edit time:     399 min
  *
  */
 
@@ -552,8 +552,8 @@ handle_message(hncp_link l,
   tlv_buf_init(&tb, 0); /* not passed anywhere */
   if (tlv_put_raw(&tb, nd_data, nd_len))
     {
-      L_DEBUG("updated node %p %d -> %d",
-              n, n->update_number, new_update_number);
+      L_DEBUG("updated node %s %d -> %d",
+              HNCP_NODE_REPR(n), n->update_number, new_update_number);
       n->update_number = new_update_number;
       n->origination_time = hncp_time(o) - be32_to_cpu(ns->ms_since_origination);
       L_DEBUG("received origination time:%lld (-%d)",
