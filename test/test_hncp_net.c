@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Thu May  8 17:58:02 2014 mstenber
- * Edit time:     387 min
+ * Last modified: Thu May  8 18:27:40 2014 mstenber
+ * Edit time:     389 min
  *
  */
 
@@ -326,27 +326,7 @@ void hncp_tube_beyond_multicast_unique(void)
 }
 
 #define test_setup() srandom(seed)
-
-#define maybe_run_test(fun)             \
-do {                                    \
-  int i;                                \
-  const char *fname = #fun;             \
-  if (!argc)                            \
-    {                                   \
-      test_setup();                     \
-      sput_run_test(fun);               \
-    }                                   \
-  else                                  \
-  for (i = 0; i < argc; i++)            \
-    {                                   \
-      if (strcmp(fname, argv[i]) == 0)  \
-        {                               \
-          test_setup();                 \
-          sput_run_test(fun);           \
-          break;                        \
-        }                               \
-    }                                   \
- } while (0)
+#define maybe_run_test(fun) sput_maybe_run_test(fun, test_setup())
 
 int main(__unused int argc, __unused char **argv)
 {

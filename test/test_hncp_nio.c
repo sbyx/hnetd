@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Tue Apr 29 22:18:15 2014 mstenber
- * Edit time:     168 min
+ * Last modified: Thu May  8 18:32:08 2014 mstenber
+ * Edit time:     173 min
  *
  */
 
@@ -531,17 +531,22 @@ static void hncp_ok(void)
   destroy_hncp(o);
 }
 
-int main(__unused int argc, __unused char **argv)
+#define maybe_run_test(fun) sput_maybe_run_test(fun, do {} while(0))
+
+int main(int argc, char **argv)
 {
   setbuf(stdout, NULL); /* so that it's in sync with stderr when redirected */
   openlog("test_hncp_nio", LOG_CONS | LOG_PERROR, LOG_DAEMON);
   sput_start_testing();
   sput_enter_suite("hncp_nio"); /* optional */
-  sput_run_test(hncp_init_no_hwaddr);
-  sput_run_test(hncp_init_iofail);
-  sput_run_test(hncp_ok_minimal);
-  sput_run_test(hncp_rejoin_works);
-  sput_run_test(hncp_ok);
+  argc -= 1;
+  argv += 1;
+
+  maybe_run_test(hncp_init_no_hwaddr);
+  maybe_run_test(hncp_init_iofail);
+  maybe_run_test(hncp_ok_minimal);
+  maybe_run_test(hncp_rejoin_works);
+  maybe_run_test(hncp_ok);
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();
