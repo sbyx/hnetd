@@ -246,7 +246,7 @@ struct pa_cpl {
 	struct btrie_element if_be;  /* Linked in iface list */
 	struct pa_laa *laa;          /* A local address assignment for the router */
 	bool invalid;                /* Used by pa algo */
-	struct pa_core_rule *rule;    /* If that cp comes from a rule. Or null. */
+	struct pa_rule *rule;         /* If that cp comes from a rule. Or null. */
 	struct btrie_element rule_be; /* If rule not null, linked in the rule tree. */
 };
 
