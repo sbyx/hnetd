@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu May  8 13:42:54 2014 mstenber
- * Edit time:     213 min
+ * Last modified: Thu May  8 14:26:10 2014 mstenber
+ * Edit time:     225 min
  *
  */
 
@@ -149,6 +149,7 @@ static void hncp_prune(hncp o)
     }
 
   hncp_node n;
+  hnetd_time_t next_time = 0;
   vlist_for_each_element(&o->nodes, n, in_nodes)
     {
       if (n->in_nodes.version != o->nodes.version)
@@ -157,10 +158,13 @@ static void hncp_prune(hncp o)
             n->last_reachable_prune = now - 1;
           else if (n->last_reachable_prune < grace_after)
             continue;
+          next_time = TMIN(next_time,
+                           n->last_reachable_prune + HNCP_PRUNE_GRACE_PERIOD + 1);
           vlist_add(&o->nodes, &n->in_nodes, n);
           _node_set_reachable(n, false);
         }
     }
+  o->next_prune = next_time;
   vlist_flush(&o->nodes);
   o->last_prune = now;
 }
@@ -193,23 +197,18 @@ void hncp_run(hncp o)
    * replicating code. */
   hncp_self_flush(o->own_node);
 
-  if (o->graph_dirty && !o->disable_prune)
+  if (o->graph_dirty)
+    o->next_prune = HNCP_MINIMUM_PRUNE_INTERVAL + o->last_prune;
+
+  if (o->next_prune && !o->disable_prune && o->next_prune <= now)
     {
-      hnetd_time_t prune_at = HNCP_MINIMUM_PRUNE_INTERVAL + o->last_prune;
-
-      if (prune_at > now)
-        {
-          next = TMIN(next, prune_at);
-        }
-      else
-        {
-          /* Prune may re-set graph dirty, if it removes nodes.
-           * So mark graph non-dirty before the call. */
-          o->graph_dirty = false;
-
-          hncp_prune(o);
-        }
+      o->graph_dirty = false;
+      hncp_prune(o);
     }
+
+  /* next_prune may be set _by_ hncp_prune, therefore redundant looking check */
+  if (o->next_prune)
+    next = TMIN(next, o->next_prune);
 
   /* Release the flag to allow more change-triggered zero timeouts to
    * be scheduled. (We don't want to do this before we're done with

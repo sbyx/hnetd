@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu May  8 13:41:44 2014 mstenber
+ * Last modified: Thu May  8 14:16:01 2014 mstenber
  * Edit time:     164 min
  *
  */
@@ -74,6 +74,7 @@ struct hncp_struct {
    * changed connectivity. */
   bool graph_dirty;
   hnetd_time_t last_prune;
+  hnetd_time_t next_prune;
 
   /* flag which indicates that we should re-calculate network hash
    * based on nodes' state. */
