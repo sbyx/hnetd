@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu May  8 18:00:00 2014 mstenber
- * Edit time:     232 min
+ * Last modified: Thu May  8 18:10:53 2014 mstenber
+ * Edit time:     235 min
  *
  */
 
@@ -142,17 +142,16 @@ static void hncp_prune(hncp o)
   hnetd_time_t next_time = 0;
   vlist_for_each_element(&o->nodes, n, in_nodes)
     {
-      if (n->in_nodes.version != o->nodes.version)
-        {
-          if (!n->last_reachable_prune)
-            n->last_reachable_prune = now - 1;
-          else if (n->last_reachable_prune < grace_after)
-            continue;
-          next_time = TMIN(next_time,
-                           n->last_reachable_prune + HNCP_PRUNE_GRACE_PERIOD + 1);
-          vlist_add(&o->nodes, &n->in_nodes, n);
-          _node_set_reachable(n, false);
-        }
+      if (n->in_nodes.version == o->nodes.version)
+        continue;
+      if (!n->last_reachable_prune)
+        n->last_reachable_prune = now - 1;
+      else if (n->last_reachable_prune < grace_after)
+        continue;
+      next_time = TMIN(next_time,
+                       n->last_reachable_prune + HNCP_PRUNE_GRACE_PERIOD + 1);
+      vlist_add(&o->nodes, &n->in_nodes, n);
+      _node_set_reachable(n, false);
     }
   o->next_prune = next_time;
   vlist_flush(&o->nodes);
