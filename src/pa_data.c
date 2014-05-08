@@ -464,6 +464,7 @@ struct pa_cp *pa_cp_create(struct pa_data *data, const struct prefix *prefix, ui
 		_pa_cpl(cp)->iface = NULL;
 		_pa_cpl(cp)->laa = NULL;
 		_pa_cpl(cp)->invalid = false;
+		_pa_cpl(cp)->rule = NULL;
 		cp = &_pa_cpl(cp)->cp;
 		break;
 	case PA_CPT_X:

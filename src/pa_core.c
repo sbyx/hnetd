@@ -101,7 +101,7 @@ static void pa_core_update_cpl(struct pa_dp *dp, struct pa_ap *ap, struct pa_cpl
 
 static void pa_core_create_cpl(struct pa_core *core, const struct prefix *p,
 		struct pa_dp *dp, struct pa_iface *iface,
-		bool authority, uint8_t priority)
+		bool authority, uint8_t priority, struct pa_core_rule *rule)
 {
 	struct pa_cpl *cpl = _pa_cpl(pa_cp_get(core_p(core, data), p, PA_CPT_L, true));
 	if(!cpl) {
@@ -117,6 +117,11 @@ static void pa_core_create_cpl(struct pa_core *core, const struct prefix *p,
 	pa_cp_notify(&cpl->cp);
 
 	pa_cp_set_apply_to(&cpl->cp, 2*core_p(core, data.flood)->flooding_delay);
+
+	if(rule) {
+		btrie_add(&rule->cpls, &cpl->rule_be, (btrie_key_t *)&cpl->cp.prefix, cpl->cp.prefix.plen);
+		cpl->rule = rule;
+	}
 
 	L_INFO("Created new "PA_CP_L, PA_CP_LA(&cpl->cp));
 }
@@ -196,20 +201,45 @@ static const struct prefix * pa_getprefix_storage(struct pa_core *core, struct p
 	return NULL;
 }
 
+static int pa_rule_try(struct pa_core *core, struct pa_core_rule *rule,
+		struct pa_iface *iface, struct pa_dp *dp, struct prefix *p)
+{
+	return -1 || (core || rule || iface ||dp || p);
+}
+
+static struct pa_core_rule *pa_getprefix_rules(struct pa_core *core, struct pa_iface *iface,
+		struct pa_dp *dp, struct prefix *p)
+{
+	struct pa_core_rule *rule;
+	list_for_each_entry(rule, &core->rules, le) {
+		if(!pa_rule_try(core, rule, iface, dp, p)) {
+			return rule;
+		}
+	}
+	return NULL;
+}
+
+
 static void pa_core_make_new_assignment(struct pa_core *core, struct pa_dp *dp, struct pa_iface *iface)
 {
 	const struct prefix *p;
+	struct pa_core_rule *rule;
 	struct prefix np;
 
+	p = NULL;
+	if((rule = pa_getprefix_rules(core, iface, dp, &np)))
+		p = &np;
+
 	/* Get from storage */
-	p = pa_getprefix_storage(core, iface, dp);
+	if (!p)
+		p = pa_getprefix_storage(core, iface, dp);
 
 	/* If no storage */
 	if(!p && !pa_getprefix_random(core, dp, iface, &np))
 		p = &np;
 
 	if(p)
-		pa_core_create_cpl(core, p, dp, iface, 0, PA_PRIORITY_DEFAULT);
+		pa_core_create_cpl(core, p, dp, iface, rule?rule->authoritative:0, rule?rule->priority:PA_PRIORITY_DEFAULT, rule);
 }
 
 /* cpl destructor */
@@ -610,7 +640,39 @@ static void __pa_aaa_to_cb(struct pa_timer *t)
 	aaa_algo_do(container_of(t, struct pa_core, aaa_to));
 }
 
-/************* Authoritative control ********************************/
+/************* Rule control ********************************/
+
+void pa_core_rule_add(struct pa_core *core, struct pa_core_rule *rule)
+{
+	struct pa_core_rule *r2;
+
+	list_for_each_entry(r2, &core->rules, le) {
+		if(rule->rule_priority <= r2->rule_priority) {
+			list_add_tail(&rule->le, &r2->le);
+			goto conf;
+		}
+	}
+	list_add_tail(&rule->le, &core->rules);
+
+conf:
+	btrie_init(&rule->cpls);
+
+	//todo: Override may need a change
+}
+
+void pa_core_rule_del(__attribute__((unused))struct pa_core *core,
+		struct pa_core_rule *rule)
+{
+	struct pa_cpl *cpl, *cpl2;
+	btrie_for_each_down_entry_safe(cpl, cpl2, &rule->cpls, NULL, 0, rule_be) {
+		btrie_remove(&cpl->rule_be);
+		cpl->rule = NULL;
+		pa_cp_set_authoritative(&cpl->cp, false);
+		pa_cp_set_priority(&cpl->cp, PAD_PRIORITY_DEFAULT);
+		pa_cp_notify(&cpl->cp);
+	}
+	list_del(&rule->le);
+}
 
 struct pa_cpl *__pa_cpl_get_in_iface(struct prefix *prefix, struct pa_iface *iface)
 {
@@ -787,6 +849,8 @@ void pa_core_init(struct pa_core *core)
 	core->data_user.ifs = __pad_cb_ifs;
 	core->data_user.flood = __pad_cb_flood;
 	core->data_user.cps = __pad_cb_cps;
+
+	INIT_LIST_HEAD(&core->rules);
 
 	core->started = false;
 }
