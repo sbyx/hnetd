@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu May  8 18:10:53 2014 mstenber
- * Edit time:     235 min
+ * Last modified: Thu May  8 18:42:36 2014 mstenber
+ * Edit time:     247 min
  *
  */
 
@@ -186,18 +186,22 @@ void hncp_run(hncp o)
    * replicating code. */
   hncp_self_flush(o->own_node);
 
-  if (o->graph_dirty)
-    o->next_prune = HNCP_MINIMUM_PRUNE_INTERVAL + o->last_prune;
-
-  if (o->next_prune && !o->disable_prune && o->next_prune <= now)
+  if (!o->disable_prune)
     {
-      o->graph_dirty = false;
-      hncp_prune(o);
-    }
+      if (o->graph_dirty)
+        o->next_prune = HNCP_MINIMUM_PRUNE_INTERVAL + o->last_prune;
 
-  /* next_prune may be set _by_ hncp_prune, therefore redundant looking check */
-  if (o->next_prune)
-    next = TMIN(next, o->next_prune);
+      if (o->next_prune && o->next_prune <= now)
+        {
+          o->graph_dirty = false;
+          hncp_prune(o);
+        }
+
+      /* next_prune may be set _by_ hncp_prune, therefore redundant
+       * looking check */
+      if (o->next_prune)
+        next = TMIN(next, o->next_prune);
+    }
 
   /* Release the flag to allow more change-triggered zero timeouts to
    * be scheduled. (We don't want to do this before we're done with
