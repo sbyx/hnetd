@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Mon May  5 14:51:28 2014 mstenber
- * Edit time:     209 min
+ * Last modified: Thu May  8 13:42:54 2014 mstenber
+ * Edit time:     213 min
  *
  */
 
@@ -272,11 +272,15 @@ void hncp_run(hncp o)
       /* vlist_for_each_element(&l->neighbors, n, in_neighbors) */
       avl_for_each_element_safe(&l->neighbors.avl, n, in_neighbors.avl, n2)
         {
-          hnetd_time_t next_time = HNCP_INTERVAL_WORRIED
-            + (o->assume_bidirectional_reachability
-               ? n->last_heard
-               : n->last_response)
-            + (HNCP_INTERVAL_BASE << n->ping_count);
+          hnetd_time_t next_time;
+
+          if (!n->ping_count)
+            next_time = HNCP_INTERVAL_WORRIED
+              + (o->assume_bidirectional_reachability
+                 ? n->last_heard
+                 : n->last_response);
+          else
+            next_time = n->last_ping + (HNCP_INTERVAL_BASE << n->ping_count);
 
           /* No cause to do anything right now. */
           if (next_time > now)
@@ -285,7 +289,7 @@ void hncp_run(hncp o)
               continue;
             }
 
-          if (n->ping_count++ == HNCP_INTERVAL_RETRIES)
+          if (n->ping_count++== HNCP_INTERVAL_RETRIES)
             {
               /* Zap the neighbor */
               L_DEBUG("neighbor %llx is gone - no response to pings",
@@ -294,6 +298,7 @@ void hncp_run(hncp o)
               continue;
             }
 
+          n->last_ping = hncp_time(o);
           /* Send a ping */
           L_DEBUG("pinging neighbor %llx", hncp_hash64(&n->node_identifier_hash));
           hncp_link_send_req_network_state(l, &n->last_address);
@@ -301,7 +306,7 @@ void hncp_run(hncp o)
     }
 
   if (next && !o->immediate_scheduled)
-    hncp_io_schedule(o, next-now);
+    hncp_io_schedule(o, next - now);
 
   /* Clear the cached time, it's most likely no longer valid. */
   o->now = 0;

@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon May  5 14:51:08 2014 mstenber
+ * Last modified: Thu May  8 13:41:44 2014 mstenber
  * Edit time:     164 min
  *
  */
@@ -172,6 +172,9 @@ struct hncp_neighbor_struct {
 
   /* How many pings we have sent that haven't been responded to. */
   int ping_count;
+
+  /* When did we send the ping most recently. */
+  hnetd_time_t last_ping;
 };
 
 
