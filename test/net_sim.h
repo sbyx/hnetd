@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu May  8 17:39:37 2014 mstenber
+ * Last modified: Thu May  8 17:57:49 2014 mstenber
  * Edit time:     125 min
  *
  */
@@ -99,7 +99,6 @@ typedef struct net_sim_t {
   struct list_head neighs;
   struct list_head messages;
 
-  bool assume_bidirectional_reachability;
   bool disable_sd;
 
   bool should_be_stable_topology;
@@ -285,7 +284,6 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
   sput_fail_unless(n->name, "strdup name");
   n->s = s;
   r = hncp_init(&n->n, name, strlen(name));
-  n->n.assume_bidirectional_reachability = s->assume_bidirectional_reachability;
   n->n.io_init_done = true; /* our IO doesn't really need init.. */
   sput_fail_unless(r, "hncp_init");
   if (!r)

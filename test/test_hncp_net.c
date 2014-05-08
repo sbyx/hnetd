@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon May  5 17:13:50 2014 mstenber
- * Edit time:     390 min
+ * Last modified: Thu May  8 17:58:02 2014 mstenber
+ * Edit time:     387 min
  *
  */
 
@@ -242,15 +242,6 @@ void hncp_bird14()
   raw_bird14(&s);
 }
 
-void hncp_bird14_bidir()
-{
-  net_sim_s s;
-
-  net_sim_init(&s);
-  s.assume_bidirectional_reachability = true;
-  raw_bird14(&s);
-}
-
 void hncp_bird14_unique()
 {
   net_sim_s s;
@@ -388,7 +379,6 @@ int main(__unused int argc, __unused char **argv)
   sput_enter_suite("hncp_net"); /* optional */
   maybe_run_test(hncp_two);
   maybe_run_test(hncp_bird14);
-  maybe_run_test(hncp_bird14_bidir);
   maybe_run_test(hncp_bird14_unique);
   maybe_run_test(hncp_tube_small);
   maybe_run_test(hncp_tube_beyond_multicast);

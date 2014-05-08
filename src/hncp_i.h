@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu May  8 14:16:01 2014 mstenber
- * Edit time:     164 min
+ * Last modified: Thu May  8 18:02:40 2014 mstenber
+ * Edit time:     165 min
  *
  */
 
@@ -34,9 +34,6 @@
 /* in hnetd_time */
 #define HNCP_UPDATE_COLLISION_N 60000
 
-/* Do we want to do unicast exchange immediately with new neighbors? */
-#undef HNCP_PROBE_NEW_NEIGHBORS_IN_UNIDIRECTIONAL_MODE_IMMEDIATELY
-
 #include <libubox/vlist.h>
 
 /* IFNAMSIZ */
@@ -46,9 +43,6 @@ typedef uint32_t iid_t;
 
 
 struct hncp_struct {
-  /* Can we assume bidirectional reachability? */
-  bool assume_bidirectional_reachability;
-
   /* Disable pruning (should be used probably only in unit tests) */
   bool disable_prune;
 

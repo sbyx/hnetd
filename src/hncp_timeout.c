@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu May  8 14:26:10 2014 mstenber
- * Edit time:     225 min
+ * Last modified: Thu May  8 18:00:00 2014 mstenber
+ * Edit time:     232 min
  *
  */
 
@@ -113,38 +113,28 @@ static void hncp_prune(hncp o)
   /* Prune the node graph. IOW, start at own node, flood fill, and zap
    * anything that didn't seem appropriate. */
   vlist_update(&o->nodes);
-  if (o->assume_bidirectional_reachability)
-    {
-      /* If we assume reachability is bidirectional, we can just
-       * traverse the graph. */
-      hncp_prune_rec(o->own_node);
-    }
-  else
-    {
-      hncp_link l;
-      hncp_neighbor ne;
-      hncp_node n = o->own_node, n2;
+  hncp_link l;
+  hncp_neighbor ne;
 
-      /* We're always reachable. */
-      vlist_add(&o->nodes, &n->in_nodes, n);
-      _node_set_reachable(n, true);
+  /* We're always reachable. */
+  vlist_add(&o->nodes, &o->own_node->in_nodes, o->own_node);
+  _node_set_reachable(o->own_node, true);
 
-      /* Only neighbors we believe to be reachable are the ones we can
-       * find in our own link -> neighbor relations, with non-zero
-       * last_response. */
-      vlist_for_each_element(&o->links, l, in_links)
+  /* Only neighbors we believe to be reachable are the ones we can
+   * find in our own link -> neighbor relations, with non-zero
+   * last_response. */
+  vlist_for_each_element(&o->links, l, in_links)
+    {
+      vlist_for_each_element(&l->neighbors, ne, in_neighbors)
         {
-          vlist_for_each_element(&l->neighbors, ne, in_neighbors)
-            {
-              if (!ne->last_response)
-                  continue;
-              n2 = hncp_node_find_neigh_bidir2(n,
-                                               cpu_to_be32(l->iid),
-                                               cpu_to_be32(ne->iid),
-                                               &ne->node_identifier_hash);
-              if (n2)
-                hncp_prune_rec(n2);
-            }
+          if (!ne->last_response)
+            continue;
+          hncp_node n2 = hncp_node_find_neigh_bidir2(o->own_node,
+                                                     cpu_to_be32(l->iid),
+                                                     cpu_to_be32(ne->iid),
+                                                     &ne->node_identifier_hash);
+          if (n2)
+            hncp_prune_rec(n2);
         }
     }
 
@@ -274,10 +264,7 @@ void hncp_run(hncp o)
           hnetd_time_t next_time;
 
           if (!n->ping_count)
-            next_time = HNCP_INTERVAL_WORRIED
-              + (o->assume_bidirectional_reachability
-                 ? n->last_heard
-                 : n->last_response);
+            next_time = n->last_response + HNCP_INTERVAL_WORRIED;
           else
             next_time = n->last_ping + (HNCP_INTERVAL_BASE << n->ping_count);
 

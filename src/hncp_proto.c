@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu May  8 17:43:54 2014 mstenber
- * Edit time:     399 min
+ * Last modified: Thu May  8 17:56:27 2014 mstenber
+ * Edit time:     401 min
  *
  */
 
@@ -224,8 +224,6 @@ _heard(hncp_link l, hncp_t_link_id lid, struct in6_addr *src)
     }
 
   n->last_address = *src;
-  if (o->assume_bidirectional_reachability)
-    n->ping_count = 0;
   n->last_heard = hncp_time(o);
   return n;
 }
@@ -372,7 +370,7 @@ handle_message(hncp_link l,
    * recently. */
   if (!multicast && ne)
     {
-      if (!o->assume_bidirectional_reachability && !ne->last_response)
+      if (!ne->last_response)
         {
           o->links_dirty = true;
           hncp_schedule(o);
