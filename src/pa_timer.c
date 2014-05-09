@@ -26,6 +26,7 @@ void pa_timer_init(struct pa_timer *t, void (*cb)(struct pa_timer *), const char
 	t->when = -1;
 	t->name = name;
 	t->min_delay = 0;
+	t->not_before = 0;
 }
 
 static inline void pa_timer_update_to(struct pa_timer *t)

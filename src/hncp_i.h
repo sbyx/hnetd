@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon May  5 14:51:08 2014 mstenber
- * Edit time:     164 min
+ * Last modified: Thu May  8 18:02:40 2014 mstenber
+ * Edit time:     165 min
  *
  */
 
@@ -34,9 +34,6 @@
 /* in hnetd_time */
 #define HNCP_UPDATE_COLLISION_N 60000
 
-/* Do we want to do unicast exchange immediately with new neighbors? */
-#undef HNCP_PROBE_NEW_NEIGHBORS_IN_UNIDIRECTIONAL_MODE_IMMEDIATELY
-
 #include <libubox/vlist.h>
 
 /* IFNAMSIZ */
@@ -46,9 +43,6 @@ typedef uint32_t iid_t;
 
 
 struct hncp_struct {
-  /* Can we assume bidirectional reachability? */
-  bool assume_bidirectional_reachability;
-
   /* Disable pruning (should be used probably only in unit tests) */
   bool disable_prune;
 
@@ -74,6 +68,7 @@ struct hncp_struct {
    * changed connectivity. */
   bool graph_dirty;
   hnetd_time_t last_prune;
+  hnetd_time_t next_prune;
 
   /* flag which indicates that we should re-calculate network hash
    * based on nodes' state. */
@@ -175,6 +170,9 @@ struct hncp_neighbor_struct {
 
   /* How many pings we have sent that haven't been responded to. */
   int ping_count;
+
+  /* When did we send the ping most recently. */
+  hnetd_time_t last_ping;
 };
 
 typedef struct trust_graph_struct hncp_trust_graph_s, *hncp_trust_graph;

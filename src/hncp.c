@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon May  5 23:36:56 2014 mstenber
- * Edit time:     502 min
+ * Last modified: Thu May  8 17:56:12 2014 mstenber
+ * Edit time:     509 min
  *
  */
 
@@ -220,15 +220,8 @@ static void update_neighbor(struct vlist_tree *t,
 
   if (t_old)
     free(t_old);
-  else if (t_new && !o->assume_bidirectional_reachability)
-    {
-#ifdef HNCP_PROBE_NEW_NEIGHBORS_IN_UNIDIRECTIONAL_MODE_IMMEDIATELY
-      /* Provisional neighbor; on add, try to send single network
-       * state request via unicast. */
-      (void)hncp_link_send_req_network_state(l, &t_new->last_address);
-#endif /* HNCP_PROBE_NEW_NEIGHBORS_IN_UNIDIRECTIONAL_MODE_IMMEDIATELY */
-      return;
-    }
+  else if (t_new)
+    return;
   /* Real new neighbor change(?). */
   o->links_dirty = true;
   hncp_schedule(o);
@@ -560,8 +553,7 @@ void hncp_self_flush(hncp_node n)
               /* If we don't assume bidirectional reachability, only
                * advertise routers that _do_ respond to our unicast at
                * least once. */
-              if (!o->assume_bidirectional_reachability &&
-                  !ne->last_response)
+              if (!ne->last_response)
                 continue;
 
               unsigned char buf[TLV_SIZE + sizeof(hncp_t_node_data_neighbor_s)];

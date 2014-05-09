@@ -337,6 +337,27 @@ static struct
         _func();                                                           \
     } while (0)
 
+#define sput_maybe_run_test(fun, setup) \
+do {                                    \
+  int i;                                \
+  const char *fname = #fun;             \
+  if (!argc)                            \
+    {                                   \
+      setup;                            \
+      sput_run_test(fun);               \
+    }                                   \
+  else                                  \
+  for (i = 0; i < argc; i++)            \
+    {                                   \
+      if (strcmp(fname, argv[i]) == 0)  \
+        {                               \
+          setup;                        \
+          sput_run_test(fun);           \
+          break;                        \
+        }                               \
+    }                                   \
+ } while (0)
+
 
 #ifdef __cplusplus
 }

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon May  5 17:13:50 2014 mstenber
- * Edit time:     390 min
+ * Last modified: Thu May  8 18:27:40 2014 mstenber
+ * Edit time:     389 min
  *
  */
 
@@ -242,15 +242,6 @@ void hncp_bird14()
   raw_bird14(&s);
 }
 
-void hncp_bird14_bidir()
-{
-  net_sim_s s;
-
-  net_sim_init(&s);
-  s.assume_bidirectional_reachability = true;
-  raw_bird14(&s);
-}
-
 void hncp_bird14_unique()
 {
   net_sim_s s;
@@ -335,27 +326,7 @@ void hncp_tube_beyond_multicast_unique(void)
 }
 
 #define test_setup() srandom(seed)
-
-#define maybe_run_test(fun)             \
-do {                                    \
-  int i;                                \
-  const char *fname = #fun;             \
-  if (!argc)                            \
-    {                                   \
-      test_setup();                     \
-      sput_run_test(fun);               \
-    }                                   \
-  else                                  \
-  for (i = 0; i < argc; i++)            \
-    {                                   \
-      if (strcmp(fname, argv[i]) == 0)  \
-        {                               \
-          test_setup();                 \
-          sput_run_test(fun);           \
-          break;                        \
-        }                               \
-    }                                   \
- } while (0)
+#define maybe_run_test(fun) sput_maybe_run_test(fun, test_setup())
 
 int main(__unused int argc, __unused char **argv)
 {
@@ -388,7 +359,6 @@ int main(__unused int argc, __unused char **argv)
   sput_enter_suite("hncp_net"); /* optional */
   maybe_run_test(hncp_two);
   maybe_run_test(hncp_bird14);
-  maybe_run_test(hncp_bird14_bidir);
   maybe_run_test(hncp_bird14_unique);
   maybe_run_test(hncp_tube_small);
   maybe_run_test(hncp_tube_beyond_multicast);

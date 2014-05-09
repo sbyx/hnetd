@@ -463,7 +463,7 @@ void test_pa_network()
 	pa_term(&pa);
 	sput_fail_unless(list_empty(&timeouts), "No more timeout");
 }
-
+/*
 void test_pa_static()
 {
 	hnetd_time_t valid, preferred;
@@ -560,7 +560,7 @@ void test_pa_static()
 	pa_stop(&pa);
 	pa_term(&pa);
 	sput_fail_unless(list_empty(&timeouts), "No more timeout");
-}
+}*/
 
 int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 {
@@ -572,7 +572,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 	sput_run_test(test_pa_initial);
 	sput_run_test(test_pa_ipv4);
 	sput_run_test(test_pa_network);
-	sput_run_test(test_pa_static);
+	//sput_run_test(test_pa_static);
 	sput_leave_suite(); /* optional */
 	sput_finish_testing();
 	return sput_get_return_value();
