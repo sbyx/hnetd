@@ -51,7 +51,10 @@ static inline void trust_graph_init(hncp_trust_graph g, hncp_hash hash){
 /** Alloc & init */
 static inline hncp_trust_graph trust_graph_create(hncp_hash hash){
   hncp_trust_graph g = malloc(sizeof(hncp_trust_graph_s));
-  trust_graph_init(g, hash);
+  if(g)
+    trust_graph_init(g, hash);
+  else
+    L_ERR("graph allocation failed");
   return g;
 }
 

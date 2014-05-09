@@ -54,8 +54,12 @@ end:
 
 void trust_graph_add_trust_link(hncp_trust_graph emitter, hncp_trust_graph trusted){
   struct _trusted_list *link = malloc(sizeof(struct _trusted_list));
+  if(!link){
+    L_ERR("Failed to add a trust link");
+    return;
+  }
   link->node = trusted;
-  list_add(&link->list,&emitter->arrows);
+  list_add_tail(&link->list,&emitter->arrows);
 };
 
 void trust_graph_add_trust_array(hncp_trust_graph emitter, hncp_trust_graph array[], int size){

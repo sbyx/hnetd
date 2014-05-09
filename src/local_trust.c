@@ -3,6 +3,10 @@
 void update_local(hncp o){
   size_t len = o->trust->array_size * sizeof(hncp_hash_s);
   hncp_t_trust_array tlv = malloc(sizeof(hncp_t_trust_array_s) + len);
+  if(!tlv){
+    L_ERR("malloc (%lu) failed for trust tlv", sizeof(hncp_t_trust_array_s)+len);
+    return;
+  }
 
   tlv->sequence_number = ++(o->trust->tlv_version);
   tlv->timeout = 0; /* Dummy */
@@ -42,6 +46,7 @@ static inline void check_free_array(hncp_trust t){
     t->local_trust_array = NULL;
   }
 }
+
 bool local_trust_remove_trusted_hash(hncp o, hncp_hash h){
   unsigned int i;
   hncp_trust t = o->trust;

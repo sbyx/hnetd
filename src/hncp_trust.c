@@ -33,7 +33,7 @@ static inline void hncp_trust_add_node(hncp o, hncp_trust_graph g){
   vlist_add(&o->trust->trust_graphs,&g->vlist_node, &g->hash);
 }
 
-static inline hncp_trust_graph hncp_trust_create_graph(hncp o, hncp_hash hash){
+static inline hncp_trust_graph hncp_trust_create_graph(hncp o, const hncp_hash hash){
   hncp_trust_graph g = trust_graph_create(hash);
   hncp_trust_add_node(o, g);
   return g;
@@ -99,12 +99,12 @@ void hncp_trust_update_graph(hncp o, hncp_hash emitter, hncp_hash trusted, int s
   hncp_trust_graph g = hncp_trust_get_graph_or_create_it(o, emitter);
   bool empty = list_empty(&g->arrows);
   trust_graph_remove_trust_links(g);
-  struct _trusted_list* arrow;
+
   for(int i = 0; i < size; i++){
-    arrow = malloc(sizeof(struct _trusted_list));
-    arrow->node = hncp_trust_get_graph_or_create_it(o, &trusted[i]);
-    list_add_tail(&arrow->list, &g->arrows);
+    hncp_trust_graph g_trusted = hncp_trust_get_graph_or_create_it(o, &trusted[i]);
+    trust_graph_add_trust_link(g, g_trusted);
   };
+
   if(empty)
     hncp_trust_flood_trust_links(g);
   else
