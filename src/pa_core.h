@@ -60,6 +60,9 @@ struct pa_static_prefix_rule {
 	char ifname[IFNAMSIZ];
 	bool hard;
 	char rule_name[40 + INET6_ADDRSTRLEN + IFNAMSIZ];
+
+	// private to user
+	struct list_head user;
 };
 
 struct pa_core {
