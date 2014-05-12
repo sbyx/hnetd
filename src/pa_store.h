@@ -15,6 +15,7 @@
 
 #include "prefix_utils.h"
 #include "pa_data.h"
+#include "pa_core.h"
 
 struct pa_store {
 	bool started;
@@ -24,6 +25,7 @@ struct pa_store {
 	char *filename;
 	hnetd_time_t save_delay;
 	struct uloop_timeout save_timeout;
+	struct pa_rule pa_rule;
 };
 
 void pa_store_init(struct pa_store *);

@@ -168,28 +168,6 @@ static int pa_rule_try_random(struct pa_core *core, struct pa_rule *rule,
 	return -1; //avoid warning
 }
 
-static int pa_rule_try_storage(struct pa_core *core, struct pa_rule *rule,
-		struct pa_dp *dp, struct pa_iface *iface,
-		__attribute__((unused))struct pa_ap *strongest_ap,
-		__attribute__((unused))struct pa_cpl *current_cpl)
-{
-	struct pa_sp *sp;
-
-	if(!iface->designated)
-		return -1;
-
-	pa_for_each_sp_in_iface(sp, iface) {
-		if(prefix_contains(&dp->prefix, &sp->prefix) &&
-				!pa_prefix_getcollision(core_pa(core), &sp->prefix)) {
-			prefix_cpy(&rule->prefix, &sp->prefix);
-			//prio, auth and advertise are set at init
-			return 0;
-		}
-	}
-
-	return -1;
-}
-
 static int pa_rule_try_accept(__attribute__((unused))struct pa_core *core,
 		struct pa_rule *rule,
 		__attribute__((unused))struct pa_dp *dp, __attribute__((unused))struct pa_iface *iface,
@@ -742,10 +720,6 @@ void pa_core_init(struct pa_core *core)
 	INIT_LIST_HEAD(&core->rules);
 	pa_core_rule_init(&core->keep_rule, "Keep current prefix", PACR_PRIORITY_KEEP, NULL, pa_rule_try_keep);
 	pa_core_rule_init(&core->accept_rule, "Accept proposed prefix", PACR_PRIORITY_ACCEPT, NULL, pa_rule_try_accept);
-	pa_core_rule_init(&core->storage_rule, "Stable storage", PACR_PRIORITY_STORAGE, NULL, pa_rule_try_storage);
-	core->storage_rule.priority = PA_PRIORITY_DEFAULT;
-	core->storage_rule.authoriative = false;
-	core->storage_rule.advertise = true;
 
 	pa_core_rule_init(&core->random_rule, "Randomly generated", PACR_PRIORITY_RANDOM, NULL, pa_rule_try_random);
 	core->random_rule.priority = PA_PRIORITY_DEFAULT;
@@ -754,7 +728,6 @@ void pa_core_init(struct pa_core *core)
 
 	pa_core_rule_add(core, &core->keep_rule);
 	pa_core_rule_add(core, &core->accept_rule);
-	pa_core_rule_add(core, &core->storage_rule);
 	pa_core_rule_add(core, &core->random_rule);
 
 	core->started = false;
@@ -798,7 +771,6 @@ void pa_core_term(struct pa_core *core)
 
 	pa_core_rule_del(core, &core->keep_rule);
 	pa_core_rule_del(core, &core->accept_rule);
-	pa_core_rule_del(core, &core->storage_rule);
 	pa_core_rule_del(core, &core->random_rule);
 }
 

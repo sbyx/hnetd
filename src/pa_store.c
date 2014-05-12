@@ -346,6 +346,28 @@ int pa_store_setfile(struct pa_store *store, const char *filepath)
 	return 0;
 }
 
+static int pa_rule_try_storage(struct pa_core *core, struct pa_rule *rule,
+		struct pa_dp *dp, struct pa_iface *iface,
+		__attribute__((unused))struct pa_ap *strongest_ap,
+		__attribute__((unused))struct pa_cpl *current_cpl)
+{
+	struct pa_sp *sp;
+
+	if(!iface->designated)
+		return -1;
+
+	pa_for_each_sp_in_iface(sp, iface) {
+		if(prefix_contains(&dp->prefix, &sp->prefix) &&
+				!pa_prefix_getcollision(container_of(core, struct pa, core), &sp->prefix)) {
+			prefix_cpy(&rule->prefix, &sp->prefix);
+			//prio, auth and advertise are set at init
+			return 0;
+		}
+	}
+
+	return -1;
+}
+
 void pa_store_init(struct pa_store *store)
 {
 	store->started = false;
@@ -358,6 +380,10 @@ void pa_store_init(struct pa_store *store)
 	store->save_delay = pas_next_delay(0);
 	memset(&store->save_timeout, 0, sizeof(struct uloop_timeout));
 	store->save_timeout.cb = pas_save_cb;
+	pa_core_rule_init(&store->pa_rule, "Stable storage", PACR_PRIORITY_STORAGE, NULL, pa_rule_try_storage);
+	store->pa_rule.priority = PA_PRIORITY_DEFAULT;
+	store->pa_rule.authoriative = false;
+	store->pa_rule.advertise = true;
 }
 
 void pa_store_start(struct pa_store *store)
@@ -372,6 +398,7 @@ void pa_store_start(struct pa_store *store)
 	}
 	pa_data_subscribe(store_p(store, data), &store->data_user);
 	pas_load(store);
+	pa_core_rule_add(store_p(store, core), &store->pa_rule);
 }
 
 void pa_store_stop(struct pa_store *store)
@@ -382,6 +409,7 @@ void pa_store_stop(struct pa_store *store)
 		uloop_timeout_cancel(&store->save_timeout);
 	pa_store_setfile(store, NULL);
 	pa_data_unsubscribe(&store->data_user);
+	pa_core_rule_del(store_p(store, core), &store->pa_rule);
 	store->started = false;
 }
 
