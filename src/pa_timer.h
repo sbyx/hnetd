@@ -25,6 +25,7 @@ void pa_timer_init(struct pa_timer *, void (*cb)(struct pa_timer *), const char 
 void pa_timer_enable(struct pa_timer *);
 void pa_timer_disable(struct pa_timer *);
 
+void pa_timer_set(struct pa_timer *, hnetd_time_t time, bool relative);
 void pa_timer_set_earlier(struct pa_timer *, hnetd_time_t time, bool relative);
 void pa_timer_set_not_before(struct pa_timer *, hnetd_time_t time, bool relative);
 void pa_timer_cancel(struct pa_timer *);

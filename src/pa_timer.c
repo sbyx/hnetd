@@ -71,7 +71,7 @@ void pa_timer_disable(struct pa_timer *t)
 		uloop_timeout_cancel(&t->t);
 }
 
-void pa_timer_set_earlier(struct pa_timer *t, hnetd_time_t time, bool relative)
+static void __pa_timer_set(struct pa_timer *t, hnetd_time_t time, bool relative, bool earlier)
 {
 	hnetd_time_t now = hnetd_time();
 	if(relative) {
@@ -82,8 +82,18 @@ void pa_timer_set_earlier(struct pa_timer *t, hnetd_time_t time, bool relative)
 		time = now + t->min_delay;
 	}
 
-	if(t->when < 0 || t->when > time)
+	if(t->when < 0 || !earlier || t->when > time)
 		pa_timer_set_when(t, time);
+}
+
+void pa_timer_set(struct pa_timer *t, hnetd_time_t time, bool relative)
+{
+	__pa_timer_set(t, time, relative, false);
+}
+
+void pa_timer_set_earlier(struct pa_timer *t, hnetd_time_t time, bool relative)
+{
+	__pa_timer_set(t, time, relative, true);
 }
 
 void pa_timer_cancel(struct pa_timer *t)

@@ -204,9 +204,9 @@ static void test_pa_store_sps() {
 	sput_fail_unless(if1->sp_count == 1, "One sp for if1");
 	sput_fail_unless(if2->sp_count == 2, "Two sp for if2");
 
-	sput_fail_unless(store->save_timeout.pending, "Timeout pending");
+	sput_fail_unless(store->t.t.pending, "Timeout pending");
 	sput_fail_unless(store->save_delay == INT64_C(10*60)*HNETD_TIME_PER_SECOND, "5 min delay");
-	store->save_timeout.cb(&store->save_timeout);
+	store->t.cb(&store->t);
 	test_pa_store_term();
 
 	/* reloading */
