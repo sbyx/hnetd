@@ -28,6 +28,12 @@ static struct pa_rid rid = { .id = {0x20} };
 struct pa_iface *if1, *if2;
 #define TEST_PAS_FILE "/tmp/hnetd_pa.db"
 
+const struct prefix *pa_prefix_getcollision(__unused struct pa *pa, __unused const struct prefix *prefix) {return NULL;};
+void pa_core_rule_init(__unused struct pa_rule *rule, __unused const char *name,
+		__unused uint32_t rule_priority, __unused const char *ifname, __unused rule_try try) {};
+void pa_core_rule_add(__unused struct pa_core *core, __unused struct pa_rule *rule) {};
+void pa_core_rule_del(__unused struct pa_core *core, __unused struct pa_rule *rule) {};
+
 static void test_pa_file_reset() {
 	FILE *f;
 		sput_fail_unless(f = fopen(TEST_PAS_FILE, "w"), "Erase test db file");
@@ -198,9 +204,9 @@ static void test_pa_store_sps() {
 	sput_fail_unless(if1->sp_count == 1, "One sp for if1");
 	sput_fail_unless(if2->sp_count == 2, "Two sp for if2");
 
-	sput_fail_unless(store->save_timeout.pending, "Timeout pending");
+	sput_fail_unless(store->t.t.pending, "Timeout pending");
 	sput_fail_unless(store->save_delay == INT64_C(10*60)*HNETD_TIME_PER_SECOND, "5 min delay");
-	store->save_timeout.cb(&store->save_timeout);
+	store->t.cb(&store->t);
 	test_pa_store_term();
 
 	/* reloading */

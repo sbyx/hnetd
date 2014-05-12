@@ -66,7 +66,6 @@ struct pa_core {
 	struct list_head rules;     /* Contains configured prefixes. */
 	struct pa_rule keep_rule;
 	struct pa_rule accept_rule;
-	struct pa_rule storage_rule;
 	struct pa_rule random_rule;
 };
 

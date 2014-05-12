@@ -15,15 +15,17 @@
 
 #include "prefix_utils.h"
 #include "pa_data.h"
+#include "pa_core.h"
+#include "pa_timer.h"
 
 struct pa_store {
-	bool started;
+	struct pa_timer t;
 	bool ula_valid;
 	struct prefix ula;
 	struct pa_data_user data_user;
 	char *filename;
 	hnetd_time_t save_delay;
-	struct uloop_timeout save_timeout;
+	struct pa_rule pa_rule;
 };
 
 void pa_store_init(struct pa_store *);

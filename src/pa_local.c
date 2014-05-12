@@ -288,16 +288,14 @@ void pa_local_init(struct pa_local *local, const struct pa_local_conf *conf)
 	local->data_user.ipv4 = __pa_local_ipv4_cb;
 	local->data_user.dps = __pa_local_dps_cb;
 
-	local->started = false;
 	//todo: DO not generate if no internal interface ?
 }
 
 void pa_local_start(struct pa_local *local)
 {
-	if(local->started)
+	if(local->t.enabled)
 		return;
 
-	local->started = true;
 	pa_timer_enable(&local->t);
 	pa_timer_set_not_before(&local->t, local_p(local, data.flood)->flooding_delay, true);
 	pa_timer_set_earlier(&local->t, 0, true);
@@ -307,7 +305,7 @@ void pa_local_start(struct pa_local *local)
 
 void pa_local_stop(struct pa_local *local)
 {
-	if(!local->started)
+	if(!local->t.enabled)
 		return;
 
 	pa_data_unsubscribe(&local->data_user);
@@ -315,8 +313,6 @@ void pa_local_stop(struct pa_local *local)
 	__pa_local_elem_term(local, &local->ula);
 
 	pa_timer_disable(&local->t);
-
-	local->started = false;
 }
 
 void pa_local_term(struct pa_local *local)

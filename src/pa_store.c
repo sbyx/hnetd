@@ -176,7 +176,7 @@ static int pas_load(struct pa_store *store)
 	FILE *f;
 	int err = 0;
 
-	if(!store->filename || !store->started)
+	if(!store->filename)
 		return 0;
 
 	if(!(f = fopen(store->filename, "r"))) {
@@ -257,18 +257,15 @@ err:
 	return -2;
 }
 
-void pas_save_cb(struct uloop_timeout *to)
+void pas_save_cb(struct pa_timer *t)
 {
-	pas_save(container_of(to, struct pa_store, save_timeout));
+	pas_save(container_of(t, struct pa_store, t));
 }
 
 void pas_save_schedule(struct pa_store *store)
 {
-	if(store->started) {
-		uloop_timeout_set(&store->save_timeout, (int) store->save_delay);
-	} else {
-		store->save_timeout.pending = true;
-	}
+	if(store->filename)
+		pa_timer_set(&store->t, store->save_delay, true);
 }
 
 const struct prefix *pa_store_ula_get(struct pa_store *store)
@@ -340,15 +337,38 @@ int pa_store_setfile(struct pa_store *store, const char *filepath)
 			return -1;
 		}
 		strcpy(store->filename, filepath);
-		pas_load(store);
+		if(store->t.enabled)
+			pas_load(store);
 	}
 
 	return 0;
 }
 
+static int pa_rule_try_storage(struct pa_core *core, struct pa_rule *rule,
+		struct pa_dp *dp, struct pa_iface *iface,
+		__attribute__((unused))struct pa_ap *strongest_ap,
+		__attribute__((unused))struct pa_cpl *current_cpl)
+{
+	struct pa_sp *sp;
+
+	if(!iface->designated)
+		return -1;
+
+	pa_for_each_sp_in_iface(sp, iface) {
+		if(prefix_contains(&dp->prefix, &sp->prefix) &&
+				!pa_prefix_getcollision(container_of(core, struct pa, core), &sp->prefix)) {
+			prefix_cpy(&rule->prefix, &sp->prefix);
+			//prio, auth and advertise are set at init
+			return 0;
+		}
+	}
+
+	return -1;
+}
+
 void pa_store_init(struct pa_store *store)
 {
-	store->started = false;
+	pa_timer_init(&store->t, pas_save_cb, "PA Storage");
 	store->filename = NULL;
 	store->ula_valid = false;
 	memset(&store->data_user, 0, sizeof(struct pa_data_user));
@@ -356,33 +376,32 @@ void pa_store_init(struct pa_store *store)
 	store->data_user.dps = __pa_store_dps;
 	store->data_user.aas = __pa_store_aas;
 	store->save_delay = pas_next_delay(0);
-	memset(&store->save_timeout, 0, sizeof(struct uloop_timeout));
-	store->save_timeout.cb = pas_save_cb;
+	pa_core_rule_init(&store->pa_rule, "Stable storage", PACR_PRIORITY_STORAGE, NULL, pa_rule_try_storage);
+	store->pa_rule.priority = PA_PRIORITY_DEFAULT;
+	store->pa_rule.authoriative = false;
+	store->pa_rule.advertise = true;
 }
 
 void pa_store_start(struct pa_store *store)
 {
-	if(store->started)
+	if(store->t.enabled)
 		return;
 
-	store->started = true;
-	if(store->save_timeout.pending) {
-		store->save_timeout.pending = false;
-		pas_save_schedule(store);
-	}
+	pa_timer_enable(&store->t);
 	pa_data_subscribe(store_p(store, data), &store->data_user);
 	pas_load(store);
+	pa_core_rule_add(store_p(store, core), &store->pa_rule);
 }
 
 void pa_store_stop(struct pa_store *store)
 {
-	if(!store->started)
+	if(!store->t.enabled)
 		return;
-	if(store->save_timeout.pending)
-		uloop_timeout_cancel(&store->save_timeout);
+
+	pa_core_rule_del(store_p(store, core), &store->pa_rule);
 	pa_store_setfile(store, NULL);
 	pa_data_unsubscribe(&store->data_user);
-	store->started = false;
+	pa_timer_disable(&store->t);
 }
 
 void pa_store_term(struct pa_store *store)

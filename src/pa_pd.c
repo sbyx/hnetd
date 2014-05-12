@@ -495,7 +495,7 @@ int pa_pd_lease_init(struct pa_pd *pd, struct pa_pd_lease *lease,
 	}
 
 	pa_timer_init(&lease->timer, pa_pd_lease_cb, "Prefix Delegation Lease");
-	if(pd->started)
+	if(pd->timer.enabled)
 		pa_timer_enable(&lease->timer);
 
 	lease->pd = pd;
@@ -567,15 +567,13 @@ void pa_pd_init(struct pa_pd *pd, const struct pa_pd_conf *conf)
 	pd->data_user.aps = pa_pd_aps_cb;
 
 	pa_timer_init(&pd->timer, pa_pd_update_cb, "Prefix Delegation");
-	pd->started = false;
 }
 
 void pa_pd_start(struct pa_pd *pd)
 {
 	struct pa_pd_lease *lease;
-	if(!pd->started) {
+	if(!pd->timer.enabled) {
 		L_NOTICE("Starting pa_pd");
-		pd->started = true;
 		pa_timer_enable(&pd->timer);
 		if(!list_empty(&pd->leases))
 			pa_timer_set_earlier(&pd->timer, PA_PD_UPDATE_DELAY, true);
@@ -592,14 +590,13 @@ void pa_pd_start(struct pa_pd *pd)
 void pa_pd_stop(struct pa_pd *pd)
 {
 	struct pa_pd_lease *lease;
-	if(pd->started) {
+	if(pd->timer.enabled) {
 		L_NOTICE("Stopping pa_pd");
 		list_for_each_entry(lease, &pd->leases, le)
 			pa_timer_disable(&lease->timer);
 
 		pa_data_unsubscribe(&pd->data_user);
 		pa_timer_disable(&pd->timer);
-		pd->started = false;
 	}
 }
 

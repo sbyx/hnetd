@@ -81,7 +81,6 @@ struct pa_local_conf
 };
 
 struct pa_local {
-	bool started;
 	struct pa_local_conf conf;
 	struct pa_local_elem ula;
 	struct pa_local_elem ipv4;
