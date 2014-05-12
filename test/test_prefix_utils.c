@@ -306,6 +306,21 @@ void prefix_random_t(void)
 	sput_fail_unless(success, "Random prefix is in src prefix");
 }
 
+void prefix_number_t()
+{
+	struct prefix p;
+	prefix_number(&p, &p10, 0, 1);
+	sput_fail_if(prefix_cmp(&p, &p10), "Correct prefix");
+	prefix_number(&p, &p10, 1, 1);
+	sput_fail_if(prefix_cmp(&p, &p11), "Correct prefix");
+	prefix_number(&p, &p10, 1, 0);
+	sput_fail_if(prefix_cmp(&p, &p10), "Correct prefix");
+	prefix_number(&p, &p10, 0xf, 1);
+	sput_fail_if(prefix_cmp(&p, &p11), "Correct prefix");
+	prefix_number(&p, &p10, 0xf, 4);
+	sput_fail_if(prefix_cmp(&p, &p1f), "Correct prefix");
+}
+
 int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 {
   sput_start_testing();
@@ -321,6 +336,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
   sput_run_test(prefix_increment_t);
   sput_run_test(prefix_last_t);
   sput_run_test(prefix_pton_t);
+  sput_run_test(prefix_number_t);
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();

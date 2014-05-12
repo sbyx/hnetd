@@ -54,12 +54,31 @@ struct pa_rule {
 #define PA_RULE_LA(rule) (rule)->name?(rule)->name:"no-name", (rule)->rule_priority
 };
 
+/* A static prefix rule is a configuration entry
+ * that will ask pa_core to use a particular prefix under
+ * some circumstances.
+ * A static prefix will only be used if an associated
+ * delegated prefix is available.*/
 struct pa_static_prefix_rule {
 	struct pa_rule rule;
-	struct prefix prefix;
-	char ifname[IFNAMSIZ];
-	bool hard;
+	struct prefix prefix;  //The prefix value
+	char ifname[IFNAMSIZ]; //The interface the prefix is associated to
+	bool hard;             // Whether that rule may remove a previously made assignment (of lower priority)
 	char rule_name[40 + INET6_ADDRSTRLEN + IFNAMSIZ];
+};
+
+/* A link id rule is a configuration entry that will
+ * ask pa_core to use a deterministic prefix for every
+ * delegated prefix.
+ * By default, its algorithmic priority is lower than
+ * a static prefix. */
+struct pa_link_id_rule {
+	struct pa_rule rule;
+	char ifname[IFNAMSIZ]; // The interface the ID is associated to
+	uint32_t link_id;      // The link ID
+	uint8_t link_id_len;   // Minimal required length difference between dp length and ap length
+	bool hard;             // Whether that rule may remove a previously made assignment (of lower priority)
+	char rule_name[40 + IFNAMSIZ];
 };
 
 struct pa_core {
@@ -82,14 +101,10 @@ void pa_core_rule_init(struct pa_rule *rule, const char *name, uint32_t rule_pri
 void pa_core_rule_add(struct pa_core *core, struct pa_rule *rule);
 void pa_core_rule_del(struct pa_core *core, struct pa_rule *rule);
 
-/* A static prefix is a particular type of rule.
- * It specifies a single prefix. When considered, the rule will push
- * the prefix whenever possible according to its priority.
- * The overall behavior can be customized by modifying the mod.
- * If ifname is set, it will only be used on the specified interface.
- * Otherwise, it may be applied on any interface. */
-/* Initializes a static prefix rule to default */
 void pa_core_static_prefix_init(struct pa_static_prefix_rule *rule,
 		const char *ifname, const struct prefix* p, bool hard);
+
+void pa_core_link_id_init(struct pa_link_id_rule *lrule, const char *ifname,
+		uint32_t link_id, uint8_t link_id_len, bool hard);
 
 #endif /* PA_CORE_H_ */
