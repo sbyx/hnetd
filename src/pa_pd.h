@@ -28,7 +28,6 @@ struct pa_pd_conf {
 struct pa_pd {
 	struct list_head leases;       /* List of known leases */
 	struct pa_data_user data_user; /* Used to receive data updates */
-	bool started;
 	struct pa_pd_conf conf;        /* The current pa_pd conf */
 	struct pa_timer timer;         /* Update leases with new dps or retry for other dps */
 };
