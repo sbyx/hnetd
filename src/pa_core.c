@@ -23,6 +23,9 @@
 #define __pa_paa_schedule(c) pa_timer_set_earlier(&(c)->paa_to, core_p((c), data)->flood.flooding_delay / PA_CORE_DELAY_FACTOR, true)
 #define __pa_aaa_schedule(c) pa_timer_set_earlier(&(c)->aaa_to, core_p((c), data)->flood.flooding_delay_ll / PA_CORE_DELAY_FACTOR, true)
 
+static int pa_core_invalidate_cps(struct pa_core *core, struct prefix *prefix, bool delete_auth,
+		struct pa_cpl *except);
+
 /* Generates a random or pseudo-random (based on the interface) prefix */
 int pa_prefix_prand(struct pa_iface *iface, size_t ctr_index,
 		const struct prefix *p, struct prefix *dst,
@@ -177,7 +180,6 @@ static int pa_rule_try_accept(__attribute__((unused))struct pa_core *core,
 		return -1;
 
 	prefix_cpy(&rule->prefix, &best_ap->prefix);
-	rule->advertise = iface->designated;
 	rule->priority = best_ap->priority;
 	rule->authoriative = false;
 	return 0;
@@ -192,7 +194,6 @@ static int pa_rule_try_keep(struct pa_core *core, struct pa_rule *rule,
 		return -1;
 
 	prefix_cpy(&rule->prefix, &current_cpl->cp.prefix);
-	rule->advertise = current_cpl->cp.advertised ||  iface->designated;
 	rule->priority = current_cpl->cp.priority;
 	rule->authoriative = current_cpl->cp.authoritative;
 	return 0;
@@ -201,7 +202,7 @@ static int pa_rule_try_keep(struct pa_core *core, struct pa_rule *rule,
 static void pa_core_apply_rule(struct pa_core *core, struct pa_rule *rule,
 		__attribute__((unused))struct pa_dp *dp,
 		__attribute__((unused))struct pa_iface *iface,
-		struct pa_cpl *current_cpl)
+		struct pa_ap *best_ap, struct pa_cpl *current_cpl)
 {
 	if(current_cpl && prefix_cmp(&current_cpl->cp.prefix, &rule->prefix)) {
 		pa_core_destroy_cp(core, &current_cpl->cp);
@@ -216,10 +217,15 @@ static void pa_core_apply_rule(struct pa_core *core, struct pa_rule *rule,
 		return;
 	}
 
+	pa_core_invalidate_cps(core, &rule->prefix, false, current_cpl);
+
 	pa_cpl_set_iface(current_cpl, iface);
 	pa_cp_set_priority(&current_cpl->cp, rule->priority);
 	pa_cp_set_authoritative(&current_cpl->cp, rule->authoriative);
-	pa_cp_set_advertised(&current_cpl->cp, rule->advertise);
+
+	bool advertise = !best_ap || iface->designated || prefix_cmp(&best_ap->prefix, &rule->prefix)
+			|| best_ap->priority < rule->priority;
+	pa_cp_set_advertised(&current_cpl->cp, advertise);
 	pa_cp_set_dp(&current_cpl->cp, dp);
 
 	if(!current_cpl->cp.applied && !current_cpl->cp.apply_to.pending)
@@ -244,18 +250,19 @@ static void pa_core_try_rules(struct pa_core *core, struct pa_dp *dp,
 	list_for_each_entry(rule, &core->rules, le) {
 		L_DEBUG("Considering "PA_RULE_L, PA_RULE_LA(rule));
 		if(rule->try && !rule->try(core, rule, dp, iface, best_ap, current_cpl)) {
-			pa_core_apply_rule(core, rule, dp, iface, current_cpl);
+			pa_core_apply_rule(core, rule, dp, iface, best_ap, current_cpl);
 			return;
 		}
 	}
 }
 
-static int pa_core_invalidate_cps(struct pa_core *core, struct prefix *prefix, bool delete_auth)
+static int pa_core_invalidate_cps(struct pa_core *core, struct prefix *prefix, bool delete_auth,
+		struct pa_cpl *except)
 {
 	struct pa_cp *cp, *cp2;
 	int ret = 0;
 	pa_for_each_cp_updown_safe(cp, cp2, core_p(core, data), prefix) {
-		if(delete_auth || !cp->authoritative) {
+		if((delete_auth || !cp->authoritative) && (cp != &except->cp)) {
 			pa_core_destroy_cp(core, cp);
 			ret = 1;
 		}
@@ -280,8 +287,12 @@ static bool pa_core_iface_is_designated(struct pa_core *core, struct pa_iface *i
 		if(!best_cpl
 				|| best_cpl->cp.authoritative > cpl->cp.authoritative
 				|| ((best_cpl->cp.authoritative == cpl->cp.authoritative) && best_cpl->cp.priority > cpl->cp.priority))
-			best_cpl = cpl;
+			if(cpl->cp.advertised)
+				best_cpl = cpl;
 	}
+
+	if(!best_cpl)
+		return false;
 
 	/* Compare with all aps on that iface */
 	pa_for_each_ap_in_iface(ap, iface) {
@@ -317,13 +328,10 @@ static struct pa_ap *pa_core_getap(struct pa_core *core, struct pa_dp *dp, struc
 	/* Get the highest priority on that interface */
 	pa_for_each_ap_in_iface_down(ap_iter, iface, &dp->prefix) {
 		if((!ap || pa_precedence_apap(ap_iter, ap) > 0)
-				&& pa_ap_isvalid(core_pa(core), ap_iter))
+				&& pa_ap_isvalid(core_pa(core), ap_iter)
+				&& (!cp || !cp->advertised || pa_precedence_apcp(ap_iter, cp) >= 0))
 				ap = ap_iter;
 	}
-
-	if(cp && ap && pa_precedence_apcp(ap, cp) < 0)
-		return NULL;
-
 	return ap;
 }
 
@@ -542,7 +550,7 @@ void pa_core_update_excluded(struct pa_core *core, struct pa_ldp *ldp)
 
 	if(ldp->excluded.valid) {
 		/* Invalidate all contained cps */
-		if (pa_core_invalidate_cps(core, &ldp->excluded.excluded, false))
+		if (pa_core_invalidate_cps(core, &ldp->excluded.excluded, false, NULL))
 			__pa_paa_schedule(core);
 
 		//todo: When no cp is deleted, we don't need to execute paa, but in case of scarcity, it may be usefull
@@ -570,14 +578,10 @@ static void __pa_aaa_to_cb(struct pa_timer *t)
 
 /************* Rule control ********************************/
 
-void pa_core_rule_init(struct pa_rule *rule, const char *name, uint32_t rule_priority, const char *ifname, rule_try try)
+void pa_core_rule_init(struct pa_rule *rule, const char *name, uint32_t rule_priority, rule_try try)
 {
 	rule->name = name;
 	rule->rule_priority = rule_priority;
-	if(ifname)
-		strcpy(rule->ifname, ifname);
-	else
-		rule->ifname[0] = '\0';
 	rule->try = try;
 	btrie_init(&rule->cpls);
 }
@@ -596,16 +600,21 @@ void pa_core_rule_add(struct pa_core *core, struct pa_rule *rule)
 
 conf:
 	btrie_init(&rule->cpls);
+	__pa_paa_schedule(core);
 
 	//todo: Override may need a change
 }
 
-void pa_core_rule_del(__attribute__((unused))struct pa_core *core,
+void pa_core_rule_del(struct pa_core *core,
 		struct pa_rule *rule)
 {
 	struct pa_cpl *cpl, *cpl2;
 	btrie_for_each_down_entry_safe(cpl, cpl2, &rule->cpls, NULL, 0, rule_be) {
-		cpl->cp.destroy(core_p(core, data), &cpl->cp, rule);
+		pa_cpl_set_rule(cpl, NULL);
+		pa_cp_set_authoritative(&cpl->cp, false);
+		pa_cp_set_priority(&cpl->cp, PA_PRIORITY_DEFAULT);
+		pa_cp_notify(&cpl->cp);
+		__pa_paa_schedule(core);
 	}
 	list_del(&rule->le);
 }
@@ -698,6 +707,57 @@ static void __pad_cb_cps(struct pa_data_user *user,
 		__pa_update_dodhcp(&container_of(cp->pa_data, struct pa, data)->core, cpl->iface);
 }
 
+/************* Static prefixes control ********************************/
+
+static int pa_rule_try_static_prefix(struct pa_core *core, struct pa_rule *rule,
+		struct pa_dp *dp, struct pa_iface *iface,
+		struct pa_ap *best_ap, __unused struct pa_cpl *current_cpl)
+{
+	struct pa_static_prefix_rule *sprule = container_of(rule, struct pa_static_prefix_rule, rule);
+	struct pa *pa = core_pa(core);
+
+	if(!(btrie_empty(&rule->cpls))
+			|| !prefix_contains(&dp->prefix, &sprule->prefix)
+			|| (sprule->ifname[0] != '\0' && strcmp(sprule->ifname, iface->ifname)))
+		return -1;
+
+	if(best_ap && (!sprule->hard ||
+			(!rule->authoriative && best_ap->priority >= rule->priority)))
+		return -1;
+
+	struct pa_ap *ap;
+	pa_for_each_ap_updown(ap, &pa->data, &sprule->prefix) {
+		if(!sprule->hard ||
+				(!rule->authoriative && rule->priority < ap->priority))
+			return -1;
+	}
+
+	struct pa_cp *cp;
+	pa_for_each_cp_updown(cp, &pa->data, &sprule->prefix) {
+		if(!sprule->hard ||
+				(!rule->authoriative && rule->priority < cp->priority))
+			return -1;
+	}
+
+	prefix_cpy(&rule->prefix, &sprule->prefix);
+	return 0;
+}
+
+void pa_core_static_prefix_init(struct pa_static_prefix_rule *sprule,
+		const char *ifname, const struct prefix* p, bool hard)
+{
+	pa_core_rule_init(&sprule->rule, "Static Prefix", hard?500:2500, pa_rule_try_static_prefix);
+	prefix_cpy(&sprule->prefix, p);
+
+	if(ifname)
+		strcpy(sprule->ifname, ifname);
+	else
+		sprule->ifname[0] = '\0';
+	sprule->hard = hard;
+	sprule->rule.authoriative = false;
+	sprule->rule.priority = PA_PRIORITY_AUTO_MIN;
+}
+
 /************* Control functions ********************************/
 
 void pa_core_init(struct pa_core *core)
@@ -718,13 +778,12 @@ void pa_core_init(struct pa_core *core)
 	core->data_user.cps = __pad_cb_cps;
 
 	INIT_LIST_HEAD(&core->rules);
-	pa_core_rule_init(&core->keep_rule, "Keep current prefix", PACR_PRIORITY_KEEP, NULL, pa_rule_try_keep);
-	pa_core_rule_init(&core->accept_rule, "Accept proposed prefix", PACR_PRIORITY_ACCEPT, NULL, pa_rule_try_accept);
+	pa_core_rule_init(&core->keep_rule, "Keep current prefix", PACR_PRIORITY_KEEP, pa_rule_try_keep);
+	pa_core_rule_init(&core->accept_rule, "Accept proposed prefix", PACR_PRIORITY_ACCEPT, pa_rule_try_accept);
 
-	pa_core_rule_init(&core->random_rule, "Randomly generated", PACR_PRIORITY_RANDOM, NULL, pa_rule_try_random);
+	pa_core_rule_init(&core->random_rule, "Randomly generated", PACR_PRIORITY_RANDOM, pa_rule_try_random);
 	core->random_rule.priority = PA_PRIORITY_DEFAULT;
 	core->random_rule.authoriative = false;
-	core->random_rule.advertise = true;
 
 	pa_core_rule_add(core, &core->keep_rule);
 	pa_core_rule_add(core, &core->accept_rule);
@@ -773,13 +832,3 @@ void pa_core_term(struct pa_core *core)
 	pa_core_rule_del(core, &core->accept_rule);
 	pa_core_rule_del(core, &core->random_rule);
 }
-
-int pa_core_static_prefix_add(struct pa_core *core, struct prefix *prefix, struct pa_iface *iface)
-{
-	return -1 || (core && prefix && iface);
-}
-int pa_core_static_prefix_remove(struct pa_core *core, struct prefix *prefix, struct pa_iface *iface)
-{
-	return -1 || (core && prefix && iface);
-}
-

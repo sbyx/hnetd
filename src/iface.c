@@ -905,9 +905,19 @@ void iface_add_dhcpv6_received(struct iface *c, const void *data, size_t len)
 
 void iface_add_chosen_prefix(struct iface *c, const struct prefix *p)
 {
-	struct pa_iface *iface = pa_iface_get(&pa_p->data, c->ifname, false);
-	if (iface)
-		pa_core_static_prefix_add(&pa_p->core, (struct prefix*)p, iface);
+	/* TODO:
+	 * This way of doing it has no way back. Valgrind will not like that.
+	 * It would be better to store those somewhere. Maybe a vlist ?
+	 */
+	struct pa_static_prefix_rule *sprule = malloc(sizeof(*sprule));
+	if(!sprule) {
+		L_ERR("malloc error in iface_add_chosen_prefix");
+		return;
+	}
+	pa_core_static_prefix_init(sprule, c->ifname, p, true);
+	sprule->rule.authoriative = true;
+	sprule->rule.priority = PAD_PRIORITY_DEFAULT;
+	pa_core_rule_add(&pa_p->core, &sprule->rule);
 }
 
 
