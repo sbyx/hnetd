@@ -725,6 +725,10 @@ static int pa_rule_try_static_prefix(struct pa_core *core, struct pa_rule *rule,
 			(!rule->authoriative && best_ap->priority >= rule->priority)))
 		return -1;
 
+	if(current_cpl && (!sprule->hard ||
+			(!rule->authoriative && current_cpl->cp.priority >= rule->priority)))
+		return -1;
+
 	struct pa_ap *ap;
 	pa_for_each_ap_updown(ap, &pa->data, &sprule->prefix) {
 		if(!sprule->hard ||
