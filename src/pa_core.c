@@ -750,7 +750,9 @@ static int pa_rule_try_static_prefix(struct pa_core *core, struct pa_rule *rule,
 void pa_core_static_prefix_init(struct pa_static_prefix_rule *sprule,
 		const char *ifname, const struct prefix* p, bool hard)
 {
-	pa_core_rule_init(&sprule->rule, "Static Prefix", hard?500:2500, pa_rule_try_static_prefix);
+	snprintf(sprule->rule_name, sizeof(sprule->rule_name), "Static Prefix %s on '%s'", PREFIX_REPR(p), ifname?ifname:"any iface");
+
+	pa_core_rule_init(&sprule->rule, sprule->rule_name, hard?500:2500, pa_rule_try_static_prefix);
 	prefix_cpy(&sprule->prefix, p);
 
 	if(ifname)

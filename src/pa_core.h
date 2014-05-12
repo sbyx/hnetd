@@ -59,6 +59,7 @@ struct pa_static_prefix_rule {
 	struct prefix prefix;
 	char ifname[IFNAMSIZ];
 	bool hard;
+	char rule_name[40 + INET6_ADDRSTRLEN + IFNAMSIZ];
 };
 
 struct pa_core {
