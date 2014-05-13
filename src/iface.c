@@ -919,7 +919,13 @@ void iface_add_dhcpv6_received(struct iface *c, const void *data, size_t len)
 
 void iface_add_chosen_prefix(struct iface *c, const struct prefix *p)
 {
-	struct pa_static_prefix_rule *sprule = calloc(1, sizeof(*sprule));
+	struct pa_static_prefix_rule *sprule;
+	//Check if that prefix is already configured
+	list_for_each_entry(sprule, &c->chosen, user) {
+		if(!prefix_cmp(p, &sprule->prefix))
+			return;
+	}
+	sprule = calloc(1, sizeof(*sprule));
 	pa_core_static_prefix_init(sprule, c->ifname, p, true);
 	sprule->rule.priority = PA_PRIORITY_AUTO_MAX + 2;
 	pa_core_rule_add(&pa_p->core, &sprule->rule);
@@ -941,6 +947,7 @@ void iface_set_link_id(struct iface *c, uint32_t linkid, uint8_t mask)
 	pa_core_link_id_init(id_rule, c->ifname, linkid, mask, true);
 	id_rule->rule.priority = PA_PRIORITY_AUTO_MAX + 1;
 	pa_core_rule_add(&pa_p->core, &id_rule->rule);
+	c->id = id_rule;
 }
 
 
