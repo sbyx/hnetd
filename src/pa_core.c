@@ -120,25 +120,33 @@ static uint8_t pa_default_plen(struct pa_dp *dp)
 	}
 }
 
-static int pa_rule_try_random(struct pa_core *core, struct pa_rule *rule,
+static uint8_t pa_scarcity_plen(struct pa_dp *dp)
+{
+	if(dp->prefix.plen < 64) {
+		return 80;
+	} else if (dp->prefix.plen < 88) {
+		return dp->prefix.plen + 32;
+	} else if (dp->prefix.plen < 112) {
+		return 124;
+	} else if (dp->prefix.plen <= 128) { //IPv4
+		return 124 + (dp->prefix.plen - 112)/8;
+	} else {
+		L_ERR("Invalid prefix length (%d)", dp->prefix.plen);
+		return 200;
+	}
+}
+
+static int pa_rule_try_random_plen(struct pa_core *core, struct pa_rule *rule,
 		struct pa_dp *dp, struct pa_iface *iface,
 		__attribute__((unused))struct pa_ap *strongest_ap,
-		__attribute__((unused))struct pa_cpl *current_cpl)
+		__attribute__((unused))struct pa_cpl *current_cpl,
+		uint8_t plen)
 {
-	if(!iface->designated)
+	if(!iface->designated || plen > 128)
 		return -1;
 
-	uint8_t plen;
 	const struct prefix *collision;
 	const struct prefix *first_collision = NULL;
-
-	if((plen = pa_default_plen(dp)) > 128)
-		return -1;
-
-	if (!iface) {
-		L_ERR("No specified interface for prefix random generation");
-		return -1;
-	}
 
 	/* Generate a pseudo-random subprefix */
 	if(pa_prefix_prand(iface, PAC_PRAND_PRFX, &dp->prefix, &rule->prefix, plen)) {
@@ -174,6 +182,20 @@ static int pa_rule_try_random(struct pa_core *core, struct pa_rule *rule,
 		}
 	}
 	return -1; //avoid warning
+}
+
+static int pa_rule_try_random_scarcity(struct pa_core *core, struct pa_rule *rule,
+		struct pa_dp *dp, struct pa_iface *iface,
+		struct pa_ap *strongest_ap, struct pa_cpl *current_cpl)
+{
+	return pa_rule_try_random_plen(core, rule, dp, iface, strongest_ap, current_cpl, pa_scarcity_plen(dp));
+}
+
+static int pa_rule_try_random(struct pa_core *core, struct pa_rule *rule,
+		struct pa_dp *dp, struct pa_iface *iface,
+		struct pa_ap *strongest_ap, struct pa_cpl *current_cpl)
+{
+	return pa_rule_try_random_plen(core, rule, dp, iface, strongest_ap, current_cpl, pa_default_plen(dp));
 }
 
 static int pa_rule_try_accept(__attribute__((unused))struct pa_core *core,
@@ -851,9 +873,14 @@ void pa_core_init(struct pa_core *core)
 	core->random_rule.priority = PA_PRIORITY_DEFAULT;
 	core->random_rule.authoritative = false;
 
+	pa_core_rule_init(&core->random_scarcity_rule, "Scarcity random selection", PACR_PRIORITY_SCARCITY, pa_rule_try_random_scarcity);
+	core->random_scarcity_rule.priority = PA_PRIORITY_DEFAULT;
+	core->random_scarcity_rule.authoritative = false;
+
 	pa_core_rule_add(core, &core->keep_rule);
 	pa_core_rule_add(core, &core->accept_rule);
 	pa_core_rule_add(core, &core->random_rule);
+	pa_core_rule_add(core, &core->random_scarcity_rule);
 
 	core->started = false;
 }
@@ -897,4 +924,5 @@ void pa_core_term(struct pa_core *core)
 	pa_core_rule_del(core, &core->keep_rule);
 	pa_core_rule_del(core, &core->accept_rule);
 	pa_core_rule_del(core, &core->random_rule);
+	pa_core_rule_del(core, &core->random_scarcity_rule);
 }

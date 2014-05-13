@@ -33,6 +33,7 @@ struct pa_rule {
 #define PACR_PRIORITY_ACCEPT    2000  //Accept or update CPL from AP
 #define PACR_PRIORITY_STORAGE   3000  //Priority used by stable storage prefix selection
 #define PACR_PRIORITY_RANDOM    4000  //Priority used by random prefix selection
+#define PACR_PRIORITY_SCARCITY  5000  //Random selection with reduced prefix length
 
 	/* Called to try finding a prefix.
 	 * Must return 0 if a prefix is found. A negative value otherwise.
@@ -92,6 +93,7 @@ struct pa_core {
 	struct pa_rule keep_rule;
 	struct pa_rule accept_rule;
 	struct pa_rule random_rule;
+	struct pa_rule random_scarcity_rule;
 };
 
 void pa_core_init(struct pa_core *);
