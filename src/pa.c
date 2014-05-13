@@ -225,6 +225,9 @@ static int pa_precedence(bool auth1, uint8_t prio1, struct pa_rid *rid1,
 	if(auth1 < auth2)
 		return -1;
 
+	if(auth1)
+		return 0;
+
 	if(prio1 > prio2)
 		return 1;
 

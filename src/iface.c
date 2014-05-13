@@ -916,7 +916,7 @@ void iface_add_chosen_prefix(struct iface *c, const struct prefix *p)
 {
 	struct pa_static_prefix_rule *sprule = calloc(1, sizeof(*sprule));
 	pa_core_static_prefix_init(sprule, c->ifname, p, true);
-	sprule->rule.authoriative = true;
+	sprule->rule.authoritative = true;
 	sprule->rule.priority = PAD_PRIORITY_DEFAULT;
 	pa_core_rule_add(&pa_p->core, &sprule->rule);
 	list_add_tail(&sprule->user, &c->chosen);

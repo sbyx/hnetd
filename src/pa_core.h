@@ -44,7 +44,7 @@ struct pa_rule {
 	/* Elements that must be filled when try returns 0 */
 	struct prefix prefix; //The prefix to be used
 	uint8_t priority;     //The priority value
-	bool authoriative;    //The authoritative bit
+	bool authoritative;    //The authoritative bit
 
 /* private to pa_core */
 	struct list_head le;

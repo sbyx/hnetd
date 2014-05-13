@@ -186,7 +186,7 @@ static int pa_rule_try_accept(__attribute__((unused))struct pa_core *core,
 
 	prefix_cpy(&rule->prefix, &best_ap->prefix);
 	rule->priority = best_ap->priority;
-	rule->authoriative = false;
+	rule->authoritative = false;
 	return 0;
 }
 
@@ -194,13 +194,13 @@ static int pa_rule_try_keep(struct pa_core *core, struct pa_rule *rule,
 		__attribute__((unused))struct pa_dp *dp, __attribute__((unused))struct pa_iface *iface,
 		struct pa_ap *best_ap, struct pa_cpl *current_cpl)
 {
-	if(!current_cpl || (best_ap && pa_precedence_apcp(best_ap, &current_cpl->cp) > 0 && !current_cpl->cp.authoritative)
+	if(!current_cpl || (best_ap && pa_precedence_apcp(best_ap, &current_cpl->cp) > 0)
 			|| !pa_cp_isvalid(core_pa(core), &current_cpl->cp))
 		return -1;
 
 	prefix_cpy(&rule->prefix, &current_cpl->cp.prefix);
 	rule->priority = current_cpl->cp.priority;
-	rule->authoriative = current_cpl->cp.authoritative;
+	rule->authoritative = current_cpl->cp.authoritative;
 	return 0;
 }
 
@@ -226,17 +226,22 @@ static void pa_core_apply_rule(struct pa_core *core, struct pa_rule *rule,
 
 	pa_cpl_set_iface(current_cpl, iface);
 	pa_cp_set_priority(&current_cpl->cp, rule->priority);
-	pa_cp_set_authoritative(&current_cpl->cp, rule->authoriative);
+	pa_cp_set_authoritative(&current_cpl->cp, rule->authoritative);
 
-	bool advertise = !best_ap || iface->designated || prefix_cmp(&best_ap->prefix, &rule->prefix)
-			|| best_ap->priority < rule->priority;
+	bool advertise = !best_ap									//Advertise if no-one else does
+			|| iface->designated								//Start advertising if designated
+			|| rule->authoritative
+			|| prefix_cmp(&best_ap->prefix, &rule->prefix)		//The prefix is not the same
+			|| ((!best_ap->authoritative) && (best_ap->priority < rule->priority)); //Our assignment has a higher priority
 	pa_cp_set_advertised(&current_cpl->cp, advertise);
 	pa_cp_set_dp(&current_cpl->cp, dp);
+
+	if(rule != &core->keep_rule)
+		pa_cpl_set_rule(current_cpl, rule);
 
 	if(!current_cpl->cp.applied && !current_cpl->cp.apply_to.pending)
 		pa_cp_set_apply_to(&current_cpl->cp, 2*core_p(core, data.flood)->flooding_delay);
 
-	pa_cpl_set_rule(current_cpl, rule);
 	current_cpl->invalid = false;
 
 	if(current_cpl->cp.__flags & PADF_CP_CREATED) {
@@ -289,10 +294,9 @@ static bool pa_core_iface_is_designated(struct pa_core *core, struct pa_iface *i
 	/* Get cp with lowest auth. and priority. */
 	best_cpl = NULL;
 	pa_for_each_cpl_in_iface(cpl, iface) {
-		if(!best_cpl
+		if(cpl->cp.advertised && (!best_cpl
 				|| best_cpl->cp.authoritative > cpl->cp.authoritative
-				|| ((best_cpl->cp.authoritative == cpl->cp.authoritative) && best_cpl->cp.priority > cpl->cp.priority))
-			if(cpl->cp.advertised)
+				|| ((best_cpl->cp.authoritative == cpl->cp.authoritative) && best_cpl->cp.priority > cpl->cp.priority)))
 				best_cpl = cpl;
 	}
 
@@ -617,7 +621,9 @@ void pa_core_rule_del(struct pa_core *core,
 	btrie_for_each_down_entry_safe(cpl, cpl2, &rule->cpls, NULL, 0, rule_be) {
 		pa_cpl_set_rule(cpl, NULL);
 		pa_cp_set_authoritative(&cpl->cp, false);
-		pa_cp_set_priority(&cpl->cp, PA_PRIORITY_DEFAULT);
+		if(cpl->cp.priority > PA_PRIORITY_DEFAULT)
+			pa_cp_set_priority(&cpl->cp, PA_PRIORITY_DEFAULT);
+		pa_cp_set_advertised(&cpl->cp, &cpl->iface->designated); //This is to avoid changing the designated router
 		pa_cp_notify(&cpl->cp);
 		__pa_paa_schedule(core);
 	}
@@ -723,24 +729,24 @@ static int pa_rule_try_prefix(struct pa_core *core, struct pa_rule *rule,
 	struct pa *pa = core_pa(core);
 
 	if(best_ap && (!hard ||
-			(!rule->authoriative && best_ap->priority >= rule->priority)))
+			(!rule->authoritative && best_ap->priority >= rule->priority)))
 		return -1;
 
 	if(current_cpl && (!hard ||
-			(!rule->authoriative && current_cpl->cp.priority >= rule->priority)))
+			(!rule->authoritative && current_cpl->cp.priority >= rule->priority)))
 		return -1;
 
 	struct pa_ap *ap;
 	pa_for_each_ap_updown(ap, &pa->data, prefix) {
 		if(!hard ||
-				(!rule->authoriative && rule->priority < ap->priority))
+				(!rule->authoritative && rule->priority < ap->priority))
 			return -1;
 	}
 
 	struct pa_cp *cp;
 	pa_for_each_cp_updown(cp, &pa->data, prefix) {
 		if(!hard ||
-				(!rule->authoriative && rule->priority < cp->priority))
+				(!rule->authoritative && rule->priority < cp->priority))
 			return -1;
 	}
 
@@ -775,7 +781,7 @@ void pa_core_static_prefix_init(struct pa_static_prefix_rule *sprule,
 	else
 		sprule->ifname[0] = '\0';
 	sprule->hard = hard;
-	sprule->rule.authoriative = false;
+	sprule->rule.authoritative = false;
 	sprule->rule.priority = PA_PRIORITY_AUTO_MIN;
 }
 
@@ -814,7 +820,7 @@ void pa_core_link_id_init(struct pa_link_id_rule *lrule, const char *ifname,
 	else
 		lrule->ifname[0] = '\0';
 	lrule->hard = hard;
-	lrule->rule.authoriative = false;
+	lrule->rule.authoritative = false;
 	lrule->rule.priority = PA_PRIORITY_AUTO_MIN;
 }
 
@@ -843,7 +849,7 @@ void pa_core_init(struct pa_core *core)
 
 	pa_core_rule_init(&core->random_rule, "Randomly generated", PACR_PRIORITY_RANDOM, pa_rule_try_random);
 	core->random_rule.priority = PA_PRIORITY_DEFAULT;
-	core->random_rule.authoriative = false;
+	core->random_rule.authoritative = false;
 
 	pa_core_rule_add(core, &core->keep_rule);
 	pa_core_rule_add(core, &core->accept_rule);
