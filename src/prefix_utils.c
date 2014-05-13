@@ -239,6 +239,18 @@ int prefix_increment(struct prefix *dst, const struct prefix *p, uint8_t protect
 	return (current && blen)?0:1;
 }
 
+void prefix_number(struct prefix *dst, const struct prefix *src, uint32_t id, uint8_t id_len)
+{
+	if(id_len > 32)
+		id_len = 32;
+	if(id_len > src->plen)
+		id_len = src->plen;
+
+	uint32_t i = htonl(id);
+	prefix_canonical(dst, src);
+	bmemcpy_shift(dst, src->plen - id_len, &i, 32 - id_len, id_len);
+}
+
 int prefix_last(struct prefix *dst, const struct prefix *p, uint8_t protected_len)
 {
 	struct prefix mask, res;

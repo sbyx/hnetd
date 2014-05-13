@@ -29,8 +29,7 @@ struct pa_iface *if1, *if2;
 #define TEST_PAS_FILE "/tmp/hnetd_pa.db"
 
 const struct prefix *pa_prefix_getcollision(__unused struct pa *pa, __unused const struct prefix *prefix) {return NULL;};
-void pa_core_rule_init(__unused struct pa_rule *rule, __unused const char *name,
-		__unused uint32_t rule_priority, __unused const char *ifname, __unused rule_try try) {};
+void pa_core_rule_init(__unused struct pa_rule *rule, __unused const char *name, __unused uint32_t rule_priority, __unused rule_try try) {};
 void pa_core_rule_add(__unused struct pa_core *core, __unused struct pa_rule *rule) {};
 void pa_core_rule_del(__unused struct pa_core *core, __unused struct pa_rule *rule) {};
 

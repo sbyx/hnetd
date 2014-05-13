@@ -122,6 +122,7 @@ struct iface {
 	struct vlist_tree assigned;
 	struct vlist_tree delegated;
 	struct vlist_tree routes;
+	struct list_head chosen;
 
 	// Other data
 	void *dhcpv6_data_stage;

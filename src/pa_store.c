@@ -376,10 +376,9 @@ void pa_store_init(struct pa_store *store)
 	store->data_user.dps = __pa_store_dps;
 	store->data_user.aas = __pa_store_aas;
 	store->save_delay = pas_next_delay(0);
-	pa_core_rule_init(&store->pa_rule, "Stable storage", PACR_PRIORITY_STORAGE, NULL, pa_rule_try_storage);
+	pa_core_rule_init(&store->pa_rule, "Stable storage", PACR_PRIORITY_STORAGE, pa_rule_try_storage);
 	store->pa_rule.priority = PA_PRIORITY_DEFAULT;
 	store->pa_rule.authoriative = false;
-	store->pa_rule.advertise = true;
 }
 
 void pa_store_start(struct pa_store *store)

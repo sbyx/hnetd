@@ -643,6 +643,14 @@ void iface_remove(struct iface *c)
 	vlist_flush_all(&c->delegated);
 	vlist_flush_all(&c->routes);
 
+	while (!list_empty(&c->chosen)) {
+		struct pa_static_prefix_rule *sprule =
+				list_first_entry(&c->chosen, struct pa_static_prefix_rule, user);
+		pa_core_rule_del(&pa_p->core, &sprule->rule);
+		list_del(&sprule->user);
+		free(sprule);
+	}
+
 	if (c->platform) {
 		if (c->flags & IFACE_FLAG_GUEST) {
 			struct pa_dp *dp;
@@ -774,6 +782,7 @@ struct iface* iface_create(const char *ifname, const char *handle, enum iface_fl
 		vlist_init(&c->assigned, compare_addrs, update_addr);
 		vlist_init(&c->delegated, compare_addrs, update_prefix);
 		vlist_init(&c->routes, compare_routes, update_route);
+		INIT_LIST_HEAD(&c->chosen);
 		c->transition.cb = iface_announce_border;
 		c->preferred.cb = iface_announce_preferred;
 
@@ -905,9 +914,12 @@ void iface_add_dhcpv6_received(struct iface *c, const void *data, size_t len)
 
 void iface_add_chosen_prefix(struct iface *c, const struct prefix *p)
 {
-	struct pa_iface *iface = pa_iface_get(&pa_p->data, c->ifname, false);
-	if (iface)
-		pa_core_static_prefix_add(&pa_p->core, (struct prefix*)p, iface);
+	struct pa_static_prefix_rule *sprule = calloc(1, sizeof(*sprule));
+	pa_core_static_prefix_init(sprule, c->ifname, p, true);
+	sprule->rule.authoriative = true;
+	sprule->rule.priority = PAD_PRIORITY_DEFAULT;
+	pa_core_rule_add(&pa_p->core, &sprule->rule);
+	list_add_tail(&sprule->user, &c->chosen);
 }
 
 

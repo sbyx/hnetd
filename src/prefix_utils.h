@@ -93,6 +93,8 @@ int prefix_last(struct prefix *dst, const struct prefix *p, uint8_t protected_le
  * src and dst can be the same pointer. */
 void prefix_canonical(struct prefix *dst, const struct prefix *src);
 
+void prefix_number(struct prefix *dst, const struct prefix *src, uint32_t id, uint8_t id_len);
+
 /* Maximum needed space to print a prefix */
 #define PREFIX_MAXBUFFLEN (INET6_ADDRSTRLEN + 4)
 
