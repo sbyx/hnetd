@@ -590,6 +590,117 @@ void test_pa_static()
 	sput_fail_unless(list_empty(&timeouts), "No more timeout");
 }
 
+
+void test_pa_link_id()
+{
+	struct pa_ap *ap;
+	struct pa_cp *cp;
+	struct pa_link_id_rule lrule;
+
+	//INIT
+	uloop_init();
+	pa_init(&pa, NULL);
+	pa.local.conf.use_ipv4 = false;
+	pa.local.conf.use_ula = false;
+	pa_flood_set_flooddelays(&pa.data, PA_TEST_FLOOD, PA_TEST_FLOOD_LL);
+	pa_flood_set_rid(&pa.data, &rid);
+	pa_flood_notify(&pa.data);
+	pa_start(&pa);
+
+	//Add interface and prefix
+	iface.user->cb_intiface(iface.user, PL_IFNAME1, true);
+	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, now_time + 100000 , now_time + 50000, NULL, 0);
+
+	ap = pa_ap_get(&pa.data, &p1_1, &rid_lower, true);
+	pa_ap_set_iface(ap, pa_iface_get(&pa.data, PL_IFNAME1, false));
+	pa_ap_notify(&pa.data, ap);
+	to_run(6);
+
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	test_pa_check_cp(cp, &p1_1, false, PA_PRIORITY_DEFAULT, false);
+
+	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 9, true); //To big to work
+	lrule.rule.authoritative = true;
+	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	pa_core_rule_add(&pa.core, &lrule.rule);
+	to_run(5);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	test_pa_check_cp(cp, &p1_1, false, PA_PRIORITY_DEFAULT, false); //No change
+	pa_core_rule_del(&pa.core, &lrule.rule);
+
+	pa_core_link_id_init(&lrule, PL_IFNAME2, 2, 4, true); //Bad interface
+	lrule.rule.authoritative = true;
+	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	pa_core_rule_add(&pa.core, &lrule.rule);
+	to_run(5);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	test_pa_check_cp(cp, &p1_1, false, PA_PRIORITY_DEFAULT, false); //No change
+	pa_core_rule_del(&pa.core, &lrule.rule);
+
+	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 4, false); //Shouldn't do anything cause not hard
+	lrule.rule.authoritative = true;
+	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	pa_core_rule_add(&pa.core, &lrule.rule);
+	to_run(5);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	test_pa_check_cp(cp, &p1_1, false, PA_PRIORITY_DEFAULT, false); //No change
+	pa_core_rule_del(&pa.core, &lrule.rule);
+
+	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 4, true); //Priority is not high enough
+	lrule.rule.authoritative = false;
+	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	pa_core_rule_add(&pa.core, &lrule.rule);
+	to_run(5);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	test_pa_check_cp(cp, &p1_1, false, PA_PRIORITY_DEFAULT, false); //No change
+	pa_core_rule_del(&pa.core, &lrule.rule);
+
+	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 8, true); //Priority is high enough
+	lrule.rule.authoritative = false;
+	lrule.rule.priority = PA_PRIORITY_DEFAULT + 1;
+	pa_core_rule_add(&pa.core, &lrule.rule);
+	to_run(5);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	test_pa_check_cp(cp, &p1_2, false, PA_PRIORITY_DEFAULT + 1, true); //new prefix
+	pa_core_rule_del(&pa.core, &lrule.rule);
+
+	to_run(6);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be); //Keep the new one rid is higher
+	test_pa_check_cp(cp, &p1_2, false, PA_PRIORITY_DEFAULT, true); //new prefix
+
+	pa_ap_set_priority(ap, PA_PRIORITY_DEFAULT + 1);
+	pa_ap_notify(&pa.data, ap);
+	to_run(6);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be); //Other one has now better priority
+	test_pa_check_cp(cp, &p1_1, false, PA_PRIORITY_DEFAULT + 1, true); //Adv cause designated
+
+	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 8, true); //Priority is high enough
+	lrule.rule.authoritative = true;
+	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	pa_core_rule_add(&pa.core, &lrule.rule);
+	to_run(5);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	test_pa_check_cp(cp, &p1_2, true, PA_PRIORITY_DEFAULT, true); //Adv cause authoritative
+	pa_core_rule_del(&pa.core, &lrule.rule);
+
+	pa_ap_todelete(ap);
+	pa_ap_notify(&pa.data, ap);
+
+	pa_core_link_id_init(&lrule, PL_IFNAME1, 1, 8, false); //Priority is high enough
+	lrule.rule.authoritative = false;
+	lrule.rule.priority = PA_PRIORITY_DEFAULT + 2;
+	pa_core_rule_add(&pa.core, &lrule.rule);
+	to_run(1);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	test_pa_check_cp(cp, &p1_2, false, PA_PRIORITY_DEFAULT, true); //No change
+	pa_core_rule_del(&pa.core, &lrule.rule);
+
+	//TERM
+	pa_stop(&pa);
+	pa_term(&pa);
+	sput_fail_unless(list_empty(&timeouts), "No more timeout");
+}
+
 int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 {
 	openlog("hnetd_test_pa", LOG_PERROR | LOG_PID, LOG_DAEMON);
@@ -601,6 +712,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 	sput_run_test(test_pa_ipv4);
 	sput_run_test(test_pa_network);
 	sput_run_test(test_pa_static);
+	sput_run_test(test_pa_link_id);
 	sput_leave_suite(); /* optional */
 	sput_finish_testing();
 	return sput_get_return_value();
