@@ -123,6 +123,7 @@ struct iface {
 	struct vlist_tree delegated;
 	struct vlist_tree routes;
 	struct list_head chosen;
+	struct pa_link_id_rule *id;
 
 	// Other data
 	void *dhcpv6_data_stage;
@@ -192,6 +193,10 @@ void iface_add_dhcpv6_received(struct iface *c, const void *data, size_t len);
 
 // Add prefix
 void iface_add_chosen_prefix(struct iface *c, const struct prefix *p);
+
+
+// Set link ID
+void iface_set_link_id(struct iface *c, uint32_t linkid, uint8_t mask);
 
 
 // Flush uplinks

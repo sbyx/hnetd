@@ -66,8 +66,7 @@ struct pa_static_prefix_rule {
 	bool hard;             // Whether that rule may remove a previously made assignment (of lower priority)
 	char rule_name[40 + INET6_ADDRSTRLEN + IFNAMSIZ];
 
-	// private to user
-	struct list_head user;
+	struct list_head user; // private to user
 };
 
 /* A link id rule is a configuration entry that will

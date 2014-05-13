@@ -14,6 +14,8 @@ void pa_data_subscribe(__unused struct pa_data *data, __unused struct pa_data_us
 struct pa_iface* pa_iface_get(__unused struct pa_data *d, __unused const char *ifname, __unused bool goc){ return NULL; }
 void pa_core_static_prefix_init(__unused struct pa_static_prefix_rule *rule, __unused const char *ifname,
 		__unused const struct prefix* p, __unused bool hard) {};
+void pa_core_link_id_init(__unused struct pa_link_id_rule *lrule, __unused const char *ifname,
+		__unused uint32_t link_id, __unused uint8_t link_id_len, __unused bool hard) {};
 void pa_core_rule_add(__unused struct pa_core *core, __unused struct pa_rule *rule) {};
 void pa_core_rule_del(__unused struct pa_core *core, __unused struct pa_rule *rule) {};
 void platform_set_owner(__unused struct iface *c, __unused bool enable) {}

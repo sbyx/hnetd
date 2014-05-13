@@ -571,6 +571,7 @@ enum {
 	DATA_ATTR_CER,
 	DATA_ATTR_GUEST,
 	DATA_ATTR_PREFIX,
+	DATA_ATTR_LINK_ID,
 	DATA_ATTR_MAX
 };
 
@@ -596,6 +597,7 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_CER] = { .name = "cer", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_GUEST] = { .name = "guest", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_PREFIX] = { .name = "prefix", .type = BLOBMSG_TYPE_ARRAY },
+	[DATA_ATTR_LINK_ID] = { .name = "link_id", .type = BLOBMSG_TYPE_STRING },
 };
 
 
@@ -770,6 +772,12 @@ static void platform_update(void *data, size_t len)
 				}
 			}
 		}
+
+		unsigned link_id, link_mask;
+		if (c && dtb[DATA_ATTR_LINK_ID] && sscanf(
+				blobmsg_get_string(dtb[DATA_ATTR_LINK_ID]),
+				"%x/%u", &link_id, &link_mask) == 2)
+			iface_set_link_id(c, link_id, link_mask);
 	}
 
 	if (c)
