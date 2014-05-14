@@ -1,11 +1,11 @@
 /*
- * pa_pd.h
+ * Author: Pierre Pfister <pierre pfister@darou.fr>
  *
- * Author: Pierre Pfister
+ * Copyright (c) 2014 Cisco Systems, Inc.
  *
  * Prefix delegation support in prefix assignment.
- *
- * This file provides an API for reserving delegated prefixes.
+ * This file provides an API for reserving prefixes
+ * for sub-delegation.
  *
  */
 

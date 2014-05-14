@@ -1,6 +1,10 @@
 /*
+ * Author: Pierre Pfister <pierre pfister@darou.fr>
+ *
+ * Copyright (c) 2014 Cisco Systems, Inc.
+ *
+ *
  * Optimized binary trie
- * Author: Pierre Pfister <pierre@darou.fr>
  *
  * That file provides an optimized binary trie structure.
  * Stored elements (given as 'struct list_head') are associated to keys.

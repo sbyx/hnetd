@@ -1,11 +1,10 @@
 /*
- * pa_core.h
+ * Author: Pierre Pfister <pierre pfister@darou.fr>
  *
- * Author: Pierre Pfister
+ * Copyright (c) 2014 Cisco Systems, Inc.
  *
- * Prefix assignment core.
- *
- * This file contains prefix assignment logic elements.
+ * This file contains prefix and address assignment core logic
+ * and configuration.
  *
  */
 

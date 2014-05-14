@@ -1,9 +1,13 @@
 /*
- * Author: Pierre Pfister
+ * Author: Pierre Pfister <pierre pfister@darou.fr>
  *
- * This file provide stable storage interface for prefix assignment.
+ * Copyright (c) 2014 Cisco Systems, Inc.
+ *
+ * This file provides stable storage interface for prefix assignment.
  * It is used to store prefixes on a per interface basis,
- * and one ULA prefix.
+ * as well as the last used ULA prefix. It is optimized to avoid
+ * writing to the stable storage while the network is changing, and uses
+ * increasing writing delays so that the flash memory doesn't get damaged.
  *
  */
 

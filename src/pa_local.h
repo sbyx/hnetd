@@ -1,7 +1,7 @@
 /*
- * pa_data.h
+ * Author: Pierre Pfister <pierre pfister@darou.fr>
  *
- * Author: Pierre Pfister
+ * Copyright (c) 2014 Cisco Systems, Inc.
  *
  * ULA and IPv4 prefix generation for
  * prefix algorithm.

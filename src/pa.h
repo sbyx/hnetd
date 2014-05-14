@@ -1,10 +1,10 @@
 /*
- * pa_data.h
+ * Author: Pierre Pfister <pierre pfister@darou.fr>
  *
- * Author: Pierre Pfister
+ * Copyright (c) 2014 Cisco Systems, Inc.
  *
- * Interfacing functions between Prefix Assignment Algorithm
- * and other elements (hcp or iface).
+ * Prefix and address assignment element. It contains all
+ * prefix and address assignment sub components.
  *
  */
 
