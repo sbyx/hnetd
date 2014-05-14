@@ -1,3 +1,10 @@
+/*
+ * Author : Xavier Bonnetain
+ *
+ * Copyright (c) 2014 cisco Systems, Inc.
+ */
+
+
 #include "trust_graph.h"
 
 
@@ -62,8 +69,8 @@ void trust_graph_add_trust_link(hncp_trust_graph emitter, hncp_trust_graph trust
   list_add_tail(&link->list,&emitter->arrows);
 };
 
-void trust_graph_add_trust_array(hncp_trust_graph emitter, hncp_trust_graph array[], int size){
-  for(int i = 0; i<size; i++)
+void trust_graph_add_trust_array(hncp_trust_graph emitter, hncp_trust_graph array[], unsigned int size){
+  for(unsigned int i = 0; i<size; i++)
     trust_graph_add_trust_link(emitter, array[i]);
 };
 

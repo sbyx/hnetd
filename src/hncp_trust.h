@@ -3,6 +3,8 @@
  *
  * Author: Xavier Bonnetain
  *
+ * Copyright (c) 2014 cisco Systems, Inc.
+ *
  * Web of trust extension for HNCP.
  *
  */

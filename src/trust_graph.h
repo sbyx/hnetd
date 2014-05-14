@@ -80,7 +80,7 @@ void trust_graph_add_trust_link(hncp_trust_graph emitter, hncp_trust_graph trust
 /** Deletion of a link, true if the link existed */
 bool trust_graph_remove_trust_link(hncp_trust_graph emitter, hncp_trust_graph trusted);
 
-void trust_graph_add_trust_array(hncp_trust_graph emitter, hncp_trust_graph array[], int size);
+void trust_graph_add_trust_array(hncp_trust_graph emitter, hncp_trust_graph array[], unsigned int size);
 
 /** Deletion of _all_ the trust links from the node */
 void trust_graph_remove_trust_links(hncp_trust_graph g);

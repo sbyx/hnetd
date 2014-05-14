@@ -1,6 +1,7 @@
 /*
  * Author : Xavier Bonnetain
  *
+ * Copyright (c) 2014 cisco Systems, Inc.
  */
 
 #include "hncp_trust.h"

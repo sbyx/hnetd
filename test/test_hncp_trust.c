@@ -1,3 +1,10 @@
+/*
+ * Author : Xavier Bonnetain
+ *
+ * Copyright (c) 2014 cisco Systems, Inc.
+ */
+
+
 #include "hncp_trust.h"
 #include "sput.h"
 
@@ -118,8 +125,10 @@ void hncp_trust_test(void){
   sput_fail_unless(local_trust_remove_trusted_hash(o, h2), "Local removal ok");
   sput_fail_if(local_trust_remove_trusted_hash(o, h2), "Removal, bis");
   local_trust_purge_trusted_array(o);
+  sput_fail_if(local_trust_remove_trusted_array(o, list, 2),"Empty array check");
   sput_fail_if(hncp_trust_node_trusted(o, h1) || hncp_trust_node_trusted(o, h2), "Local complete deletion ok");
-  local_trust_add_trusted_hash(o, h2);
+  local_trust_add_trusted_hash(o, h3);
+  local_trust_replace_trusted_array(o, h2, 1);
   /* here : g3 => g1 <=> g2 <=> g */
   sput_fail_unless(hncp_trust_node_trusts_me(o, h3) && !hncp_trust_node_trusted(o, h3), "Inserting again ok");
   hncp_trust_destroy(o);
