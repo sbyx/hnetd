@@ -79,6 +79,8 @@ static struct prefix p2_1 = PL_P2_01;
 
 static struct prefix p1_excluded = PL_P1_0;
 static struct prefix p1_1_addr = PL_P1_01A;
+static struct prefix p1_1_addr1 = PL_P1_01A1;
+static struct prefix p1_1_addr2 = PL_P1_01A2;
 static struct prefix p1_2_addr = PL_P1_02A;
 static struct prefix pv4_1 = PL_PV4_1;
 static struct prefix pv4_1_1 = PL_PV4_1_1;
@@ -701,6 +703,97 @@ void test_pa_link_id()
 	sput_fail_unless(list_empty(&timeouts), "No more timeout");
 }
 
+void test_pa_iface_addr() {
+	struct pa_cpl *cpl;
+	struct pa_iface_addr a;
+	struct in6_addr addr;
+	struct pa_eaa *eaa;
+
+	//INIT
+	uloop_init();
+	pa_init(&pa, NULL);
+	pa.local.conf.use_ipv4 = false;
+	pa.local.conf.use_ula = false;
+	pa_flood_set_flooddelays(&pa.data, PA_TEST_FLOOD, PA_TEST_FLOOD_LL);
+	pa_flood_set_rid(&pa.data, &rid);
+	pa_flood_notify(&pa.data);
+	pa_start(&pa);
+
+	//Add interface and prefix
+	iface.user->cb_intiface(iface.user, PL_IFNAME1, true);
+	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, now_time + 100000 , now_time + 50000, NULL, 0);
+	fr_md5_push_prefix(&p1_1);
+	to_run(6); //Do everything
+
+	cpl = _pa_cpl(btrie_first_down_entry(&cpl->cp, &pa.data.cps, NULL, 0, be));
+	sput_fail_unless(cpl, "Cpl exists");
+	sput_fail_unless(!prefix_cmp(&cpl->cp.prefix, &p1_1), "Correct prefix");
+	sput_fail_unless(cpl->laa, "Laa exists");
+	memcpy(&addr, &iface.iface.eui64_addr, 16);
+	memcpy(&addr, &p1_1.prefix, 8);
+	sput_fail_unless(!memcmp(&addr, &cpl->laa->aa.address, 16), "Correct address");
+
+	pa_core_iface_addr_init(&a, PL_IFNAME1, &p1_1_addr1.prefix, 64, NULL);
+	pa_core_iface_addr_add(&pa.core, &a);
+	to_run(4); //Proposed address is used
+	sput_fail_unless(!memcmp(&p1_1_addr1.prefix, &cpl->laa->aa.address, 16), "Correct address");
+	pa_core_iface_addr_del(&pa.core, &a);
+	to_run(4); //The address remains
+	sput_fail_unless(!memcmp(&p1_1_addr1.prefix, &cpl->laa->aa.address, 16), "Correct address");
+
+	pa_core_iface_addr_init(&a, PL_IFNAME2, &p1_1_addr2.prefix, 64, NULL);
+	pa_core_iface_addr_add(&pa.core, &a);
+	to_run(4); //Bad ifname
+	sput_fail_unless(!memcmp(&p1_1_addr1.prefix, &cpl->laa->aa.address, 16), "Correct address");
+	pa_core_iface_addr_del(&pa.core, &a);
+
+	pa_core_iface_addr_init(&a, NULL, &p1_1_addr2.prefix, 64, NULL);
+	pa_core_iface_addr_add(&pa.core, &a);
+	to_run(4); //Applyable to any interface
+	sput_fail_unless(!memcmp(&p1_1_addr2.prefix, &cpl->laa->aa.address, 16), "Correct address");
+	pa_core_iface_addr_del(&pa.core, &a);
+
+	pa_core_iface_addr_init(&a, NULL, &p1_1_addr1.prefix, 63, NULL);
+	pa_core_iface_addr_add(&pa.core, &a);
+	to_run(4); //Mask too small
+	sput_fail_unless(!memcmp(&p1_1_addr2.prefix, &cpl->laa->aa.address, 16), "Correct address");
+	pa_core_iface_addr_del(&pa.core, &a);
+
+	pa_core_iface_addr_init(&a, PL_IFNAME1, &p1_1_addr1.prefix, 64, &p2);
+	pa_core_iface_addr_add(&pa.core, &a);
+	to_run(4); //Invalid filter
+	sput_fail_unless(!memcmp(&p1_1_addr2.prefix, &cpl->laa->aa.address, 16), "Correct address");
+	pa_core_iface_addr_del(&pa.core, &a);
+
+	pa_core_iface_addr_init(&a, PL_IFNAME1, &p1_1_addr1.prefix, 64, &p1);
+	pa_core_iface_addr_add(&pa.core, &a);
+	to_run(4); //Correct filter
+	sput_fail_unless(!memcmp(&p1_1_addr1.prefix, &cpl->laa->aa.address, 16), "Correct address");
+	pa_core_iface_addr_del(&pa.core, &a);
+
+	//Add a eaa
+	eaa = pa_eaa_get(&pa.data, &p1_1_addr1.prefix, &rid_higher, true);
+	pa_eaa_set_iface(eaa, pa_iface_get(&pa.data, PL_IFNAME1, true));
+	pa_aa_notify(&pa.data, &eaa->aa);
+	to_run(4); //Go use storage address
+	sput_fail_unless(!memcmp(&p1_1_addr2.prefix, &cpl->laa->aa.address, 16), "Correct address");
+
+	pa_core_iface_addr_init(&a, PL_IFNAME1, &p1_1_addr1.prefix, 64, NULL);
+	pa_core_iface_addr_add(&pa.core, &a);
+	to_run(4); //Cannot use this one
+	sput_fail_unless(!memcmp(&p1_1_addr2.prefix, &cpl->laa->aa.address, 16), "Correct address");
+
+	pa_aa_todelete(&eaa->aa);
+	pa_aa_notify(&pa.data, &eaa->aa);
+	to_run(4);
+	sput_fail_unless(!memcmp(&p1_1_addr1.prefix, &cpl->laa->aa.address, 16), "Correct address");
+	pa_core_iface_addr_del(&pa.core, &a);
+
+	//TERM
+	pa_stop(&pa);
+	pa_term(&pa);
+}
+
 int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 {
 	openlog("hnetd_test_pa", LOG_PERROR | LOG_PID, LOG_DAEMON);
@@ -713,6 +806,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 	sput_run_test(test_pa_network);
 	sput_run_test(test_pa_static);
 	sput_run_test(test_pa_link_id);
+	sput_run_test(test_pa_iface_addr);
 	sput_leave_suite(); /* optional */
 	sput_finish_testing();
 	return sput_get_return_value();

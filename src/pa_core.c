@@ -430,7 +430,7 @@ static int __aaa_from_conf(struct pa_core *core, struct pa_cpl *cpl, struct in6_
 	uint8_t plen = cpl->cp.prefix.plen;
 
 	list_for_each_entry(a, &core->iface_addrs, le) {
-		if(prefix_contains(&a->filter, &cpl->cp.prefix) && plen < a->mask &&
+		if(prefix_contains(&a->filter, &cpl->cp.prefix) && plen <= a->mask &&
 				(a->ifname[0] == '\0' || !strcmp(a->ifname, cpl->iface->ifname))) {
 			memcpy(addr, &cpl->cp.prefix.prefix, sizeof(struct in6_addr));
 			bmemcpy(addr, &a->address, plen, 128-plen);
@@ -568,6 +568,11 @@ static void aaa_algo_do(struct pa_core *core)
 						!__aaa_do_slaac(cpl, &addr) 					||
 						!__aaa_find_random(core, cpl, &addr))))
 		{
+			if(cpl->laa) {
+				pa_aa_todelete(&cpl->laa->aa);
+				pa_aa_notify(data, &cpl->laa->aa);
+			}
+
 			laa = pa_laa_create(&addr, cpl);
 			if(laa) {
 				pa_aa_notify(data, &laa->aa);
