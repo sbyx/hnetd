@@ -417,6 +417,23 @@ void paa_algo_do(struct pa_core *core)
 	L_INFO("End of prefix assignment algorithm");
 }
 
+static int __aaa_from_conf(struct pa_core *core, struct pa_cpl *cpl, struct in6_addr *addr)
+{
+	struct pa_iface_addr *a;
+	uint8_t plen = cpl->cp.prefix.plen;
+
+	list_for_each_entry(a, &core->iface_addrs, le) {
+		if(prefix_contains(&a->filter, &cpl->cp.prefix) && plen < a->mask &&
+				(a->ifname[0] == '\0' || !strcmp(a->ifname, cpl->iface->ifname))) {
+			memcpy(addr, &cpl->cp.prefix.prefix, sizeof(struct in6_addr));
+			bmemcpy(addr, &a->address, plen, 128-plen);
+			if(pa_addr_available(core_pa(core), cpl->iface, addr))
+				return 0;
+		}
+	}
+	return -1;
+}
+
 static int __aaa_from_storage(struct pa_core *core, struct pa_cpl *cpl, struct in6_addr *addr)
 {
 	struct pa_sa *sa;
@@ -538,24 +555,28 @@ static void aaa_algo_do(struct pa_core *core)
 			pa_aa_notify(data, &cpl->laa->aa);
 		}
 
-		/* Create new if no assigned */
-		if(!cpl->laa) { //cpl->iface is never NULL
-			if(!__aaa_from_storage(core, cpl, &addr) || !__aaa_do_slaac(cpl, &addr) || !__aaa_find_random(core, cpl, &addr)) {
-				laa = pa_laa_create(&addr, cpl);
-				if(laa) {
-					pa_aa_notify(data, &laa->aa);
-					if(cp->prefix.plen <= 64) {
-						pa_laa_set_apply_to(laa, 0);
-					} else {
-						//todo: Maybe this delay is not that useful, or slaac needed in any case
-						pa_laa_set_apply_to(laa, 2*core_p(core, data.flood)->flooding_delay_ll);
-					}
+		if(		(!__aaa_from_conf(core, cpl, &addr) && (!cpl->laa || memcmp(&addr, &cpl->laa->aa.address, sizeof(struct in6_addr))))
+				 ||
+				(!cpl->laa && (!__aaa_from_storage(core, cpl, &addr) 	||
+						!__aaa_do_slaac(cpl, &addr) 					||
+						!__aaa_find_random(core, cpl, &addr))))
+		{
+			laa = pa_laa_create(&addr, cpl);
+			if(laa) {
+				pa_aa_notify(data, &laa->aa);
+				if(cp->prefix.plen <= 64) {
+					pa_laa_set_apply_to(laa, 0);
 				} else {
-					L_WARN("Could not create laa from address %s", ADDR_REPR(&addr));
+					//todo: Maybe this delay is not that useful, or slaac needed in any case
+					pa_laa_set_apply_to(laa, 2*core_p(core, data.flood)->flooding_delay_ll);
 				}
 			} else {
-				L_WARN("Could not find address for "PA_CP_L, PA_CP_LA(cp));
+				L_WARN("Could not create laa from address %s", ADDR_REPR(&addr));
 			}
+		}
+
+		if(!cpl->laa) {
+			L_WARN("Could not find address for "PA_CP_L, PA_CP_LA(cp));
 		}
 	}
 }
@@ -650,6 +671,36 @@ void pa_core_rule_del(struct pa_core *core,
 		__pa_paa_schedule(core);
 	}
 	list_del(&rule->le);
+}
+
+/************* Iface addr control ********************************/
+
+void pa_core_iface_addr_init(struct pa_iface_addr *addr, const char *ifname,
+		struct in6_addr *address, uint8_t mask, struct prefix *filter)
+{
+	memcpy(&addr->address, address, sizeof(struct in6_addr));
+	addr->mask = mask;
+
+	if(filter)
+		prefix_cpy(&addr->filter, filter);
+	else
+		addr->filter.plen = 0;
+
+	if(ifname)
+		strcpy(addr->ifname, ifname);
+	else
+		addr->ifname[0] = '\0';
+}
+
+void pa_core_iface_addr_add(struct pa_core *core, struct pa_iface_addr *addr)
+{
+	list_add(&addr->le, &core->iface_addrs);
+	__pa_aaa_schedule(core);
+}
+
+void pa_core_iface_addr_del(__unused struct pa_core *core, struct pa_iface_addr *addr)
+{
+	list_del(&addr->le);
 }
 
 /************* Callbacks for pa_data ********************************/
@@ -881,6 +932,8 @@ void pa_core_init(struct pa_core *core)
 	pa_core_rule_add(core, &core->accept_rule);
 	pa_core_rule_add(core, &core->random_rule);
 	pa_core_rule_add(core, &core->random_scarcity_rule);
+
+	INIT_LIST_HEAD(&core->iface_addrs);
 
 	core->started = false;
 }
