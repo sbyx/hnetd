@@ -464,14 +464,23 @@ void test_pa_network()
 	sput_fail_unless(list_empty(&timeouts), "No more timeout");
 }
 
+#define test_pa_check_cp(cp, p, auth, prio, adv) \
+do { \
+	sput_fail_unless(cp, "No CP");\
+	if(cp) { \
+		sput_fail_unless(!prefix_cmp(&cp->prefix, p), "Correct prefix"); \
+		sput_fail_unless(cp->authoritative == auth, "Correct authoritative"); \
+		sput_fail_unless(cp->priority == prio, "Correct priority"); \
+		sput_fail_unless(cp->advertised == adv, "Correct advertised"); \
+	} \
+} while(0)
+
 void test_pa_static()
 {
-	hnetd_time_t valid, preferred;
 	struct pa_ap *ap;
 	struct pa_iface *i;
 	struct pa_cp *cp;
 	struct pa_static_prefix_rule sprule;
-	int res;
 
 	//INIT
 	uloop_init();
@@ -485,41 +494,32 @@ void test_pa_static()
 
 	//Add interface and prefix
 	iface.user->cb_intiface(iface.user, PL_IFNAME1, true);
-	valid = now_time + 100000;
-	preferred = now_time + 50000;
-	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, valid , preferred, NULL, 0);
+	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, now_time + 100000 , now_time + 50000, NULL, 0);
 
 	ap = pa_ap_get(&pa.data, &p1_1, &rid_lower, true);
 	i = pa_iface_get(&pa.data, PL_IFNAME1, false);
 	sput_fail_unless(i, "Iface was there");
 	pa_ap_set_iface(ap, i);
 	pa_ap_notify(&pa.data, ap);
-	res = to_run(6);
-	sput_fail_unless(!res && !to_getfirst(), "Run and apply everything");
+	to_run(6);
 
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
-	sput_fail_unless(cp, "CP created");
-	if(cp) {
-		sput_fail_unless(!prefix_cmp(&cp->prefix, &p1_1), "Correct prefix");
-		sput_fail_unless(!cp->authoritative, "Not authoritative");
-		sput_fail_unless(!cp->advertised, "Not advertised");
-	}
+	test_pa_check_cp(cp, &p1_1, false, PAD_PRIORITY_DEFAULT, false);
 
 	pa_core_static_prefix_init(&sprule, NULL, &p1_1, true);
-	sprule.rule.authoriative = true;
+	sprule.rule.authoritative = true;
 	sprule.rule.priority = PA_PRIORITY_DEFAULT;
 	pa_core_rule_add(&pa.core, &sprule.rule);
-	res = to_run(1);
+	to_run(1);
 
 	sput_fail_unless(cp->authoritative, "Now authoritative");
-	sput_fail_unless(!cp->advertised, "Not advertised");
+	sput_fail_unless(cp->advertised, "Not advertised");
 
 	pa_ap_todelete(ap); //Destroy the other ap
 	pa_ap_notify(&pa.data, ap);
 
-	res = to_run(4); //Run paa
-	sput_fail_unless(cp->authoritative, "Now authoritative");
-	sput_fail_unless(cp->advertised, "Advertised");
+	to_run(4); //Run paa
+	test_pa_check_cp(cp, &p1_1, true, PA_PRIORITY_DEFAULT, true);
 
 	//Another AP will send an authoritative (bug situation).
 	ap = pa_ap_get(&pa.data, &p1_2, &rid_higher, true);
@@ -529,8 +529,7 @@ void test_pa_static()
 
 	to_run(4); //Run PAA ,AAA and apply
 
-	sput_fail_unless(cp->authoritative, "Authoritative");
-	sput_fail_unless(cp->advertised, "Advertised");
+	test_pa_check_cp(cp, &p1_1, true, PA_PRIORITY_DEFAULT, true); //Adv because designated
 	sput_fail_unless(cp->applied, "Applied");
 
 	pa_core_rule_del(&pa.core, &sprule.rule); //Remove authoritative assignment
@@ -538,85 +537,163 @@ void test_pa_static()
 	to_run(4); // Run PA, AA and apply
 
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
-	sput_fail_unless(cp, "CP created");
-	if(cp) {
-		sput_fail_unless(!prefix_cmp(&cp->prefix, &p1_2), "Correct prefix");
-		sput_fail_unless(!cp->authoritative, "Not authoritative");
-	}
+	test_pa_check_cp(cp, &p1_2, false, PA_PRIORITY_DEFAULT, true);
 
 	//Test other mods
 
 	//Soft mod should not change the prefix
 	pa_core_static_prefix_init(&sprule, PL_IFNAME1, &p1_1, false);
-	sprule.rule.authoriative = true;
+	sprule.rule.authoritative = true;
 	sprule.rule.priority = PA_PRIORITY_DEFAULT;
 	pa_core_rule_add(&pa.core, &sprule.rule);
-	res = to_run(1);
+	to_run(1);
 
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
-	sput_fail_unless(cp, "CP created");
-	if(cp) {
-		sput_fail_unless(!prefix_cmp(&cp->prefix, &p1_2), "Correct prefix");
-		sput_fail_unless(!cp->authoritative, "Not authoritative");
-	}
+	test_pa_check_cp(cp, &p1_2, false, PA_PRIORITY_DEFAULT, true);
 	pa_core_rule_del(&pa.core, &sprule.rule);
-	res = to_run(4);
+	to_run(4);
 
 	//Reducing the priority should cause the rule to not be applied
 	pa_core_static_prefix_init(&sprule, PL_IFNAME1, &p1_1, false);
-	sprule.rule.authoriative = false;
+	sprule.rule.authoritative = false;
 	sprule.rule.priority = PA_PRIORITY_MIN;
 	pa_core_rule_add(&pa.core, &sprule.rule);
-	res = to_run(1);
+	to_run(4);
 
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
-	sput_fail_unless(cp, "CP created");
-	if(cp) {
-		sput_fail_unless(!prefix_cmp(&cp->prefix, &p1_2), "Correct prefix");
-		sput_fail_unless(!cp->authoritative, "Not authoritative");
-	}
-	res = to_run(4);
+	test_pa_check_cp(cp, &p1_2, false, PA_PRIORITY_DEFAULT, true);
 
 	//But it should override it once the ap is deleted
 	pa_ap_todelete(ap); //Remove that ap
 	pa_ap_notify(&pa.data, ap);
-
 	to_run(4); // Run All
 
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
-	sput_fail_unless(cp, "CP created");
-	if(cp) {
-		sput_fail_unless(!prefix_cmp(&cp->prefix, &p1_2), "Correct prefix");
-		sput_fail_unless(!cp->authoritative, "Authoritative");
-		sput_fail_unless(cp->advertised, "Advertised");
-		sput_fail_unless(cp->applied, "Applied");
-	}
+	test_pa_check_cp(cp, &p1_2, false, PA_PRIORITY_DEFAULT, true);
 
 	//Now we delete the cp and watch the other cp be chosen
 	cp->destroy(&pa.data, cp, (void *)1);
 	to_run(4);
+
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
-	sput_fail_unless(cp, "CP created");
-	if(cp) {
-		sput_fail_unless(!prefix_cmp(&cp->prefix, &p1_1), "Correct prefix");
-		sput_fail_unless(!cp->authoritative, "Authoritative");
-		sput_fail_unless(cp->advertised, "Advertised");
-		sput_fail_unless(cp->priority == PA_PRIORITY_MIN, "Priority");
-		sput_fail_unless(cp->applied, "Applied");
-	}
+	test_pa_check_cp(cp, &p1_1, false, PA_PRIORITY_MIN, true);
 
 	pa_core_rule_del(&pa.core, &sprule.rule);
-	res = to_run(4);
+	to_run(4);
 
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
-	sput_fail_unless(cp, "CP created");
-	if(cp) {
-		sput_fail_unless(!prefix_cmp(&cp->prefix, &p1_1), "Correct prefix");
-		sput_fail_unless(!cp->authoritative, "Authoritative");
-		sput_fail_unless(cp->advertised, "Advertised");
-		sput_fail_unless(cp->priority == PAD_PRIORITY_DEFAULT, "Priority");
-		sput_fail_unless(cp->applied, "Applied");
-	}
+	test_pa_check_cp(cp, &p1_1, false, PA_PRIORITY_MIN, true);
+
+	//TERM
+	pa_stop(&pa);
+	pa_term(&pa);
+	sput_fail_unless(list_empty(&timeouts), "No more timeout");
+}
+
+
+void test_pa_link_id()
+{
+	struct pa_ap *ap;
+	struct pa_cp *cp;
+	struct pa_link_id_rule lrule;
+
+	//INIT
+	uloop_init();
+	pa_init(&pa, NULL);
+	pa.local.conf.use_ipv4 = false;
+	pa.local.conf.use_ula = false;
+	pa_flood_set_flooddelays(&pa.data, PA_TEST_FLOOD, PA_TEST_FLOOD_LL);
+	pa_flood_set_rid(&pa.data, &rid);
+	pa_flood_notify(&pa.data);
+	pa_start(&pa);
+
+	//Add interface and prefix
+	iface.user->cb_intiface(iface.user, PL_IFNAME1, true);
+	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, now_time + 100000 , now_time + 50000, NULL, 0);
+
+	ap = pa_ap_get(&pa.data, &p1_1, &rid_lower, true);
+	pa_ap_set_iface(ap, pa_iface_get(&pa.data, PL_IFNAME1, false));
+	pa_ap_notify(&pa.data, ap);
+	to_run(6);
+
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	test_pa_check_cp(cp, &p1_1, false, PA_PRIORITY_DEFAULT, false);
+
+	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 9, true); //To big to work
+	lrule.rule.authoritative = true;
+	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	pa_core_rule_add(&pa.core, &lrule.rule);
+	to_run(5);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	test_pa_check_cp(cp, &p1_1, false, PA_PRIORITY_DEFAULT, false); //No change
+	pa_core_rule_del(&pa.core, &lrule.rule);
+
+	pa_core_link_id_init(&lrule, PL_IFNAME2, 2, 4, true); //Bad interface
+	lrule.rule.authoritative = true;
+	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	pa_core_rule_add(&pa.core, &lrule.rule);
+	to_run(5);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	test_pa_check_cp(cp, &p1_1, false, PA_PRIORITY_DEFAULT, false); //No change
+	pa_core_rule_del(&pa.core, &lrule.rule);
+
+	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 4, false); //Shouldn't do anything cause not hard
+	lrule.rule.authoritative = true;
+	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	pa_core_rule_add(&pa.core, &lrule.rule);
+	to_run(5);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	test_pa_check_cp(cp, &p1_1, false, PA_PRIORITY_DEFAULT, false); //No change
+	pa_core_rule_del(&pa.core, &lrule.rule);
+
+	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 4, true); //Priority is not high enough
+	lrule.rule.authoritative = false;
+	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	pa_core_rule_add(&pa.core, &lrule.rule);
+	to_run(5);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	test_pa_check_cp(cp, &p1_1, false, PA_PRIORITY_DEFAULT, false); //No change
+	pa_core_rule_del(&pa.core, &lrule.rule);
+
+	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 8, true); //Priority is high enough
+	lrule.rule.authoritative = false;
+	lrule.rule.priority = PA_PRIORITY_DEFAULT + 1;
+	pa_core_rule_add(&pa.core, &lrule.rule);
+	to_run(5);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	test_pa_check_cp(cp, &p1_2, false, PA_PRIORITY_DEFAULT + 1, true); //new prefix
+	pa_core_rule_del(&pa.core, &lrule.rule);
+
+	to_run(6);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be); //Keep the new one rid is higher
+	test_pa_check_cp(cp, &p1_2, false, PA_PRIORITY_DEFAULT, true); //new prefix
+
+	pa_ap_set_priority(ap, PA_PRIORITY_DEFAULT + 1);
+	pa_ap_notify(&pa.data, ap);
+	to_run(6);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be); //Other one has now better priority
+	test_pa_check_cp(cp, &p1_1, false, PA_PRIORITY_DEFAULT + 1, true); //Adv cause designated
+
+	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 8, true); //Priority is high enough
+	lrule.rule.authoritative = true;
+	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	pa_core_rule_add(&pa.core, &lrule.rule);
+	to_run(5);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	test_pa_check_cp(cp, &p1_2, true, PA_PRIORITY_DEFAULT, true); //Adv cause authoritative
+	pa_core_rule_del(&pa.core, &lrule.rule);
+
+	pa_ap_todelete(ap);
+	pa_ap_notify(&pa.data, ap);
+
+	pa_core_link_id_init(&lrule, PL_IFNAME1, 1, 8, false); //Priority is high enough
+	lrule.rule.authoritative = false;
+	lrule.rule.priority = PA_PRIORITY_DEFAULT + 2;
+	pa_core_rule_add(&pa.core, &lrule.rule);
+	to_run(1);
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	test_pa_check_cp(cp, &p1_2, false, PA_PRIORITY_DEFAULT, true); //No change
+	pa_core_rule_del(&pa.core, &lrule.rule);
 
 	//TERM
 	pa_stop(&pa);
@@ -635,6 +712,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 	sput_run_test(test_pa_ipv4);
 	sput_run_test(test_pa_network);
 	sput_run_test(test_pa_static);
+	sput_run_test(test_pa_link_id);
 	sput_leave_suite(); /* optional */
 	sput_finish_testing();
 	return sput_get_return_value();

@@ -378,7 +378,7 @@ void pa_store_init(struct pa_store *store)
 	store->save_delay = pas_next_delay(0);
 	pa_core_rule_init(&store->pa_rule, "Stable storage", PACR_PRIORITY_STORAGE, pa_rule_try_storage);
 	store->pa_rule.priority = PA_PRIORITY_DEFAULT;
-	store->pa_rule.authoriative = false;
+	store->pa_rule.authoritative = false;
 }
 
 void pa_store_start(struct pa_store *store)

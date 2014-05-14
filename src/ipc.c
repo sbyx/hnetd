@@ -35,6 +35,7 @@ enum ipc_option {
 	OPT_ACCEPT_CERID,
 	OPT_CERID,
 	OPT_GUEST,
+	OPT_LINK_ID,
 	OPT_MAX
 };
 
@@ -47,6 +48,7 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_ACCEPT_CERID] = {"accept_cerid", BLOBMSG_TYPE_BOOL},
 	[OPT_CERID] = {"cerid", BLOBMSG_TYPE_STRING},
 	[OPT_GUEST] = {"guest", BLOBMSG_TYPE_BOOL},
+	[OPT_LINK_ID] = {"link_id", BLOBMSG_TYPE_STRING},
 };
 
 enum ipc_prefix_option {
@@ -118,7 +120,7 @@ int ipc_ifupdown(int argc, char *argv[])
 	char *entry;
 
 	int c;
-	while ((c = getopt(argc, argv, "ecgp:")) > 0) {
+	while ((c = getopt(argc, argv, "ecgp:l:")) > 0) {
 		switch(c) {
 		case 'e':
 			external = true;
@@ -139,6 +141,10 @@ int ipc_ifupdown(int argc, char *argv[])
 				blobmsg_add_string(&b, NULL, entry);
 			blobmsg_close_array(&b, p);
 			free(buf);
+			break;
+
+		case 'l':
+			blobmsg_add_string(&b, "link_id", optarg);
 			break;
 		}
 	}
@@ -197,6 +203,12 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 						iface_add_chosen_prefix(iface, &p);
 				}
 			}
+
+			unsigned link_id, link_mask;
+			if (iface && tb[OPT_LINK_ID] && sscanf(
+						blobmsg_get_string(tb[OPT_LINK_ID]),
+						"%x/%u", &link_id, &link_mask) == 2)
+					iface_set_link_id(iface, link_id, link_mask);
 		} else if (!strcmp(cmd, "ifdown")) {
 			iface_remove(c);
 		} else if (!strcmp(cmd, "enable_ipv4_uplink")) {
