@@ -50,6 +50,7 @@ proto_hnet_setup() {
     for p in $iface_id; do
     	json_add_string "" "$p"
     done
+    json_close_array
     proto_close_data
 
     proto_send_update "$interface"
