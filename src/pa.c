@@ -11,6 +11,7 @@
 #define L_PREFIX "pa - "
 
 #include "pa.h"
+#include "iface.h"
 
 /************************************/
 /********** Main interface **********/
@@ -99,17 +100,39 @@ void pa_term(struct pa *pa)
 /********* Iface interface **********/
 /************************************/
 
+static uint8_t __pa_custom_plen(__unused struct pa_iface *iface, struct pa_dp *dp, void *priv, bool scarcity)
+{
+	struct iface *i = (struct iface *)priv;
+	uint8_t plen = pa_core_default_plen(dp, scarcity);
+	if(plen < i->min_v6_plen && !prefix_is_ipv4(&dp->prefix))
+		return i->min_v6_plen;
+
+	return plen;
+}
+
 static void __pa_ifu_intiface(struct iface_user *u, const char *ifname, bool enabled)
 {
 	L_INFO("Iface callback for interior interface %s -> %s", ifname, enabled?"intern":"extern");
 
 	struct pa *pa = container_of(u, struct pa, ifu);
 	struct pa_iface *iface;
+	struct iface *i;
 
 	if(!(iface = pa_iface_get(&pa->data, ifname, enabled)))
 		return;
 
 	pa_iface_set_internal(iface, enabled);
+
+	if((i = iface_get(ifname))) {
+		if(!enabled || !i->min_v6_plen) {
+			iface->custom_plen = NULL;
+			iface->custom_plen_priv = NULL;
+		} else {
+			iface->custom_plen = __pa_custom_plen;
+			iface->custom_plen_priv = i;
+		}
+	}
+
 	pa_iface_notify(&pa->data, iface);
 }
 

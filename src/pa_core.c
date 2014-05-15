@@ -111,7 +111,7 @@ static void pa_core_destroy_cp(struct pa_core *core, struct pa_cp *cp)
 	cp->destroy(core_p(core, data), cp, core);
 }
 
-uint8_t pa_default_plen(struct pa_dp *dp, bool scarcity)
+uint8_t pa_core_default_plen(struct pa_dp *dp, bool scarcity)
 {
 	if(!scarcity) {
 		if(dp->prefix.plen < 64) {
@@ -194,7 +194,7 @@ static int pa_rule_try_random_scarcity(struct pa_core *core, struct pa_rule *rul
 		struct pa_dp *dp, struct pa_iface *iface,
 		struct pa_ap *strongest_ap, struct pa_cpl *current_cpl)
 {
-	uint8_t plen = iface->custom_plen?iface->custom_plen(iface, dp, iface->custom_plen_priv, true):pa_default_plen(dp, true);
+	uint8_t plen = iface->custom_plen?iface->custom_plen(iface, dp, iface->custom_plen_priv, true):pa_core_default_plen(dp, true);
 	return pa_rule_try_random_plen(core, rule, dp, iface, strongest_ap, current_cpl, plen);
 }
 
@@ -202,7 +202,7 @@ static int pa_rule_try_random(struct pa_core *core, struct pa_rule *rule,
 		struct pa_dp *dp, struct pa_iface *iface,
 		struct pa_ap *strongest_ap, struct pa_cpl *current_cpl)
 {
-	uint8_t plen = iface->custom_plen?iface->custom_plen(iface, dp, iface->custom_plen_priv, false):pa_default_plen(dp, false);
+	uint8_t plen = iface->custom_plen?iface->custom_plen(iface, dp, iface->custom_plen_priv, false):pa_core_default_plen(dp, false);
 	return pa_rule_try_random_plen(core, rule, dp, iface, strongest_ap, current_cpl, plen);
 }
 
@@ -892,7 +892,7 @@ static int pa_rule_try_link_id(struct pa_core *core, struct pa_rule *rule,
 	if((lrule->ifname[0] != '\0' && strcmp(lrule->ifname, iface->ifname)))
 		return -1;
 
-	if(((plen = pa_default_plen(dp, false)) > 128) || ((plen - dp->prefix.plen) < lrule->link_id_len))
+	if(((plen = pa_core_default_plen(dp, false)) > 128) || ((plen - dp->prefix.plen) < lrule->link_id_len))
 		return -1;
 
 	prefix_canonical(&p, &dp->prefix);

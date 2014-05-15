@@ -573,6 +573,7 @@ enum {
 	DATA_ATTR_PREFIX,
 	DATA_ATTR_LINK_ID,
 	DATA_ATTR_IFACE_ID,
+	DATA_ATTR_MIN_V6_PLEN,
 	DATA_ATTR_MAX
 };
 
@@ -600,6 +601,7 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_PREFIX] = { .name = "prefix", .type = BLOBMSG_TYPE_ARRAY },
 	[DATA_ATTR_LINK_ID] = { .name = "link_id", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_IFACE_ID] = { .name = "iface_id", .type = BLOBMSG_TYPE_ARRAY },
+	[DATA_ATTR_MIN_V6_PLEN] = { .name = "min_v6_plen", .type = BLOBMSG_TYPE_STRING },
 };
 
 
@@ -802,6 +804,13 @@ static void platform_update(void *data, size_t len)
 					iface_add_addrconf(c, &addr.prefix, 128 - addr.plen, &filter);
 				}
 			}
+		}
+
+		unsigned minv6len;
+		if(c && tb[DATA_ATTR_MIN_V6_PLEN]
+		               && sscanf(blobmsg_get_string(tb[DATA_ATTR_MIN_V6_PLEN]), "%u", &minv6len)
+		               && minv6len <= 128) {
+			c->min_v6_plen = minv6len;
 		}
 	}
 

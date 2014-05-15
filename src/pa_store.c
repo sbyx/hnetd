@@ -357,13 +357,21 @@ static int pa_rule_try_storage(struct pa_core *core, struct pa_rule *rule,
 		__attribute__((unused))struct pa_cpl *current_cpl)
 {
 	struct pa_sp *sp;
+	uint8_t plen;
 
 	if(!iface->designated)
 		return -1;
 
+	if(iface->custom_plen) {
+		plen = iface->custom_plen(iface, dp, iface->custom_plen_priv, false);
+	} else {
+		plen = 0;
+	}
+
 	pa_for_each_sp_in_iface(sp, iface) {
 		if(prefix_contains(&dp->prefix, &sp->prefix) &&
-				!pa_prefix_getcollision(container_of(core, struct pa, core), &sp->prefix)) {
+				!pa_prefix_getcollision(container_of(core, struct pa, core), &sp->prefix) &&
+				sp->prefix.plen > plen) {
 			prefix_cpy(&rule->prefix, &sp->prefix);
 			//prio, auth and advertise are set at init
 			return 0;

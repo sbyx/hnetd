@@ -33,9 +33,9 @@ static struct pa_test_iface {
 	struct iface_user *user;
 	struct iface iface;
 } iface = { .user = NULL,
-		.iface = { .eui64_addr = {
-				.s6_addr = { 0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00, PL_EUI64 }
-		} } };
+		.iface = { .eui64_addr = {.s6_addr = { 0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00, PL_EUI64 }},
+				.min_v6_plen = 0,
+} };
 
 #define iface_register_user   pa_test_iface_register_user
 #define iface_unregister_user pa_test_iface_unregister_user
@@ -794,6 +794,37 @@ void test_pa_iface_addr() {
 	pa_term(&pa);
 }
 
+void test_pa_minv6len()
+{
+	struct pa_cpl *cpl;
+
+	//INIT
+	uloop_init();
+	pa_init(&pa, NULL);
+	pa.local.conf.use_ipv4 = false;
+	pa.local.conf.use_ula = false;
+	pa_flood_set_flooddelays(&pa.data, PA_TEST_FLOOD, PA_TEST_FLOOD_LL);
+	pa_flood_set_rid(&pa.data, &rid);
+	pa_flood_notify(&pa.data);
+	pa_start(&pa);
+
+	iface.iface.min_v6_plen = 92;
+	iface.user->cb_intiface(iface.user, PL_IFNAME1, true);
+	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, now_time + 100000 , now_time + 50000, NULL, 0);
+	fr_md5_push_prefix(&p1_1);
+	fr_md5_push_prefix(&p1_1_addr); //Because 92 len require a random address
+	to_run(6); //Do everything
+
+	cpl = _pa_cpl(btrie_first_down_entry(&cpl->cp, &pa.data.cps, NULL, 0, be));
+	sput_fail_unless(cpl, "Cpl exists");
+	sput_fail_unless(cpl->cp.prefix.plen == 92, "Custom prefix length");
+
+	//TERM
+	pa_stop(&pa);
+	pa_term(&pa);
+	iface.iface.min_v6_plen = 0;
+}
+
 int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 {
 	openlog("hnetd_test_pa", LOG_PERROR | LOG_PID, LOG_DAEMON);
@@ -807,6 +838,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 	sput_run_test(test_pa_static);
 	sput_run_test(test_pa_link_id);
 	sput_run_test(test_pa_iface_addr);
+	sput_run_test(test_pa_minv6len);
 	sput_leave_suite(); /* optional */
 	sput_finish_testing();
 	return sput_get_return_value();

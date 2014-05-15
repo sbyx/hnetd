@@ -37,6 +37,7 @@ enum ipc_option {
 	OPT_GUEST,
 	OPT_LINK_ID,
 	OPT_IFACE_ID,
+	OPT_MIN_V6_PLEN,
 	OPT_MAX
 };
 
@@ -51,6 +52,7 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_GUEST] = {"guest", BLOBMSG_TYPE_BOOL},
 	[OPT_LINK_ID] = {"link_id", BLOBMSG_TYPE_STRING},
 	[OPT_IFACE_ID] = {"iface_id", BLOBMSG_TYPE_ARRAY},
+	[OPT_MIN_V6_PLEN] = {"min_v6_plen", BLOBMSG_TYPE_STRING},
 };
 
 enum ipc_prefix_option {
@@ -122,7 +124,7 @@ int ipc_ifupdown(int argc, char *argv[])
 	char *entry;
 
 	int c;
-	while ((c = getopt(argc, argv, "ecgp:l:i:")) > 0) {
+	while ((c = getopt(argc, argv, "ecgp:l:i:m:")) > 0) {
 		switch(c) {
 		case 'e':
 			external = true;
@@ -156,6 +158,10 @@ int ipc_ifupdown(int argc, char *argv[])
 				blobmsg_add_string(&b, NULL, entry);
 			blobmsg_close_array(&b, p);
 			free(buf);
+			break;
+
+		case 'm':
+			blobmsg_add_string(&b, "min_v6_plen", optarg);
 			break;
 		}
 	}
@@ -242,6 +248,14 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 					}
 				}
 			}
+
+			unsigned minv6len;
+			if(iface && tb[OPT_MIN_V6_PLEN]
+			               && sscanf(blobmsg_get_string(tb[OPT_MIN_V6_PLEN]), "%u", &minv6len)
+			               && minv6len <= 128) {
+				iface->min_v6_plen = minv6len;
+			}
+
 		} else if (!strcmp(cmd, "ifdown")) {
 			iface_remove(c);
 		} else if (!strcmp(cmd, "enable_ipv4_uplink")) {
