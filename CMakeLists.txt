@@ -32,6 +32,14 @@ if (${COVERAGE})
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
 endif (${COVERAGE})
 
+if (${EXTRA_INCLUDE_DIR})
+  include_directories(${EXTRA_INCLUDE_DIR})
+endif (${EXTRA_INCLUDE_DIR})
+
+if (${EXTRA_LINK_DIR})
+  link_directories(${EXTRA_LINK_DIR})
+endif (${EXTRA_LINK_DIR})
+
 if(${BACKEND} MATCHES "openwrt")
   set(BACKEND_SOURCE "src/platform-openwrt.c")
   set(BACKEND_LINK "ubus")
