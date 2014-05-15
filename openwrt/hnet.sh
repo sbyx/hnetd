@@ -15,14 +15,16 @@ proto_hnet_init_config() {
     proto_config_add_string 'link_id'
     proto_config_add_string 'iface_id'
     proto_config_add_string 'min_v6_plen'
+    proto_config_add_string 'adhoc'
+    proto_config_add_string 'disable_pa'
 }
 
 proto_hnet_setup() {
     local interface="$1"
     local device="$2"
 
-    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id min_v6_plen
-    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id min_v6_plen
+    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id min_v6_plen adhoc disable_pa
+    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id min_v6_plen adhoc disable_pa
 
     logger -t proto-hnet "proto_hnet_setup $device/$interface"
 
@@ -41,6 +43,8 @@ proto_hnet_setup() {
     proto_add_data
     [ "$guest" = "1" ] && json_add_boolean guest 1
     [ "$accept_cerid" = "1" ] && json_add_boolean accept_cerid 1
+    [ "$adhoc" = "1" ] && json_add_boolean adhoc 1
+    [ "$disable_pa" = "1" ] && json_add_boolean disable_pa 1
     json_add_array prefix
     for p in $prefix; do
     	json_add_string "" "$p"

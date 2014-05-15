@@ -574,6 +574,8 @@ enum {
 	DATA_ATTR_LINK_ID,
 	DATA_ATTR_IFACE_ID,
 	DATA_ATTR_MIN_V6_PLEN,
+	DATA_ATTR_ADHOC,
+	DATA_ATTR_DISABLE_PA,
 	DATA_ATTR_MAX
 };
 
@@ -602,6 +604,8 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_LINK_ID] = { .name = "link_id", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_IFACE_ID] = { .name = "iface_id", .type = BLOBMSG_TYPE_ARRAY },
 	[DATA_ATTR_MIN_V6_PLEN] = { .name = "min_v6_plen", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_ADHOC] = { .name = "adhoc", .type = BLOBMSG_TYPE_BOOL },
+	[DATA_ATTR_DISABLE_PA] = { .name = "disable_pa", .type = BLOBMSG_TYPE_BOOL },
 };
 
 
@@ -752,6 +756,12 @@ static void platform_update(void *data, size_t len)
 
 		if (dtb[DATA_ATTR_GUEST] && blobmsg_get_bool(dtb[DATA_ATTR_GUEST]))
 			flags |= IFACE_FLAG_GUEST;
+
+		if (dtb[DATA_ATTR_ADHOC] && blobmsg_get_bool(dtb[DATA_ATTR_ADHOC]))
+			flags |= IFACE_FLAG_ADHOC;
+
+		if (dtb[DATA_ATTR_DISABLE_PA] && blobmsg_get_bool(dtb[DATA_ATTR_DISABLE_PA]))
+			flags |= IFACE_FLAG_DISABLE_PA;
 
 		if (dtb[DATA_ATTR_CER])
 			inet_pton(AF_INET6, blobmsg_get_string(dtb[DATA_ATTR_CER]), &cer);

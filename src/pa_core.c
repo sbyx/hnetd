@@ -315,7 +315,7 @@ static bool pa_core_iface_is_designated(struct pa_core *core, struct pa_iface *i
 	struct pa_cpl *cpl, *best_cpl;
 	struct pa_ap *ap;
 
-	if(btrie_empty(&iface->aps))
+	if(btrie_empty(&iface->aps) || iface->adhoc)
 		return true;
 
 	if(btrie_empty(&iface->cpls))
@@ -406,7 +406,7 @@ void paa_algo_do(struct pa_core *core)
 				continue;
 
 			cpl = pa_core_getcpl(dp, iface);
-			ap = pa_core_getap(core, dp, iface, &cpl->cp);
+			ap = iface->adhoc?NULL:pa_core_getap(core, dp, iface, &cpl->cp);
 			pa_core_try_rules(core, dp, iface, ap, cpl);
 		}
 	}
@@ -736,7 +736,7 @@ static void __pad_cb_ifs(struct pa_data_user *user,
 		struct pa_iface *iface, uint32_t flags)
 {
 	struct pa_core *core = container_of(user, struct pa_core, data_user);
-	if(flags & (PADF_IF_CREATED | PADF_IF_INTERNAL | PADF_IF_TODELETE))
+	if(flags & (PADF_IF_CREATED | PADF_IF_INTERNAL | PADF_IF_TODELETE | PADF_IF_ADHOC))
 		__pa_paa_schedule(core);
 
 	if((flags & PADF_IF_TODELETE) || !iface->internal) {

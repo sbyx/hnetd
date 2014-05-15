@@ -765,7 +765,7 @@ static bool iface_discover_border(struct iface *c)
 }
 
 
-struct iface* iface_create(const char *ifname, const char *handle, enum iface_flags flags)
+struct iface* iface_create(const char *ifname, const char *handle, iface_flags flags)
 {
 	struct iface *c = iface_get(ifname);
 	if (!c) {

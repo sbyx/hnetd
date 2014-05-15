@@ -779,6 +779,7 @@ struct pa_iface *pa_iface_get(struct pa_data *data, const char *ifname, bool goc
 	iface->designated = false;
 	iface->do_dhcp = false;
 	iface->internal = false;
+	iface->adhoc = false;
 	iface->ipv4_uplink = false;
 	list_add(&iface->le, &data->ifs);
 	iface->__flags = PADF_IF_CREATED;
@@ -798,6 +799,11 @@ void pa_iface_set_internal(struct pa_iface *iface, bool internal)
 void pa_iface_set_dodhcp(struct pa_iface *iface, bool dodhcp)
 {
 	PA_SET_SCALAR(iface->do_dhcp, dodhcp, iface->__flags, PADF_IF_DODHCP);
+}
+
+void pa_iface_set_adhoc(struct pa_iface *iface, bool adhoc)
+{
+	PA_SET_SCALAR(iface->adhoc, adhoc, iface->__flags, PADF_IF_ADHOC);
 }
 
 void pa_iface_destroy(struct pa_data *data, struct pa_iface *iface)

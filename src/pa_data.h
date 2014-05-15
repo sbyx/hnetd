@@ -76,6 +76,7 @@ struct pa_iface {
 
 	bool internal;         /* Whether the iface is internal */
 	bool do_dhcp;          /* Whether router should do dhcp on that iface. */
+	bool adhoc;            /* Whether the link is adhoc */
 
 	struct btrie aps;      /* assigned prefixes on that iface */
 	struct btrie cpls;     /* chosen prefixes on that iface */
@@ -101,6 +102,7 @@ struct pa_iface {
 #define PADF_IF_TODELETE PADF_ALL_TODELETE
 #define PADF_IF_INTERNAL 0x0100
 #define PADF_IF_DODHCP   0x0200
+#define PADF_IF_ADHOC    0x0400
 	uint32_t __flags;
 
 #define PA_IFNAME_L  "%s"
@@ -416,6 +418,7 @@ void pa_data_unsubscribe(struct pa_data_user *);
 #define pa_for_each_iface(pa_iface, pa_data) list_for_each_entry(pa_iface, &(pa_data)->ifs, le)
 struct pa_iface *pa_iface_get(struct pa_data *, const char *ifname, bool goc);
 void pa_iface_set_internal(struct pa_iface *, bool internal);
+void pa_iface_set_adhoc(struct pa_iface *iface, bool adhoc);
 void pa_iface_set_dodhcp(struct pa_iface *, bool dodhcp);
 #define pa_iface_todelete(iface) (iface)->__flags |= PADF_IF_TODELETE
 void pa_iface_notify(struct pa_data *, struct pa_iface *);

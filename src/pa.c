@@ -116,21 +116,28 @@ static void __pa_ifu_intiface(struct iface_user *u, const char *ifname, bool ena
 
 	struct pa *pa = container_of(u, struct pa, ifu);
 	struct pa_iface *iface;
-	struct iface *i;
+	struct iface *i = iface_get(ifname);
+
+	if(!i)
+		return;
+
+	if(i->flags & IFACE_FLAG_DISABLE_PA) {
+		L_INFO("PA is disabled on %s", ifname);
+		enabled = false;
+	}
 
 	if(!(iface = pa_iface_get(&pa->data, ifname, enabled)))
 		return;
 
 	pa_iface_set_internal(iface, enabled);
+	pa_iface_set_adhoc(iface, !!(i->flags & IFACE_FLAG_ADHOC));
 
-	if((i = iface_get(ifname))) {
-		if(!enabled || !i->min_v6_plen) {
-			iface->custom_plen = NULL;
-			iface->custom_plen_priv = NULL;
-		} else {
-			iface->custom_plen = __pa_custom_plen;
-			iface->custom_plen_priv = i;
-		}
+	if(!enabled || !i->min_v6_plen) {
+		iface->custom_plen = NULL;
+		iface->custom_plen_priv = NULL;
+	} else {
+		iface->custom_plen = __pa_custom_plen;
+		iface->custom_plen_priv = i;
 	}
 
 	pa_iface_notify(&pa->data, iface);

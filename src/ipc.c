@@ -38,6 +38,8 @@ enum ipc_option {
 	OPT_LINK_ID,
 	OPT_IFACE_ID,
 	OPT_MIN_V6_PLEN,
+	OPT_ADHOC,
+	OPT_DISABLE_PA,
 	OPT_MAX
 };
 
@@ -53,6 +55,8 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_LINK_ID] = {"link_id", BLOBMSG_TYPE_STRING},
 	[OPT_IFACE_ID] = {"iface_id", BLOBMSG_TYPE_ARRAY},
 	[OPT_MIN_V6_PLEN] = {"min_v6_plen", BLOBMSG_TYPE_STRING},
+	[OPT_ADHOC] = {"adhoc", BLOBMSG_TYPE_BOOL},
+	[OPT_DISABLE_PA] = {"disable_pa", BLOBMSG_TYPE_BOOL},
 };
 
 enum ipc_prefix_option {
@@ -124,7 +128,7 @@ int ipc_ifupdown(int argc, char *argv[])
 	char *entry;
 
 	int c;
-	while ((c = getopt(argc, argv, "ecgp:l:i:m:")) > 0) {
+	while ((c = getopt(argc, argv, "ecgadp:l:i:m:")) > 0) {
 		switch(c) {
 		case 'e':
 			external = true;
@@ -163,6 +167,14 @@ int ipc_ifupdown(int argc, char *argv[])
 		case 'm':
 			blobmsg_add_string(&b, "min_v6_plen", optarg);
 			break;
+
+		case 'd':
+			blobmsg_add_u8(&b, "disable_pa", 1);
+			break;
+
+		case 'a':
+			blobmsg_add_u8(&b, "adhoc", 1);
+			break;
 		}
 	}
 
@@ -198,13 +210,19 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 		const char *cmd = blobmsg_get_string(tb[OPT_COMMAND]);
 		L_DEBUG("Handling ipc command %s", cmd);
 		if (!strcmp(cmd, "ifup")) {
-			enum iface_flags flags = 0;
+			iface_flags flags = 0;
 
 			if (tb[OPT_ACCEPT_CERID] && blobmsg_get_bool(tb[OPT_ACCEPT_CERID]))
 				flags |= IFACE_FLAG_ACCEPT_CERID;
 
 			if (tb[OPT_GUEST] && blobmsg_get_bool(tb[OPT_GUEST]))
 				flags |= IFACE_FLAG_GUEST;
+
+			if (tb[OPT_ADHOC] && blobmsg_get_bool(tb[OPT_ADHOC]))
+				flags |= IFACE_FLAG_ADHOC;
+
+			if (tb[OPT_DISABLE_PA] && blobmsg_get_bool(tb[OPT_DISABLE_PA]))
+				flags |= IFACE_FLAG_DISABLE_PA;
 
 			struct iface *iface = iface_create(ifname, tb[OPT_HANDLE] == NULL ? NULL :
 					blobmsg_get_string(tb[OPT_HANDLE]), flags);
