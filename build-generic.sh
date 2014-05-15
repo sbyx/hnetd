@@ -24,7 +24,7 @@ git clone https://github.com/sbyx/hnetd.git $gitdir/hnetd
 	cd $gitdir/uci
 	mv CMakeLists.txt CMakeLists.txt.in
 	echo "include_directories($distdir/usr/include)" > CMakeLists.txt
-	echo "link_directories($distdir(usr/lib)" >> CMakeLists.txt
+	echo "link_directories($distdir/usr/lib)" >> CMakeLists.txt
 	cat CMakeLists.txt.in >> CMakeLists.txt
 	cmake -DCMAKE_INSTALL_PREFIX=$distdir/usr -DBUILD_LUA=off .
 	make install VERBOSE=1
@@ -40,7 +40,7 @@ git clone https://github.com/sbyx/hnetd.git $gitdir/hnetd
 	cd $gitdir/odhcpd
 	mv CMakeLists.txt CMakeLists.txt.in
 	echo "include_directories($distdir/usr/include)" > CMakeLists.txt
-	echo "link_directories($distdir/dist/usr/lib)" >> CMakeLists.txt
+	echo "link_directories($distdir/usr/lib)" >> CMakeLists.txt
 	cat CMakeLists.txt.in >> CMakeLists.txt
 	cmake -DCMAKE_INSTALL_PREFIX=$distdir/usr .
 	make install
