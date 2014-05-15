@@ -111,35 +111,34 @@ static void pa_core_destroy_cp(struct pa_core *core, struct pa_cp *cp)
 	cp->destroy(core_p(core, data), cp, core);
 }
 
-static uint8_t pa_default_plen(struct pa_dp *dp)
+uint8_t pa_default_plen(struct pa_dp *dp, bool scarcity)
 {
-	if(dp->prefix.plen < 64) {
-		return 64;
-	} else if (dp->prefix.plen < 104) {
-		return dp->prefix.plen + 16;
-	} else if (dp->prefix.plen < 112) {
-		return 120;
-	} else if (dp->prefix.plen <= 128) { //IPv4
-		return 120 + (dp->prefix.plen - 112)/2;
+	if(!scarcity) {
+		if(dp->prefix.plen < 64) {
+			return 64;
+		} else if (dp->prefix.plen < 104) {
+			return dp->prefix.plen + 16;
+		} else if (dp->prefix.plen < 112) {
+			return 120;
+		} else if (dp->prefix.plen <= 128) { //IPv4
+			return 120 + (dp->prefix.plen - 112)/2;
+		} else {
+			L_ERR("Invalid prefix length (%d)", dp->prefix.plen);
+			return 200;
+		}
 	} else {
-		L_ERR("Invalid prefix length (%d)", dp->prefix.plen);
-		return 200;
-	}
-}
-
-static uint8_t pa_scarcity_plen(struct pa_dp *dp)
-{
-	if(dp->prefix.plen < 64) {
-		return 80;
-	} else if (dp->prefix.plen < 88) {
-		return dp->prefix.plen + 32;
-	} else if (dp->prefix.plen < 112) {
-		return 124;
-	} else if (dp->prefix.plen <= 128) { //IPv4
-		return 124 + (dp->prefix.plen - 112)/8;
-	} else {
-		L_ERR("Invalid prefix length (%d)", dp->prefix.plen);
-		return 200;
+		if(dp->prefix.plen < 64) {
+			return 80;
+		} else if (dp->prefix.plen < 88) {
+			return dp->prefix.plen + 32;
+		} else if (dp->prefix.plen < 112) {
+			return 124;
+		} else if (dp->prefix.plen <= 128) { //IPv4
+			return 124 + (dp->prefix.plen - 112)/8;
+		} else {
+			L_ERR("Invalid prefix length (%d)", dp->prefix.plen);
+			return 200;
+		}
 	}
 }
 
@@ -195,14 +194,16 @@ static int pa_rule_try_random_scarcity(struct pa_core *core, struct pa_rule *rul
 		struct pa_dp *dp, struct pa_iface *iface,
 		struct pa_ap *strongest_ap, struct pa_cpl *current_cpl)
 {
-	return pa_rule_try_random_plen(core, rule, dp, iface, strongest_ap, current_cpl, pa_scarcity_plen(dp));
+	uint8_t plen = iface->custom_plen?iface->custom_plen(iface, dp, iface->custom_plen_priv, true):pa_default_plen(dp, true);
+	return pa_rule_try_random_plen(core, rule, dp, iface, strongest_ap, current_cpl, plen);
 }
 
 static int pa_rule_try_random(struct pa_core *core, struct pa_rule *rule,
 		struct pa_dp *dp, struct pa_iface *iface,
 		struct pa_ap *strongest_ap, struct pa_cpl *current_cpl)
 {
-	return pa_rule_try_random_plen(core, rule, dp, iface, strongest_ap, current_cpl, pa_default_plen(dp));
+	uint8_t plen = iface->custom_plen?iface->custom_plen(iface, dp, iface->custom_plen_priv, false):pa_default_plen(dp, false);
+	return pa_rule_try_random_plen(core, rule, dp, iface, strongest_ap, current_cpl, plen);
 }
 
 static int pa_rule_try_accept(__attribute__((unused))struct pa_core *core,
@@ -732,11 +733,19 @@ static void __pad_cb_flood(struct pa_data_user *user,
 }
 
 static void __pad_cb_ifs(struct pa_data_user *user,
-		__attribute__((unused))struct pa_iface *iface, uint32_t flags)
+		struct pa_iface *iface, uint32_t flags)
 {
 	struct pa_core *core = container_of(user, struct pa_core, data_user);
 	if(flags & (PADF_IF_CREATED | PADF_IF_INTERNAL | PADF_IF_TODELETE))
 		__pa_paa_schedule(core);
+
+	if((flags & PADF_IF_TODELETE) || !iface->internal) {
+		//Remove all cpls
+		struct pa_cpl *cpl, *cpl2;
+		pa_for_each_cpl_in_iface_safe(cpl, cpl2, iface) {
+			pa_core_destroy_cp(core, &cpl->cp);
+		}
+	}
 }
 
 static void __pad_cb_dps(struct pa_data_user *user, struct pa_dp *dp, uint32_t flags)
@@ -883,7 +892,7 @@ static int pa_rule_try_link_id(struct pa_core *core, struct pa_rule *rule,
 	if((lrule->ifname[0] != '\0' && strcmp(lrule->ifname, iface->ifname)))
 		return -1;
 
-	if(((plen = pa_default_plen(dp)) > 128) || ((plen - dp->prefix.plen) < lrule->link_id_len))
+	if(((plen = pa_default_plen(dp, false)) > 128) || ((plen - dp->prefix.plen) < lrule->link_id_len))
 		return -1;
 
 	prefix_canonical(&p, &dp->prefix);

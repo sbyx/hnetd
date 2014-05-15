@@ -67,6 +67,8 @@ struct pa_rid {
 		(rid)->id[12], (rid)->id[13], (rid)->id[15], (rid)->id[15]
 };
 
+struct pa_dp;
+
 /* Interface */
 struct pa_iface {
 	struct list_head le;   /* Linked in pa_data's ifaces list */
@@ -87,6 +89,13 @@ struct pa_iface {
 	bool ipv4_uplink;       /* Whether this iface is the ipv4 uplink - used by pa.c */
 
 	uint32_t prand_ctr[2];  /* Pseudo random counters used for prefix and address generation */
+
+	/* Custom prefix length selection. Default is NULL.
+	 * If not null, it will be used instead of Prefix Assignment default.
+	 * In case of scarcity, a smaller prefix length (or invalid value like 255) should
+	 * be returned. */
+	uint8_t (*custom_plen)(struct pa_iface *, struct pa_dp *dp, void *priv, bool scarcity);
+	void *custom_plen_priv;
 
 #define PADF_IF_CREATED  PADF_ALL_CREATED
 #define PADF_IF_TODELETE PADF_ALL_TODELETE
@@ -450,6 +459,7 @@ void pa_ap_notify(struct pa_data *data, struct pa_ap *ap);
 #define pa_for_each_cp_updown_safe(pa_cp, cp2, pa_data, p) btrie_for_each_updown_entry_safe(pa_cp, cp2, &(pa_data)->cps, (btrie_key_t *)&(p)->prefix, (p)->plen, be)
 #define pa_for_each_cp_safe(pa_cp, cp2, pa_data) btrie_for_each_down_entry_safe(pa_cp, cp2, &(pa_data)->cps, NULL, 0, be)
 #define pa_for_each_cpl_in_iface(pa_cpl, pa_iface) btrie_for_each_down_entry(pa_cpl, &(pa_iface)->cpls, NULL, 0, if_be)
+#define pa_for_each_cpl_in_iface_safe(pa_cpl, cpl2, pa_iface) btrie_for_each_down_entry_safe(pa_cpl, cpl2, &(pa_iface)->cpls, NULL, 0, if_be)
 #define pa_for_each_cpl_in_iface_down(pa_cpl, pa_iface, p) btrie_for_each_down_entry(pa_cpl, &(pa_iface)->cpls, (btrie_key_t *)&(p)->prefix, (p)->plen, if_be)
 #define pa_for_each_cp_in_dp(pa_cp, pa_dp) btrie_for_each_down_entry(pa_cp, &(pa_dp)->cps, NULL, 0, dp_be)
 #define pa_for_each_cp_in_dp_safe(pa_cp, cp2, pa_dp) btrie_for_each_down_entry_safe(pa_cp, cp2, &(pa_dp)->cps, NULL, 0, dp_be)

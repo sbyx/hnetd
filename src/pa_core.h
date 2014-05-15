@@ -133,6 +133,9 @@ void pa_core_start(struct pa_core *);
 void pa_core_stop(struct pa_core *);
 void pa_core_term(struct pa_core *);
 
+//Default plen selection policy function
+uint8_t pa_default_plen(struct pa_dp *dp, bool scarcity);
+
 void pa_core_rule_init(struct pa_rule *rule, const char *name, uint32_t rule_priority, rule_try try);
 void pa_core_rule_add(struct pa_core *core, struct pa_rule *rule);
 void pa_core_rule_del(struct pa_core *core, struct pa_rule *rule);
