@@ -18,6 +18,10 @@ void pa_core_link_id_init(__unused struct pa_link_id_rule *lrule, __unused const
 		__unused uint32_t link_id, __unused uint8_t link_id_len, __unused bool hard) {};
 void pa_core_rule_add(__unused struct pa_core *core, __unused struct pa_rule *rule) {};
 void pa_core_rule_del(__unused struct pa_core *core, __unused struct pa_rule *rule) {};
+void pa_core_iface_addr_init(__unused struct pa_iface_addr *addr, __unused const char *ifname,
+		__unused struct in6_addr *address, __unused uint8_t mask, __unused struct prefix *filter) {}
+void pa_core_iface_addr_add(__unused struct pa_core *core, __unused struct pa_iface_addr *addr) {}
+void pa_core_iface_addr_del(__unused struct pa_core *core, __unused struct pa_iface_addr *addr) {}
 void platform_set_owner(__unused struct iface *c, __unused bool enable) {}
 int platform_init(__unused struct pa_data *data, __unused const char *pd_socket) { return 0; }
 void platform_set_address(__unused struct iface *c, __unused struct iface_addr *addr, __unused bool enable) {}

@@ -572,6 +572,7 @@ enum {
 	DATA_ATTR_GUEST,
 	DATA_ATTR_PREFIX,
 	DATA_ATTR_LINK_ID,
+	DATA_ATTR_IFACE_ID,
 	DATA_ATTR_MAX
 };
 
@@ -598,6 +599,7 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_GUEST] = { .name = "guest", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_PREFIX] = { .name = "prefix", .type = BLOBMSG_TYPE_ARRAY },
 	[DATA_ATTR_LINK_ID] = { .name = "link_id", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_IFACE_ID] = { .name = "iface_id", .type = BLOBMSG_TYPE_ARRAY },
 };
 
 
@@ -771,6 +773,7 @@ static void platform_update(void *data, size_t len)
 						iface_add_chosen_prefix(c, &p);
 				}
 			}
+
 		}
 
 		unsigned link_id, link_mask;
@@ -778,6 +781,28 @@ static void platform_update(void *data, size_t len)
 				blobmsg_get_string(dtb[DATA_ATTR_LINK_ID]),
 				"%x/%u", &link_id, &link_mask) == 2)
 			iface_set_link_id(c, link_id, link_mask);
+
+		if (c && dtb[DATA_ATTR_IFACE_ID]) {
+			struct blob_attr *k;
+			unsigned rem;
+
+			blobmsg_for_each_attr(k, dtb[DATA_ATTR_IFACE_ID], rem) {
+				if (blobmsg_type(k) == BLOBMSG_TYPE_STRING) {
+					char astr[55], fstr[55];
+					struct prefix filter, addr;
+					int res = sscanf(blobmsg_get_string(k), "%54s %54s", astr, fstr);
+					if(!res || !prefix_pton(astr, &addr) || (res > 1 && !prefix_pton(fstr, &filter))) {
+						L_ERR("Incorrect iface_id syntax %s", blobmsg_get_string(k));
+						continue;
+					}
+					if(addr.plen == 128 && !addr.prefix.s6_addr32[0] && !addr.prefix.s6_addr32[1])
+						addr.plen = 64;
+					if(res == 1)
+						filter.plen = 0;
+					iface_add_addrconf(c, &addr.prefix, 128 - addr.plen, &filter);
+				}
+			}
+		}
 	}
 
 	if (c)

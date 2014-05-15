@@ -36,6 +36,7 @@ enum ipc_option {
 	OPT_CERID,
 	OPT_GUEST,
 	OPT_LINK_ID,
+	OPT_IFACE_ID,
 	OPT_MAX
 };
 
@@ -49,6 +50,7 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_CERID] = {"cerid", BLOBMSG_TYPE_STRING},
 	[OPT_GUEST] = {"guest", BLOBMSG_TYPE_BOOL},
 	[OPT_LINK_ID] = {"link_id", BLOBMSG_TYPE_STRING},
+	[OPT_IFACE_ID] = {"iface_id", BLOBMSG_TYPE_ARRAY},
 };
 
 enum ipc_prefix_option {
@@ -120,7 +122,7 @@ int ipc_ifupdown(int argc, char *argv[])
 	char *entry;
 
 	int c;
-	while ((c = getopt(argc, argv, "ecgp:l:")) > 0) {
+	while ((c = getopt(argc, argv, "ecgp:l:i:")) > 0) {
 		switch(c) {
 		case 'e':
 			external = true;
@@ -145,6 +147,15 @@ int ipc_ifupdown(int argc, char *argv[])
 
 		case 'l':
 			blobmsg_add_string(&b, "link_id", optarg);
+			break;
+
+		case 'i':
+			buf = strdup(optarg);
+			p = blobmsg_open_array(&b, "iface_id");
+			for (entry = strtok(buf, ","); entry; entry = strtok(NULL, ","))
+				blobmsg_add_string(&b, NULL, entry);
+			blobmsg_close_array(&b, p);
+			free(buf);
 			break;
 		}
 	}
@@ -209,6 +220,28 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 						blobmsg_get_string(tb[OPT_LINK_ID]),
 						"%x/%u", &link_id, &link_mask) == 2)
 					iface_set_link_id(iface, link_id, link_mask);
+
+			if (iface && tb[OPT_IFACE_ID]) {
+				struct blob_attr *k;
+				unsigned rem;
+
+				blobmsg_for_each_attr(k, tb[OPT_IFACE_ID], rem) {
+					if (blobmsg_type(k) == BLOBMSG_TYPE_STRING) {
+						char astr[55], fstr[55];
+						struct prefix filter, addr;
+						int res = sscanf(blobmsg_get_string(k), "%54s %54s", astr, fstr);
+						if(!res || !prefix_pton(astr, &addr) || (res > 1 && !prefix_pton(fstr, &filter))) {
+							L_ERR("Incorrect iface_id syntax %s", blobmsg_get_string(k));
+							continue;
+						}
+						if(addr.plen == 128 && !addr.prefix.s6_addr32[0] && !addr.prefix.s6_addr32[1])
+							addr.plen = 64;
+						if(res == 1)
+							filter.plen = 0;
+						iface_add_addrconf(iface, &addr.prefix, 128 - addr.plen, &filter);
+					}
+				}
+			}
 		} else if (!strcmp(cmd, "ifdown")) {
 			iface_remove(c);
 		} else if (!strcmp(cmd, "enable_ipv4_uplink")) {

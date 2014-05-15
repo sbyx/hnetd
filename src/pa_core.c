@@ -706,12 +706,14 @@ void pa_core_iface_addr_init(struct pa_iface_addr *addr, const char *ifname,
 
 void pa_core_iface_addr_add(struct pa_core *core, struct pa_iface_addr *addr)
 {
+	L_NOTICE("Adding address configuration: "PA_IFACE_ADDR_L, PA_IFACE_ADDR_LA(addr));
 	list_add(&addr->le, &core->iface_addrs);
 	__pa_aaa_schedule(core);
 }
 
 void pa_core_iface_addr_del(__unused struct pa_core *core, struct pa_iface_addr *addr)
 {
+	L_NOTICE("Removing address configuration: "PA_IFACE_ADDR_L, PA_IFACE_ADDR_LA(addr));
 	list_del(&addr->le);
 }
 

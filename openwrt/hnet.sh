@@ -13,14 +13,15 @@ proto_hnet_init_config() {
     proto_config_add_string 'reqaddress'
     proto_config_add_string 'prefix'
     proto_config_add_string 'link_id'
+    proto_config_add_string 'iface_id'
 }
 
 proto_hnet_setup() {
     local interface="$1"
     local device="$2"
 
-    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id
-    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id
+    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id
+    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id
 
     logger -t proto-hnet "proto_hnet_setup $device/$interface"
 
@@ -45,6 +46,10 @@ proto_hnet_setup() {
     done
     json_close_array
     json_add_string link_id "$link_id"
+    json_add_array iface_id
+    for p in $iface_id; do
+    	json_add_string "" "$p"
+    done
     proto_close_data
 
     proto_send_update "$interface"

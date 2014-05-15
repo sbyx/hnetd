@@ -123,6 +123,7 @@ struct iface {
 	struct vlist_tree delegated;
 	struct vlist_tree routes;
 	struct list_head chosen;
+	struct list_head addrconf;
 	struct pa_link_id_rule *id;
 
 	// Other data
@@ -197,6 +198,11 @@ void iface_add_chosen_prefix(struct iface *c, const struct prefix *p);
 
 // Set link ID
 void iface_set_link_id(struct iface *c, uint32_t linkid, uint8_t mask);
+
+
+// Add hnet address
+void iface_add_addrconf(struct iface *c, struct in6_addr *addr,
+		uint8_t mask, struct prefix *filter);
 
 
 // Flush uplinks

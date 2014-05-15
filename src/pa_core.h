@@ -106,6 +106,13 @@ struct pa_iface_addr {
 	 * If the filter prefix length and the mask are the same, only one particular address
 	 * may be used for one particular link prefix.
 	 */
+
+	/* private to user */
+	struct list_head user;
+
+#define PA_IFACE_ADDR_L "[%s %d %s]%%%s"
+#define PA_IFACE_ADDR_LA(addr) ADDR_REPR(&(addr)->address), (addr)->mask, \
+	PREFIX_REPR(&(addr)->filter), (addr)->ifname[0]?(addr)->ifname:"any-iface"
 };
 
 struct pa_core {
