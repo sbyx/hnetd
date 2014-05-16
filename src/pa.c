@@ -309,3 +309,49 @@ bool pa_cp_isvalid(struct pa *pa, struct pa_cp *cp)
 	return true;
 }
 
+static int __pa_available_prefix_iterate(const struct prefix *first, const struct prefix *c,
+		uint8_t protected_len, struct prefix *prefix)
+{
+	if(!c || c->plen > first->plen) //current is bigger than c
+		c = prefix;
+	if(prefix_increment(prefix, c, protected_len) == -1) {
+		L_ERR("Error incrementing %s with protected length %d", PREFIX_REPR(c), protected_len);
+		return -1;
+	}
+	prefix->plen = first->plen;
+	return 0;
+}
+
+int pa_available_prefix_iter_first(struct pa *pa, const struct prefix *first,
+		uint8_t protected_len, struct prefix *prefix)
+{
+	const struct prefix *c;
+	prefix_cpy(prefix, first);
+	if((c = pa_prefix_getcollision(pa, prefix))) {
+		//Need to go one step forward because we would think we looped otherwise.
+		if(__pa_available_prefix_iterate(first, c, protected_len, prefix))
+			return -1;
+		if(pa_prefix_getcollision(pa, prefix))
+			return pa_available_prefix_iter_next(pa, first, protected_len, prefix);
+	}
+	return 0;
+}
+
+int pa_available_prefix_iter_next(struct pa *pa, const struct prefix *first,
+		uint8_t protected_len, struct prefix *prefix)
+{
+	const struct prefix *c = NULL;
+	do {
+		if(__pa_available_prefix_iterate(first, c, protected_len, prefix))
+			return -1;
+		if((c = pa_prefix_getcollision(pa, prefix))) {
+			if(prefix_contains(c, first) || prefix_contains(first, c))
+				return 1;
+		} else {
+			return 0;
+		}
+	} while(true);
+	return 0;//avoid warning
+}
+
+

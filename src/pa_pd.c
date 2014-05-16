@@ -116,45 +116,17 @@ static int pa_pd_create_cpd(struct pa_pd_dp_req *req, struct prefix *p)
 	return 0;
 }
 
-/* Look for a prefix of seed's prefix length and using the seed as starting point */
 static int pa_pd_find_prefix_plen(struct pa_pd_dp_req *req, const struct prefix *seed,
 		struct prefix *dst)
 {
 	struct pa_dp *dp = req->dp;
 	struct pa_pd *pd = req->lease->pd;
-	const struct prefix *collision;
-	const struct prefix *first_collision = NULL;
-	prefix_cpy(dst, seed);
+	int i;
 
-	L_DEBUG("Trying with plen %d", (int) seed->plen);
-
-	while(1) {
-		if(!(collision = pa_prefix_getcollision(pd_pa(pd), dst)))
-			return 0;
-
-		L_DEBUG("Prefix %s can't be used", PREFIX_REPR(dst));
-
-		if(!first_collision) {
-			first_collision = collision;
-		} else if(!prefix_cmp(collision, first_collision)) { //We looped
-			L_INFO("No more available prefix can be found in %s", PREFIX_REPR(&dp->prefix));
-			return -1;
-		}
-
-		if(dst->plen <= collision->plen) {
-			if(prefix_increment(dst, dst, dp->prefix.plen) == -1) {
-				L_ERR("Error incrementing %s with protected length %d", PREFIX_REPR(dst), dp->prefix.plen);
-				return -1;
-			}
-		} else {
-			if(prefix_increment(dst, collision, dp->prefix.plen) == -1) {
-				L_ERR("Error incrementing %s with protected length %d", PREFIX_REPR(collision), dp->prefix.plen);
-				return -1;
-			}
-			dst->plen = seed->plen;
-		}
+	pa_for_each_available_prefix(pd_pa(pd), i, seed, dp->prefix.plen, dst) {
+		return 0;
 	}
-	return -1; //avoid warning
+	return -1;
 }
 
 static int pa_pd_find_prefix(struct pa_pd_dp_req *req, struct prefix *dst,

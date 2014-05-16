@@ -17,8 +17,7 @@
 #define PA_CORE_MIN_DELAY 3
 #define PA_CORE_DELAY_FACTOR 10
 
-#define PA_CORE_PREFIX_SEARCH_MAX_ROUNDS 256
-#define PA_CORE_ADDRESS_SEARCH_MAX_ROUNDS 256
+#define PA_CORE_FINDRAND_N 64
 
 #define PAC_PRAND_PRFX 0
 #define PAC_PRAND_ADDR 1
@@ -142,68 +141,105 @@ uint8_t pa_core_default_plen(struct pa_dp *dp, bool scarcity)
 	}
 }
 
+/* This algorithm for finding a random prefix finds the first PA_CORE_FINDRAND_N available prefixes
+ * and pick a random one among them.
+ * Although this algorithm uses better random, it is sensible when multiple node trie
+ * to assign prefixes of different lengths (A single assigned /64 can invalidate lots of /96).  */
+static int pa_rule_try_random_plen_firsts(struct pa_core *core, struct pa_rule *rule,
+		struct pa_dp *dp, struct pa_iface *iface,
+		struct prefix *first_candidate)
+{
+	int i;
+	if(!iface->designated)
+		return -1;
+
+	struct prefix candidates[PA_CORE_FINDRAND_N];
+	size_t current_candidate = 0;
+
+	L_DEBUG("Trying to find up to %d available prefixes of length %d in %s",
+			PA_CORE_FINDRAND_N, rule->prefix.plen ,PREFIX_REPR(&dp->prefix));
+
+	pa_for_each_available_prefix(core_pa(core), i, first_candidate, dp->prefix.plen, &rule->prefix) {
+		prefix_cpy(&candidates[current_candidate], &rule->prefix);
+		current_candidate++;
+		if(current_candidate == PA_CORE_FINDRAND_N)
+			break;
+	}
+
+	if(!current_candidate) {
+		L_INFO("No more available prefix could be found in %s", PREFIX_REPR(&dp->prefix));
+		return -1;
+	}
+
+	L_DEBUG("%d different candidates were found in %s", (int) current_candidate, PREFIX_REPR(&dp->prefix));
+	prefix_cpy(&rule->prefix, &candidates[random() % current_candidate]);
+	return 0;
+}
+
 static int pa_rule_try_random_plen(struct pa_core *core, struct pa_rule *rule,
 		struct pa_dp *dp, struct pa_iface *iface,
-		__attribute__((unused))struct pa_ap *strongest_ap,
-		__attribute__((unused))struct pa_cpl *current_cpl,
 		uint8_t plen)
 {
+	struct prefix first;
+	int i;
+
 	if(!iface->designated || plen > 128)
 		return -1;
 
-	const struct prefix *collision;
-	const struct prefix *first_collision = NULL;
-
-	/* Generate a pseudo-random subprefix */
-	if(pa_prefix_prand(iface, PAC_PRAND_PRFX, &dp->prefix, &rule->prefix, plen)) {
+	// Generate a pseudo-random subprefix
+	if(pa_prefix_prand(iface, PAC_PRAND_PRFX, &dp->prefix, &first, plen)) {
 		L_ERR("Cannot generate random prefix from "PA_DP_L" of length %d for "PA_IF_L,
 				PA_DP_LA(dp), dp->prefix.plen, PA_IF_LA(iface));
 		return -1;
 	}
 
-	while(1) {
-		if(!(collision = pa_prefix_getcollision(core_pa(core), &rule->prefix)))
-			return 0; //prio, auth and adv are set at init
-
-		L_DEBUG("Prefix %s can't be used", PREFIX_REPR(&rule->prefix));
-
-		if(!first_collision) {
-			first_collision = collision;
-		} else if(!prefix_cmp(collision, first_collision)) { //We looped
-			L_INFO("No more available prefix can be found in %s", PREFIX_REPR(&dp->prefix));
-			return -1;
-		}
-
-		if(rule->prefix.plen <= collision->plen) {
-			if(prefix_increment(&rule->prefix, &rule->prefix, dp->prefix.plen) == -1) {
-				L_ERR("Error incrementing %s with protected length %d", PREFIX_REPR(&rule->prefix), dp->prefix.plen);
-				return -1;
-			}
-		} else {
-			if(prefix_increment(&rule->prefix, collision, dp->prefix.plen) == -1) {
-				L_ERR("Error incrementing %s with protected length %d", PREFIX_REPR(collision), dp->prefix.plen);
-				return -1;
-			}
-			rule->prefix.plen = plen;
-		}
+	pa_for_each_available_prefix(core_pa(core), i, &first, dp->prefix.plen, &rule->prefix) {
+		return 0;
 	}
-	return -1; //avoid warning
+	return -1;
 }
 
 static int pa_rule_try_random_scarcity(struct pa_core *core, struct pa_rule *rule,
 		struct pa_dp *dp, struct pa_iface *iface,
-		struct pa_ap *strongest_ap, struct pa_cpl *current_cpl)
+		__unused struct pa_ap *strongest_ap, __unused struct pa_cpl *current_cpl)
 {
 	uint8_t plen = iface->custom_plen?iface->custom_plen(iface, dp, iface->custom_plen_priv, true):pa_core_default_plen(dp, true);
-	return pa_rule_try_random_plen(core, rule, dp, iface, strongest_ap, current_cpl, plen);
+	return pa_rule_try_random_plen(core, rule, dp, iface, plen);
 }
 
 static int pa_rule_try_random(struct pa_core *core, struct pa_rule *rule,
 		struct pa_dp *dp, struct pa_iface *iface,
-		struct pa_ap *strongest_ap, struct pa_cpl *current_cpl)
+		__unused struct pa_ap *strongest_ap, __unused struct pa_cpl *current_cpl)
 {
 	uint8_t plen = iface->custom_plen?iface->custom_plen(iface, dp, iface->custom_plen_priv, false):pa_core_default_plen(dp, false);
-	return pa_rule_try_random_plen(core, rule, dp, iface, strongest_ap, current_cpl, plen);
+
+	/* Space waste avoidance */
+	if(plen >  dp->prefix.plen + 12 && !prefix_is_ipv4(&dp->prefix)) {
+		struct prefix first;
+		struct prefix *smallest = &dp->prefix;
+		struct pa_ap *ap;
+		pa_for_each_ap_updown(ap, core_p(core, data), &dp->prefix) {
+			if(smallest->plen < ap->prefix.plen) {
+				smallest = &ap->prefix;
+			}
+		}
+		struct pa_cp *cp;
+		pa_for_each_cp_down(cp, core_p(core, data), &dp->prefix) {
+			if(smallest->plen < cp->prefix.plen) {
+				smallest = &cp->prefix;
+			}
+		}
+
+		if(smallest->plen < dp->prefix.plen + 10)
+			smallest = &dp->prefix;
+
+		prefix_cpy(&first, smallest);
+		first.plen = plen - 8;
+		prefix_canonical(&first, &first);
+		first.plen = plen;
+		return pa_rule_try_random_plen_firsts(core, rule, dp, iface, &first);
+	}
+	return pa_rule_try_random_plen(core, rule, dp, iface, plen);
 }
 
 static int pa_rule_try_accept(__attribute__((unused))struct pa_core *core,
