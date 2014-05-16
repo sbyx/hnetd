@@ -817,8 +817,8 @@ static void platform_update(void *data, size_t len)
 		}
 
 		unsigned minv6len;
-		if(c && tb[DATA_ATTR_MIN_V6_PLEN]
-		               && sscanf(blobmsg_get_string(tb[DATA_ATTR_MIN_V6_PLEN]), "%u", &minv6len)
+		if(c && dtb[DATA_ATTR_MIN_V6_PLEN]
+		               && sscanf(blobmsg_get_string(dtb[DATA_ATTR_MIN_V6_PLEN]), "%u", &minv6len)
 		               && minv6len <= 128) {
 			c->min_v6_plen = minv6len;
 		}
