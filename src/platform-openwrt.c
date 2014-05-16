@@ -742,7 +742,7 @@ static void platform_update(void *data, size_t len)
 			v4uplink = true;
 	}
 
-	enum iface_flags flags = 0;
+	iface_flags flags = 0;
 	struct in6_addr cer = IN6ADDR_ANY_INIT;
 
 	struct blob_attr *dtb[DATA_ATTR_MAX];
