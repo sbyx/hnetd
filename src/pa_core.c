@@ -214,7 +214,7 @@ static int pa_rule_try_random(struct pa_core *core, struct pa_rule *rule,
 	uint8_t plen = iface->custom_plen?iface->custom_plen(iface, dp, iface->custom_plen_priv, false):pa_core_default_plen(dp, false);
 
 	/* Space waste avoidance */
-	if(plen >  dp->prefix.plen + 12 && !prefix_is_ipv4(&dp->prefix)) {
+	if(plen >  dp->prefix.plen + 12 && !prefix_is_ipv4(&dp->prefix) && plen > 68) {
 		struct prefix first;
 		struct prefix *smallest = &dp->prefix;
 		struct pa_ap *ap;
