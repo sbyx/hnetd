@@ -68,8 +68,12 @@ typedef btrie_plen_t plen_t;
 
 #define index(i) ((i) >> index_shift)
 #define remain(i) ((i) & remain_mask)
-#define mask(i) ((full_mask >> (BTRIE_KEY - 1 - (i))) << (BTRIE_KEY - 1 - (i)))
 #define nthbit(key, i) ((key) & (first_bit_mask >> (i)))
+
+static inline pkey_t mask(plen_t len) {
+	int i = BTRIE_KEY - 1 - len;
+	return (full_mask >> i) << i;
+}
 
 void *__bt_p; //Helper for iterators
 
