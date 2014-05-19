@@ -182,6 +182,15 @@ struct btrie_element *btrie_next_updown(struct btrie_element *prev, btrie_key_t 
 #define btrie_for_each_updown_entry_safe(entry, entry2, root, key, len, field) 					\
 			__bt_fe_es(entry, entry2, root, key, len, btrie_first_updown, btrie_next_updown, field)
 
+/* Iterates over all available prefixes contained in the prefix given by key and min_len.
+ * The key is updated at each step and contains the available key. */
+struct btrie *btrie_first_available(struct btrie *root, btrie_key_t *key, btrie_plen_t *len, btrie_plen_t min_len);
+struct btrie *btrie_next_available(struct btrie *prev, btrie_key_t *key, btrie_plen_t *len, btrie_plen_t min_len);
+
+#define btrie_for_each_available(root, node, key, len, min_len) \
+			for(node = btrie_first_available(root, key, len, min_len); node; \
+					node = btrie_next_available(node, key, len, min_len))
+
 /***************Private**************/
 struct btrie {
 	struct btrie_element elements; //Must be first for cast

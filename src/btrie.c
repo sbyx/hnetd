@@ -76,6 +76,7 @@ static inline pkey_t mask(plen_t len) {
 }
 
 void *__bt_p; //Helper for iterators
+static struct btrie __bt_all_available; //Used when no node can be found for the available lookup
 
 static struct btrie *btrie_node_lookup(struct btrie *n, const pkey_t *key, plen_t plen)
 {
@@ -376,12 +377,13 @@ struct btrie_element *__btrie_skip_down(struct btrie_element *prev, btrie_plen_t
 	return NULL;
 }
 
-struct btrie_element *btrie_first_down(struct btrie *root, btrie_key_t *key, btrie_plen_t len)
+/* Returns the first node lower than the key */
+static struct btrie *btrie_first_down_node(struct btrie *root, btrie_key_t *key, btrie_plen_t len)
 {
 	struct btrie *node = btrie_node_lookup(root, key, len);
 	struct btrie *child;
 	if(node->plen == len) {
-		return btrie_next_down(&node->elements, len);
+		return node;
 	} else {
 		if(nthbit(ntohk(key[index(node->plen)]), remain(node->plen))) {
 			child = node->child[1];
@@ -392,9 +394,18 @@ struct btrie_element *btrie_first_down(struct btrie *root, btrie_key_t *key, btr
 		if(!child || len >= child->plen || ((ntohk(key[index(node->plen)]) ^ child->key) & mask(remain(len - 1)))) {
 			return NULL;
 		} else {
-			return btrie_next_down(&child->elements, len);
+			return child;
 		}
 	}
+}
+
+struct btrie_element *btrie_first_down(struct btrie *root, btrie_key_t *key, btrie_plen_t len)
+{
+	struct btrie *node = btrie_first_down_node(root, key, len);
+	if(!node)
+		return NULL;
+
+	return btrie_next_down(&node->elements, len);
 }
 
 struct btrie_element *btrie_next_updown(struct btrie_element *prev, btrie_key_t *key, btrie_plen_t len)
@@ -443,3 +454,115 @@ struct btrie_element *btrie_first_updown(struct btrie *root, btrie_key_t *key, b
 {
 	return btrie_next_updown(&root->elements, key, len);
 }
+
+#define btrie_keyleft(key, len) do { \
+		key[index(*len)] &= htonk(~(first_bit_mask >> remain(*len))); \
+		*(len) += 1; \
+	} while(0)
+
+#define btrie_keyright(key, len) do { \
+		key[index(*len)] |= htonk((first_bit_mask >> remain(*len))); \
+		*(len) += 1; \
+	} while(0)
+
+#define btrie_keyup(len) *len -= 1
+
+static struct btrie *__btrie_next_available(struct btrie *prev, btrie_key_t *key, btrie_plen_t *len, btrie_plen_t min_len, bool first)
+{
+	pkey_t last_bit;
+	if(prev == &__bt_all_available)
+		return NULL;
+
+	if(!first)
+		goto up;
+
+node:
+	if(*len == prev->plen) {
+		if(list_empty(&prev->elements.l)) {
+			if(!prev->child[0] && !prev->child[1])
+				return prev;
+			goto left_eq;
+		} else {
+			//This node contains an element
+			goto up;
+		}
+	}
+	goto left_neq;
+
+//left:
+	if(*len == prev->plen) {
+left_eq:
+		if(prev->child[0]) {
+			prev = prev->child[0];
+			btrie_keyleft(key, len);
+			goto node;
+		} else {
+			btrie_keyleft(key, len);
+			return prev;
+		}
+		//goto right_eq;
+	}
+
+left_neq:
+	if(!nthbit(prev->key, remain(*len))) { //len + 1th bit is zero (tree going left as well)
+		btrie_keyleft(key, len);
+		goto node;
+	} else {
+		btrie_keyleft(key, len);
+		return prev;
+	}
+
+right:
+	if(*len == prev->plen) {
+		if(prev->child[1]) {
+			prev = prev->child[1];
+			btrie_keyright(key, len);
+			goto node;
+		} else {
+			btrie_keyright(key, len);
+			return prev;
+		}
+	}
+
+	if(nthbit(prev->key, remain(*len))) { //Node goes right as well (len + 1th bit)
+		btrie_keyright(key, len);
+		goto node;
+	} else {
+		btrie_keyright(key, len);
+		return prev;
+	}
+
+up:
+	if(*len == min_len) //Reached the end of iteration
+		return NULL;
+
+	btrie_keyup(len);
+	last_bit = nthbit(ntohk(key[index(*len)]), remain(*len)); //len + 1th bit (Last previously returned bit)
+	if(prev->parent && prev->parent->plen == *len)
+		prev = prev->parent;
+
+	if(last_bit)
+		goto up;
+	else
+		goto right;
+
+return NULL; //To avoid warning
+}
+
+struct btrie *btrie_next_available(struct btrie *prev, btrie_key_t *key, btrie_plen_t *len, btrie_plen_t min_len)
+{
+	return __btrie_next_available(prev, key, len, min_len, false);
+}
+
+struct btrie *btrie_first_available(struct btrie *root, btrie_key_t *key, btrie_plen_t *len, btrie_plen_t min_len)
+{
+	*len = min_len;
+	struct btrie *node = btrie_first_down_node(root, key, *len);
+
+	if(!node) { //Nothing is under this one
+		return &__bt_all_available;
+	} else {
+		return __btrie_next_available(node, key, len, min_len, true);
+	}
+}
+

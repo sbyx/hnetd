@@ -76,6 +76,17 @@ int test_count_updown(struct btrie *root, pkey_t *k, uint8_t bitlen)
 	return i;
 }
 
+static size_t test_count_available(struct btrie *root, pkey_t *key, plen_t len)
+{
+	struct btrie *n;
+	size_t ctr = 0;
+	plen_t l;
+	btrie_for_each_available(root, n, key, &l, len) {
+		ctr++;
+	}
+	return ctr;
+}
+
 void test_print_key(pkey_t *k, uint8_t bitlen)
 {
 	if(!bitlen) {
@@ -258,6 +269,7 @@ int test_rand_getagain()
 void test_btrie_stress_push(struct btrie *root, void *str, void *check, uint8_t diversity, int id)
 {
 	struct btrie_entry *entry;
+	void *key = calloc(1, STR_LEN);
 	int count_down = 0;
 	int count_up = 0;
 	int count_updown = 0;
@@ -274,6 +286,10 @@ void test_btrie_stress_push(struct btrie *root, void *str, void *check, uint8_t 
 		count_down = test_count_down(root, str, bitlen);
 		count_up = test_count_up(root, str, bitlen);
 		count_updown = test_count_updown(root, str, bitlen);
+
+		memcpy(key, str, STR_LEN);
+		test_count_available(root, key, bitlen); //Just execute, looking for faults
+		test_count_available(root, key, 0); //Just execute, looking for faults
 
 		//Malloc fails
 		malloc_fails = 1;
@@ -317,6 +333,7 @@ void test_btrie_stress_push(struct btrie *root, void *str, void *check, uint8_t 
 		btrie_check(root);
 	}
 
+	free(key);
 	return;
 }
 
@@ -610,6 +627,71 @@ static void test_btrie_prefix()
 
 #endif
 
+#define BTRIE_AVAIL_ITER 100
+
+static void test_btrie_available()
+{
+	struct btrie t;
+	struct btrie_element e;
+	plen_t len;
+	pkey_t key[4], key2[4];
+	int i, j, iter;
+
+
+	btrie_init(&t);
+	for(i=0; i< 4 * BTRIE_KEY; i++) {
+		len = 0;
+		btrie_first_available(&t, key, &len, i);
+		sput_fail_unless(len == i, "Everything is available");
+		sput_fail_unless(test_count_available(&t, key, i) == 1, "One single available");
+	}
+
+	for(iter = 0; iter < BTRIE_AVAIL_ITER; iter++) {
+		key[0] = rand();
+		key[1] = rand();
+		key[2] = rand();
+		key[3] = rand();
+		for(i=0; i< 4 * BTRIE_KEY; i++) {
+			btrie_add(&t, &e, key, i);
+			for(j=0; j<=i; j++) {
+				memcpy(key2, key, (4 * BTRIE_KEY) / 8);
+				if(test_count_available(&t, key2, j) != (unsigned) i - j) {
+					sput_fail_unless(0, "Should be i - j available prefixes");
+				}
+			}
+			btrie_remove(&e);
+		}
+	}
+}
+
+#ifdef BTRIE_KEY_NETWORK_BYTE_ORDER
+void test_btrie_available_list(struct btrie *root)
+{
+	struct btrie *n;
+	struct prefix available, can;
+	printf("Listing available prefixes \n");
+	btrie_for_each_available(root, n, (btrie_key_t *)&available.prefix, &available.plen, 0)
+	{
+		prefix_canonical(&can, &available);
+		printf("Available prefix: %s\n", PREFIX_REPR(&can));
+	}
+	printf("\n");
+}
+
+void test_btrie_available_prefix()
+{
+	struct btrie t;
+	struct prefix p = PL_P1, p2 = PL_P2_01;
+	struct btrie_element e1, e2;
+	btrie_init(&t);
+	test_btrie_available_list(&t);
+	btrie_add(&t, &e1, (btrie_key_t *)&p.prefix, p.plen);
+	test_btrie_available_list(&t);
+	btrie_add(&t, &e2, (btrie_key_t *)&p2.prefix, p.plen);
+	test_btrie_available_list(&t);
+}
+#endif
+
 int main( __unused int argc,  __unused char **argv)
 {
   sput_start_testing();
@@ -618,6 +700,10 @@ int main( __unused int argc,  __unused char **argv)
   sput_run_test(test_btrie_stress);
 #ifdef BTRIE_KEY_NETWORK_BYTE_ORDER
   sput_run_test(test_btrie_prefix);
+#endif
+  sput_run_test(test_btrie_available);
+#ifdef BTRIE_KEY_NETWORK_BYTE_ORDER
+  sput_run_test(test_btrie_available_prefix);
 #endif
   sput_leave_suite(); /* optional */
   sput_finish_testing();
