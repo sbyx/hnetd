@@ -87,6 +87,21 @@ static size_t test_count_available(struct btrie *root, pkey_t *key, plen_t len)
 	return ctr;
 }
 
+static uint64_t test_count_space(struct btrie *root, pkey_t *key, plen_t len, plen_t target_len)
+{
+	struct btrie *n;
+	uint64_t ctr = 0;
+	plen_t l;
+	if(target_len - len > 63)
+		target_len = len + 63;
+
+	btrie_for_each_available(root, n, key, &l, len) {
+		if(l <= target_len)
+			ctr += BTRIE_AVAILABLE_ALL >> (l - len);
+	}
+	return ctr;
+}
+
 void test_print_key(pkey_t *k, uint8_t bitlen)
 {
 	if(!bitlen) {
@@ -289,7 +304,28 @@ void test_btrie_stress_push(struct btrie *root, void *str, void *check, uint8_t 
 
 		memcpy(key, str, STR_LEN);
 		test_count_available(root, key, bitlen); //Just execute, looking for faults
+		memcpy(key, str, STR_LEN);
 		test_count_available(root, key, 0); //Just execute, looking for faults
+		memcpy(key, str, STR_LEN);
+		if(test_count_space(root, key, 0, 63) != btrie_available_space(root, NULL, 0, 63)) {
+			printf("Inserted key ");
+			test_print_key(str, STR_LEN);
+			printf("\n");
+			sput_fail_if(1, "Invalid space count");
+		}
+		memcpy(key, str, STR_LEN);
+		if(test_count_space(root, key, 11, 63) != btrie_available_space(root, str, 11, 63)) {
+			printf("Inserted key ");
+			test_print_key(str, bitlen);
+			memcpy(key, str, STR_LEN);
+			printf("\n %lx %lx\n", test_count_space(root, key, 11, 63), btrie_available_space(root, str, 11, 63));
+			sput_fail_if(1, "Invalid space count 2");
+		} else {
+			printf("Inserted key ");
+			test_print_key(str, bitlen);
+			printf("\n");
+			//printf("Invalid valid");
+		}
 
 		//Malloc fails
 		malloc_fails = 1;
@@ -644,6 +680,7 @@ static void test_btrie_available()
 		btrie_first_available(&t, key, &len, i);
 		sput_fail_unless(len == i, "Everything is available");
 		sput_fail_unless(test_count_available(&t, key, i) == 1, "One single available");
+		sput_fail_unless(btrie_available_space(&t, NULL, 0, 4 * BTRIE_KEY) == BTRIE_AVAILABLE_ALL, "Everything is available");
 	}
 
 	for(iter = 0; iter < BTRIE_AVAIL_ITER; iter++) {
@@ -657,6 +694,10 @@ static void test_btrie_available()
 				memcpy(key2, key, (4 * BTRIE_KEY) / 8);
 				if(test_count_available(&t, key2, j) != (unsigned) i - j) {
 					sput_fail_unless(0, "Should be i - j available prefixes");
+				}
+				if(i - j < 64 &&
+						(btrie_available_space(&t, key, j, 4 * BTRIE_KEY) != (BTRIE_AVAILABLE_ALL - (BTRIE_AVAILABLE_ALL >> (i - j))))) {
+					sput_fail_unless(0, "Correct amount of available");
 				}
 			}
 			btrie_remove(&e);

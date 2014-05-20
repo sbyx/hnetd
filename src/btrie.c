@@ -554,6 +554,16 @@ struct btrie *btrie_next_available(struct btrie *prev, btrie_key_t *key, btrie_p
 	return __btrie_next_available(prev, key, len, min_len, false);
 }
 
+bool btrie_node_up_available(struct btrie *node)
+{
+	while(node->parent) {
+		node = node->parent;
+		if(!list_empty(&node->elements.l))
+			return false;
+	}
+	return true;
+}
+
 struct btrie *btrie_first_available(struct btrie *root, btrie_key_t *key, btrie_plen_t *len, btrie_plen_t min_len)
 {
 	*len = min_len;
@@ -561,8 +571,70 @@ struct btrie *btrie_first_available(struct btrie *root, btrie_key_t *key, btrie_
 
 	if(!node) { //Nothing is under this one
 		return &__bt_all_available;
+	} else if (!btrie_node_up_available(node)) {
+		return NULL;
 	} else {
 		return __btrie_next_available(node, key, len, min_len, true);
 	}
 }
 
+uint64_t btrie_available_space(struct btrie *root, btrie_key_t *key, btrie_plen_t len, btrie_plen_t target_len)
+{
+	uint64_t count = 0;
+	plen_t next_len = len, max;
+
+	struct btrie *node = btrie_first_down_node(root, key, len);
+	if(!node)
+		return BTRIE_AVAILABLE_ALL;
+	else if (!btrie_node_up_available(node)) {
+		return 0;
+	}
+
+	if(target_len - len > 63)
+		target_len = len + 63;
+
+node:
+	if(next_len < node->plen) {
+		max = (node->plen > target_len)?len + 63:node->plen;
+		plen_t left = next_len - len + 1;
+		plen_t right = 64 - (max - len + 1);
+		count += (((0xffffffffffffffffu << (left)) >> (left + right)) << (right));
+	}
+
+	if(!list_empty(&node->elements.l) || node->plen >= target_len)
+		goto up;
+
+	//Only root can have no child. But root plen is 0, so no bound problem.
+
+//left:
+	if(node->child[0]) {
+		next_len = node->plen + 1;
+		node = node->child[0];
+		goto node;
+	} else {
+		count += BTRIE_AVAILABLE_ALL >> (node->plen + 1 - len);
+	}
+
+right:
+	if(node->child[1]) {
+		next_len = node->plen + 1;
+		node = node->child[1];
+		goto node;
+	} else {
+		count += BTRIE_AVAILABLE_ALL >> (node->plen + 1 - len);
+	}
+
+up:
+	if(!node->parent || node->parent->plen < len)
+		return count;
+
+	if(node == node->parent->child[0]) {
+		node = node->parent;
+		goto right;
+	} else {
+		node = node->parent;
+		goto up;
+	}
+
+	return 0; //Avoid warning
+}
