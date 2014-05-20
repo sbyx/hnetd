@@ -170,8 +170,20 @@ struct pa_ldp {
 	} excluded;
 };
 
+/* Element that is put in the global prefix tree
+ * in order to allow fast available prefix space analysis.
+ * It may replace the individual tree at some point.
+ * For now, we deal with both individual and shared trees. */
+struct pa_pentry {
+	struct btrie_element be;
+	uint8_t type;
+#define PA_PENTRY_TYPE_AP 0x01
+#define PA_PENTRY_TYPE_CP 0x02
+};
+
 struct pa_ap {
-	struct btrie_element be;   /* Put in pa_data's ap tree */
+	struct btrie_element be;  /* Put in pa_data's ap tree */
+	struct pa_pentry pe;      /* Prefix entry */
 	struct prefix prefix;	  /* The assigned prefix */
 	struct pa_rid rid;        /* Sender's router id */
 
@@ -202,6 +214,7 @@ typedef void (*cp_destructor)(struct pa_data *, struct pa_cp *, void *owner);
  * A chosen prefix MUST always be part of an existing delegated prefix. */
 struct pa_cp {
 	struct btrie_element be;      /* Put in pa_data's cp list */
+	struct pa_pentry pe;      /* Prefix entry */
 	struct prefix prefix;	  /* The assigned prefix */
 
 	bool advertised;          /* Whether it must be advertised */
@@ -373,6 +386,7 @@ struct pa_data {
 	struct pa_ipv4   ipv4;  /* IPv4 global connectivity */
 	struct list_head ifs;   /* Ifaces */
 	struct btrie dps;       /* Delegated prefixes */
+	struct btrie pes;       /* Prefix entries (both aps and cps) */
 	struct btrie aps;       /* Assigned prefixes */
 	struct btrie cps;       /* Chosen prefixes */
 	struct btrie eaas;      /* Externally Address assignments */
