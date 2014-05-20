@@ -81,7 +81,7 @@ static size_t test_count_available(struct btrie *root, const pkey_t *contain_key
 	struct btrie *n;
 	size_t ctr = 0;
 	plen_t iter_len;
-	btrie_for_each_available(root, n, iter_key, &iter_len, contain_key, contain_len) {
+	btrie_for_each_available(root, n, iter_key, &iter_len, contain_key, contain_len, 0) {
 		ctr++;
 	}
 	return ctr;
@@ -95,7 +95,7 @@ static uint64_t test_count_space(struct btrie *root, const pkey_t *contain_key, 
 	if(target_len - contain_len > 63)
 		target_len = contain_len + 63;
 
-	btrie_for_each_available(root, n, iter_key, &iter_len, contain_key, contain_len) {
+	btrie_for_each_available(root, n, iter_key, &iter_len, contain_key, contain_len, 0) {
 		if(iter_len <= target_len)
 			ctr += BTRIE_AVAILABLE_ALL >> (iter_len - contain_len);
 	}
@@ -662,7 +662,7 @@ static void test_btrie_available()
 	btrie_init(&t);
 	for(i=0; i< 4 * BTRIE_KEY; i++) {
 		len = 0;
-		btrie_first_available(&t, key2, &len, key, i);
+		btrie_first_available(&t, key2, &len, key, i, 0);
 		sput_fail_unless(len == i, "Everything is available");
 		sput_fail_unless(test_count_available(&t, key, i, key2) == 1, "One single available");
 		sput_fail_unless(btrie_available_space(&t, NULL, 0, 4 * BTRIE_KEY) == BTRIE_AVAILABLE_ALL, "Everything is available");
@@ -695,7 +695,7 @@ void test_btrie_available_list(struct btrie *root)
 	struct btrie *n;
 	struct prefix available, can;
 	printf("Listing available prefixes \n");
-	btrie_for_each_available(root, n, (btrie_key_t *)&available.prefix, &available.plen, NULL, 0)
+	btrie_for_each_available(root, n, (btrie_key_t *)&available.prefix, &available.plen, NULL, 0, 0)
 	{
 		prefix_canonical(&can, &available);
 		printf("Available prefix: %s\n", PREFIX_REPR(&can));

@@ -567,13 +567,16 @@ static bool btrie_node_up_available(struct btrie *node)
 }
 
 struct btrie *btrie_first_available(struct btrie *root, btrie_key_t *iter_key, btrie_plen_t *iter_len,
-		const btrie_key_t *contain_key, btrie_plen_t contain_len)
+		const btrie_key_t *contain_key, btrie_plen_t contain_len, btrie_plen_t first_len)
 {
-	if(contain_len)
-		memcpy(iter_key, contain_key, (contain_len - 1) >> 3);
+	if(first_len < contain_len)
+		first_len = contain_len;
 
-	*iter_len = contain_len;
-	struct btrie *node = btrie_first_down_node(root, contain_key, contain_len);
+	if(first_len)
+		memcpy(iter_key, contain_key, (first_len - 1) >> 3);
+
+	*iter_len = first_len;
+	struct btrie *node = btrie_first_down_node(root, contain_key, first_len);
 
 	if(!node) { //Nothing is under this one
 		return &__bt_all_available;
