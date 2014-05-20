@@ -114,7 +114,7 @@ struct btrie_element *__btrie_skip_down(struct btrie_element *prev, btrie_plen_t
 /*********************************************/
 
 /* Iterates over all elements associated with a given key */
-struct btrie_element *btrie_first(struct btrie *root, btrie_key_t *key, btrie_plen_t len);
+struct btrie_element *btrie_first(struct btrie *root, const btrie_key_t *key, btrie_plen_t len);
 struct btrie_element *btrie_next(struct btrie_element *prev);
 #define btrie_first_entry(e, root, key, len ,field) __bt_first_entry(e, root, key, len, btrie_first, field)
 
@@ -128,7 +128,7 @@ struct btrie_element *btrie_next(struct btrie_element *prev);
 			__bt_fe_es(entry, entry2, root, key, len, btrie_first, __bt_next, field)
 
 /* Iterates over all elements which key is equal to or begin with a given key (Elements down the tree) */
-struct btrie_element *btrie_first_down(struct btrie *root, btrie_key_t *key, btrie_plen_t len);
+struct btrie_element *btrie_first_down(struct btrie *root, const btrie_key_t *key, btrie_plen_t len);
 struct btrie_element *btrie_next_down(struct btrie_element *prev, btrie_plen_t len);
 #define btrie_first_down_entry(e, root, key, len ,field) __bt_first_entry(e, root, key, len, btrie_first_down, field)
 
@@ -154,7 +154,7 @@ struct btrie_element *btrie_next_down(struct btrie_element *prev, btrie_plen_t l
 	entry2 = __bt_next_e(__bt_e(__btrie_skip_down(&(entry)->field, len), entry, field), field, __bt_next_down, key, len)
 
 /* Iterates over all elements which key is equal to or contains a given key (Elements up the tree) */
-struct btrie_element *btrie_first_up(struct btrie *root, btrie_key_t *key, btrie_plen_t len);
+struct btrie_element *btrie_first_up(struct btrie *root, const btrie_key_t *key, btrie_plen_t len);
 struct btrie_element *btrie_next_up(struct btrie_element *prev);
 #define btrie_first_up_entry(e, root, key, len ,field) __bt_first_entry(e, root, key, len, btrie_first_up, field)
 
@@ -169,8 +169,8 @@ struct btrie_element *btrie_next_up(struct btrie_element *prev);
 
 /* Iterates over all elements which key contains or is contained in a given key (Do both up and down)
  * Up elements are visited first, from shortest prefix to longest. Down elements are visited afterward. */
-struct btrie_element *btrie_first_updown(struct btrie *root, btrie_key_t *key, btrie_plen_t len);
-struct btrie_element *btrie_next_updown(struct btrie_element *prev, btrie_key_t *key, btrie_plen_t len);
+struct btrie_element *btrie_first_updown(struct btrie *root, const btrie_key_t *key, btrie_plen_t len);
+struct btrie_element *btrie_next_updown(struct btrie_element *prev, const btrie_key_t *key, btrie_plen_t len);
 #define btrie_first_updown_entry(e, root, key, len ,field) __bt_first_entry(e, root, key, len, btrie_first_updown, field)
 
 #define btrie_for_each_updown(el, root, key, len) 												\

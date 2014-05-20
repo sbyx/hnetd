@@ -287,7 +287,7 @@ struct btrie_element *btrie_next(struct btrie_element *prev)
 	return NULL;
 }
 
-struct btrie_element *btrie_first(struct btrie *root, btrie_key_t *key, btrie_plen_t len)
+struct btrie_element *btrie_first(struct btrie *root, const btrie_key_t *key, btrie_plen_t len)
 {
 	struct btrie *t;
 	if(!(t = btrie_node_goc(root, key, len, 0)))
@@ -313,7 +313,7 @@ loop:
 	return NULL;
 }
 
-struct btrie_element *btrie_first_up(struct btrie *root, btrie_key_t *key, btrie_plen_t len)
+struct btrie_element *btrie_first_up(struct btrie *root, const btrie_key_t *key, btrie_plen_t len)
 {
 	return btrie_next_up(&(btrie_node_lookup(root, key, len))->elements);
 }
@@ -378,7 +378,7 @@ struct btrie_element *__btrie_skip_down(struct btrie_element *prev, btrie_plen_t
 }
 
 /* Returns the first node lower than the key */
-static struct btrie *btrie_first_down_node(struct btrie *root, btrie_key_t *key, btrie_plen_t len)
+static struct btrie *btrie_first_down_node(struct btrie *root, const btrie_key_t *key, btrie_plen_t len)
 {
 	struct btrie *node = btrie_node_lookup(root, key, len);
 	struct btrie *child;
@@ -399,7 +399,7 @@ static struct btrie *btrie_first_down_node(struct btrie *root, btrie_key_t *key,
 	}
 }
 
-struct btrie_element *btrie_first_down(struct btrie *root, btrie_key_t *key, btrie_plen_t len)
+struct btrie_element *btrie_first_down(struct btrie *root, const btrie_key_t *key, btrie_plen_t len)
 {
 	struct btrie *node = btrie_first_down_node(root, key, len);
 	if(!node)
@@ -408,7 +408,7 @@ struct btrie_element *btrie_first_down(struct btrie *root, btrie_key_t *key, btr
 	return btrie_next_down(&node->elements, len);
 }
 
-struct btrie_element *btrie_next_updown(struct btrie_element *prev, btrie_key_t *key, btrie_plen_t len)
+struct btrie_element *btrie_next_updown(struct btrie_element *prev, const btrie_key_t *key, btrie_plen_t len)
 {
 	struct btrie *node;
 	if(!prev)
@@ -450,7 +450,7 @@ next:
 	}
 }
 
-struct btrie_element *btrie_first_updown(struct btrie *root, btrie_key_t *key, btrie_plen_t len)
+struct btrie_element *btrie_first_updown(struct btrie *root, const btrie_key_t *key, btrie_plen_t len)
 {
 	return btrie_next_updown(&root->elements, key, len);
 }
