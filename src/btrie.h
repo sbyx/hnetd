@@ -184,12 +184,14 @@ struct btrie_element *btrie_next_updown(struct btrie_element *prev, const btrie_
 
 /* Iterates over all available keys contained in the prefix given by key and min_len.
  * The key is updated at each step and contains the available key. */
-struct btrie *btrie_first_available(struct btrie *root, btrie_key_t *key, btrie_plen_t *len, btrie_plen_t min_len);
-struct btrie *btrie_next_available(struct btrie *prev, btrie_key_t *key, btrie_plen_t *len, btrie_plen_t min_len);
+struct btrie *btrie_first_available(struct btrie *root, btrie_key_t *iter_key, btrie_plen_t *iter_len,
+		const btrie_key_t *contain_key, btrie_plen_t contain_len);
+struct btrie *btrie_next_available(struct btrie *prev, btrie_key_t *iter_key, btrie_plen_t *iter_len,
+		btrie_plen_t contain_len);
 
-#define btrie_for_each_available(root, node, key, len, min_len) \
-			for(node = btrie_first_available(root, key, len, min_len); node; \
-					node = btrie_next_available(node, key, len, min_len))
+#define btrie_for_each_available(root, node, iter_key, iter_len, contain_key, contain_len) \
+			for(node = btrie_first_available(root, iter_key, iter_len, contain_key, contain_len); node; \
+					node = btrie_next_available(node, iter_key, iter_len, contain_len))
 
 /* Returns the amount of key space available in the given subtree.
  * BTRIE_AVAILABLE_ALL is returned when the given prefix is available.
@@ -197,7 +199,7 @@ struct btrie *btrie_next_available(struct btrie *prev, btrie_key_t *key, btrie_p
  * BTRIE_AVAILABLE_ALL >> 1 + BTRIE_AVAILABLE_ALL >> 2 if one half plus one quarter are available, etc...
  * Available prefixes of length > target_len or length >= 64 + len are ignored. */
 #define BTRIE_AVAILABLE_ALL 0x8000000000000000u
-uint64_t btrie_available_space(struct btrie *root, btrie_key_t *key, btrie_plen_t len, btrie_plen_t target_len);
+uint64_t btrie_available_space(struct btrie *root, const btrie_key_t *key, btrie_plen_t len, btrie_plen_t target_len);
 
 /* Gives the number of keys of length target_len available and belonging in the given key. */
 #define btrie_available_prefixes_count(root, key, len, target_len) \

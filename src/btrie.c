@@ -467,7 +467,8 @@ struct btrie_element *btrie_first_updown(struct btrie *root, const btrie_key_t *
 
 #define btrie_keyup(len) *len -= 1
 
-static struct btrie *__btrie_next_available(struct btrie *prev, btrie_key_t *key, btrie_plen_t *len, btrie_plen_t min_len, bool first)
+static struct btrie *__btrie_next_available(struct btrie *prev, btrie_key_t *key, btrie_plen_t *len,
+		btrie_plen_t contain_len, bool first)
 {
 	pkey_t last_bit;
 	if(prev == &__bt_all_available)
@@ -533,7 +534,7 @@ right:
 	}
 
 up:
-	if(*len == min_len) //Reached the end of iteration
+	if(*len == contain_len) //Reached the end of iteration
 		return NULL;
 
 	btrie_keyup(len);
@@ -549,12 +550,13 @@ up:
 return NULL; //To avoid warning
 }
 
-struct btrie *btrie_next_available(struct btrie *prev, btrie_key_t *key, btrie_plen_t *len, btrie_plen_t min_len)
+struct btrie *btrie_next_available(struct btrie *prev, btrie_key_t *iter_key, btrie_plen_t *iter_len,
+		btrie_plen_t contain_len)
 {
-	return __btrie_next_available(prev, key, len, min_len, false);
+	return __btrie_next_available(prev, iter_key, iter_len, contain_len, false);
 }
 
-bool btrie_node_up_available(struct btrie *node)
+static bool btrie_node_up_available(struct btrie *node)
 {
 	while(node->parent) {
 		node = node->parent;
@@ -564,21 +566,25 @@ bool btrie_node_up_available(struct btrie *node)
 	return true;
 }
 
-struct btrie *btrie_first_available(struct btrie *root, btrie_key_t *key, btrie_plen_t *len, btrie_plen_t min_len)
+struct btrie *btrie_first_available(struct btrie *root, btrie_key_t *iter_key, btrie_plen_t *iter_len,
+		const btrie_key_t *contain_key, btrie_plen_t contain_len)
 {
-	*len = min_len;
-	struct btrie *node = btrie_first_down_node(root, key, *len);
+	if(contain_len)
+		memcpy(iter_key, contain_key, (contain_len - 1) >> 3);
+
+	*iter_len = contain_len;
+	struct btrie *node = btrie_first_down_node(root, contain_key, contain_len);
 
 	if(!node) { //Nothing is under this one
 		return &__bt_all_available;
 	} else if (!btrie_node_up_available(node)) {
 		return NULL;
 	} else {
-		return __btrie_next_available(node, key, len, min_len, true);
+		return __btrie_next_available(node, iter_key, iter_len, contain_len, true);
 	}
 }
 
-uint64_t btrie_available_space(struct btrie *root, btrie_key_t *key, btrie_plen_t len, btrie_plen_t target_len)
+uint64_t btrie_available_space(struct btrie *root, const btrie_key_t *key, btrie_plen_t len, btrie_plen_t target_len)
 {
 	uint64_t count = 0;
 	plen_t next_len = len, max;
