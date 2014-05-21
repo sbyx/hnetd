@@ -456,6 +456,16 @@ void pa_ldp_set_iface(struct pa_ldp *, struct pa_iface *);
 
 struct pa_edp *pa_edp_get(struct pa_data *, const struct prefix *, const struct pa_rid *rid, bool goc);
 
+extern struct btrie *__pad_avail_n0;
+extern btrie_plen_t __pad_avail_l0;
+#define pa_for_each_available_prefix_new(data, n, first, protected_len, p) \
+		btrie_for_each_available_loop_stop(&(data)->pes, n, __pad_avail_n0, __pad_avail_l0, (btrie_key_t *)&(p)->prefix, &(p)->plen, \
+				(btrie_key_t *)&(first)->prefix, protected_len, (first)->plen)
+
+#define pa_for_each_available_addresses(data, n, first, protected_len, p) \
+		btrie_for_each_available_loop_stop(&(data)->aas, n, __pad_avail_n0, __pad_avail_l0, (btrie_key_t *)&(p)->prefix, &(p)->plen, \
+				(btrie_key_t *)(first), protected_len, 128)
+
 #define pa_for_each_ap(pa_ap, pa_data) btrie_for_each_down_entry(pa_ap, &(pa_data)->aps, NULL, 0, be)
 #define pa_for_each_ap_updown(ap, data, p) btrie_for_each_updown_entry(ap, &(data)->aps, (btrie_key_t *)&(p)->prefix, (p)->plen, be)
 #define pa_for_each_ap_in_iface(pa_ap, pa_iface) btrie_for_each_down_entry(pa_ap, &(pa_iface)->aps, NULL, 0, if_be)

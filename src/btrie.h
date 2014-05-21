@@ -183,16 +183,32 @@ struct btrie_element *btrie_next_updown(struct btrie_element *prev, const btrie_
 			__bt_fe_es(entry, entry2, root, key, len, btrie_first_updown, btrie_next_updown, field)
 
 /* Iterates over all available keys contained in the prefix given by key and min_len.
- * The key is updated at each step and contains the available key.
- * first_len allows to not visit all nodes but start at a particular point and visit all following available keys. */
+ * The key is updated at each step and contains the available key. */
 struct btrie *btrie_first_available(struct btrie *root, btrie_key_t *iter_key, btrie_plen_t *iter_len,
-		const btrie_key_t *contain_key, btrie_plen_t contain_len, btrie_plen_t first_len);
+		const btrie_key_t *contain_key, btrie_plen_t contain_len);
 struct btrie *btrie_next_available(struct btrie *prev, btrie_key_t *iter_key, btrie_plen_t *iter_len,
 		btrie_plen_t contain_len);
 
-#define btrie_for_each_available(root, node, iter_key, iter_len, contain_key, contain_len, first_len) \
-			for(node = btrie_first_available(root, iter_key, iter_len, contain_key, contain_len, first_len); node; \
+/* Iterates over all available keys, using a particular key as starting point and looping indefinitly. */
+struct btrie *btrie_first_available_loop(struct btrie *root,
+		btrie_key_t *iter_key, btrie_plen_t *iter_len,
+		const btrie_key_t *contain_key, btrie_plen_t contain_len, btrie_plen_t first_len);
+struct btrie *btrie_next_available_loop(struct btrie *prev,
+		btrie_key_t *iter_key, btrie_plen_t *iter_len,
+		btrie_plen_t contain_len);
+
+#define btrie_for_each_available(root, node, iter_key, iter_len, contain_key, contain_len) \
+			for(node = btrie_first_available(root, iter_key, iter_len, contain_key, contain_len); node; \
 					node = btrie_next_available(node, iter_key, iter_len, contain_len))
+
+#define btrie_for_each_available_loop(root, node, iter_key, iter_len, contain_key, contain_len, first_len) \
+		for(node = btrie_first_available_loop(root, iter_key, iter_len, contain_key, contain_len, first_len); node; \
+							node = btrie_next_available_loop(node, iter_key, iter_len, contain_len))
+
+#define btrie_for_each_available_loop_stop(root, node, n0, l0, iter_key, iter_len, contain_key, contain_len, first_len) \
+		for(node = btrie_first_available_loop(root, iter_key, iter_len, contain_key, contain_len, first_len), n0 = NULL; \
+					(n0)?(node != n0 || *iter_len != l0):((n0 = node) && ((l0 = *iter_len) || 1)); \
+							node = btrie_next_available_loop(node, iter_key, iter_len, contain_len))
 
 /* Returns the amount of key space available in the given subtree.
  * BTRIE_AVAILABLE_ALL is returned when the given prefix is available.

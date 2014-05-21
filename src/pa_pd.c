@@ -119,12 +119,20 @@ static int pa_pd_create_cpd(struct pa_pd_dp_req *req, struct prefix *p)
 static int pa_pd_find_prefix_plen(struct pa_pd_dp_req *req, const struct prefix *seed,
 		struct prefix *dst)
 {
+	struct btrie *n;
 	struct pa_dp *dp = req->dp;
 	struct pa_pd *pd = req->lease->pd;
-	int i;
 
-	pa_for_each_available_prefix(pd_pa(pd), i, seed, dp->prefix.plen, dst) {
-		return 0;
+	pa_for_each_available_prefix_new(pd_p(pd, data), n, seed, dp->prefix.plen, dst) {
+		if(dst->plen <= seed->plen) {
+			if(prefix_contains(dst, seed)) { //Only possible at first iteration
+				prefix_cpy(dst, seed);
+			} else {
+				prefix_canonical(dst, dst);
+				dst->plen = seed->plen;
+			}
+			return 0;
+		}
 	}
 	return -1;
 }

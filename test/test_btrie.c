@@ -46,6 +46,9 @@ void *test_malloc(size_t size)
 #define key_hex_repr "%016lx"
 #endif
 
+void btrie_print(struct btrie *node, int rec);
+void test_print_key(const pkey_t *k, uint8_t bitlen);
+
 int test_count_down(struct btrie *root, pkey_t *k, uint8_t bitlen)
 {
 	int i = 0;
@@ -81,7 +84,19 @@ static size_t test_count_available(struct btrie *root, const pkey_t *contain_key
 	struct btrie *n;
 	size_t ctr = 0;
 	plen_t iter_len;
-	btrie_for_each_available(root, n, iter_key, &iter_len, contain_key, contain_len, 0) {
+	btrie_for_each_available(root, n, iter_key, &iter_len, contain_key, contain_len) {
+		ctr++;
+	}
+	return ctr;
+}
+
+static size_t test_count_available_loop(struct btrie *root, const pkey_t *contain_key,
+		plen_t contain_len, pkey_t *iter_key, plen_t first_len)
+{
+	struct btrie *n, *n0;
+	size_t ctr = 0;
+	plen_t iter_len, l0;
+	btrie_for_each_available_loop_stop(root, n, n0, l0, iter_key, &iter_len, contain_key, contain_len, first_len) {
 		ctr++;
 	}
 	return ctr;
@@ -95,14 +110,14 @@ static uint64_t test_count_space(struct btrie *root, const pkey_t *contain_key, 
 	if(target_len - contain_len > 63)
 		target_len = contain_len + 63;
 
-	btrie_for_each_available(root, n, iter_key, &iter_len, contain_key, contain_len, 0) {
+	btrie_for_each_available(root, n, iter_key, &iter_len, contain_key, contain_len) {
 		if(iter_len <= target_len)
 			ctr += BTRIE_AVAILABLE_ALL >> (iter_len - contain_len);
 	}
 	return ctr;
 }
 
-void test_print_key(pkey_t *k, uint8_t bitlen)
+void test_print_key(const pkey_t *k, uint8_t bitlen)
 {
 	if(!bitlen) {
 		printf("0/0");
@@ -302,13 +317,21 @@ void test_btrie_stress_push(struct btrie *root, void *str, void *check, uint8_t 
 		count_up = test_count_up(root, str, bitlen);
 		count_updown = test_count_updown(root, str, bitlen);
 
-		test_count_available(root, str, bitlen, key); //Just execute, looking for faults
+		if(test_count_available(root, str, bitlen, key) != test_count_available_loop(root, str, bitlen, key, BIT_LEN)) {
+			sput_fail_if(1, "Difference between loop and no_loop iterations 1");
+		}
+		if(test_count_available(root, str, 0, key) != test_count_available_loop(root, str, 0, key, BIT_LEN)) {
+			sput_fail_if(1, "Difference between loop and no_loop iterations 2");
+		}
+
+		; //Just execute, looking for faults
 		test_count_available(root, str, 0, key); //Just execute, looking for faults
 		if(test_count_space(root, str, 0, key, 63) != btrie_available_space(root, str, 0, 63)) {
 			sput_fail_if(1, "Invalid space count");
 		}
 		memcpy(key, str, STR_LEN);
 		if(test_count_space(root, str, 11, key, 63) != btrie_available_space(root, str, 11, 63)) {
+			printf("%lx vs %lx", test_count_space(root, str, 11, key, 63), btrie_available_space(root, str, 11, 63));
 			sput_fail_if(1, "Invalid space count 2");
 		}
 
@@ -429,8 +452,9 @@ static void test_check_prefix(struct btrie_pentry *pentry)
 
 static void test_btrie_prefix()
 {
-	struct btrie t;
+	struct btrie t, *n;
 	int i,l;
+	struct prefix iter;
 	struct btrie_element *elem, *elem2;
 	struct btrie_pentry *pentry, *pentry2;
 
@@ -644,6 +668,27 @@ static void test_btrie_prefix()
 	}
 	sput_fail_unless( i == 10, "Correct number of elements");
 
+	i = 0;
+	btrie_for_each_available(&t, n, (btrie_key_t *)&iter.prefix, &iter.plen, NULL, 0) {
+		i++;
+	}
+	sput_fail_unless(i == 155, "155 available prefixes");
+
+	struct btrie *n0;
+	btrie_plen_t l0;
+	i = 0;
+	btrie_for_each_available_loop_stop(&t, n, n0, l0, (btrie_key_t *)&iter.prefix, &iter.plen, NULL, 0, 0) {
+		i++;
+	}
+	sput_fail_unless(i == 155, "155 available prefixes");
+
+	struct prefix first = PL_P1;
+	i = 0;
+	btrie_for_each_available_loop_stop(&t, n, n0, l0, (btrie_key_t *)&iter.prefix, &iter.plen, (btrie_key_t *)&first.prefix, 0, first.plen) {
+		i++;
+	}
+	sput_fail_unless(i == 155, "155 available prefixes");
+
 }
 
 #endif
@@ -658,11 +703,10 @@ static void test_btrie_available()
 	pkey_t key[4], key2[4];
 	int i, j, iter;
 
-
 	btrie_init(&t);
 	for(i=0; i< 4 * BTRIE_KEY; i++) {
 		len = 0;
-		btrie_first_available(&t, key2, &len, key, i, 0);
+		btrie_first_available(&t, key2, &len, key, i);
 		sput_fail_unless(len == i, "Everything is available");
 		sput_fail_unless(test_count_available(&t, key, i, key2) == 1, "One single available");
 		sput_fail_unless(btrie_available_space(&t, NULL, 0, 4 * BTRIE_KEY) == BTRIE_AVAILABLE_ALL, "Everything is available");
@@ -695,7 +739,7 @@ void test_btrie_available_list(struct btrie *root)
 	struct btrie *n;
 	struct prefix available, can;
 	printf("Listing available prefixes \n");
-	btrie_for_each_available(root, n, (btrie_key_t *)&available.prefix, &available.plen, NULL, 0, 0)
+	btrie_for_each_available(root, n, (btrie_key_t *)&available.prefix, &available.plen, NULL, 0)
 	{
 		prefix_canonical(&can, &available);
 		printf("Available prefix: %s\n", PREFIX_REPR(&can));

@@ -181,7 +181,7 @@ static int pa_rule_try_random_plen(struct pa_core *core, struct pa_rule *rule,
 		uint8_t plen)
 {
 	struct prefix first;
-	int i;
+	struct btrie *n;
 
 	if(!iface->designated || plen > 128)
 		return -1;
@@ -193,9 +193,18 @@ static int pa_rule_try_random_plen(struct pa_core *core, struct pa_rule *rule,
 		return -1;
 	}
 
-	pa_for_each_available_prefix(core_pa(core), i, &first, dp->prefix.plen, &rule->prefix) {
-		return 0;
+	pa_for_each_available_prefix_new(core_p(core, data), n, &first, dp->prefix.plen, &rule->prefix) {
+		if(rule->prefix.plen <= plen) {
+			if(prefix_contains(&rule->prefix, &first)) { //Only possible at first iteration
+				prefix_cpy(&rule->prefix, &first);
+			} else {
+				prefix_canonical(&rule->prefix, &rule->prefix);
+				rule->prefix.plen = plen;
+			}
+			return 0;
+		}
 	}
+
 	return -1;
 }
 

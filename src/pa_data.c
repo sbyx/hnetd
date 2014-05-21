@@ -15,6 +15,9 @@
 #include <stdio.h>
 #include <inttypes.h>
 
+struct btrie *__pad_avail_n0;
+btrie_plen_t __pad_avail_l0;
+
 /* We can decide what dp to ignore */
 #define PAD_DP_IGNORE_INCLUDED   //Makes sense to avoid prefix delegated by 7084
 //#define PAD_DP_IGNORE_INCLUDER //Makes sense with prefix coloring
