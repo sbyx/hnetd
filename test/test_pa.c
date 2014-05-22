@@ -215,7 +215,7 @@ void test_pa_ipv4()
 		sput_fail_unless(!prefix_cmp(&pv4_1, &cp->prefix), "Correct cp prefix");
 	}
 
-	fr_md5_push_prefix(&pv4_1_1);
+	fr_md5_push_prefix(&pv4_1); //The network address should not be used and pv4_1_1 should be used instead
 	sput_fail_unless(to_getfirst() == &pa.core.aaa_to.t && !to_run(1), "Run aaa");
 	sput_fail_unless(_pa_cpl(cp)->laa, "Created laa");
 	if(_pa_cpl(cp)->laa)

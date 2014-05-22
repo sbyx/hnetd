@@ -456,15 +456,24 @@ void pa_ldp_set_iface(struct pa_ldp *, struct pa_iface *);
 
 struct pa_edp *pa_edp_get(struct pa_data *, const struct prefix *, const struct pa_rid *rid, bool goc);
 
-extern struct btrie *__pad_avail_n0;
+extern struct btrie *__pad_avail_n0, *__pad_avail_n;
 extern btrie_plen_t __pad_avail_l0;
-#define pa_for_each_available_prefix_new(data, n, first, protected_len, p) \
-		btrie_for_each_available_loop_stop(&(data)->pes, n, __pad_avail_n0, __pad_avail_l0, (btrie_key_t *)&(p)->prefix, &(p)->plen, \
+#define pa_for_each_available_prefix(data, container, p) \
+		btrie_for_each_available(&(data)->pes, __pad_avail_n, (btrie_key_t *)&(p)->prefix, &(p)->plen, \
+				(btrie_key_t *)&(container)->prefix, (container)->plen)
+
+#define pa_for_each_available_prefix_first(data, first, protected_len, p) \
+		btrie_for_each_available_loop_stop(&(data)->pes, __pad_avail_n, __pad_avail_n0, __pad_avail_l0, (btrie_key_t *)&(p)->prefix, &(p)->plen, \
 				(btrie_key_t *)&(first)->prefix, protected_len, (first)->plen)
 
-#define pa_for_each_available_addresses(data, n, first, protected_len, p) \
-		btrie_for_each_available_loop_stop(&(data)->aas, n, __pad_avail_n0, __pad_avail_l0, (btrie_key_t *)&(p)->prefix, &(p)->plen, \
-				(btrie_key_t *)(first), protected_len, 128)
+#define pa_for_each_available_address_first(data, first, container_len, p) \
+		btrie_for_each_available_loop_stop(&(data)->eaas, __pad_avail_n, __pad_avail_n0, __pad_avail_l0, (btrie_key_t *)&(p)->prefix, &(p)->plen, \
+						(btrie_key_t *)(first), container_len, 128)
+
+#define pa_for_each_pentry_updown(pe, data, p) btrie_for_each_updown_entry(pe, &(data)->pes, (btrie_key_t *)&(p)->prefix, (p)->plen, be)
+#define pa_pentry_open(pentry, ap, cp) do { \
+	if((pentry)->type == PA_PENTRY_TYPE_AP) { ap = container_of(pentry, struct pa_ap, pe); cp = NULL; } \
+	else { cp = container_of(pentry, struct pa_cp, pe); ap = NULL; } }while(0)
 
 #define pa_for_each_ap(pa_ap, pa_data) btrie_for_each_down_entry(pa_ap, &(pa_data)->aps, NULL, 0, be)
 #define pa_for_each_ap_updown(ap, data, p) btrie_for_each_updown_entry(ap, &(data)->aps, (btrie_key_t *)&(p)->prefix, (p)->plen, be)

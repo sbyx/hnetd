@@ -84,15 +84,4 @@ bool pa_ap_isvalid(struct pa *pa, struct pa_ap *ap);
 int pa_precedence_apap(struct pa_ap *ap1, struct pa_ap *ap2);
 int pa_precedence_apcp(struct pa_ap *ap, struct pa_cp *cp);
 
-/* Deprecated iteration - use btrie available iteration instead*/
-int pa_available_prefix_iter_first(struct pa *pa, const struct prefix *first,
-		uint8_t protected_len, struct prefix *prefix);
-int pa_available_prefix_iter_next(struct pa *pa, const struct prefix *first,
-		uint8_t protected_len, struct prefix *prefix);
-
-#define pa_for_each_available_prefix(pa, i, first, protected_len, p)                    \
-			for(i = pa_available_prefix_iter_first(pa, first, protected_len, p);        \
-					!i; i = pa_available_prefix_iter_next(pa, first, protected_len, p)) \
-
-
 #endif /* PA_H_ */

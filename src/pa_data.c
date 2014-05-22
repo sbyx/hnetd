@@ -15,7 +15,7 @@
 #include <stdio.h>
 #include <inttypes.h>
 
-struct btrie *__pad_avail_n0;
+struct btrie *__pad_avail_n0, *__pad_avail_n;
 btrie_plen_t __pad_avail_l0;
 
 /* We can decide what dp to ignore */

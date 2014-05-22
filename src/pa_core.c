@@ -17,7 +17,7 @@
 #define PA_CORE_MIN_DELAY 3
 #define PA_CORE_DELAY_FACTOR 10
 
-#define PA_CORE_FINDRAND_N 64
+#define PA_CORE_FINDRAND_EXP 8
 
 #define PAC_PRAND_PRFX 0
 #define PAC_PRAND_ADDR 1
@@ -141,61 +141,58 @@ uint8_t pa_core_default_plen(struct pa_dp *dp, bool scarcity)
 	}
 }
 
-/* This algorithm for finding a random prefix finds the first PA_CORE_FINDRAND_N available prefixes
- * and pick a random one among them.
- * Although this algorithm uses better random, it is sensible when multiple node trie
- * to assign prefixes of different lengths (A single assigned /64 can invalidate lots of /96).  */
-static int pa_rule_try_random_plen_firsts(struct pa_core *core, struct pa_rule *rule,
-		struct pa_dp *dp, struct pa_iface *iface,
-		struct prefix *first_candidate)
-{
-	int i;
-	if(!iface->designated)
-		return -1;
-
-	struct prefix candidates[PA_CORE_FINDRAND_N];
-	size_t current_candidate = 0;
-
-	L_DEBUG("Trying to find up to %d available prefixes of length %d in %s",
-			PA_CORE_FINDRAND_N, rule->prefix.plen ,PREFIX_REPR(&dp->prefix));
-
-	pa_for_each_available_prefix(core_pa(core), i, first_candidate, dp->prefix.plen, &rule->prefix) {
-		prefix_cpy(&candidates[current_candidate], &rule->prefix);
-		current_candidate++;
-		if(current_candidate == PA_CORE_FINDRAND_N)
-			break;
-	}
-
-	if(!current_candidate) {
-		L_INFO("No more available prefix could be found in %s", PREFIX_REPR(&dp->prefix));
-		return -1;
-	}
-
-	L_DEBUG("%d different candidates were found in %s", (int) current_candidate, PREFIX_REPR(&dp->prefix));
-	prefix_cpy(&rule->prefix, &candidates[random() % current_candidate]);
-	return 0;
-}
-
 static int pa_rule_try_random_plen(struct pa_core *core, struct pa_rule *rule,
 		struct pa_dp *dp, struct pa_iface *iface,
 		uint8_t plen)
 {
-	struct prefix first;
-	struct btrie *n;
-
 	if(!iface->designated || plen > 128)
 		return -1;
 
-	// Generate a pseudo-random subprefix
+	uint16_t prefix_count[129] = {0}; //Used to count the number of available prefixes
+	struct prefix p;
+
+	/* This first pass counts the number of available prefix of each length */
+	pa_for_each_available_prefix(core_p(core, data), &dp->prefix, &p)
+	{
+		if(prefix_count[p.plen] != UINT16_MAX)
+			prefix_count[p.plen]++;
+	}
+	uint8_t min_plen;
+	uint64_t count = 0;
+	int i;
+	for(i = plen; i >=0; i--) {
+		if(prefix_count[i]) {
+			if(plen - i >= PA_CORE_FINDRAND_EXP) {
+				count = 1 << PA_CORE_FINDRAND_EXP;
+			} else {
+				count += prefix_count[i] * (1 << (plen - i));
+			}
+			min_plen = i;
+			if(count >= (1 << PA_CORE_FINDRAND_EXP)) {
+				break;
+			}
+		}
+	}
+
+	if(!count) {
+		L_INFO("No more available prefix of length %d could be found in %s", plen, PREFIX_REPR(&dp->prefix));
+		return -1;
+	}
+	L_DEBUG("At least %lu available prefixes of length %d have been found in %s", count, plen, PREFIX_REPR(&dp->prefix));
+
+	/* Select a prefix randomly */
+	struct prefix first;
 	if(pa_prefix_prand(iface, PAC_PRAND_PRFX, &dp->prefix, &first, plen)) {
 		L_ERR("Cannot generate random prefix from "PA_DP_L" of length %d for "PA_IF_L,
 				PA_DP_LA(dp), dp->prefix.plen, PA_IF_LA(iface));
 		return -1;
 	}
 
-	pa_for_each_available_prefix_new(core_p(core, data), n, &first, dp->prefix.plen, &rule->prefix) {
-		if(rule->prefix.plen <= plen) {
-			if(prefix_contains(&rule->prefix, &first)) { //Only possible at first iteration
+	/* Go through available prefixes starting by the chosen one */
+	pa_for_each_available_prefix_first(core_p(core, data), &first, dp->prefix.plen, &rule->prefix) {
+		if(rule->prefix.plen <= plen && rule->prefix.plen >= min_plen) {
+			if(prefix_contains(&rule->prefix, &first)) {
+				//Found at first iteration
 				prefix_cpy(&rule->prefix, &first);
 			} else {
 				prefix_canonical(&rule->prefix, &rule->prefix);
@@ -204,51 +201,24 @@ static int pa_rule_try_random_plen(struct pa_core *core, struct pa_rule *rule,
 			return 0;
 		}
 	}
-
-	return -1;
+	return -1; //Should never come here
 }
+
+#define pa_iface_plen(iface, scarcity) \
+	(iface)->custom_plen?(iface)->custom_plen(iface, dp, (iface)->custom_plen_priv, scarcity):pa_core_default_plen(dp, scarcity)
 
 static int pa_rule_try_random_scarcity(struct pa_core *core, struct pa_rule *rule,
 		struct pa_dp *dp, struct pa_iface *iface,
 		__unused struct pa_ap *strongest_ap, __unused struct pa_cpl *current_cpl)
 {
-	uint8_t plen = iface->custom_plen?iface->custom_plen(iface, dp, iface->custom_plen_priv, true):pa_core_default_plen(dp, true);
-	return pa_rule_try_random_plen(core, rule, dp, iface, plen);
+	return pa_rule_try_random_plen(core, rule, dp, iface, pa_iface_plen(iface, true));
 }
 
 static int pa_rule_try_random(struct pa_core *core, struct pa_rule *rule,
 		struct pa_dp *dp, struct pa_iface *iface,
 		__unused struct pa_ap *strongest_ap, __unused struct pa_cpl *current_cpl)
 {
-	uint8_t plen = iface->custom_plen?iface->custom_plen(iface, dp, iface->custom_plen_priv, false):pa_core_default_plen(dp, false);
-
-	/* Space waste avoidance */
-	if(plen >  dp->prefix.plen + 12 && !prefix_is_ipv4(&dp->prefix) && plen > 68) {
-		struct prefix first;
-		struct prefix *smallest = &dp->prefix;
-		struct pa_ap *ap;
-		pa_for_each_ap_updown(ap, core_p(core, data), &dp->prefix) {
-			if(smallest->plen < ap->prefix.plen) {
-				smallest = &ap->prefix;
-			}
-		}
-		struct pa_cp *cp;
-		pa_for_each_cp_down(cp, core_p(core, data), &dp->prefix) {
-			if(smallest->plen < cp->prefix.plen) {
-				smallest = &cp->prefix;
-			}
-		}
-
-		if(smallest->plen < dp->prefix.plen + 10)
-			smallest = &dp->prefix;
-
-		prefix_cpy(&first, smallest);
-		first.plen = plen - 8;
-		prefix_canonical(&first, &first);
-		first.plen = plen;
-		return pa_rule_try_random_plen_firsts(core, rule, dp, iface, &first);
-	}
-	return pa_rule_try_random_plen(core, rule, dp, iface, plen);
+	return pa_rule_try_random_plen(core, rule, dp, iface, pa_iface_plen(iface, false));
 }
 
 static int pa_rule_try_accept(__attribute__((unused))struct pa_core *core,
@@ -518,9 +488,7 @@ static inline int __aaa_do_slaac(struct pa_cpl *cpl, struct in6_addr *addr)
 
 static int __aaa_find_random(struct pa_core *core, struct pa_cpl *cpl, struct in6_addr *addr)
 {
-	struct prefix rpool, result;
-	bool first = true;
-	struct in6_addr first_addr;
+	struct prefix rpool, first, result;
 
 	/* Get routers pool */
 	prefix_canonical(&rpool, &cpl->cp.prefix);
@@ -538,42 +506,30 @@ static int __aaa_find_random(struct pa_core *core, struct pa_cpl *cpl, struct in
 		return -1;
 	}
 
-	if(pa_prefix_prand(cpl->iface, PAC_PRAND_ADDR, &rpool, &result, 128)) {
+	L_DEBUG("Trying to find an address in %s", PREFIX_REPR(&rpool));
+	if(pa_prefix_prand(cpl->iface, PAC_PRAND_ADDR, &rpool, &first, 128)) {
 		L_ERR("Cannot generate random address from "PA_CP_L" for "PA_IF_L,
 						PA_CP_LA(&cpl->cp), PA_IF_LA(cpl->iface));
 		return -1;
 	}
 
-	//todo: prefix_increment can't manipulate more than 32 bits
-	if(rpool.plen < 96) {
-		result.plen = 96;
-		prefix_canonical(&rpool, &result);
-		result.plen = 128;
-	}
-	L_DEBUG("Trying to find an address in %s", PREFIX_REPR(&rpool));
-
-	while(1) {
-		if((!prefix_is_ipv4(&rpool)
-				|| memcmp(&rpool.prefix, &result.prefix, sizeof(struct in6_addr)))
-				&& pa_addr_available(core_pa(core), cpl->iface, &result.prefix)) {
-			memcpy(addr, &result.prefix, sizeof(struct in6_addr));
-			return 0;
+	pa_for_each_available_address_first(core_p(core, data), &first.prefix, rpool.plen, &result) {
+		if(result.plen == 128 && prefix_is_ipv4(&rpool)
+				&& !memcmp(&rpool.prefix, &result.prefix, sizeof(struct in6_addr))) {
+				continue;
 		}
-
-		L_DEBUG("Address %s can't be used", ADDR_REPR(&result.prefix));
-
-		if(first) {
-			memcpy(&first_addr, &result.prefix,  sizeof(struct in6_addr));
-			first = false;
-		} else if (!memcmp(&first_addr, &result.prefix, sizeof(struct in6_addr))) {
-			L_WARN("No address available in "PA_CP_L, PA_CP_LA(&cpl->cp));
-			return -1;
+		if(prefix_contains(&result, &first)) {
+			prefix_cpy(&result, &first);
+		} else {
+			prefix_canonical(&result, &result);
+			result.plen = 128;
 		}
-
-		if(prefix_increment(&result, &result, rpool.plen) == -1) {
-			L_ERR("Can't increment address %s in "PA_CP_L, ADDR_REPR(&result.prefix), PA_CP_LA(&cpl->cp));
-			return -1;
+		if(prefix_is_ipv4(&rpool) &&
+				!memcmp(&rpool.prefix, &result.prefix, sizeof(struct in6_addr))) {
+			prefix_increment(&result, &result, 127); //Last bit must be a zero
 		}
+		memcpy(addr, &result.prefix, sizeof(struct in6_addr));
+		return 0;
 	}
 	return -1;
 }
@@ -877,17 +833,13 @@ static int pa_rule_try_prefix(struct pa_core *core, struct pa_rule *rule,
 			(!rule->authoritative && current_cpl->cp.priority >= rule->priority)))
 		return -1;
 
+	struct pa_pentry *pe;
 	struct pa_ap *ap;
-	pa_for_each_ap_updown(ap, &pa->data, prefix) {
-		if(!hard ||
-				(!rule->authoritative && rule->priority < ap->priority))
-			return -1;
-	}
-
 	struct pa_cp *cp;
-	pa_for_each_cp_updown(cp, &pa->data, prefix) {
+	pa_for_each_pentry_updown(pe, &pa->data, prefix) {
+		pa_pentry_open(pe, ap, cp);
 		if(!hard ||
-				(!rule->authoritative && rule->priority < cp->priority))
+				(!rule->authoritative && (rule->priority < ((cp)?(cp->priority):(ap->priority)))))
 			return -1;
 	}
 
