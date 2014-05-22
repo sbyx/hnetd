@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Tue Apr 29 17:34:34 2014 mstenber
- * Edit time:     479 min
+ * Last modified: Thu May 22 13:01:50 2014 mstenber
+ * Edit time:     496 min
  *
  */
 
@@ -68,9 +68,8 @@ struct hncp_sd_struct
   /* how many iterations we've added to routername to get our current one. */
   int router_name_iteration;
 
-  char *dnsmasq_script;
-  char *dnsmasq_bonus_file;
-  char *ohp_script;
+  /* Parameters received when created (pointers within owned by someone else) */
+  hncp_sd_params_s p;
 
   /* State hashes used to keep track of what has been committed. */
   hncp_hash_s dnsmasq_state;
@@ -360,7 +359,7 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
 
 bool hncp_sd_restart_dnsmasq(hncp_sd sd)
 {
-  char *args[] = { (char *)sd->dnsmasq_script, "restart", NULL};
+  char *args[] = { (char *)sd->p.dnsmasq_script, "restart", NULL};
 
   _fork_execv(args);
   return true;
@@ -395,13 +394,8 @@ bool hncp_sd_reconfigure_ohp(hncp_sd sd)
   bool first = true;
   md5_ctx_t ctx;
 
-  if (!sd->ohp_script)
-    {
-      L_ERR("no ohp_script set yet hncp_sd_reconfigure_ohp called");
-      return false;
-    }
   md5_begin(&ctx);
-  PUSH_ARG(sd->ohp_script);
+  PUSH_ARG(sd->p.ohp_script);
 
   /* ohp can _always_ listen to all interfaces that have been
    * configured. Less flapping of the binary, and it hurts nobody if
@@ -674,13 +668,17 @@ void hncp_sd_update(hncp_sd sd)
   if (sd->should_update & UPDATE_FLAG_DNSMASQ)
     {
       sd->should_update &= ~UPDATE_FLAG_DNSMASQ;
-      if (hncp_sd_write_dnsmasq_conf(sd, sd->dnsmasq_bonus_file))
-        hncp_sd_restart_dnsmasq(sd);
+      if (sd->p.dnsmasq_script && sd->p.dnsmasq_bonus_file)
+        {
+          if (hncp_sd_write_dnsmasq_conf(sd, sd->p.dnsmasq_bonus_file))
+            hncp_sd_restart_dnsmasq(sd);
+        }
     }
   if (sd->should_update & UPDATE_FLAG_OHP)
     {
       sd->should_update &= ~UPDATE_FLAG_OHP;
-      hncp_sd_reconfigure_ohp(sd);
+      if (sd->p.ohp_script)
+        hncp_sd_reconfigure_ohp(sd);
     }
   if (sd->should_update)
     L_DEBUG("hncp_sd_update leftovers:%d", sd->should_update);
@@ -694,44 +692,37 @@ static void _timeout_cb(struct uloop_timeout *t)
 }
 
 
-hncp_sd hncp_sd_create(hncp h,
-                       const char *dnsmasq_script,
-                       const char *dnsmasq_bonus_file,
-                       const char *ohp_script,
-                       const char *router_name,
-                       const char *domain_name)
+hncp_sd hncp_sd_create(hncp h, hncp_sd_params p)
 {
   hncp_sd sd = calloc(1, sizeof(*sd));
 
   sd->hncp = h;
   sd->timeout.cb = _timeout_cb;
-  if (!sd
-      || !(sd->dnsmasq_script = strdup(dnsmasq_script))
-      || !(sd->dnsmasq_bonus_file = strdup(dnsmasq_bonus_file))
-      || !(sd->ohp_script = strdup(ohp_script)))
-    abort();
+  sd->p = *p;
+  if (!sd)
+    return NULL;
 
   /* Handle domain name */
-  if (domain_name)
+  if (p->domain_name)
     {
       uint8_t ll[DNS_MAX_LL_LEN];
       int len;
-      len = escaped2ll(domain_name, ll, sizeof(ll));
+      len = escaped2ll(p->domain_name, ll, sizeof(ll));
       if (len < 0)
         {
-          L_ERR("invalid domain:%s", domain_name);
+          L_ERR("invalid domain:%s", p->domain_name);
           abort();
         }
       hncp_add_tlv_raw(h, HNCP_T_DNS_DOMAIN_NAME, ll, len);
 
-      strncpy(sd->hncp->domain, domain_name, DNS_MAX_ESCAPED_LEN);
+      strncpy(sd->hncp->domain, p->domain_name, DNS_MAX_ESCAPED_LEN);
     }
   else
     strcpy(sd->hncp->domain, HNCP_SD_DEFAULT_DOMAIN);
 
   /* Handle router name */
-  if (router_name)
-    strcpy(sd->router_name_base, router_name);
+  if (p->router_name)
+    strcpy(sd->router_name_base, p->router_name);
   else
     strcpy(sd->router_name_base, "r");
   strcpy(sd->router_name, sd->router_name_base);
@@ -751,8 +742,5 @@ void hncp_sd_destroy(hncp_sd sd)
 {
   uloop_timeout_cancel(&sd->timeout);
   hncp_unsubscribe(sd->hncp, &sd->subscriber);
-  free(sd->dnsmasq_script);
-  free(sd->dnsmasq_bonus_file);
-  free(sd->ohp_script);
   free(sd);
 }
