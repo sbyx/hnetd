@@ -188,6 +188,7 @@ int ipc_ifupdown(int argc, char *argv[])
 	return ipc_client(blobmsg_format_json(b.head, true));
 }
 
+struct prefix zeros_64_prefix = { .prefix = { .s6_addr = {}}, .plen = 64 } ;
 
 // Handle internal IPC message
 static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
@@ -258,7 +259,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 							L_ERR("Incorrect iface_id syntax %s", blobmsg_get_string(k));
 							continue;
 						}
-						if(addr.plen == 128 && !addr.prefix.s6_addr32[0] && !addr.prefix.s6_addr32[1])
+						if(addr.plen == 128 && prefix_contains(&zeros_64_prefix, &addr))
 							addr.plen = 64;
 						if(res == 1)
 							filter.plen = 0;
