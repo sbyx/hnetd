@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Tue Apr 29 17:19:46 2014 mstenber
- * Edit time:     403 min
+ * Last modified: Thu May 22 14:06:20 2014 mstenber
+ * Edit time:     404 min
  *
  */
 
@@ -392,10 +392,8 @@ static void _tlv_cb(hncp_subscriber s,
       break;
     case HNCP_T_ROUTER_ADDRESS:
       {
-        hncp_t_router_address ra;
-
-        ra = tlv_data(tlv);
-        if (tlv_len(tlv) == sizeof(*ra))
+        hncp_t_router_address ra = hncp_tlv_router_address(tlv);
+        if (ra)
         {
           _update_pa_eaa(g->pa_data, &ra->address,
                          (struct pa_rid *)&n->node_identifier_hash,

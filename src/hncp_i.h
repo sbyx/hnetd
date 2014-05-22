@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu May  8 18:02:40 2014 mstenber
- * Edit time:     165 min
+ * Last modified: Thu May 22 14:05:46 2014 mstenber
+ * Edit time:     166 min
  *
  */
 
@@ -364,6 +364,14 @@ hncp_tlv_neighbor(const struct tlv_attr *a)
   return tlv_data(a);
 }
 
+static inline hncp_t_router_address
+hncp_tlv_router_address(const struct tlv_attr *a)
+{
+  if (tlv_id(a) != HNCP_T_ROUTER_ADDRESS
+      || tlv_len(a) != sizeof(hncp_t_router_address_s))
+    return NULL;
+  return tlv_data(a);
+}
 
 static inline hncp_node
 hncp_node_find_neigh_bidir2(hncp_node n,

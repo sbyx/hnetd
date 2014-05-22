@@ -89,7 +89,7 @@ int main(__unused int argc, char *argv[])
 	int c;
 	hncp_iface_user_s hiu;
 	hncp_glue hg;
-	hncp_sd_params_s sd_params = {};
+	hncp_sd_params_s sd_params;
 
 #ifdef WITH_IPC
 	if (strstr(argv[0], "hnet-call"))
@@ -125,7 +125,8 @@ int main(__unused int argc, char *argv[])
 	const char *pa_store_file = NULL;
 	const char *pd_socket_path = "/var/run/hnetd_pd";
 
-	while ((c = getopt(argc, argv, "d:f:o:n:r:s:p:m:")) != -1) {
+	memset(&sd_params, 0, sizeof(sd_params));
+	while ((c = getopt(argc, argv, "d:f:o:n:r:s:p:m:c:")) != -1) {
 		switch (c) {
 		case 'd':
 			sd_params.dnsmasq_script = optarg;
@@ -135,6 +136,9 @@ int main(__unused int argc, char *argv[])
 			break;
 		case 'o':
 			sd_params.ohp_script = optarg;
+			break;
+		case 'c':
+			sd_params.pcp_script = optarg;
 			break;
 		case 'n':
 			sd_params.router_name = optarg;
@@ -170,7 +174,7 @@ int main(__unused int argc, char *argv[])
 	}
 
 	if (!hncp_sd_create(h, &sd_params)) {
-		L_ERR("unable to initialize rd, exiting");
+		L_ERR("unable to initialize sd, exiting");
 		return 71;
 	}
 
