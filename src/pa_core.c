@@ -158,7 +158,7 @@ static int pa_rule_try_random_plen(struct pa_core *core, struct pa_rule *rule,
 			prefix_count[p.plen]++;
 	}
 	uint8_t min_plen;
-	uint64_t count = 0;
+	uint32_t count = 0;
 	int i;
 	for(i = plen; i >=0; i--) {
 		if(prefix_count[i]) {
@@ -178,7 +178,7 @@ static int pa_rule_try_random_plen(struct pa_core *core, struct pa_rule *rule,
 		L_INFO("No more available prefix of length %d could be found in %s", plen, PREFIX_REPR(&dp->prefix));
 		return -1;
 	}
-	L_DEBUG("At least %lu available prefixes of length %d have been found in %s", count, plen, PREFIX_REPR(&dp->prefix));
+	L_DEBUG("At least %d available prefixes of length %d have been found in %s", (int)count, plen, PREFIX_REPR(&dp->prefix));
 
 	/* Select a prefix randomly */
 	struct prefix first;
