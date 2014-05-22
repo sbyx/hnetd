@@ -91,6 +91,8 @@ proto_hnet_setup() {
 	    [ -n "$dhcpv6_clientid" ] && json_add_string clientid "$dhcpv6_clientid"
 	    json_add_string iface_dslite "${interface}_dslite"
 	    json_add_string zone_dslite wan
+	    json_add_string iface_map "${interface}_map"
+	    json_add_string zone_map wan
 
 	    # Require PD, not only NA/SLAAC
 	    json_add_string forceprefix 1
