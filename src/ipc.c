@@ -21,6 +21,7 @@
 #include "iface.h"
 #include "dhcp.h"
 #include "dhcpv6.h"
+#include "prefix_utils.h"
 
 static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events);
 static struct uloop_fd ipcsock = { .cb = ipc_handle };
@@ -40,6 +41,7 @@ enum ipc_option {
 	OPT_MIN_V6_PLEN,
 	OPT_ADHOC,
 	OPT_DISABLE_PA,
+	OPT_PASSTHRU,
 	OPT_MAX
 };
 
@@ -57,6 +59,7 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_MIN_V6_PLEN] = {"min_v6_plen", BLOBMSG_TYPE_STRING},
 	[OPT_ADHOC] = {"adhoc", BLOBMSG_TYPE_BOOL},
 	[OPT_DISABLE_PA] = {"disable_pa", BLOBMSG_TYPE_BOOL},
+	[OPT_PASSTHRU] = {"passthru", BLOBMSG_TYPE_STRING},
 };
 
 enum ipc_prefix_option {
@@ -75,7 +78,6 @@ struct blobmsg_policy ipc_prefix_policy[] = {
 	[PREFIX_VALID] = {"valid", BLOBMSG_TYPE_INT32},
 	[PREFIX_CLASS] = {"class", BLOBMSG_TYPE_INT32}
 };
-
 
 int ipc_init(void)
 {
@@ -360,31 +362,14 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			}
 
 
-			const size_t dns_max = 4;
-			size_t dns_cnt = 0;
-			struct {
-				uint16_t type;
-				uint16_t len;
-				struct in6_addr addr[dns_max];
-			} dns;
-
-			if (tb[OPT_DNS]) {
-				struct blob_attr *k;
-				unsigned rem;
-
-				blobmsg_for_each_attr(k, tb[OPT_DNS], rem) {
-					if (dns_cnt >= dns_max || blobmsg_type(k) != BLOBMSG_TYPE_STRING ||
-							inet_pton(AF_INET6, blobmsg_data(k), &dns.addr[dns_cnt]) < 1)
-						continue;
-
-					++dns_cnt;
+			if (tb[OPT_PASSTHRU]) {
+				size_t buflen = blobmsg_data_len(tb[OPT_PASSTHRU]) / 2;
+				uint8_t *buf = malloc(buflen);
+				if (buf) {
+					unhexlify(buf, buflen, blobmsg_get_string(tb[OPT_PASSTHRU]));
+					iface_add_dhcpv6_received(c, buf, buflen);
+					free(buf);
 				}
-			}
-
-			if (dns_cnt) {
-				dns.type = htons(DHCPV6_OPT_DNS_SERVERS);
-				dns.len = htons(dns_cnt * sizeof(struct in6_addr));
-				iface_add_dhcpv6_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns));
 			}
 
 			if (tb[OPT_CERID])

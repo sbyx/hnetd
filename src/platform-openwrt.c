@@ -576,6 +576,7 @@ enum {
 	DATA_ATTR_MIN_V6_PLEN,
 	DATA_ATTR_ADHOC,
 	DATA_ATTR_DISABLE_PA,
+	DATA_ATTR_PASSTHRU,
 	DATA_ATTR_MAX
 };
 
@@ -606,6 +607,7 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_MIN_V6_PLEN] = { .name = "min_v6_plen", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_ADHOC] = { .name = "adhoc", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_DISABLE_PA] = { .name = "disable_pa", .type = BLOBMSG_TYPE_BOOL },
+	[DATA_ATTR_PASSTHRU] = { .name = "passthru", .type = BLOBMSG_TYPE_STRING },
 };
 
 
@@ -667,12 +669,7 @@ static void update_interface(struct iface *c,
 	}
 
 	const size_t dns_max = 4;
-	size_t dns_cnt = 0, dns4_cnt = 0;
-	struct {
-		uint16_t type;
-		uint16_t len;
-		struct in6_addr addr[dns_max];
-	} dns;
+	size_t dns4_cnt = 0;
 	struct __attribute__((packed)) {
 		uint8_t type;
 		uint8_t len;
@@ -680,22 +677,26 @@ static void update_interface(struct iface *c,
 	} dns4;
 
 	blobmsg_for_each_attr(k, tb[IFACE_ATTR_DNS], rem) {
-		if (dns_cnt >= dns_max || blobmsg_type(k) != BLOBMSG_TYPE_STRING ||
-				inet_pton(AF_INET6, blobmsg_data(k), &dns.addr[dns_cnt]) < 1) {
-			if (dns4_cnt >= dns_max ||
-					inet_pton(AF_INET, blobmsg_data(k), &dns4.addr[dns4_cnt]) < 1)
-				continue;
-			++dns4_cnt;
+		if (dns4_cnt >= dns_max ||
+				inet_pton(AF_INET, blobmsg_data(k), &dns4.addr[dns4_cnt]) < 1)
 			continue;
-		}
-
-		++dns_cnt;
+		++dns4_cnt;
 	}
 
-	if (v6uplink && dns_cnt) {
-		dns.type = htons(DHCPV6_OPT_DNS_SERVERS);
-		dns.len = htons(dns_cnt * sizeof(struct in6_addr));
-		iface_add_dhcpv6_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns));
+	if (tb[IFACE_ATTR_DATA]) {
+		struct blob_attr *dtb[DATA_ATTR_MAX];
+		blobmsg_parse(data_attrs, DATA_ATTR_MAX, dtb,
+				blobmsg_data(tb[IFACE_ATTR_DATA]), blobmsg_len(tb[IFACE_ATTR_DATA]));
+
+		if (v6uplink && dtb[DATA_ATTR_PASSTHRU]) {
+			size_t buflen = blobmsg_data_len(dtb[DATA_ATTR_PASSTHRU]) / 2;
+			uint8_t *buf = malloc(buflen);
+			if (buf) {
+				unhexlify(buf, buflen, blobmsg_get_string(dtb[DATA_ATTR_PASSTHRU]));
+				iface_add_dhcpv6_received(c, buf, buflen);
+				free(buf);
+			}
+		}
 	}
 
 	if (v4uplink) {
