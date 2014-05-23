@@ -18,21 +18,31 @@
 struct pa_core;
 struct pa_rule;
 
+enum pa_rule_pref {
+	PAR_PREF_STATIC_O,  //Overriding static assignment
+	PAR_PREF_LINKID_O,  //Overriding link id
+	PAR_PREF_KEEP,      //Keep current prefix
+	PAR_PREF_ACCEPT,    //Accept someone else's prefix
+	PAR_PREF_STATIC,    //Non-overriding static assignment
+	PAR_PREF_LINKID,    //Non-overriding link id
+	PAR_PREF_STORAGE,   //Use stored prefix of desired length
+	PAR_PREF_RANDOM,    //Pick random prefix of random length
+	PAR_PREF_STORAGE_S, //Use stored prefix of scarcity length
+	PAR_PREF_RANDOM_S,  //Pick random prefix of scarcity length
+	PAR_PREF_MAX,
+};
+
 typedef int (*rule_try)(struct pa_core *core, struct pa_rule *rule,
 		struct pa_dp *dp, struct pa_iface *iface,
-		struct pa_ap *best_ap, struct pa_cpl *current_cpl);
+		struct pa_ap *best_ap, struct pa_cpl *current_cpl,
+		enum pa_rule_pref best_found_priority);
 
 /* Prefix selection uses rules. They are called in priority order
    each time the prefix assignment algorithm is run. */
 struct pa_rule {
-	const char *name;                /* Name of that rule, used for logging */
+	const char *name;                    /* Name of that rule, used for logging */
 
-	uint32_t rule_priority;          /* Rules are applied in sorted order. */
-#define PACR_PRIORITY_KEEP      1000  //Keep existing CPL if valid
-#define PACR_PRIORITY_ACCEPT    2000  //Accept or update CPL from AP
-#define PACR_PRIORITY_STORAGE   3000  //Priority used by stable storage prefix selection
-#define PACR_PRIORITY_RANDOM    4000  //Priority used by random prefix selection
-#define PACR_PRIORITY_SCARCITY  5000  //Random selection with reduced prefix length
+	enum pa_rule_pref best_priority; /* Best priority that can be returned by this rule (Used to optimize rule calls). */
 
 	/* Called to try finding a prefix.
 	 * Must return 0 if a prefix is found. A negative value otherwise.
@@ -42,16 +52,22 @@ struct pa_rule {
 	rule_try try;
 
 	/* Elements that must be filled when try returns 0 */
-	struct prefix prefix; //The prefix to be used
-	uint8_t priority;     //The priority value
-	bool authoritative;    //The authoritative bit
+	struct {
+		struct prefix prefix;    //The prefix to be used
+		uint8_t priority;        //PA priority value
+		bool authoritative;      //PA authoritative bit
+		enum pa_rule_pref preference;  //Internal prefix selection priority
+
+		/* When a rule returns a result, it will be discarded if
+		 * core_priority > best_found_priority. */
+	} result;
 
 /* private to pa_core */
 	struct list_head le;
 	struct btrie cpls;
 
-#define PA_RULE_L  "pa_rule [%s](prio %u)"
-#define PA_RULE_LA(rule) (rule)->name?(rule)->name:"no-name", (rule)->rule_priority
+#define PA_RULE_L  "pa_rule [%s](best priority %u)"
+#define PA_RULE_LA(rule) (rule)->name?(rule)->name:"no-name", (rule)->best_priority
 };
 
 /* A static prefix rule is a configuration entry
@@ -63,7 +79,7 @@ struct pa_static_prefix_rule {
 	struct pa_rule rule;
 	struct prefix prefix;  //The prefix value
 	char ifname[IFNAMSIZ]; //The interface the prefix is associated to
-	bool hard;             // Whether that rule may remove a previously made assignment (of lower priority)
+	bool override;         // Whether that rule may remove a previously made assignment (of lower priority)
 	char rule_name[40 + INET6_ADDRSTRLEN + IFNAMSIZ];
 
 	struct list_head user; // private to user
@@ -79,7 +95,7 @@ struct pa_link_id_rule {
 	char ifname[IFNAMSIZ]; // The interface the ID is associated to
 	uint32_t link_id;      // The link ID
 	uint8_t link_id_len;   // Minimal required length difference between dp length and ap length
-	bool hard;             // Whether that rule may remove a previously made assignment (of lower priority)
+	bool override;         // Whether that rule may remove a previously made assignment (of lower priority)
 	char rule_name[40 + IFNAMSIZ];
 };
 
@@ -124,7 +140,6 @@ struct pa_core {
 	struct pa_rule keep_rule;
 	struct pa_rule accept_rule;
 	struct pa_rule random_rule;
-	struct pa_rule random_scarcity_rule;
 	struct list_head iface_addrs;
 };
 
@@ -135,16 +150,18 @@ void pa_core_term(struct pa_core *);
 
 //Default plen selection policy function
 uint8_t pa_core_default_plen(struct pa_dp *dp, bool scarcity);
+#define pa_iface_plen(iface, scarcity) \
+	(iface)->custom_plen?(iface)->custom_plen(iface, dp, (iface)->custom_plen_priv, scarcity):pa_core_default_plen(dp, scarcity)
 
-void pa_core_rule_init(struct pa_rule *rule, const char *name, uint32_t rule_priority, rule_try try);
+void pa_core_rule_init(struct pa_rule *rule, const char *name, enum pa_rule_pref best_priority, rule_try try);
 void pa_core_rule_add(struct pa_core *core, struct pa_rule *rule);
 void pa_core_rule_del(struct pa_core *core, struct pa_rule *rule);
 
 void pa_core_static_prefix_init(struct pa_static_prefix_rule *rule,
-		const char *ifname, const struct prefix* p, bool hard);
+		const char *ifname, const struct prefix* p, bool override);
 
 void pa_core_link_id_init(struct pa_link_id_rule *lrule, const char *ifname,
-		uint32_t link_id, uint8_t link_id_len, bool hard);
+		uint32_t link_id, uint8_t link_id_len, bool override);
 
 void pa_core_iface_addr_init(struct pa_iface_addr *addr,
 		const char *ifname, 		//The ifname or NULL (or 0 len str) if may be applied to any iface

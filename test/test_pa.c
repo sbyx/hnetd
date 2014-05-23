@@ -509,8 +509,8 @@ void test_pa_static()
 	test_pa_check_cp(cp, &p1_1, false, PAD_PRIORITY_DEFAULT, false);
 
 	pa_core_static_prefix_init(&sprule, NULL, &p1_1, true);
-	sprule.rule.authoritative = true;
-	sprule.rule.priority = PA_PRIORITY_DEFAULT;
+	sprule.rule.result.authoritative = true;
+	sprule.rule.result.priority = PA_PRIORITY_DEFAULT;
 	pa_core_rule_add(&pa.core, &sprule.rule);
 	to_run(1);
 
@@ -545,8 +545,8 @@ void test_pa_static()
 
 	//Soft mod should not change the prefix
 	pa_core_static_prefix_init(&sprule, PL_IFNAME1, &p1_1, false);
-	sprule.rule.authoritative = true;
-	sprule.rule.priority = PA_PRIORITY_DEFAULT;
+	sprule.rule.result.authoritative = true;
+	sprule.rule.result.priority = PA_PRIORITY_DEFAULT;
 	pa_core_rule_add(&pa.core, &sprule.rule);
 	to_run(1);
 
@@ -557,8 +557,8 @@ void test_pa_static()
 
 	//Reducing the priority should cause the rule to not be applied
 	pa_core_static_prefix_init(&sprule, PL_IFNAME1, &p1_1, false);
-	sprule.rule.authoritative = false;
-	sprule.rule.priority = PA_PRIORITY_MIN;
+	sprule.rule.result.authoritative = false;
+	sprule.rule.result.priority = PA_PRIORITY_MIN;
 	pa_core_rule_add(&pa.core, &sprule.rule);
 	to_run(4);
 
@@ -622,8 +622,8 @@ void test_pa_link_id()
 	test_pa_check_cp(cp, &p1_1, false, PA_PRIORITY_DEFAULT, false);
 
 	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 9, true); //To big to work
-	lrule.rule.authoritative = true;
-	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	lrule.rule.result.authoritative = true;
+	lrule.rule.result.priority = PA_PRIORITY_DEFAULT;
 	pa_core_rule_add(&pa.core, &lrule.rule);
 	to_run(5);
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
@@ -631,8 +631,8 @@ void test_pa_link_id()
 	pa_core_rule_del(&pa.core, &lrule.rule);
 
 	pa_core_link_id_init(&lrule, PL_IFNAME2, 2, 4, true); //Bad interface
-	lrule.rule.authoritative = true;
-	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	lrule.rule.result.authoritative = true;
+	lrule.rule.result.priority = PA_PRIORITY_DEFAULT;
 	pa_core_rule_add(&pa.core, &lrule.rule);
 	to_run(5);
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
@@ -640,8 +640,8 @@ void test_pa_link_id()
 	pa_core_rule_del(&pa.core, &lrule.rule);
 
 	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 4, false); //Shouldn't do anything cause not hard
-	lrule.rule.authoritative = true;
-	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	lrule.rule.result.authoritative = true;
+	lrule.rule.result.priority = PA_PRIORITY_DEFAULT;
 	pa_core_rule_add(&pa.core, &lrule.rule);
 	to_run(5);
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
@@ -649,8 +649,8 @@ void test_pa_link_id()
 	pa_core_rule_del(&pa.core, &lrule.rule);
 
 	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 4, true); //Priority is not high enough
-	lrule.rule.authoritative = false;
-	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	lrule.rule.result.authoritative = false;
+	lrule.rule.result.priority = PA_PRIORITY_DEFAULT;
 	pa_core_rule_add(&pa.core, &lrule.rule);
 	to_run(5);
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
@@ -658,8 +658,8 @@ void test_pa_link_id()
 	pa_core_rule_del(&pa.core, &lrule.rule);
 
 	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 8, true); //Priority is high enough
-	lrule.rule.authoritative = false;
-	lrule.rule.priority = PA_PRIORITY_DEFAULT + 1;
+	lrule.rule.result.authoritative = false;
+	lrule.rule.result.priority = PA_PRIORITY_DEFAULT + 1;
 	pa_core_rule_add(&pa.core, &lrule.rule);
 	to_run(5);
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
@@ -677,8 +677,8 @@ void test_pa_link_id()
 	test_pa_check_cp(cp, &p1_1, false, PA_PRIORITY_DEFAULT + 1, true); //Adv cause designated
 
 	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 8, true); //Priority is high enough
-	lrule.rule.authoritative = true;
-	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	lrule.rule.result.authoritative = true;
+	lrule.rule.result.priority = PA_PRIORITY_DEFAULT;
 	pa_core_rule_add(&pa.core, &lrule.rule);
 	to_run(5);
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
@@ -689,8 +689,8 @@ void test_pa_link_id()
 	pa_ap_notify(&pa.data, ap);
 
 	pa_core_link_id_init(&lrule, PL_IFNAME1, 1, 8, false); //Priority is high enough
-	lrule.rule.authoritative = false;
-	lrule.rule.priority = PA_PRIORITY_DEFAULT + 2;
+	lrule.rule.result.authoritative = false;
+	lrule.rule.result.priority = PA_PRIORITY_DEFAULT + 2;
 	pa_core_rule_add(&pa.core, &lrule.rule);
 	to_run(1);
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);

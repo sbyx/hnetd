@@ -354,27 +354,33 @@ int pa_store_setfile(struct pa_store *store, const char *filepath)
 static int pa_rule_try_storage(struct pa_core *core, struct pa_rule *rule,
 		struct pa_dp *dp, struct pa_iface *iface,
 		__attribute__((unused))struct pa_ap *strongest_ap,
-		__attribute__((unused))struct pa_cpl *current_cpl)
+		__attribute__((unused))struct pa_cpl *current_cpl,
+		__unused enum pa_rule_pref best_found_priority)
 {
 	struct pa_sp *sp;
-	uint8_t plen;
+	uint8_t plen, plen_scarcity;
 
 	if(!iface->designated)
 		return -1;
 
-	if(iface->custom_plen) {
-		plen = iface->custom_plen(iface, dp, iface->custom_plen_priv, false);
-	} else {
-		plen = 0;
-	}
+	plen = pa_iface_plen(iface, false);
+	plen_scarcity = pa_iface_plen(iface, true);
 
+	rule->result.preference = PAR_PREF_MAX;
 	pa_for_each_sp_in_iface(sp, iface) {
 		if(prefix_contains(&dp->prefix, &sp->prefix) &&
-				!pa_prefix_getcollision(container_of(core, struct pa, core), &sp->prefix) &&
-				sp->prefix.plen > plen) {
-			prefix_cpy(&rule->prefix, &sp->prefix);
-			//prio, auth and advertise are set at init
-			return 0;
+				!pa_prefix_getcollision(container_of(core, struct pa, core), &sp->prefix)) {
+
+			if(sp->prefix.plen == plen) {
+				rule->result.preference = PAR_PREF_STORAGE;
+				prefix_cpy(&rule->result.prefix, &sp->prefix);
+				return 0;
+			}
+			if(rule->result.preference == PAR_PREF_MAX &&
+					sp->prefix.plen == plen_scarcity) {
+				rule->result.preference = PAR_PREF_STORAGE_S;
+				prefix_cpy(&rule->result.prefix, &sp->prefix);
+			}
 		}
 	}
 
@@ -391,9 +397,10 @@ void pa_store_init(struct pa_store *store)
 	store->data_user.dps = __pa_store_dps;
 	store->data_user.aas = __pa_store_aas;
 	store->save_delay = pas_next_delay(0);
-	pa_core_rule_init(&store->pa_rule, "Stable storage", PACR_PRIORITY_STORAGE, pa_rule_try_storage);
-	store->pa_rule.priority = PA_PRIORITY_DEFAULT;
-	store->pa_rule.authoritative = false;
+	pa_core_rule_init(&store->pa_rule, "Stable storage", PAR_PREF_STORAGE, pa_rule_try_storage);
+	store->pa_rule.result.priority = PA_PRIORITY_DEFAULT;
+	store->pa_rule.result.authoritative = false;
+	store->pa_rule.result.preference = PAR_PREF_STORAGE;
 }
 
 void pa_store_start(struct pa_store *store)
