@@ -34,11 +34,6 @@ struct _trusted_list {
     struct list_head list;
 };
 
-/* For graph exploration*/
-struct exploration_list {
-  hncp_trust_graph g;
-  struct list_head list;
-};
 
 /** Struct init */
 static inline void trust_graph_init(hncp_trust_graph g, hncp_hash hash){
@@ -60,8 +55,8 @@ static inline hncp_trust_graph trust_graph_create(hncp_hash hash){
 
 /* For bfs explo of the graph */
 static inline void add_graph_last(struct list_head* l, hncp_trust_graph g){
-  struct exploration_list* e = malloc(sizeof(struct exploration_list));
-  e->g = g;
+  struct _trusted_list* e = malloc(sizeof(struct _trusted_list));
+  e->node = g;
   list_add_tail(&e->list, l);
 }
 

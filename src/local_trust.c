@@ -7,7 +7,7 @@
 
 #include "local_trust.h"
 
-void update_local(hncp o){
+void local_trust_update_tlv(hncp o){
   size_t len = o->trust->array_size * sizeof(hncp_hash_s);
   hncp_t_trust_array tlv = malloc(sizeof(hncp_t_trust_array_s) + len);
   if(!tlv){
@@ -27,24 +27,24 @@ void update_local(hncp o){
 }
 
 
-void local_trust_add_trusted_hash(hncp o, hncp_hash h){
+void local_trust_add_trusted_hash(hncp o, hncp_hash h, bool update){
   hncp_trust t = o->trust;
   t->array_size++;
   t->local_trust_array = realloc(t->local_trust_array, t->array_size * sizeof(hncp_hash_s));
   t->local_trust_array[t->array_size-1] = *h;
-
-  update_local(o);
+  if(update)
+    local_trust_update_tlv(o);
 }
 
 
-void local_trust_add_trusted_array(hncp o, hncp_hash h, unsigned int size){
+void local_trust_add_trusted_array(hncp o, hncp_hash h, unsigned int size, bool update){
   hncp_trust t = o->trust;
   unsigned int orig_size = t->array_size;
   t->array_size+= size;
   t->local_trust_array = realloc(t->local_trust_array, t->array_size * sizeof(hncp_hash_s));
   memcpy(&t->local_trust_array[orig_size], h, size * sizeof(hncp_hash_s));
-
-  update_local(o);
+  if(update)
+    local_trust_update_tlv(o);
 }
 
 static inline void check_free_array(hncp_trust t){
@@ -54,7 +54,7 @@ static inline void check_free_array(hncp_trust t){
   }
 }
 
-bool _remove_trusted_hash(hncp o, hncp_hash h){
+bool local_trust_remove_trusted_hash(hncp o, hncp_hash h, bool update){
   unsigned int i;
   hncp_trust t = o->trust;
   for(i = 0; i < t->array_size; i++){
@@ -67,26 +67,21 @@ remove:
   memmove(&t->local_trust_array[i], &t->local_trust_array[i+1], (t->array_size-i) * sizeof(hncp_hash_s));
   t->local_trust_array = realloc(t->local_trust_array, t->array_size * sizeof(hncp_hash_s));
   check_free_array(t);
+  if(update)
+    local_trust_update_tlv(o);
   return true;
 }
 
-bool local_trust_remove_trusted_hash(hncp o, hncp_hash h){
-  if(_remove_trusted_hash(o, h)){
-    update_local(o);
-    return true;
-  } else
-    return false;
-}
 
-bool local_trust_remove_trusted_array(hncp o, hncp_hash h, unsigned int size){
-  bool update = false;
+bool local_trust_remove_trusted_array(hncp o, hncp_hash h, unsigned int size, bool update){
+  bool done = false;
   for(unsigned int i = 0; i<size; i++){
-    if(_remove_trusted_hash(o, &h[i]))
-     update = true;
+    if(local_trust_remove_trusted_hash(o, &h[i], false))
+     done = true;
   }
-  if(update)
-    update_local(o);
-  return update;
+  if(update && done)
+    local_trust_update_tlv(o);
+  return done;
 }
 
 
@@ -96,13 +91,14 @@ void _purge_trusted_array(hncp o){
   check_free_array(t);
 }
 
-void local_trust_replace_trusted_array(hncp o, hncp_hash h, unsigned int size){
+void local_trust_replace_trusted_array(hncp o, hncp_hash h, unsigned int size, bool update){
   _purge_trusted_array(o);
-  local_trust_add_trusted_array(o, h, size);
+  local_trust_add_trusted_array(o, h, size, update);
 }
 
 
-void local_trust_purge_trusted_array(hncp o){
+void local_trust_purge_trusted_array(hncp o, bool update){
   _purge_trusted_array(o);
-  update_local(o);
+  if(update)
+    local_trust_update_tlv(o);
 }

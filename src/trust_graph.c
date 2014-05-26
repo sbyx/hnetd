@@ -17,8 +17,8 @@ void init_explo(struct list_head* l, hncp_trust_graph g){
 /* Remove marking after an explo, and free the list used for that */
 static void trust_graph_to_reset(struct list_head* l){
   while(!list_empty(l)){
-    struct exploration_list* e = list_first_entry(l, struct exploration_list, list);
-    e->g->marked = false;
+    struct _trusted_list* e = list_first_entry(l, struct _trusted_list, list);
+    e->node->marked = false;
     list_del(&e->list);
     free(e);
   }
@@ -34,9 +34,9 @@ bool trust_graph_is_trusted(hncp_trust_graph g, hncp_hash node_hash){
     goto end;
   };
   g->marked = true;
-  struct exploration_list* entry;
+  struct _trusted_list* entry;
   list_for_each_entry(entry, &l, list){
-    hncp_trust_graph graph = entry ->g;
+    hncp_trust_graph graph = entry->node;
     struct _trusted_list* item;
     _for_each_trust_graph(graph, item){
       hncp_trust_graph node = item->node;

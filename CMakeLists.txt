@@ -73,11 +73,11 @@ add_library(L_HNCP_GLUE OBJECT src/hncp_pa.c src/hncp_sd.c)
 set(HNCP_WITH_GLUE ${HNCP_WITH_PROTO} $<TARGET_OBJECTS:L_HNCP_GLUE>)
 add_library(L_HNCP_IO OBJECT src/hncp_io.c)
 set(HNCP_IO $<TARGET_OBJECTS:L_HNCP_IO>)
-add_library(L_TRUST OBJECT src/hncp_trust.c src/trust_graph.c src/local_trust.c)
+add_library(L_TRUST OBJECT src/hncp_trust.c src/trust_graph.c src/local_trust.c src/crypto.c src/hncp_crypto.c)
 set(TRUST $<TARGET_OBJECTS:L_TRUST>)
 set(HNCP ${HNCP_WITH_GLUE} ${HNCP_IO})
 add_executable(hnetd ${HNCP} src/hncp_routing.c src/hnetd.c src/iface.c src/pd.c ${PA} src/ ${BACKEND_SOURCE})
-target_link_libraries(hnetd ubox blobmsg_json resolv ${BACKEND_LINK})
+target_link_libraries(hnetd ubox blobmsg_json resolv polarssl ${BACKEND_LINK})
 install(TARGETS hnetd DESTINATION sbin/)
 
 # Unit test stuff
@@ -157,9 +157,14 @@ add_test(btrie test_btrie)
 add_dependencies(check test_btrie)
 
 add_executable(test_hncp_trust test/test_hncp_trust.c ${TRUST} ${HNCP} ${PA} )
-target_link_libraries(test_hncp_trust ubox ${BACKEND_LINK} blobmsg_json)
+target_link_libraries(test_hncp_trust ubox ${BACKEND_LINK} blobmsg_json polarssl)
 add_test(trust_graph test_hncp_trust)
 add_dependencies(check test_hncp_trust)
+
+add_executable(test_hncp_crypto test/test_hncp_crypto.c ${TRUST} ${HNCP} ${PA} )
+target_link_libraries(test_hncp_crypto ubox ${BACKEND_LINK} blobmsg_json polarssl)
+add_test(hncp_crypto test_hncp_crypto)
+add_dependencies(check test_hncp_crypto)
 
 # Packaging rules
 set(CPACK_PACKAGE_VERSION "1")
