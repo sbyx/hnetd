@@ -13,14 +13,18 @@ proto_hnet_init_config() {
     proto_config_add_string 'reqaddress'
     proto_config_add_string 'prefix'
     proto_config_add_string 'link_id'
+    proto_config_add_string 'iface_id'
+    proto_config_add_string 'min_v6_plen'
+    proto_config_add_string 'adhoc'
+    proto_config_add_string 'disable_pa'
 }
 
 proto_hnet_setup() {
     local interface="$1"
     local device="$2"
 
-    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id
-    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id
+    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id min_v6_plen adhoc disable_pa
+    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id min_v6_plen adhoc disable_pa
 
     logger -t proto-hnet "proto_hnet_setup $device/$interface"
 
@@ -39,12 +43,20 @@ proto_hnet_setup() {
     proto_add_data
     [ "$guest" = "1" ] && json_add_boolean guest 1
     [ "$accept_cerid" = "1" ] && json_add_boolean accept_cerid 1
+    [ "$adhoc" = "1" ] && json_add_boolean adhoc 1
+    [ "$disable_pa" = "1" ] && json_add_boolean disable_pa 1
     json_add_array prefix
     for p in $prefix; do
     	json_add_string "" "$p"
     done
     json_close_array
     json_add_string link_id "$link_id"
+    json_add_array iface_id
+    for p in $iface_id; do
+    	json_add_string "" "$p"
+    done
+    json_close_array
+    json_add_string min_v6_plen "$min_v6_plen"
     proto_close_data
 
     proto_send_update "$interface"
@@ -79,6 +91,8 @@ proto_hnet_setup() {
 	    [ -n "$dhcpv6_clientid" ] && json_add_string clientid "$dhcpv6_clientid"
 	    json_add_string iface_dslite "${interface}_dslite"
 	    json_add_string zone_dslite wan
+	    json_add_string iface_map "${interface}_map"
+	    json_add_string zone_map wan
 
 	    # Require PD, not only NA/SLAAC
 	    json_add_string forceprefix 1

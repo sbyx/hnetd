@@ -15,11 +15,14 @@
 #define PL_ROOT4   0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00, 0x00,0x00, 0xff,0xff, 0x0a
 
 #define PL_EUI64   0x00,0x00, 0x00,0x00,  0xff,0xff, 0xff,0xff
+#define PL_ADDR0   0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00
 
 #define PL_P1      { .plen = 56 , .prefix = { .s6_addr = {PL_ROOT, 0x01}} }
 #define PL_P1_0    { .plen = 60 , .prefix = { .s6_addr = {PL_ROOT, 0x01,0x00}} }
 #define PL_P1_01   { .plen = 64 , .prefix = { .s6_addr = {PL_ROOT, 0x01,0x01}} }
 #define PL_P1_01A  { .plen = 128, .prefix = { .s6_addr = {PL_ROOT, 0x01,0x01,  PL_EUI64}} }
+#define PL_P1_01A1 { .plen = 128, .prefix = { .s6_addr = {PL_ROOT, 0x01,0x01,  PL_ADDR0, 0x01}} }
+#define PL_P1_01A2 { .plen = 128, .prefix = { .s6_addr = {PL_ROOT, 0x01,0x01,  PL_ADDR0, 0x02}} }
 #define PL_P1_02   { .plen = 64 , .prefix = { .s6_addr = {PL_ROOT, 0x01,0x02}} }
 #define PL_P1_02A  { .plen = 128, .prefix = { .s6_addr = {PL_ROOT, 0x01,0x02,  PL_EUI64}} }
 #define PL_P1_04   { .plen = 64 , .prefix = { .s6_addr = {PL_ROOT, 0x01,0x04}} }

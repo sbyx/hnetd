@@ -89,6 +89,7 @@ int main(__unused int argc, char *argv[])
 	int c;
 	hncp_iface_user_s hiu;
 	hncp_glue hg;
+	hncp_sd_params_s sd_params = {};
 
 #ifdef WITH_IPC
 	if (strstr(argv[0], "hnet-call"))
@@ -121,26 +122,25 @@ int main(__unused int argc, char *argv[])
 	}
 
 	const char *routing_script = NULL;
-	const char *dnsmasq_script = NULL;
-	const char *dnsmasq_bonus_file = NULL;
-	const char *ohp_script = NULL;
-	const char *router_name = NULL;
 	const char *pa_store_file = NULL;
 	const char *pd_socket_path = "/var/run/hnetd_pd";
 
-	while ((c = getopt(argc, argv, "d:f:o:n:r:s:p:")) != -1) {
+	while ((c = getopt(argc, argv, "d:f:o:n:r:s:p:m:")) != -1) {
 		switch (c) {
 		case 'd':
-			dnsmasq_script = optarg;
+			sd_params.dnsmasq_script = optarg;
 			break;
 		case 'f':
-			dnsmasq_bonus_file = optarg;
+			sd_params.dnsmasq_bonus_file = optarg;
 			break;
 		case 'o':
-			ohp_script = optarg;
+			sd_params.ohp_script = optarg;
 			break;
 		case 'n':
-			router_name = optarg;
+			sd_params.router_name = optarg;
+			break;
+		case 'm':
+			sd_params.domain_name = optarg;
 			break;
 		case 'r':
 			routing_script = optarg;
@@ -164,21 +164,14 @@ int main(__unused int argc, char *argv[])
 		return 42;
 	}
 
-	if (!(hg=hncp_pa_glue_create(h, &pa.data))) {
+	if (!(hg = hncp_pa_glue_create(h, &pa.data))) {
 		L_ERR("Unable to connect hncp and pa");
 		return 17;
 	}
 
-	/* At some point should think of subset of these options is
-	 * meaningful; if not, should combine them to single option,
-	 * perhaps? */
-	if (dnsmasq_script && ohp_script && dnsmasq_bonus_file) {
-		if (!hncp_sd_create(h,
-							dnsmasq_script, dnsmasq_bonus_file,
-							ohp_script, router_name, NULL)) {
-			L_ERR("unable to initialize rd, exiting");
-			return 71;
-		}
+	if (!hncp_sd_create(h, &sd_params)) {
+		L_ERR("unable to initialize rd, exiting");
+		return 71;
 	}
 
 	if (routing_script)

@@ -1,3 +1,9 @@
+/*
+* Author: Pierre Pfister <pierre pfister@darou.fr>
+ *
+ * Copyright (c) 2014 Cisco Systems, Inc.
+*/
+
 #ifdef L_PREFIX
 #undef L_PREFIX
 #endif
@@ -8,6 +14,9 @@
 
 #include <stdio.h>
 #include <inttypes.h>
+
+struct btrie *__pad_avail_n0, *__pad_avail_n;
+btrie_plen_t __pad_avail_l0;
 
 /* We can decide what dp to ignore */
 #define PAD_DP_IGNORE_INCLUDED   //Makes sense to avoid prefix delegated by 7084
@@ -275,6 +284,19 @@ struct pa_edp *pa_edp_get(struct pa_data *data, const struct prefix *p,
 	return edp;
 }
 
+static int pa_pentry_init(struct pa_data *data, struct pa_pentry *pentry, uint8_t type, const struct prefix *p)
+{
+	pentry->type = type;
+	if(btrie_add(&data->pes, &pentry->be, (btrie_key_t *)&p->prefix, p->plen))
+		return -1;
+	return 0;
+}
+
+static void pa_pentry_term(struct pa_pentry *pentry)
+{
+	btrie_remove(&pentry->be);
+}
+
 struct pa_ap *__pa_ap_get(struct pa_data *data, const struct prefix *p, const struct pa_rid *rid)
 {
 	struct pa_ap *ap;
@@ -299,13 +321,19 @@ struct pa_ap *pa_ap_get(struct pa_data *data, const struct prefix *p,
 	ap->iface = NULL;
 	prefix_cpy(&ap->prefix, p);
 	PA_RIDCPY(&ap->rid, rid);
-	if(btrie_add(&data->aps, &ap->be, (btrie_key_t *)&p->prefix, p->plen)) {
-		L_ERR("Could not insert "PA_AP_L" in btrie", PA_AP_LA(ap));
-		free(ap);
-		return NULL;
-	}
+	if(btrie_add(&data->aps, &ap->be, (btrie_key_t *)&p->prefix, p->plen))
+		goto add;
+	if(pa_pentry_init(data, &ap->pe, PA_PENTRY_TYPE_AP, p))
+		goto pentry;
 	ap->__flags = PADF_AP_CREATED;
 	return ap;
+
+pentry:
+	btrie_remove(&ap->be);
+add:
+	L_ERR("Could not insert "PA_AP_L" in btrie", PA_AP_LA(ap));
+	free(ap);
+	return NULL;
 }
 
 void pa_ap_set_iface(struct pa_ap *ap, struct pa_iface *iface)
@@ -328,6 +356,7 @@ void pa_ap_destroy(struct pa_ap *ap)
 	L_DEBUG("Destroying "PA_AP_L, PA_AP_LA(ap));
 	pa_ap_set_iface(ap, NULL);
 	btrie_remove(&ap->be);
+	pa_pentry_term(&ap->pe);
 	free(ap);
 }
 
@@ -492,12 +521,19 @@ struct pa_cp *pa_cp_create(struct pa_data *data, const struct prefix *prefix, ui
 	cp->applied = false;
 	cp->authoritative = false;
 	cp->priority = PAD_PRIORITY_DEFAULT;
-	btrie_add(&data->cps, &cp->be, (btrie_key_t *)&cp->prefix.prefix, cp->prefix.plen);
+	if(btrie_add(&data->cps, &cp->be, (btrie_key_t *)&cp->prefix.prefix, cp->prefix.plen))
+		goto add;
+	if(pa_pentry_init(data, &cp->pe, PA_PENTRY_TYPE_CP, prefix))
+		goto pentry;
 	cp->apply_to.pending = false;
 	cp->apply_to.cb = _pa_cp_apply_to;
 	cp->dp = NULL;
 	cp->__flags = PADF_CP_CREATED;
 	return cp;
+pentry:
+	btrie_remove(&cp->be);
+add:
+	return NULL;
 }
 
 void pa_cpl_set_iface(struct pa_cpl *cpl, struct pa_iface *iface)
@@ -582,6 +618,7 @@ void pa_cp_destroy(struct pa_cp *cp)
 	if(cp->apply_to.pending)
 		uloop_timeout_cancel(&cp->apply_to);
 	btrie_remove(&cp->be);
+	pa_pentry_term(&cp->pe);
 	free(cp);
 }
 
@@ -773,12 +810,14 @@ struct pa_iface *pa_iface_get(struct pa_data *data, const char *ifname, bool goc
 	iface->designated = false;
 	iface->do_dhcp = false;
 	iface->internal = false;
+	iface->adhoc = false;
 	iface->ipv4_uplink = false;
 	list_add(&iface->le, &data->ifs);
 	iface->__flags = PADF_IF_CREATED;
 	iface->sp_count = 0;
 	iface->prand_ctr[0] = 0;
 	iface->prand_ctr[1] = 0;
+	iface->custom_plen = NULL;
 	L_INFO("Created "PA_IF_L, PA_IF_LA(iface));
 	return iface;
 }
@@ -791,6 +830,11 @@ void pa_iface_set_internal(struct pa_iface *iface, bool internal)
 void pa_iface_set_dodhcp(struct pa_iface *iface, bool dodhcp)
 {
 	PA_SET_SCALAR(iface->do_dhcp, dodhcp, iface->__flags, PADF_IF_DODHCP);
+}
+
+void pa_iface_set_adhoc(struct pa_iface *iface, bool adhoc)
+{
+	PA_SET_SCALAR(iface->adhoc, adhoc, iface->__flags, PADF_IF_ADHOC);
 }
 
 void pa_iface_destroy(struct pa_data *data, struct pa_iface *iface)
@@ -909,6 +953,7 @@ void pa_data_init(struct pa_data *data, const struct pa_data_conf *conf)
 	else
 		pa_data_conf_defaults(&data->conf);
 
+	btrie_init(&data->pes);
 	btrie_init(&data->aps);
 	INIT_LIST_HEAD(&data->ifs);
 	btrie_init(&data->eaas);

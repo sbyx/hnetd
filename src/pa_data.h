@@ -1,7 +1,8 @@
 /*
- * pa_data.h
+ * Author: Pierre Pfister <pierre pfister@darou.fr>
  *
- * Author: Pierre Pfister
+ * Copyright (c) 2014 Cisco Systems, Inc.
+ *
  *
  * Prefix assignment database.
  *
@@ -66,6 +67,8 @@ struct pa_rid {
 		(rid)->id[12], (rid)->id[13], (rid)->id[15], (rid)->id[15]
 };
 
+struct pa_dp;
+
 /* Interface */
 struct pa_iface {
 	struct list_head le;   /* Linked in pa_data's ifaces list */
@@ -73,6 +76,7 @@ struct pa_iface {
 
 	bool internal;         /* Whether the iface is internal */
 	bool do_dhcp;          /* Whether router should do dhcp on that iface. */
+	bool adhoc;            /* Whether the link is adhoc */
 
 	struct btrie aps;      /* assigned prefixes on that iface */
 	struct btrie cpls;     /* chosen prefixes on that iface */
@@ -87,10 +91,18 @@ struct pa_iface {
 
 	uint32_t prand_ctr[2];  /* Pseudo random counters used for prefix and address generation */
 
+	/* Custom prefix length selection. Default is NULL.
+	 * If not null, it will be used instead of Prefix Assignment default.
+	 * In case of scarcity, a smaller prefix length (or invalid value like 255) should
+	 * be returned. */
+	uint8_t (*custom_plen)(struct pa_iface *, struct pa_dp *dp, void *priv, bool scarcity);
+	void *custom_plen_priv;
+
 #define PADF_IF_CREATED  PADF_ALL_CREATED
 #define PADF_IF_TODELETE PADF_ALL_TODELETE
 #define PADF_IF_INTERNAL 0x0100
 #define PADF_IF_DODHCP   0x0200
+#define PADF_IF_ADHOC    0x0400
 	uint32_t __flags;
 
 #define PA_IFNAME_L  "%s"
@@ -158,8 +170,20 @@ struct pa_ldp {
 	} excluded;
 };
 
+/* Element that is put in the global prefix tree
+ * in order to allow fast available prefix space analysis.
+ * It may replace the individual tree at some point.
+ * For now, we deal with both individual and shared trees. */
+struct pa_pentry {
+	struct btrie_element be;
+	uint8_t type;
+#define PA_PENTRY_TYPE_AP 0x01
+#define PA_PENTRY_TYPE_CP 0x02
+};
+
 struct pa_ap {
-	struct btrie_element be;   /* Put in pa_data's ap tree */
+	struct btrie_element be;  /* Put in pa_data's ap tree */
+	struct pa_pentry pe;      /* Prefix entry */
 	struct prefix prefix;	  /* The assigned prefix */
 	struct pa_rid rid;        /* Sender's router id */
 
@@ -190,6 +214,7 @@ typedef void (*cp_destructor)(struct pa_data *, struct pa_cp *, void *owner);
  * A chosen prefix MUST always be part of an existing delegated prefix. */
 struct pa_cp {
 	struct btrie_element be;      /* Put in pa_data's cp list */
+	struct pa_pentry pe;      /* Prefix entry */
 	struct prefix prefix;	  /* The assigned prefix */
 
 	bool advertised;          /* Whether it must be advertised */
@@ -361,6 +386,7 @@ struct pa_data {
 	struct pa_ipv4   ipv4;  /* IPv4 global connectivity */
 	struct list_head ifs;   /* Ifaces */
 	struct btrie dps;       /* Delegated prefixes */
+	struct btrie pes;       /* Prefix entries (both aps and cps) */
 	struct btrie aps;       /* Assigned prefixes */
 	struct btrie cps;       /* Chosen prefixes */
 	struct btrie eaas;      /* Externally Address assignments */
@@ -406,6 +432,7 @@ void pa_data_unsubscribe(struct pa_data_user *);
 #define pa_for_each_iface(pa_iface, pa_data) list_for_each_entry(pa_iface, &(pa_data)->ifs, le)
 struct pa_iface *pa_iface_get(struct pa_data *, const char *ifname, bool goc);
 void pa_iface_set_internal(struct pa_iface *, bool internal);
+void pa_iface_set_adhoc(struct pa_iface *iface, bool adhoc);
 void pa_iface_set_dodhcp(struct pa_iface *, bool dodhcp);
 #define pa_iface_todelete(iface) (iface)->__flags |= PADF_IF_TODELETE
 void pa_iface_notify(struct pa_data *, struct pa_iface *);
@@ -429,6 +456,25 @@ void pa_ldp_set_iface(struct pa_ldp *, struct pa_iface *);
 
 struct pa_edp *pa_edp_get(struct pa_data *, const struct prefix *, const struct pa_rid *rid, bool goc);
 
+extern struct btrie *__pad_avail_n0, *__pad_avail_n;
+extern btrie_plen_t __pad_avail_l0;
+#define pa_for_each_available_prefix(data, container, p) \
+		btrie_for_each_available(&(data)->pes, __pad_avail_n, (btrie_key_t *)&(p)->prefix, &(p)->plen, \
+				(btrie_key_t *)&(container)->prefix, (container)->plen)
+
+#define pa_for_each_available_prefix_first(data, first, protected_len, p) \
+		btrie_for_each_available_loop_stop(&(data)->pes, __pad_avail_n, __pad_avail_n0, __pad_avail_l0, (btrie_key_t *)&(p)->prefix, &(p)->plen, \
+				(btrie_key_t *)&(first)->prefix, protected_len, (first)->plen)
+
+#define pa_for_each_available_address_first(data, first, container_len, p) \
+		btrie_for_each_available_loop_stop(&(data)->eaas, __pad_avail_n, __pad_avail_n0, __pad_avail_l0, (btrie_key_t *)&(p)->prefix, &(p)->plen, \
+						(btrie_key_t *)(first), container_len, 128)
+
+#define pa_for_each_pentry_updown(pe, data, p) btrie_for_each_updown_entry(pe, &(data)->pes, (btrie_key_t *)&(p)->prefix, (p)->plen, be)
+#define pa_pentry_open(pentry, ap, cp) do { \
+	if((pentry)->type == PA_PENTRY_TYPE_AP) { ap = container_of(pentry, struct pa_ap, pe); cp = NULL; } \
+	else { cp = container_of(pentry, struct pa_cp, pe); ap = NULL; } }while(0)
+
 #define pa_for_each_ap(pa_ap, pa_data) btrie_for_each_down_entry(pa_ap, &(pa_data)->aps, NULL, 0, be)
 #define pa_for_each_ap_updown(ap, data, p) btrie_for_each_updown_entry(ap, &(data)->aps, (btrie_key_t *)&(p)->prefix, (p)->plen, be)
 #define pa_for_each_ap_in_iface(pa_ap, pa_iface) btrie_for_each_down_entry(pa_ap, &(pa_iface)->aps, NULL, 0, if_be)
@@ -449,6 +495,7 @@ void pa_ap_notify(struct pa_data *data, struct pa_ap *ap);
 #define pa_for_each_cp_updown_safe(pa_cp, cp2, pa_data, p) btrie_for_each_updown_entry_safe(pa_cp, cp2, &(pa_data)->cps, (btrie_key_t *)&(p)->prefix, (p)->plen, be)
 #define pa_for_each_cp_safe(pa_cp, cp2, pa_data) btrie_for_each_down_entry_safe(pa_cp, cp2, &(pa_data)->cps, NULL, 0, be)
 #define pa_for_each_cpl_in_iface(pa_cpl, pa_iface) btrie_for_each_down_entry(pa_cpl, &(pa_iface)->cpls, NULL, 0, if_be)
+#define pa_for_each_cpl_in_iface_safe(pa_cpl, cpl2, pa_iface) btrie_for_each_down_entry_safe(pa_cpl, cpl2, &(pa_iface)->cpls, NULL, 0, if_be)
 #define pa_for_each_cpl_in_iface_down(pa_cpl, pa_iface, p) btrie_for_each_down_entry(pa_cpl, &(pa_iface)->cpls, (btrie_key_t *)&(p)->prefix, (p)->plen, if_be)
 #define pa_for_each_cp_in_dp(pa_cp, pa_dp) btrie_for_each_down_entry(pa_cp, &(pa_dp)->cps, NULL, 0, dp_be)
 #define pa_for_each_cp_in_dp_safe(pa_cp, cp2, pa_dp) btrie_for_each_down_entry_safe(pa_cp, cp2, &(pa_dp)->cps, NULL, 0, dp_be)

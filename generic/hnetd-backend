@@ -70,6 +70,7 @@ startdhcp)
 	set dhcp.$2.pd_manager=$3
 	commit dhcp
 EOF
+	pidof odhcpd || odhcpd &
 	killall -SIGHUP odhcpd
 	;;
 	

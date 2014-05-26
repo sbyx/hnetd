@@ -91,11 +91,11 @@ struct iface_route {
 	unsigned metric;
 };
 
-
-enum iface_flags {
-	IFACE_FLAG_ACCEPT_CERID,
-	IFACE_FLAG_GUEST,
-};
+typedef uint8_t iface_flags;
+#define IFACE_FLAG_ACCEPT_CERID  0x01
+#define IFACE_FLAG_GUEST         0x02
+#define IFACE_FLAG_ADHOC         0x04
+#define IFACE_FLAG_DISABLE_PA    0x08
 
 struct iface {
 	struct list_head head;
@@ -112,17 +112,21 @@ struct iface {
 	bool designatedv4;
 
 	// Flags
-	enum iface_flags flags;
+	iface_flags flags;
 
 	// LL-address
 	struct in6_addr eui64_addr;
 	struct in6_addr cer;
+
+	// Config
+	uint8_t min_v6_plen; //Min plen to be used when making new assignment
 
 	// Prefix storage
 	struct vlist_tree assigned;
 	struct vlist_tree delegated;
 	struct vlist_tree routes;
 	struct list_head chosen;
+	struct list_head addrconf;
 	struct pa_link_id_rule *id;
 
 	// Other data
@@ -158,7 +162,7 @@ int iface_init(struct pa *pa, const char *pd_socket);
 struct iface* iface_get(const char *ifname);
 
 // Create / get an interface (external or internal), handle set = managed
-struct iface* iface_create(const char *ifname, const char *handle, enum iface_flags flags);
+struct iface* iface_create(const char *ifname, const char *handle, iface_flags flags);
 
 // Remove a known interface
 void iface_remove(struct iface *iface);
@@ -197,6 +201,11 @@ void iface_add_chosen_prefix(struct iface *c, const struct prefix *p);
 
 // Set link ID
 void iface_set_link_id(struct iface *c, uint32_t linkid, uint8_t mask);
+
+
+// Add hnet address
+void iface_add_addrconf(struct iface *c, struct in6_addr *addr,
+		uint8_t mask, struct prefix *filter);
 
 
 // Flush uplinks

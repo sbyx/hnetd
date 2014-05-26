@@ -1,7 +1,7 @@
 /*
- * Author: Pierre Pfister
+ * Author: Pierre Pfister <pierre pfister@darou.fr>
  *
- * Prefixes manipulation utilities.
+ * Copyright (c) 2014 Cisco Systems, Inc.
  *
  */
 
@@ -31,6 +31,35 @@ struct prefix ipv6_ll_prefix = {
 struct prefix ipv6_global_prefix = {
 		.prefix = { .s6_addr = { 0x20 }},
 		.plen = 3 };
+
+static const int8_t hexvals[] = {
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -2, -2, -1, -1, -2, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+     0,  1,  2,  3,  4,  5,  6,  7,  8,  9, -1, -1, -1, -1, -1, -1,
+    -1, 10, 11, 12, 13, 14, 15, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, 10, 11, 12, 13, 14, 15, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+};
+
+ssize_t unhexlify(uint8_t *dst, size_t len, const char *src)
+{
+	size_t c;
+	for (c = 0; c < len && src[0] && src[1]; ++c) {
+		int8_t x = (int8_t)*src++;
+		int8_t y = (int8_t)*src++;
+		if (x < 0 || (x = hexvals[x]) < 0
+				|| y < 0 || (y = hexvals[y]) < 0)
+			return -1;
+		dst[c] = x << 4 | y;
+		while (((int8_t)*src) < 0 ||
+				(*src && hexvals[(uint8_t)*src] < 0))
+			src++;
+	}
+
+	return c;
+}
 
 static int bmemcmp(const void *m1, const void *m2, size_t bitlen)
 {

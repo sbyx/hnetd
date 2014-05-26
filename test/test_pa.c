@@ -33,9 +33,9 @@ static struct pa_test_iface {
 	struct iface_user *user;
 	struct iface iface;
 } iface = { .user = NULL,
-		.iface = { .eui64_addr = {
-				.s6_addr = { 0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00, PL_EUI64 }
-		} } };
+		.iface = { .eui64_addr = {.s6_addr = { 0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00, PL_EUI64 }},
+				.min_v6_plen = 0,
+} };
 
 #define iface_register_user   pa_test_iface_register_user
 #define iface_unregister_user pa_test_iface_unregister_user
@@ -79,6 +79,8 @@ static struct prefix p2_1 = PL_P2_01;
 
 static struct prefix p1_excluded = PL_P1_0;
 static struct prefix p1_1_addr = PL_P1_01A;
+static struct prefix p1_1_addr1 = PL_P1_01A1;
+static struct prefix p1_1_addr2 = PL_P1_01A2;
 static struct prefix p1_2_addr = PL_P1_02A;
 static struct prefix pv4_1 = PL_PV4_1;
 static struct prefix pv4_1_1 = PL_PV4_1_1;
@@ -213,7 +215,7 @@ void test_pa_ipv4()
 		sput_fail_unless(!prefix_cmp(&pv4_1, &cp->prefix), "Correct cp prefix");
 	}
 
-	fr_md5_push_prefix(&pv4_1_1);
+	fr_md5_push_prefix(&pv4_1); //The network address should not be used and pv4_1_1 should be used instead
 	sput_fail_unless(to_getfirst() == &pa.core.aaa_to.t && !to_run(1), "Run aaa");
 	sput_fail_unless(_pa_cpl(cp)->laa, "Created laa");
 	if(_pa_cpl(cp)->laa)
@@ -507,8 +509,8 @@ void test_pa_static()
 	test_pa_check_cp(cp, &p1_1, false, PAD_PRIORITY_DEFAULT, false);
 
 	pa_core_static_prefix_init(&sprule, NULL, &p1_1, true);
-	sprule.rule.authoritative = true;
-	sprule.rule.priority = PA_PRIORITY_DEFAULT;
+	sprule.rule.result.authoritative = true;
+	sprule.rule.result.priority = PA_PRIORITY_DEFAULT;
 	pa_core_rule_add(&pa.core, &sprule.rule);
 	to_run(1);
 
@@ -543,8 +545,8 @@ void test_pa_static()
 
 	//Soft mod should not change the prefix
 	pa_core_static_prefix_init(&sprule, PL_IFNAME1, &p1_1, false);
-	sprule.rule.authoritative = true;
-	sprule.rule.priority = PA_PRIORITY_DEFAULT;
+	sprule.rule.result.authoritative = true;
+	sprule.rule.result.priority = PA_PRIORITY_DEFAULT;
 	pa_core_rule_add(&pa.core, &sprule.rule);
 	to_run(1);
 
@@ -555,8 +557,8 @@ void test_pa_static()
 
 	//Reducing the priority should cause the rule to not be applied
 	pa_core_static_prefix_init(&sprule, PL_IFNAME1, &p1_1, false);
-	sprule.rule.authoritative = false;
-	sprule.rule.priority = PA_PRIORITY_MIN;
+	sprule.rule.result.authoritative = false;
+	sprule.rule.result.priority = PA_PRIORITY_MIN;
 	pa_core_rule_add(&pa.core, &sprule.rule);
 	to_run(4);
 
@@ -620,8 +622,8 @@ void test_pa_link_id()
 	test_pa_check_cp(cp, &p1_1, false, PA_PRIORITY_DEFAULT, false);
 
 	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 9, true); //To big to work
-	lrule.rule.authoritative = true;
-	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	lrule.rule.result.authoritative = true;
+	lrule.rule.result.priority = PA_PRIORITY_DEFAULT;
 	pa_core_rule_add(&pa.core, &lrule.rule);
 	to_run(5);
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
@@ -629,8 +631,8 @@ void test_pa_link_id()
 	pa_core_rule_del(&pa.core, &lrule.rule);
 
 	pa_core_link_id_init(&lrule, PL_IFNAME2, 2, 4, true); //Bad interface
-	lrule.rule.authoritative = true;
-	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	lrule.rule.result.authoritative = true;
+	lrule.rule.result.priority = PA_PRIORITY_DEFAULT;
 	pa_core_rule_add(&pa.core, &lrule.rule);
 	to_run(5);
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
@@ -638,8 +640,8 @@ void test_pa_link_id()
 	pa_core_rule_del(&pa.core, &lrule.rule);
 
 	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 4, false); //Shouldn't do anything cause not hard
-	lrule.rule.authoritative = true;
-	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	lrule.rule.result.authoritative = true;
+	lrule.rule.result.priority = PA_PRIORITY_DEFAULT;
 	pa_core_rule_add(&pa.core, &lrule.rule);
 	to_run(5);
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
@@ -647,8 +649,8 @@ void test_pa_link_id()
 	pa_core_rule_del(&pa.core, &lrule.rule);
 
 	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 4, true); //Priority is not high enough
-	lrule.rule.authoritative = false;
-	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	lrule.rule.result.authoritative = false;
+	lrule.rule.result.priority = PA_PRIORITY_DEFAULT;
 	pa_core_rule_add(&pa.core, &lrule.rule);
 	to_run(5);
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
@@ -656,8 +658,8 @@ void test_pa_link_id()
 	pa_core_rule_del(&pa.core, &lrule.rule);
 
 	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 8, true); //Priority is high enough
-	lrule.rule.authoritative = false;
-	lrule.rule.priority = PA_PRIORITY_DEFAULT + 1;
+	lrule.rule.result.authoritative = false;
+	lrule.rule.result.priority = PA_PRIORITY_DEFAULT + 1;
 	pa_core_rule_add(&pa.core, &lrule.rule);
 	to_run(5);
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
@@ -675,8 +677,8 @@ void test_pa_link_id()
 	test_pa_check_cp(cp, &p1_1, false, PA_PRIORITY_DEFAULT + 1, true); //Adv cause designated
 
 	pa_core_link_id_init(&lrule, PL_IFNAME1, 2, 8, true); //Priority is high enough
-	lrule.rule.authoritative = true;
-	lrule.rule.priority = PA_PRIORITY_DEFAULT;
+	lrule.rule.result.authoritative = true;
+	lrule.rule.result.priority = PA_PRIORITY_DEFAULT;
 	pa_core_rule_add(&pa.core, &lrule.rule);
 	to_run(5);
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
@@ -687,8 +689,8 @@ void test_pa_link_id()
 	pa_ap_notify(&pa.data, ap);
 
 	pa_core_link_id_init(&lrule, PL_IFNAME1, 1, 8, false); //Priority is high enough
-	lrule.rule.authoritative = false;
-	lrule.rule.priority = PA_PRIORITY_DEFAULT + 2;
+	lrule.rule.result.authoritative = false;
+	lrule.rule.result.priority = PA_PRIORITY_DEFAULT + 2;
 	pa_core_rule_add(&pa.core, &lrule.rule);
 	to_run(1);
 	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
@@ -699,6 +701,128 @@ void test_pa_link_id()
 	pa_stop(&pa);
 	pa_term(&pa);
 	sput_fail_unless(list_empty(&timeouts), "No more timeout");
+}
+
+void test_pa_iface_addr() {
+	struct pa_cpl *cpl;
+	struct pa_iface_addr a;
+	struct in6_addr addr;
+	struct pa_eaa *eaa;
+
+	//INIT
+	uloop_init();
+	pa_init(&pa, NULL);
+	pa.local.conf.use_ipv4 = false;
+	pa.local.conf.use_ula = false;
+	pa_flood_set_flooddelays(&pa.data, PA_TEST_FLOOD, PA_TEST_FLOOD_LL);
+	pa_flood_set_rid(&pa.data, &rid);
+	pa_flood_notify(&pa.data);
+	pa_start(&pa);
+
+	//Add interface and prefix
+	iface.user->cb_intiface(iface.user, PL_IFNAME1, true);
+	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, now_time + 100000 , now_time + 50000, NULL, 0);
+	fr_md5_push_prefix(&p1_1);
+	to_run(6); //Do everything
+
+	cpl = _pa_cpl(btrie_first_down_entry(&cpl->cp, &pa.data.cps, NULL, 0, be));
+	sput_fail_unless(cpl, "Cpl exists");
+	sput_fail_unless(!prefix_cmp(&cpl->cp.prefix, &p1_1), "Correct prefix");
+	sput_fail_unless(cpl->laa, "Laa exists");
+	memcpy(&addr, &iface.iface.eui64_addr, 16);
+	memcpy(&addr, &p1_1.prefix, 8);
+	sput_fail_unless(!memcmp(&addr, &cpl->laa->aa.address, 16), "Correct address");
+
+	pa_core_iface_addr_init(&a, PL_IFNAME1, &p1_1_addr1.prefix, 64, NULL);
+	pa_core_iface_addr_add(&pa.core, &a);
+	to_run(4); //Proposed address is used
+	sput_fail_unless(!memcmp(&p1_1_addr1.prefix, &cpl->laa->aa.address, 16), "Correct address");
+	pa_core_iface_addr_del(&pa.core, &a);
+	to_run(4); //The address remains
+	sput_fail_unless(!memcmp(&p1_1_addr1.prefix, &cpl->laa->aa.address, 16), "Correct address");
+
+	pa_core_iface_addr_init(&a, PL_IFNAME2, &p1_1_addr2.prefix, 64, NULL);
+	pa_core_iface_addr_add(&pa.core, &a);
+	to_run(4); //Bad ifname
+	sput_fail_unless(!memcmp(&p1_1_addr1.prefix, &cpl->laa->aa.address, 16), "Correct address");
+	pa_core_iface_addr_del(&pa.core, &a);
+
+	pa_core_iface_addr_init(&a, NULL, &p1_1_addr2.prefix, 64, NULL);
+	pa_core_iface_addr_add(&pa.core, &a);
+	to_run(4); //Applyable to any interface
+	sput_fail_unless(!memcmp(&p1_1_addr2.prefix, &cpl->laa->aa.address, 16), "Correct address");
+	pa_core_iface_addr_del(&pa.core, &a);
+
+	pa_core_iface_addr_init(&a, NULL, &p1_1_addr1.prefix, 63, NULL);
+	pa_core_iface_addr_add(&pa.core, &a);
+	to_run(4); //Mask too small
+	sput_fail_unless(!memcmp(&p1_1_addr2.prefix, &cpl->laa->aa.address, 16), "Correct address");
+	pa_core_iface_addr_del(&pa.core, &a);
+
+	pa_core_iface_addr_init(&a, PL_IFNAME1, &p1_1_addr1.prefix, 64, &p2);
+	pa_core_iface_addr_add(&pa.core, &a);
+	to_run(4); //Invalid filter
+	sput_fail_unless(!memcmp(&p1_1_addr2.prefix, &cpl->laa->aa.address, 16), "Correct address");
+	pa_core_iface_addr_del(&pa.core, &a);
+
+	pa_core_iface_addr_init(&a, PL_IFNAME1, &p1_1_addr1.prefix, 64, &p1);
+	pa_core_iface_addr_add(&pa.core, &a);
+	to_run(4); //Correct filter
+	sput_fail_unless(!memcmp(&p1_1_addr1.prefix, &cpl->laa->aa.address, 16), "Correct address");
+	pa_core_iface_addr_del(&pa.core, &a);
+
+	//Add a eaa
+	eaa = pa_eaa_get(&pa.data, &p1_1_addr1.prefix, &rid_higher, true);
+	pa_eaa_set_iface(eaa, pa_iface_get(&pa.data, PL_IFNAME1, true));
+	pa_aa_notify(&pa.data, &eaa->aa);
+	to_run(4); //Go use storage address
+	sput_fail_unless(!memcmp(&p1_1_addr2.prefix, &cpl->laa->aa.address, 16), "Correct address");
+
+	pa_core_iface_addr_init(&a, PL_IFNAME1, &p1_1_addr1.prefix, 64, NULL);
+	pa_core_iface_addr_add(&pa.core, &a);
+	to_run(4); //Cannot use this one
+	sput_fail_unless(!memcmp(&p1_1_addr2.prefix, &cpl->laa->aa.address, 16), "Correct address");
+
+	pa_aa_todelete(&eaa->aa);
+	pa_aa_notify(&pa.data, &eaa->aa);
+	to_run(4);
+	sput_fail_unless(!memcmp(&p1_1_addr1.prefix, &cpl->laa->aa.address, 16), "Correct address");
+	pa_core_iface_addr_del(&pa.core, &a);
+
+	//TERM
+	pa_stop(&pa);
+	pa_term(&pa);
+}
+
+void test_pa_minv6len()
+{
+	struct pa_cpl *cpl;
+
+	//INIT
+	uloop_init();
+	pa_init(&pa, NULL);
+	pa.local.conf.use_ipv4 = false;
+	pa.local.conf.use_ula = false;
+	pa_flood_set_flooddelays(&pa.data, PA_TEST_FLOOD, PA_TEST_FLOOD_LL);
+	pa_flood_set_rid(&pa.data, &rid);
+	pa_flood_notify(&pa.data);
+	pa_start(&pa);
+
+	iface.iface.min_v6_plen = 92;
+	iface.user->cb_intiface(iface.user, PL_IFNAME1, true);
+	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, now_time + 100000 , now_time + 50000, NULL, 0);
+	fr_md5_push_prefix(&p1_1);
+	fr_md5_push_prefix(&p1_1_addr); //Because 92 len require a random address
+	to_run(6); //Do everything
+
+	cpl = _pa_cpl(btrie_first_down_entry(&cpl->cp, &pa.data.cps, NULL, 0, be));
+	sput_fail_unless(cpl, "Cpl exists");
+	sput_fail_unless(cpl->cp.prefix.plen == 92, "Custom prefix length");
+
+	//TERM
+	pa_stop(&pa);
+	pa_term(&pa);
+	iface.iface.min_v6_plen = 0;
 }
 
 int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
@@ -713,6 +837,8 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 	sput_run_test(test_pa_network);
 	sput_run_test(test_pa_static);
 	sput_run_test(test_pa_link_id);
+	sput_run_test(test_pa_iface_addr);
+	sput_run_test(test_pa_minv6len);
 	sput_leave_suite(); /* optional */
 	sput_finish_testing();
 	return sput_get_return_value();

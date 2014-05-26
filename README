@@ -91,11 +91,15 @@ Afterwards run hnetd with appropriate parameters.
 
 Once both services are running, you can use hnet-ifup and hnet-ifdown:
 
-hnet-ifup [-e] [-g] [-p prefix] [-l id/idmask] <interfacename>
+hnet-ifup [-e] [-g] [-a] [-d] [-p prefix] [-l id/idmask] [-i id/idmask [filter-prefix]] [-m min_v6_plen] <interfacename>
 <interfacename> is the name of the network interface to add (e.g. eth0).
 -e is an optional parameter indicating the interface is fixed-external.
 -g is an optional parameter indicating it is a guest interface.
 -p is an optional parameter indicating one or more static prefixes.
 -l is an optional parameter setting the link-id and id-mask.
+-i is an optional parameter indicating one or more iface ids.
+-m is an optional parameter setting the minimal prefix length used when generating an IPv6 assignment.
+-d is an optional parameter indicating prefix assignment must be disabled.
+-a is an optional parameter indicating the interface is adhoc.
 
 hnet-ifdown <interfacename> removes an interface from hnet again.

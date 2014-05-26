@@ -32,6 +32,7 @@ const struct prefix *pa_prefix_getcollision(__unused struct pa *pa, __unused con
 void pa_core_rule_init(__unused struct pa_rule *rule, __unused const char *name, __unused uint32_t rule_priority, __unused rule_try try) {};
 void pa_core_rule_add(__unused struct pa_core *core, __unused struct pa_rule *rule) {};
 void pa_core_rule_del(__unused struct pa_core *core, __unused struct pa_rule *rule) {};
+uint8_t pa_core_default_plen(__unused struct pa_dp *dp, __unused bool scarcity) {return 200;};
 
 static void test_pa_file_reset() {
 	FILE *f;

@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Tue Apr 29 22:12:36 2014 mstenber
- * Edit time:     85 min
+ * Last modified: Thu May 22 12:58:56 2014 mstenber
+ * Edit time:     86 min
  *
  */
 
@@ -246,11 +246,14 @@ void test_hncp_sd(void)
   s.disable_sd = true;
   n3 = net_sim_find_hncp(&s, "n3");
   node3 = container_of(n3, net_node_s, n);
-  node3->sd = hncp_sd_create(&node3->n,
-                             "/bin/yes",
-                             "/tmp/n3.conf",
-                             "/bin/no",
-                             "xorbo", "domain.");
+  static hncp_sd_params_s sd_params = {
+    .dnsmasq_script = "/bin/yes",
+    .dnsmasq_bonus_file = "/tmp/n3.conf",
+    .ohp_script = "/bin/no",
+    .router_name = "xorbo",
+    .domain_name = "domain."
+  };
+  node3->sd = hncp_sd_create(&node3->n, &sd_params);
   s.disable_sd = false;
   l3 = net_sim_hncp_find_link_by_name(n3, "eth0");
   net_sim_set_connected(l2, l3, true);

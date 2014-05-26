@@ -1,6 +1,10 @@
 /*
+ * Author: Pierre Pfister <pierre pfister@darou.fr>
+ *
+ * Copyright (c) 2014 Cisco Systems, Inc.
+ *
+ *
  * Optimized binary trie
- * Author: Pierre Pfister <pierre@darou.fr>
  *
  * That file provides an optimized binary trie structure.
  * Stored elements (given as 'struct list_head') are associated to keys.
@@ -110,7 +114,7 @@ struct btrie_element *__btrie_skip_down(struct btrie_element *prev, btrie_plen_t
 /*********************************************/
 
 /* Iterates over all elements associated with a given key */
-struct btrie_element *btrie_first(struct btrie *root, btrie_key_t *key, btrie_plen_t len);
+struct btrie_element *btrie_first(struct btrie *root, const btrie_key_t *key, btrie_plen_t len);
 struct btrie_element *btrie_next(struct btrie_element *prev);
 #define btrie_first_entry(e, root, key, len ,field) __bt_first_entry(e, root, key, len, btrie_first, field)
 
@@ -124,7 +128,7 @@ struct btrie_element *btrie_next(struct btrie_element *prev);
 			__bt_fe_es(entry, entry2, root, key, len, btrie_first, __bt_next, field)
 
 /* Iterates over all elements which key is equal to or begin with a given key (Elements down the tree) */
-struct btrie_element *btrie_first_down(struct btrie *root, btrie_key_t *key, btrie_plen_t len);
+struct btrie_element *btrie_first_down(struct btrie *root, const btrie_key_t *key, btrie_plen_t len);
 struct btrie_element *btrie_next_down(struct btrie_element *prev, btrie_plen_t len);
 #define btrie_first_down_entry(e, root, key, len ,field) __bt_first_entry(e, root, key, len, btrie_first_down, field)
 
@@ -150,7 +154,7 @@ struct btrie_element *btrie_next_down(struct btrie_element *prev, btrie_plen_t l
 	entry2 = __bt_next_e(__bt_e(__btrie_skip_down(&(entry)->field, len), entry, field), field, __bt_next_down, key, len)
 
 /* Iterates over all elements which key is equal to or contains a given key (Elements up the tree) */
-struct btrie_element *btrie_first_up(struct btrie *root, btrie_key_t *key, btrie_plen_t len);
+struct btrie_element *btrie_first_up(struct btrie *root, const btrie_key_t *key, btrie_plen_t len);
 struct btrie_element *btrie_next_up(struct btrie_element *prev);
 #define btrie_first_up_entry(e, root, key, len ,field) __bt_first_entry(e, root, key, len, btrie_first_up, field)
 
@@ -165,8 +169,8 @@ struct btrie_element *btrie_next_up(struct btrie_element *prev);
 
 /* Iterates over all elements which key contains or is contained in a given key (Do both up and down)
  * Up elements are visited first, from shortest prefix to longest. Down elements are visited afterward. */
-struct btrie_element *btrie_first_updown(struct btrie *root, btrie_key_t *key, btrie_plen_t len);
-struct btrie_element *btrie_next_updown(struct btrie_element *prev, btrie_key_t *key, btrie_plen_t len);
+struct btrie_element *btrie_first_updown(struct btrie *root, const btrie_key_t *key, btrie_plen_t len);
+struct btrie_element *btrie_next_updown(struct btrie_element *prev, const btrie_key_t *key, btrie_plen_t len);
 #define btrie_first_updown_entry(e, root, key, len ,field) __bt_first_entry(e, root, key, len, btrie_first_updown, field)
 
 #define btrie_for_each_updown(el, root, key, len) 												\
@@ -177,6 +181,46 @@ struct btrie_element *btrie_next_updown(struct btrie_element *prev, btrie_key_t 
 			__bt_fe_e(entry, root, key, len, btrie_first_updown, btrie_next_updown, field)
 #define btrie_for_each_updown_entry_safe(entry, entry2, root, key, len, field) 					\
 			__bt_fe_es(entry, entry2, root, key, len, btrie_first_updown, btrie_next_updown, field)
+
+/* Iterates over all available keys contained in the prefix given by key and min_len.
+ * The key is updated at each step and contains the available key. */
+struct btrie *btrie_first_available(struct btrie *root, btrie_key_t *iter_key, btrie_plen_t *iter_len,
+		const btrie_key_t *contain_key, btrie_plen_t contain_len);
+struct btrie *btrie_next_available(struct btrie *prev, btrie_key_t *iter_key, btrie_plen_t *iter_len,
+		btrie_plen_t contain_len);
+
+/* Iterates over all available keys, using a particular key as starting point and looping indefinitly. */
+struct btrie *btrie_first_available_loop(struct btrie *root,
+		btrie_key_t *iter_key, btrie_plen_t *iter_len,
+		const btrie_key_t *contain_key, btrie_plen_t contain_len, btrie_plen_t first_len);
+struct btrie *btrie_next_available_loop(struct btrie *prev,
+		btrie_key_t *iter_key, btrie_plen_t *iter_len,
+		btrie_plen_t contain_len);
+
+#define btrie_for_each_available(root, node, iter_key, iter_len, contain_key, contain_len) \
+			for(node = btrie_first_available(root, iter_key, iter_len, contain_key, contain_len); node; \
+					node = btrie_next_available(node, iter_key, iter_len, contain_len))
+
+#define btrie_for_each_available_loop(root, node, iter_key, iter_len, contain_key, contain_len, first_len) \
+		for(node = btrie_first_available_loop(root, iter_key, iter_len, contain_key, contain_len, first_len); node; \
+							node = btrie_next_available_loop(node, iter_key, iter_len, contain_len))
+
+#define btrie_for_each_available_loop_stop(root, node, n0, l0, iter_key, iter_len, contain_key, contain_len, first_len) \
+		for(node = btrie_first_available_loop(root, iter_key, iter_len, contain_key, contain_len, first_len), n0 = NULL; \
+					(n0)?(node != n0 || *iter_len != l0):((n0 = node) && ((l0 = *iter_len) || 1)); \
+							node = btrie_next_available_loop(node, iter_key, iter_len, contain_len))
+
+/* Returns the amount of key space available in the given subtree.
+ * BTRIE_AVAILABLE_ALL is returned when the given prefix is available.
+ * BTRIE_AVAILABLE_ALL >> 1 if one half is available and the other half is not,
+ * BTRIE_AVAILABLE_ALL >> 1 + BTRIE_AVAILABLE_ALL >> 2 if one half plus one quarter are available, etc...
+ * Available prefixes of length > target_len or length >= 64 + len are ignored. */
+#define BTRIE_AVAILABLE_ALL 0x8000000000000000u
+uint64_t btrie_available_space(struct btrie *root, const btrie_key_t *key, btrie_plen_t len, btrie_plen_t target_len);
+
+/* Gives the number of keys of length target_len available and belonging in the given key. */
+#define btrie_available_prefixes_count(root, key, len, target_len) \
+			(btrie_available_space(root, key, len, target_len) >> (63 - (target_len - len)))
 
 /***************Private**************/
 struct btrie {

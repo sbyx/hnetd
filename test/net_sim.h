@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu May  8 17:57:49 2014 mstenber
- * Edit time:     125 min
+ * Last modified: Thu May 22 12:56:40 2014 mstenber
+ * Edit time:     127 min
  *
  */
 
@@ -266,11 +266,16 @@ void net_sim_local_tlv_callback(hncp_subscriber sub,
       }
 }
 
-
 hncp net_sim_find_hncp(net_sim s, const char *name)
 {
   net_node n;
   bool r;
+  static hncp_sd_params_s sd_params = {
+    .dnsmasq_script = "/bin/yes",
+    .dnsmasq_bonus_file = "/tmp/dnsmasq.conf",
+    .ohp_script = "/bin/no"
+  };
+
 
   list_for_each_entry(n, &s->nodes, h)
     {
@@ -304,11 +309,7 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
 #ifndef DISABLE_HNCP_SD
   /* Add SD support */
   if (!s->disable_sd)
-    if (!(n->sd = hncp_sd_create(&n->n,
-                                 "/bin/yes",
-                                 "/tmp/dnsmasq.conf",
-                                 "/bin/no",
-                                 NULL, NULL)))
+    if (!(n->sd = hncp_sd_create(&n->n, &sd_params)))
       return NULL;
 #endif /* !DISABLE_HNCP_SD */
   n->debug_subscriber.local_tlv_change_callback = net_sim_local_tlv_callback;

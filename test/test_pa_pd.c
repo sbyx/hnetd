@@ -36,7 +36,8 @@ void pa_store_term(__unused struct pa_store *s) {}
 void iface_register_user(__unused struct iface_user *user) {}
 void iface_unregister_user(__unused struct iface_user *user) {}
 
-
+uint8_t pa_core_default_plen(__unused struct pa_dp *dp, __unused bool scarcity) {return 64;}
+struct iface* iface_get(__unused const char *ifname) {return NULL;}
 
 static struct pa pa;
 #define pd (&pa.pd)

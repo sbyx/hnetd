@@ -157,6 +157,15 @@ void padt_check_edp(struct pa_edp *edp, struct pa_rid *rid)
 	padt_check_other(!PA_RIDCMP(rid, &edp->rid), edp, rid);
 }
 
+void padt_check_btrie_key(struct btrie_element *e, struct prefix *p)
+{
+	struct prefix p2;
+	sput_fail_unless(p->plen == btrie_get_keylen(e), "Correct btrie plen");
+	p2.plen = p->plen;
+	btrie_get_key(e, (btrie_key_t *)&p2.prefix);
+	sput_fail_if(prefix_cmp(&p2, p), "Correct prefix");
+}
+
 void padt_check_ap(struct pa_ap *ap, struct prefix *p,
 		struct pa_rid *rid, bool authoritative,
 		uint8_t priority, struct pa_iface *iface)
@@ -166,6 +175,9 @@ void padt_check_ap(struct pa_ap *ap, struct prefix *p,
 	padt_check_scalar(ap, authoritative);
 	padt_check_scalar(ap, priority);
 	padt_check_scalar(ap, iface);
+	sput_fail_unless(ap->pe.type == PA_PENTRY_TYPE_AP, "Correct pentry type");
+	padt_check_btrie_key(&ap->be, p);
+	padt_check_btrie_key(&ap->pe.be, p);
 }
 
 void padt_check_cpl(struct pa_cpl *cpl, struct pa_iface *iface,
@@ -188,6 +200,9 @@ void padt_check_cp(struct pa_cp *cp, struct prefix *p,
 	padt_check_scalar(cp, priority);
 	padt_check_scalar(cp, dp);
 	padt_check_scalar(cp, pa_data);
+	sput_fail_unless(cp->pe.type == PA_PENTRY_TYPE_CP, "Correct pentry type");
+	padt_check_btrie_key(&cp->be, p);
+	padt_check_btrie_key(&cp->pe.be, p);
 }
 
 void padt_check_aa(struct pa_aa *aa, struct in6_addr *address,

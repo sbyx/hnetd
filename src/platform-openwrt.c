@@ -572,6 +572,11 @@ enum {
 	DATA_ATTR_GUEST,
 	DATA_ATTR_PREFIX,
 	DATA_ATTR_LINK_ID,
+	DATA_ATTR_IFACE_ID,
+	DATA_ATTR_MIN_V6_PLEN,
+	DATA_ATTR_ADHOC,
+	DATA_ATTR_DISABLE_PA,
+	DATA_ATTR_PASSTHRU,
 	DATA_ATTR_MAX
 };
 
@@ -598,6 +603,11 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_GUEST] = { .name = "guest", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_PREFIX] = { .name = "prefix", .type = BLOBMSG_TYPE_ARRAY },
 	[DATA_ATTR_LINK_ID] = { .name = "link_id", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_IFACE_ID] = { .name = "iface_id", .type = BLOBMSG_TYPE_ARRAY },
+	[DATA_ATTR_MIN_V6_PLEN] = { .name = "min_v6_plen", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_ADHOC] = { .name = "adhoc", .type = BLOBMSG_TYPE_BOOL },
+	[DATA_ATTR_DISABLE_PA] = { .name = "disable_pa", .type = BLOBMSG_TYPE_BOOL },
+	[DATA_ATTR_PASSTHRU] = { .name = "passthru", .type = BLOBMSG_TYPE_STRING },
 };
 
 
@@ -659,12 +669,7 @@ static void update_interface(struct iface *c,
 	}
 
 	const size_t dns_max = 4;
-	size_t dns_cnt = 0, dns4_cnt = 0;
-	struct {
-		uint16_t type;
-		uint16_t len;
-		struct in6_addr addr[dns_max];
-	} dns;
+	size_t dns4_cnt = 0;
 	struct __attribute__((packed)) {
 		uint8_t type;
 		uint8_t len;
@@ -672,22 +677,26 @@ static void update_interface(struct iface *c,
 	} dns4;
 
 	blobmsg_for_each_attr(k, tb[IFACE_ATTR_DNS], rem) {
-		if (dns_cnt >= dns_max || blobmsg_type(k) != BLOBMSG_TYPE_STRING ||
-				inet_pton(AF_INET6, blobmsg_data(k), &dns.addr[dns_cnt]) < 1) {
-			if (dns4_cnt >= dns_max ||
-					inet_pton(AF_INET, blobmsg_data(k), &dns4.addr[dns4_cnt]) < 1)
-				continue;
-			++dns4_cnt;
+		if (dns4_cnt >= dns_max ||
+				inet_pton(AF_INET, blobmsg_data(k), &dns4.addr[dns4_cnt]) < 1)
 			continue;
-		}
-
-		++dns_cnt;
+		++dns4_cnt;
 	}
 
-	if (v6uplink && dns_cnt) {
-		dns.type = htons(DHCPV6_OPT_DNS_SERVERS);
-		dns.len = htons(dns_cnt * sizeof(struct in6_addr));
-		iface_add_dhcpv6_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns));
+	if (tb[IFACE_ATTR_DATA]) {
+		struct blob_attr *dtb[DATA_ATTR_MAX];
+		blobmsg_parse(data_attrs, DATA_ATTR_MAX, dtb,
+				blobmsg_data(tb[IFACE_ATTR_DATA]), blobmsg_len(tb[IFACE_ATTR_DATA]));
+
+		if (v6uplink && dtb[DATA_ATTR_PASSTHRU]) {
+			size_t buflen = blobmsg_data_len(dtb[DATA_ATTR_PASSTHRU]) / 2;
+			uint8_t *buf = malloc(buflen);
+			if (buf) {
+				unhexlify(buf, buflen, blobmsg_get_string(dtb[DATA_ATTR_PASSTHRU]));
+				iface_add_dhcpv6_received(c, buf, buflen);
+				free(buf);
+			}
+		}
 	}
 
 	if (v4uplink) {
@@ -734,7 +743,7 @@ static void platform_update(void *data, size_t len)
 			v4uplink = true;
 	}
 
-	enum iface_flags flags = 0;
+	iface_flags flags = 0;
 	struct in6_addr cer = IN6ADDR_ANY_INIT;
 
 	struct blob_attr *dtb[DATA_ATTR_MAX];
@@ -748,6 +757,12 @@ static void platform_update(void *data, size_t len)
 
 		if (dtb[DATA_ATTR_GUEST] && blobmsg_get_bool(dtb[DATA_ATTR_GUEST]))
 			flags |= IFACE_FLAG_GUEST;
+
+		if (dtb[DATA_ATTR_ADHOC] && blobmsg_get_bool(dtb[DATA_ATTR_ADHOC]))
+			flags |= IFACE_FLAG_ADHOC;
+
+		if (dtb[DATA_ATTR_DISABLE_PA] && blobmsg_get_bool(dtb[DATA_ATTR_DISABLE_PA]))
+			flags |= IFACE_FLAG_DISABLE_PA;
 
 		if (dtb[DATA_ATTR_CER])
 			inet_pton(AF_INET6, blobmsg_get_string(dtb[DATA_ATTR_CER]), &cer);
@@ -771,6 +786,7 @@ static void platform_update(void *data, size_t len)
 						iface_add_chosen_prefix(c, &p);
 				}
 			}
+
 		}
 
 		unsigned link_id, link_mask;
@@ -778,6 +794,35 @@ static void platform_update(void *data, size_t len)
 				blobmsg_get_string(dtb[DATA_ATTR_LINK_ID]),
 				"%x/%u", &link_id, &link_mask) == 2)
 			iface_set_link_id(c, link_id, link_mask);
+
+		if (c && dtb[DATA_ATTR_IFACE_ID]) {
+			struct blob_attr *k;
+			unsigned rem;
+
+			blobmsg_for_each_attr(k, dtb[DATA_ATTR_IFACE_ID], rem) {
+				if (blobmsg_type(k) == BLOBMSG_TYPE_STRING) {
+					char astr[55], fstr[55];
+					struct prefix filter, addr;
+					int res = sscanf(blobmsg_get_string(k), "%54s %54s", astr, fstr);
+					if(!res || !prefix_pton(astr, &addr) || (res > 1 && !prefix_pton(fstr, &filter))) {
+						L_ERR("Incorrect iface_id syntax %s", blobmsg_get_string(k));
+						continue;
+					}
+					if(addr.plen == 128 && !addr.prefix.s6_addr32[0] && !addr.prefix.s6_addr32[1])
+						addr.plen = 64;
+					if(res == 1)
+						filter.plen = 0;
+					iface_add_addrconf(c, &addr.prefix, 128 - addr.plen, &filter);
+				}
+			}
+		}
+
+		unsigned minv6len;
+		if(c && dtb[DATA_ATTR_MIN_V6_PLEN]
+		               && sscanf(blobmsg_get_string(dtb[DATA_ATTR_MIN_V6_PLEN]), "%u", &minv6len)
+		               && minv6len <= 128) {
+			c->min_v6_plen = minv6len;
+		}
 	}
 
 	if (c)

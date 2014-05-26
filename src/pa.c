@@ -1,9 +1,17 @@
+/*
+ * Author: Pierre Pfister <pierre pfister@darou.fr>
+ *
+ * Copyright (c) 2014 Cisco Systems, Inc.
+ *
+ */
+
 #ifdef L_PREFIX
 #undef L_PREFIX
 #endif
 #define L_PREFIX "pa - "
 
 #include "pa.h"
+#include "iface.h"
 
 /************************************/
 /********** Main interface **********/
@@ -92,17 +100,46 @@ void pa_term(struct pa *pa)
 /********* Iface interface **********/
 /************************************/
 
+static uint8_t __pa_custom_plen(__unused struct pa_iface *iface, struct pa_dp *dp, void *priv, bool scarcity)
+{
+	struct iface *i = (struct iface *)priv;
+	uint8_t plen = pa_core_default_plen(dp, scarcity);
+	if(plen < i->min_v6_plen && !prefix_is_ipv4(&dp->prefix))
+		return i->min_v6_plen;
+
+	return plen;
+}
+
 static void __pa_ifu_intiface(struct iface_user *u, const char *ifname, bool enabled)
 {
 	L_INFO("Iface callback for interior interface %s -> %s", ifname, enabled?"intern":"extern");
 
 	struct pa *pa = container_of(u, struct pa, ifu);
 	struct pa_iface *iface;
+	struct iface *i = iface_get(ifname);
+
+	if(!i)
+		return;
+
+	if(i->flags & IFACE_FLAG_DISABLE_PA) {
+		L_INFO("PA is disabled on %s", ifname);
+		enabled = false;
+	}
 
 	if(!(iface = pa_iface_get(&pa->data, ifname, enabled)))
 		return;
 
 	pa_iface_set_internal(iface, enabled);
+	pa_iface_set_adhoc(iface, !!(i->flags & IFACE_FLAG_ADHOC));
+
+	if(!enabled || !i->min_v6_plen) {
+		iface->custom_plen = NULL;
+		iface->custom_plen_priv = NULL;
+	} else {
+		iface->custom_plen = __pa_custom_plen;
+		iface->custom_plen_priv = i;
+	}
+
 	pa_iface_notify(&pa->data, iface);
 }
 
@@ -183,13 +220,14 @@ static void __pa_ifu_ipv4(struct iface_user *u, const char *ifname,
  * or bigger prefix in cps. See pa_core.c. */
 const struct prefix *pa_prefix_getcollision(struct pa *pa, const struct prefix *prefix)
 {
+	struct pa_pentry *p;
 	struct pa_ap *ap;
-	pa_for_each_ap_updown(ap, &pa->data, prefix) {
-		return &ap->prefix;
-	}
-
 	struct pa_cp *cp;
-	pa_for_each_cp_updown(cp, &pa->data, prefix) {
+	pa_for_each_pentry_updown(p, &pa->data, prefix) {
+		pa_pentry_open(p, ap, cp);
+		if(ap)
+			return &ap->prefix;
+
 		return &cp->prefix;
 	}
 	return NULL;
@@ -271,4 +309,3 @@ bool pa_cp_isvalid(struct pa *pa, struct pa_cp *cp)
 	}
 	return true;
 }
-

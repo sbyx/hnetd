@@ -651,6 +651,13 @@ void iface_remove(struct iface *c)
 		free(sprule);
 	}
 
+	while(!list_empty(&c->addrconf)) {
+		struct pa_iface_addr *addr = list_first_entry(&c->addrconf, struct pa_iface_addr, user);
+		pa_core_iface_addr_del(&pa_p->core, addr);
+		list_del(&addr->user);
+		free(addr);
+	}
+
 	if (c->id) {
 		pa_core_rule_del(&pa_p->core, &c->id->rule);
 		free(c->id);
@@ -758,7 +765,7 @@ static bool iface_discover_border(struct iface *c)
 }
 
 
-struct iface* iface_create(const char *ifname, const char *handle, enum iface_flags flags)
+struct iface* iface_create(const char *ifname, const char *handle, iface_flags flags)
 {
 	struct iface *c = iface_get(ifname);
 	if (!c) {
@@ -788,6 +795,7 @@ struct iface* iface_create(const char *ifname, const char *handle, enum iface_fl
 		vlist_init(&c->delegated, compare_addrs, update_prefix);
 		vlist_init(&c->routes, compare_routes, update_route);
 		INIT_LIST_HEAD(&c->chosen);
+		INIT_LIST_HEAD(&c->addrconf);
 		c->transition.cb = iface_announce_border;
 		c->preferred.cb = iface_announce_preferred;
 
@@ -927,7 +935,7 @@ void iface_add_chosen_prefix(struct iface *c, const struct prefix *p)
 	}
 	sprule = calloc(1, sizeof(*sprule));
 	pa_core_static_prefix_init(sprule, c->ifname, p, true);
-	sprule->rule.priority = PA_PRIORITY_AUTO_MAX + 2;
+	sprule->rule.result.priority = PA_PRIORITY_AUTO_MAX + 2;
 	pa_core_rule_add(&pa_p->core, &sprule->rule);
 	list_add_tail(&sprule->user, &c->chosen);
 }
@@ -945,11 +953,27 @@ void iface_set_link_id(struct iface *c, uint32_t linkid, uint8_t mask)
 	memset(id_rule, 0, sizeof(*id_rule));
 
 	pa_core_link_id_init(id_rule, c->ifname, linkid, mask, true);
-	id_rule->rule.priority = PA_PRIORITY_AUTO_MAX + 1;
+	id_rule->rule.result.priority = PA_PRIORITY_AUTO_MAX + 1;
 	pa_core_rule_add(&pa_p->core, &id_rule->rule);
 	c->id = id_rule;
 }
 
+void iface_add_addrconf(struct iface *c, struct in6_addr *addr,
+		uint8_t mask, struct prefix *filter)
+{
+	struct pa_iface_addr *a;
+	list_for_each_entry(a, &c->addrconf, user) {
+		if(memcmp(addr, &a->address, sizeof(struct in6_addr)) || mask != a->mask ||
+				strcmp(c->ifname, a->ifname))
+			continue;
+		if((filter && !prefix_cmp(filter, &a->filter)) || (!filter && a->filter.plen == 0))
+			return; //It is the same entry
+	}
+	a = malloc(sizeof(*a));
+	pa_core_iface_addr_init(a, c->ifname, addr, mask, filter);
+	list_add_tail(&a->user, &c->addrconf);
+	pa_core_iface_addr_add(&pa_p->core, a);
+}
 
 void iface_update(void)
 {

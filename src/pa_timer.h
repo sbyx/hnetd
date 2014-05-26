@@ -1,7 +1,9 @@
 /*
- * Author: Pierre Pfister
+ * Author: Pierre Pfister <pierre pfister@darou.fr>
  *
- * uloop_timer helper for PA objects.
+ * Copyright (c) 2014 Cisco Systems, Inc.
+ *
+ * uloop_timeout encapsulation for PA objects.
  *
  */
 
