@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Thu May 22 15:43:20 2014 mstenber
- * Edit time:     537 min
+ * Last modified: Mon May 26 21:11:00 2014 mstenber
+ * Edit time:     498 min
  *
  */
 
@@ -53,8 +53,11 @@
 
 /* How long a timeout we schedule for the actual update (that occurs
  * in a timeout). This effectively sets an upper bound on how
- * frequently the dnsmasq/ohp scripts are called. */
-#define UPDATE_TIMEOUT 100
+ * frequently the dnsmasq/ohp scripts are called. If there's changes
+ * that mutate system state, the timer gets reset. At SOME POINT the
+ * system should calm down though, and if it doesn't, it's perhaps
+ * best it is visible to user it's broken in some way :) */
+#define UPDATE_TIMEOUT 3000
 
 struct hncp_sd_struct
 {
@@ -99,11 +102,9 @@ static void _fork_execv(char *argv[])
 static void _should_update(hncp_sd sd, int v)
 {
   L_DEBUG("hncp_sd/should_update:%d", v);
-  if ((sd->should_update & v) == v)
-    return;
   sd->should_update |= v;
-  /* Schedule the timeout (note: we won't configure anything until the
-   * churn slows down. This is intentional.) */
+  /* Reset the timeout. We intentionally will not configure anything
+   * until the churn slows down.*/
   uloop_timeout_set(&sd->timeout, UPDATE_TIMEOUT);
 }
 
@@ -646,20 +647,6 @@ static void _local_tlv_cb(hncp_subscriber s,
     }
 }
 
-static void _republish_cb(hncp_subscriber s)
-{
-  hncp_sd sd = container_of(s, hncp_sd_s, subscriber);
-
-  _publish_ddzs(sd);
-}
-
-static void _force_republish_cb(hncp_subscriber s)
-{
-  hncp_sd sd = container_of(s, hncp_sd_s, subscriber);
-
-  _should_update(sd, UPDATE_FLAG_ALL);
-}
-
 static struct tlv_attr *_get_dns_domain_tlv(hncp o)
 {
   hncp_node n;
@@ -809,6 +796,21 @@ static void _timeout_cb(struct uloop_timeout *t)
   hncp_sd_update(sd);
 }
 
+
+static void _republish_cb(hncp_subscriber s)
+{
+  hncp_sd sd = container_of(s, hncp_sd_s, subscriber);
+
+  _refresh_domain(sd);
+  _publish_ddzs(sd);
+}
+
+static void _force_republish_cb(hncp_subscriber s)
+{
+  hncp_sd sd = container_of(s, hncp_sd_s, subscriber);
+
+  _should_update(sd, UPDATE_FLAG_ALL);
+}
 
 hncp_sd hncp_sd_create(hncp h, hncp_sd_params p)
 {
