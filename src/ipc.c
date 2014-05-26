@@ -42,6 +42,7 @@ enum ipc_option {
 	OPT_ADHOC,
 	OPT_DISABLE_PA,
 	OPT_PASSTHRU,
+	OPT_ULA_DEFAULT_ROUTER,
 	OPT_MAX
 };
 
@@ -60,6 +61,7 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_ADHOC] = {"adhoc", BLOBMSG_TYPE_BOOL},
 	[OPT_DISABLE_PA] = {"disable_pa", BLOBMSG_TYPE_BOOL},
 	[OPT_PASSTHRU] = {"passthru", BLOBMSG_TYPE_STRING},
+	[OPT_ULA_DEFAULT_ROUTER] = {"ula_default_router", BLOBMSG_TYPE_BOOL},
 };
 
 enum ipc_prefix_option {
@@ -130,7 +132,7 @@ int ipc_ifupdown(int argc, char *argv[])
 	char *entry;
 
 	int c;
-	while ((c = getopt(argc, argv, "ecgadp:l:i:m:")) > 0) {
+	while ((c = getopt(argc, argv, "ecgadp:l:i:m:u")) > 0) {
 		switch(c) {
 		case 'e':
 			external = true;
@@ -176,6 +178,10 @@ int ipc_ifupdown(int argc, char *argv[])
 
 		case 'a':
 			blobmsg_add_u8(&b, "adhoc", 1);
+			break;
+
+		case 'u':
+			blobmsg_add_u8(&b, "ula_default_router", 1);
 			break;
 		}
 	}
@@ -226,6 +232,9 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 
 			if (tb[OPT_DISABLE_PA] && blobmsg_get_bool(tb[OPT_DISABLE_PA]))
 				flags |= IFACE_FLAG_DISABLE_PA;
+
+			if (tb[OPT_ULA_DEFAULT_ROUTER] && blobmsg_get_bool(tb[OPT_ULA_DEFAULT_ROUTER]))
+				flags |= IFACE_FLAG_ULA_DEFAULT;
 
 			struct iface *iface = iface_create(ifname, tb[OPT_HANDLE] == NULL ? NULL :
 					blobmsg_get_string(tb[OPT_HANDLE]), flags);

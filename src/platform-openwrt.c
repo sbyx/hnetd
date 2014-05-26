@@ -445,6 +445,8 @@ static void platform_commit(struct uloop_timeout *t)
 		char *dst = blobmsg_alloc_string_buffer(&b, "dhcpv6_raw", c->dhcpv6_len_out * 2 + 1);
 		hexlify(dst, c->dhcpv6_data_out, c->dhcpv6_len_out);
 		blobmsg_add_string_buffer(&b);
+
+		blobmsg_add_u32(&b, "ra_default", (c->flags & IFACE_FLAG_ULA_DEFAULT) ? 1 : 0);
 	}
 
 
@@ -583,6 +585,7 @@ enum {
 	DATA_ATTR_ADHOC,
 	DATA_ATTR_DISABLE_PA,
 	DATA_ATTR_PASSTHRU,
+	DATA_ATTR_ULA_DEFAULT_ROUTER,
 	DATA_ATTR_MAX
 };
 
@@ -614,6 +617,7 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_ADHOC] = { .name = "adhoc", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_DISABLE_PA] = { .name = "disable_pa", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_PASSTHRU] = { .name = "passthru", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_ULA_DEFAULT_ROUTER] = { .name = "ula_default_router", .type = BLOBMSG_TYPE_BOOL },
 };
 
 
@@ -769,6 +773,9 @@ static void platform_update(void *data, size_t len)
 
 		if (dtb[DATA_ATTR_DISABLE_PA] && blobmsg_get_bool(dtb[DATA_ATTR_DISABLE_PA]))
 			flags |= IFACE_FLAG_DISABLE_PA;
+
+		if (dtb[DATA_ATTR_ULA_DEFAULT_ROUTER] && blobmsg_get_bool(dtb[DATA_ATTR_ULA_DEFAULT_ROUTER]))
+			flags |= IFACE_FLAG_ULA_DEFAULT;
 
 		if (dtb[DATA_ATTR_CER])
 			inet_pton(AF_INET6, blobmsg_get_string(dtb[DATA_ATTR_CER]), &cer);
