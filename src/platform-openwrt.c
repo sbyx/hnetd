@@ -441,6 +441,12 @@ static void platform_commit(struct uloop_timeout *t)
 	blobmsg_add_string(&b, "dhcpv6", service);
 	blobmsg_add_u32(&b, "ra_management", 1);
 
+	if (c->internal && c->linkowner) {
+		char *dst = blobmsg_alloc_string_buffer(&b, "dhcpv6_raw", c->dhcpv6_len_out * 2 + 1);
+		hexlify(dst, c->dhcpv6_data_out, c->dhcpv6_len_out);
+		blobmsg_add_string_buffer(&b);
+	}
+
 
 	if (c->internal && c->linkowner)
 		blobmsg_add_string(&b, "pd_manager", hnetd_pd_socket);

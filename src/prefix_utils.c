@@ -32,6 +32,7 @@ struct prefix ipv6_global_prefix = {
 		.prefix = { .s6_addr = { 0x20 }},
 		.plen = 3 };
 
+static const char hexdigits[] = "0123456789abcdef";
 static const int8_t hexvals[] = {
     -1, -1, -1, -1, -1, -1, -1, -1, -1, -2, -2, -1, -1, -2, -1, -1,
     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -59,6 +60,15 @@ ssize_t unhexlify(uint8_t *dst, size_t len, const char *src)
 	}
 
 	return c;
+}
+
+void hexlify(char *dst, const uint8_t *src, size_t len)
+{
+	for (size_t i = 0; i < len; ++i) {
+		*dst++ = hexdigits[src[i] >> 4];
+		*dst++ = hexdigits[src[i] & 0x0f];
+	}
+	*dst = 0;
 }
 
 static int bmemcmp(const void *m1, const void *m2, size_t bitlen)
