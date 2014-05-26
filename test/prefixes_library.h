@@ -27,6 +27,8 @@
 #define PL_P1_02A  { .plen = 128, .prefix = { .s6_addr = {PL_ROOT, 0x01,0x02,  PL_EUI64}} }
 #define PL_P1_04   { .plen = 64 , .prefix = { .s6_addr = {PL_ROOT, 0x01,0x04}} }
 #define PL_P1_10   { .plen = 64 , .prefix = { .s6_addr = {PL_ROOT, 0x01,0x10}} }
+#define PL_P1_11   { .plen = 64 , .prefix = { .s6_addr = {PL_ROOT, 0x01,0x11}} }
+#define PL_P1_24   { .plen = 64 , .prefix = { .s6_addr = {PL_ROOT, 0x01,0x24}} }
 
 #define PL_P2      { .plen = 56 , .prefix = { .s6_addr = {PL_ROOT, 0x02}} }
 #define PL_P2_01   { .plen = 64 , .prefix = { .s6_addr = {PL_ROOT, 0x02, 0x01}} }

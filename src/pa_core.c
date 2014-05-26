@@ -19,8 +19,7 @@
 
 #define PA_CORE_FINDRAND_EXP 8
 
-#define PAC_PRAND_PRFX 0
-#define PAC_PRAND_ADDR 1
+#define PA_CORE_PSEUDORAND_TENTATIVES 10
 
 #define core_pa(c) (container_of(c, struct pa, core))
 #define core_rid(core) (&((core_pa(core))->flood.rid))
@@ -33,7 +32,7 @@ static int pa_core_invalidate_cps(struct pa_core *core, struct prefix *prefix, b
 		struct pa_cpl *except);
 
 /* Generates a random or pseudo-random (based on the interface) prefix */
-int pa_prefix_prand(struct pa_iface *iface, size_t ctr_index,
+int pa_prefix_prand(struct pa_iface *iface, uint32_t ctr,
 		const struct prefix *p, struct prefix *dst,
 		uint8_t plen)
 {
@@ -43,13 +42,13 @@ int pa_prefix_prand(struct pa_iface *iface, size_t ctr_index,
 
 	if((i = iface_get(iface->ifname))) {
 		memcpy(seed, &i->eui64_addr.s6_addr[8], 8);
-		pos += sizeof(struct in6_addr);
+		pos += 8;
 	}
 
 	memcpy(seed + pos, iface->ifname, strlen(iface->ifname));
 	pos += strlen(iface->ifname);
 
-	return prefix_prandom(seed, pos, iface->prand_ctr[ctr_index]++, p, dst, plen);
+	return prefix_prandom(seed, pos, ctr, p, dst, plen);
 }
 
 bool __pa_compute_dodhcp(struct pa_iface *iface)
@@ -145,7 +144,7 @@ static int pa_rule_try_random_plen(struct pa_core *core, struct pa_rule *rule,
 		struct pa_dp *dp, struct pa_iface *iface,
 		uint8_t plen, const uint16_t *prefix_count)
 {
-	if(plen > 128)
+	if(plen > 128 || plen < dp->prefix.plen)
 		return -1;
 
 	uint8_t min_plen;
@@ -160,6 +159,7 @@ static int pa_rule_try_random_plen(struct pa_core *core, struct pa_rule *rule,
 			}
 			min_plen = i;
 			if(count >= (1 << PA_CORE_FINDRAND_EXP)) {
+				count = 1 << PA_CORE_FINDRAND_EXP;
 				break;
 			}
 		}
@@ -171,29 +171,48 @@ static int pa_rule_try_random_plen(struct pa_core *core, struct pa_rule *rule,
 	}
 	L_DEBUG("At least %d available prefixes of length %d have been found in %s", (int)count, plen, PREFIX_REPR(&dp->prefix));
 
-	/* Select a prefix randomly */
-	struct prefix first;
-	if(pa_prefix_prand(iface, PAC_PRAND_PRFX, &dp->prefix, &first, plen)) {
-		L_ERR("Cannot generate random prefix from "PA_DP_L" of length %d for "PA_IF_L,
-				PA_DP_LA(dp), dp->prefix.plen, PA_IF_LA(iface));
-		return -1;
-	}
-
-	/* Go through available prefixes starting by the chosen one */
+	/* First try the pseudo-random prefixes */
+	struct prefix tentative;
 	struct prefix *res = &rule->result.prefix;
-	pa_for_each_available_prefix_first(core_p(core, data), &first, dp->prefix.plen, res) {
-		if(res->plen <= plen && res->plen >= min_plen) {
-			if(prefix_contains(res, &first)) {
-				//Found at first iteration
-				prefix_cpy(res, &first);
-			} else {
-				prefix_canonical(res, res);
-				res->plen = plen;
+	i = 0;
+	do {
+		pa_prefix_prand(iface, (uint32_t) i, &dp->prefix, &tentative, plen); //Ignoring unlikely error on purpose.
+		L_DEBUG("Trying pseudo-random prefix %s", PREFIX_REPR(&tentative));
+		pa_for_each_available_prefix_first(core_p(core, data), &tentative, dp->prefix.plen, res) {
+			//todo: No need for a loop here, should use first result call.
+			if(res->plen <= plen && res->plen >= min_plen && prefix_contains(res, &tentative)) {
+				prefix_cpy(res, &tentative);
+				goto chosen;
 			}
-			return 0;
+			break;
+		}
+		L_DEBUG("This prefix is not available");
+	} while(++i < PA_CORE_PSEUDORAND_TENTATIVES);
+
+	i = random() % count;
+	L_DEBUG("Choosing a random prefix (%dth available prefix)", (int) (i+1));
+	/* Go through available prefixes starting by the chosen one */
+	pa_for_each_available_prefix(core_p(core, data), &dp->prefix, res) {
+		if(res->plen <= plen && res->plen >= min_plen) {
+			if((plen - res->plen >= PA_CORE_FINDRAND_EXP) ||
+					i < (1 << (plen - res->plen))) {
+				//We choose the i'th prefix in there
+				uint8_t id_len = plen - res->plen;
+				prefix_canonical(res, res);
+				if(id_len) {
+					res->plen = plen;
+					prefix_number(res, res, (uint32_t) i, id_len);
+				}
+				goto chosen;
+			}
+			i -= (1 << (plen - res->plen));
 		}
 	}
+	L_ERR("Prefix random selection error (Program should not execute this line !)");
 	return -1; //Should never come here
+chosen:
+	L_DEBUG("Prefix %s is available", PREFIX_REPR(res));
+	return 0;
 }
 
 static int pa_rule_try_random(struct pa_core *core, struct pa_rule *rule,
@@ -506,7 +525,7 @@ static inline int __aaa_do_slaac(struct pa_cpl *cpl, struct in6_addr *addr)
 
 static int __aaa_find_random(struct pa_core *core, struct pa_cpl *cpl, struct in6_addr *addr)
 {
-	struct prefix rpool, first, result;
+	struct prefix rpool, tentative, result;
 
 	/* Get routers pool */
 	prefix_canonical(&rpool, &cpl->cp.prefix);
@@ -524,32 +543,61 @@ static int __aaa_find_random(struct pa_core *core, struct pa_cpl *cpl, struct in
 		return -1;
 	}
 
-	L_DEBUG("Trying to find an address in %s", PREFIX_REPR(&rpool));
-	if(pa_prefix_prand(cpl->iface, PAC_PRAND_ADDR, &rpool, &first, 128)) {
-		L_ERR("Cannot generate random address from "PA_CP_L" for "PA_IF_L,
-						PA_CP_LA(&cpl->cp), PA_IF_LA(cpl->iface));
-		return -1;
-	}
+	// Try pseudo-random addresses
+	L_DEBUG("Trying to find a pseudo-random address in %s", PREFIX_REPR(&rpool));
+	int i = 0;
+	do {
+		pa_prefix_prand(cpl->iface, (uint32_t) i, &rpool, &tentative, 128); //Ignoring unlikely error on purpose.
+		L_DEBUG("Trying pseudo-random address %s", ADDR_REPR(&tentative.prefix));
 
-	pa_for_each_available_address_first(core_p(core, data), &first.prefix, rpool.plen, &result) {
-		if(result.plen == 128 && prefix_is_ipv4(&rpool)
-				&& !memcmp(&rpool.prefix, &result.prefix, sizeof(struct in6_addr))) {
-				continue;
+		pa_for_each_available_address_first(core_p(core, data), &tentative.prefix, rpool.plen, &result) {
+			if(!prefix_contains(&result, &tentative) ||
+					(prefix_is_ipv4(&rpool)
+							&& !memcmp(&rpool.prefix, &result.prefix, sizeof(struct in6_addr))))
+				break;
+
+			prefix_cpy(&result, &tentative);
+			goto chosen;
 		}
-		if(prefix_contains(&result, &first)) {
-			prefix_cpy(&result, &first);
-		} else {
-			prefix_canonical(&result, &result);
-			result.plen = 128;
-		}
-		if(prefix_is_ipv4(&rpool) &&
-				!memcmp(&rpool.prefix, &result.prefix, sizeof(struct in6_addr))) {
-			prefix_increment(&result, &result, 127); //Last bit must be a zero
-		}
-		memcpy(addr, &result.prefix, sizeof(struct in6_addr));
-		return 0;
+		L_DEBUG("This address is not available");
+	} while(++i < PA_CORE_PSEUDORAND_TENTATIVES);
+
+	//Try random addresses
+	uint64_t count = pa_available_address_count(core_p(core, data), &rpool);
+	if(count > (1 << PA_CORE_FINDRAND_EXP))
+		count = (1 << PA_CORE_FINDRAND_EXP);
+
+	i = random() % ((int)count);
+	L_DEBUG("Choosing a random prefix (%d'th available prefix)", (int) i);
+	/* Go through available prefixes starting by the chosen one */
+	pa_for_each_available_address(core_p(core, data), &rpool, &result) {
+			if((128 - result.plen >= PA_CORE_FINDRAND_EXP) ||
+					i < (1 << (128 - result.plen))) {
+				//We choose the i'th address in there
+				uint8_t id_len = 128 - result.plen;
+				prefix_canonical(&result, &result);
+				if(!i && prefix_is_ipv4(&result) //Avoid using the network address
+						&& !memcmp(&rpool.prefix, &result.prefix, sizeof(struct in6_addr))) {
+					if(result.plen == 128) {
+						i--;
+						continue;
+					}
+					i = 1;
+				}
+				if(id_len) {
+					result.plen = 128;
+					prefix_number(&result, &result, (uint32_t) i, id_len);
+				}
+				goto chosen;
+			}
+			i -= (1 << (128 - result.plen));
 	}
-	return -1;
+	L_ERR("Prefix random selection error (Program should not execute this line !)");
+	return -1; //Should never come here
+chosen:
+	L_DEBUG("Address %s has been selected", ADDR_REPR(&result.prefix));
+	memcpy(addr, &result.prefix, sizeof(struct in6_addr));
+	return 0;
 }
 
 static bool __aaa_valid(struct pa_core *core, struct in6_addr *addr)
