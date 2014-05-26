@@ -935,7 +935,7 @@ void iface_add_chosen_prefix(struct iface *c, const struct prefix *p)
 	}
 	sprule = calloc(1, sizeof(*sprule));
 	pa_core_static_prefix_init(sprule, c->ifname, p, true);
-	sprule->rule.priority = PA_PRIORITY_AUTO_MAX + 2;
+	sprule->rule.result.priority = PA_PRIORITY_AUTO_MAX + 2;
 	pa_core_rule_add(&pa_p->core, &sprule->rule);
 	list_add_tail(&sprule->user, &c->chosen);
 }
@@ -953,7 +953,7 @@ void iface_set_link_id(struct iface *c, uint32_t linkid, uint8_t mask)
 	memset(id_rule, 0, sizeof(*id_rule));
 
 	pa_core_link_id_init(id_rule, c->ifname, linkid, mask, true);
-	id_rule->rule.priority = PA_PRIORITY_AUTO_MAX + 1;
+	id_rule->rule.result.priority = PA_PRIORITY_AUTO_MAX + 1;
 	pa_core_rule_add(&pa_p->core, &id_rule->rule);
 	c->id = id_rule;
 }
