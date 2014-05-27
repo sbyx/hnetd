@@ -802,10 +802,10 @@ static void platform_update(void *data, size_t len)
 
 		}
 
-		unsigned link_id, link_mask;
+		unsigned link_id, link_mask = 8;
 		if (c && dtb[DATA_ATTR_LINK_ID] && sscanf(
 				blobmsg_get_string(dtb[DATA_ATTR_LINK_ID]),
-				"%x/%u", &link_id, &link_mask) == 2)
+				"%x/%u", &link_id, &link_mask) >= 1)
 			iface_set_link_id(c, link_id, link_mask);
 
 		if (c && dtb[DATA_ATTR_IFACE_ID]) {

@@ -251,10 +251,10 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 				}
 			}
 
-			unsigned link_id, link_mask;
+			unsigned link_id, link_mask = 8;
 			if (iface && tb[OPT_LINK_ID] && sscanf(
 						blobmsg_get_string(tb[OPT_LINK_ID]),
-						"%x/%u", &link_id, &link_mask) == 2)
+						"%x/%u", &link_id, &link_mask) >= 1)
 					iface_set_link_id(iface, link_id, link_mask);
 
 			if (iface && tb[OPT_IFACE_ID]) {
