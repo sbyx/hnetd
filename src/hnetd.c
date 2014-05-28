@@ -8,6 +8,7 @@
 
 #include <time.h>
 #include <errno.h>
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -124,8 +125,22 @@ int main(__unused int argc, char *argv[])
 	const char *routing_script = NULL;
 	const char *pa_store_file = NULL;
 	const char *pd_socket_path = "/var/run/hnetd_pd";
+	const char *pa_ip4prefix = NULL;
+	const char *pa_ulaprefix = NULL;
 
-	while ((c = getopt(argc, argv, "d:f:o:n:r:s:p:m:")) != -1) {
+	enum {
+		GOL_IPPREFIX = 1000,
+		GOL_ULAPREFIX,
+	};
+
+	struct option longopts[] = {
+			//Can use no_argument, required_argument or optional_argument
+			{ "ip4prefix",   required_argument,      NULL,           GOL_IPPREFIX },
+			{ "ulaprefix",   required_argument,      NULL,           GOL_ULAPREFIX },
+			{ NULL,          0,                      NULL,           0 }
+	};
+
+	while ((c = getopt_long(argc, argv, "d:f:o:n:r:s:p:m:", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'd':
 			sd_params.dnsmasq_script = optarg;
@@ -151,12 +166,50 @@ int main(__unused int argc, char *argv[])
 		case 'p':
 			pd_socket_path = optarg;
 			break;
+		case GOL_IPPREFIX:
+			pa_ip4prefix = optarg;
+			break;
+		case GOL_ULAPREFIX:
+			pa_ulaprefix = optarg;
+			break;
+		case '?':
+			L_ERR("Unrecognized option");
+			return 3;
 		}
 	}
 
 	pa_init(&pa, NULL);
 	if(pa_store_file)
 		pa_store_setfile(&pa.store, pa_store_file);
+
+	if(pa_ip4prefix) {
+		if(!prefix_pton(pa_ip4prefix, &pa.local.conf.v4_prefix)) {
+			L_ERR("Unable to parse ipv4 prefix option '%s'", pa_ip4prefix);
+			return 40;
+		} else if (!prefix_is_ipv4(&pa.local.conf.v4_prefix)) {
+			L_ERR("The ip4prefix option '%s' is not an IPv4 prefix", pa_ip4prefix);
+			return 41;
+		} else {
+			L_INFO("Setting %s as IPv4 prefix", PREFIX_REPR(&pa.local.conf.v4_prefix));
+		}
+	}
+
+	if(pa_ulaprefix) {
+		if(!prefix_pton(pa_ulaprefix, &pa.local.conf.ula_prefix)) {
+			L_ERR("Unable to parse ula prefix option '%s'", pa_ulaprefix);
+			return 40;
+		} else if (prefix_is_ipv4(&pa.local.conf.ula_prefix)) {
+			L_ERR("The ulaprefix option '%s' is an IPv4 prefix", pa_ulaprefix);
+			return 41;
+		} else {
+			if (!prefix_is_ipv6_ula(&pa.local.conf.ula_prefix)) {
+				L_WARN("The provided ULA prefix %s is not an ULA. I hope you know what you are doing.",
+						PREFIX_REPR(&pa.local.conf.ula_prefix));
+			}
+			pa.local.conf.use_random_ula = false;
+			L_INFO("Setting %s as ULA prefix", PREFIX_REPR(&pa.local.conf.ula_prefix));
+		}
+	}
 
 	h = hncp_create();
 	if (!h) {
