@@ -331,7 +331,7 @@ void test_btrie_stress_push(struct btrie *root, void *str, void *check, uint8_t 
 		}
 		memcpy(key, str, STR_LEN);
 		if(test_count_space(root, str, 11, key, 63) != btrie_available_space(root, str, 11, 63)) {
-			printf("%lx vs %lx", test_count_space(root, str, 11, key, 63), btrie_available_space(root, str, 11, 63));
+			printf("%lx vs %lx", (long int)test_count_space(root, str, 11, key, 63), (long int)btrie_available_space(root, str, 11, 63));
 			sput_fail_if(1, "Invalid space count 2");
 		}
 

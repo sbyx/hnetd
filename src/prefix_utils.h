@@ -27,6 +27,7 @@ extern struct prefix ipv6_ll_prefix;
 extern struct prefix ipv6_global_prefix;
 
 ssize_t unhexlify(uint8_t *dst, size_t len, const char *src);
+void hexlify(char *dst, const uint8_t *src, size_t len);
 
 /* Copy bits of memory from src to dst.
  * Starts from bit #frombit and copies nbits.

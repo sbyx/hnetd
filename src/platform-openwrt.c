@@ -441,6 +441,14 @@ static void platform_commit(struct uloop_timeout *t)
 	blobmsg_add_string(&b, "dhcpv6", service);
 	blobmsg_add_u32(&b, "ra_management", 1);
 
+	if (c->internal && c->linkowner) {
+		char *dst = blobmsg_alloc_string_buffer(&b, "dhcpv6_raw", c->dhcpv6_len_out * 2 + 1);
+		hexlify(dst, c->dhcpv6_data_out, c->dhcpv6_len_out);
+		blobmsg_add_string_buffer(&b);
+
+		blobmsg_add_u32(&b, "ra_default", (c->flags & IFACE_FLAG_ULA_DEFAULT) ? 1 : 0);
+	}
+
 
 	if (c->internal && c->linkowner)
 		blobmsg_add_string(&b, "pd_manager", hnetd_pd_socket);
@@ -577,6 +585,7 @@ enum {
 	DATA_ATTR_ADHOC,
 	DATA_ATTR_DISABLE_PA,
 	DATA_ATTR_PASSTHRU,
+	DATA_ATTR_ULA_DEFAULT_ROUTER,
 	DATA_ATTR_MAX
 };
 
@@ -608,6 +617,7 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_ADHOC] = { .name = "adhoc", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_DISABLE_PA] = { .name = "disable_pa", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_PASSTHRU] = { .name = "passthru", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_ULA_DEFAULT_ROUTER] = { .name = "ula_default_router", .type = BLOBMSG_TYPE_BOOL },
 };
 
 
@@ -764,6 +774,9 @@ static void platform_update(void *data, size_t len)
 		if (dtb[DATA_ATTR_DISABLE_PA] && blobmsg_get_bool(dtb[DATA_ATTR_DISABLE_PA]))
 			flags |= IFACE_FLAG_DISABLE_PA;
 
+		if (dtb[DATA_ATTR_ULA_DEFAULT_ROUTER] && blobmsg_get_bool(dtb[DATA_ATTR_ULA_DEFAULT_ROUTER]))
+			flags |= IFACE_FLAG_ULA_DEFAULT;
+
 		if (dtb[DATA_ATTR_CER])
 			inet_pton(AF_INET6, blobmsg_get_string(dtb[DATA_ATTR_CER]), &cer);
 	}
@@ -789,10 +802,10 @@ static void platform_update(void *data, size_t len)
 
 		}
 
-		unsigned link_id, link_mask;
+		unsigned link_id, link_mask = 8;
 		if (c && dtb[DATA_ATTR_LINK_ID] && sscanf(
 				blobmsg_get_string(dtb[DATA_ATTR_LINK_ID]),
-				"%x/%u", &link_id, &link_mask) == 2)
+				"%x/%u", &link_id, &link_mask) >= 1)
 			iface_set_link_id(c, link_id, link_mask);
 
 		if (c && dtb[DATA_ATTR_IFACE_ID]) {

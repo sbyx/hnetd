@@ -815,8 +815,6 @@ struct pa_iface *pa_iface_get(struct pa_data *data, const char *ifname, bool goc
 	list_add(&iface->le, &data->ifs);
 	iface->__flags = PADF_IF_CREATED;
 	iface->sp_count = 0;
-	iface->prand_ctr[0] = 0;
-	iface->prand_ctr[1] = 0;
 	iface->custom_plen = NULL;
 	L_INFO("Created "PA_IF_L, PA_IF_LA(iface));
 	return iface;

@@ -89,8 +89,6 @@ struct pa_iface {
 	bool designated;        /* Used by paa. */
 	bool ipv4_uplink;       /* Whether this iface is the ipv4 uplink - used by pa.c */
 
-	uint32_t prand_ctr[2];  /* Pseudo random counters used for prefix and address generation */
-
 	/* Custom prefix length selection. Default is NULL.
 	 * If not null, it will be used instead of Prefix Assignment default.
 	 * In case of scarcity, a smaller prefix length (or invalid value like 255) should
@@ -465,6 +463,13 @@ extern btrie_plen_t __pad_avail_l0;
 #define pa_for_each_available_prefix_first(data, first, protected_len, p) \
 		btrie_for_each_available_loop_stop(&(data)->pes, __pad_avail_n, __pad_avail_n0, __pad_avail_l0, (btrie_key_t *)&(p)->prefix, &(p)->plen, \
 				(btrie_key_t *)&(first)->prefix, protected_len, (first)->plen)
+
+#define pa_available_address_count(data, pool) \
+		btrie_available_space(&(data)->eaas, (btrie_key_t *)&(pool)->prefix, (pool)->plen, 128)
+
+#define pa_for_each_available_address(data, container, p) \
+		btrie_for_each_available(&(data)->eaas, __pad_avail_n, (btrie_key_t *)&(p)->prefix, &(p)->plen, \
+				(btrie_key_t *)&(container)->prefix, (container)->plen)
 
 #define pa_for_each_available_address_first(data, first, container_len, p) \
 		btrie_for_each_available_loop_stop(&(data)->eaas, __pad_avail_n, __pad_avail_n0, __pad_avail_l0, (btrie_key_t *)&(p)->prefix, &(p)->plen, \
