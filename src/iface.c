@@ -33,6 +33,7 @@
 #include "iface.h"
 #include "platform.h"
 #include "pa_data.h"
+#include "dhcpv6.h"
 
 void iface_pa_ifs(struct pa_data_user *, struct pa_iface *, uint32_t flags);
 void iface_pa_cps(struct pa_data_user *, struct pa_cp *, uint32_t flags);
@@ -246,9 +247,9 @@ static void iface_notify_internal_state(struct iface *c, bool enabled)
 
 static void iface_notify_data_state(struct iface *c, bool enabled)
 {
-	void *data = (enabled) ? (c->dhcpv6_data_in ? c->dhcpv6_data_in : (void*)1) : NULL;
+	void *data = (enabled && !avl_is_empty(&c->delegated.avl)) ? (c->dhcpv6_data_in ? c->dhcpv6_data_in : (void*)1) : NULL;
 	size_t len = (enabled) ? c->dhcpv6_len_in : 0;
-	void *data4 = (enabled) ? (c->dhcp_data_in ? c->dhcp_data_in : (void*)1) : NULL;
+	void *data4 = (enabled && c->v4uplink) ? (c->dhcp_data_in ? c->dhcp_data_in : (void*)1) : NULL;
 	size_t len4 = (enabled) ? c->dhcp_len_in : 0;
 
 	struct iface_user *u;
@@ -375,9 +376,22 @@ void iface_set_dhcp_send(const char *ifname, const void *dhcpv6_data, size_t dhc
 	    c->dhcpv6_len_out == dhcpv6_len && (!dhcpv6_len || memcmp(c->dhcpv6_data_out, dhcpv6_data, dhcpv6_len) == 0))
 		return;
 
+	uint8_t *odata;
+	uint16_t olen, otype;
+
 	c->dhcpv6_data_out = realloc(c->dhcpv6_data_out, dhcpv6_len);
-	memcpy(c->dhcpv6_data_out, dhcpv6_data, dhcpv6_len);
-	c->dhcpv6_len_out = dhcpv6_len;
+	c->dhcpv6_len_out = 0;
+	uint8_t *p = c->dhcpv6_data_out;
+
+	// Filter DNS-server and DNS-domain which we handle separatly
+	dhcpv6_for_each_option(dhcpv6_data, ((const uint8_t*)dhcpv6_data) + dhcpv6_len, otype, olen, odata) {
+		if (otype == DHCPV6_OPT_DNS_SERVERS || otype == DHCPV6_OPT_DNS_DOMAIN)
+			continue;
+
+		memcpy(p, &odata[-4], olen + 4);
+		p += olen + 4;
+		c->dhcpv6_len_out += olen + 4;
+	}
 
 	c->dhcp_data_out = realloc(c->dhcp_data_out, dhcp_len);
 	memcpy(c->dhcp_data_out, dhcp_data, dhcp_len);

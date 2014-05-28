@@ -272,6 +272,13 @@ void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t l
 		strcpy(dnsbuf, "DNS=");
 		size_t dnsbuflen = strlen(dnsbuf);
 
+		char *rawbuf = malloc(c->dhcpv6_len_out * 2 + 10);
+		strncpy(rawbuf, "PASSTHRU=", 10);
+		hexlify(&rawbuf[9], c->dhcpv6_data_out, c->dhcpv6_len_out);
+
+		char *radefaultbuf = malloc(16);
+		snprintf(radefaultbuf, 16, "RA_DEFAULT=%d", (c->flags & IFACE_FLAG_ULA_DEFAULT) ? 1 : 0);
+
 		for (size_t i = 0; i < dns_cnt; ++i) {
 			inet_ntop(AF_INET6, &dns[i], &dnsbuf[dnsbuflen], INET6_ADDRSTRLEN);
 			dnsbuflen = strlen(dnsbuf);
@@ -289,6 +296,8 @@ void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t l
 
 		putenv(dnsbuf);
 		putenv(domainbuf);
+		putenv(rawbuf);
+		putenv(radefaultbuf);
 
 		execv(argv[0], argv);
 		_exit(128);
