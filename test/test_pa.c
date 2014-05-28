@@ -34,7 +34,7 @@ static struct pa_test_iface {
 	struct iface iface;
 } iface = { .user = NULL,
 		.iface = { .eui64_addr = {.s6_addr = { 0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00, PL_EUI64 }},
-				.min_v6_plen = 0,
+				.ip6_plen = 0,
 } };
 
 #define iface_register_user   pa_test_iface_register_user
@@ -835,7 +835,7 @@ void test_pa_minv6len()
 	pa_flood_notify(&pa.data);
 	pa_start(&pa);
 
-	iface.iface.min_v6_plen = 92;
+	iface.iface.ip6_plen = 92;
 	iface.user->cb_intiface(iface.user, PL_IFNAME1, true);
 	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, now_time + 100000 , now_time + 50000, NULL, 0);
 	fr_md5_push_prefix(&p1_1);
@@ -849,7 +849,7 @@ void test_pa_minv6len()
 	//TERM
 	pa_stop(&pa);
 	pa_term(&pa);
-	iface.iface.min_v6_plen = 0;
+	iface.iface.ip6_plen = 0;
 }
 
 int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)

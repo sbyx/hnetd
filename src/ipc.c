@@ -38,7 +38,7 @@ enum ipc_option {
 	OPT_GUEST,
 	OPT_LINK_ID,
 	OPT_IFACE_ID,
-	OPT_MIN_V6_PLEN,
+	OPT_IP6_PLEN,
 	OPT_ADHOC,
 	OPT_DISABLE_PA,
 	OPT_PASSTHRU,
@@ -57,7 +57,7 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_GUEST] = {"guest", BLOBMSG_TYPE_BOOL},
 	[OPT_LINK_ID] = {"link_id", BLOBMSG_TYPE_STRING},
 	[OPT_IFACE_ID] = {"iface_id", BLOBMSG_TYPE_ARRAY},
-	[OPT_MIN_V6_PLEN] = {"min_v6_plen", BLOBMSG_TYPE_STRING},
+	[OPT_IP6_PLEN] = {"ip6_plen", BLOBMSG_TYPE_STRING},
 	[OPT_ADHOC] = {"adhoc", BLOBMSG_TYPE_BOOL},
 	[OPT_DISABLE_PA] = {"disable_pa", BLOBMSG_TYPE_BOOL},
 	[OPT_PASSTHRU] = {"passthru", BLOBMSG_TYPE_STRING},
@@ -169,7 +169,7 @@ int ipc_ifupdown(int argc, char *argv[])
 			break;
 
 		case 'm':
-			blobmsg_add_string(&b, "min_v6_plen", optarg);
+			blobmsg_add_string(&b, "ip6_plen", optarg);
 			break;
 
 		case 'd':
@@ -280,10 +280,10 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			}
 
 			unsigned minv6len;
-			if(iface && tb[OPT_MIN_V6_PLEN]
-			               && sscanf(blobmsg_get_string(tb[OPT_MIN_V6_PLEN]), "%u", &minv6len)
+			if(iface && tb[OPT_IP6_PLEN]
+			               && sscanf(blobmsg_get_string(tb[OPT_IP6_PLEN]), "%u", &minv6len)
 			               && minv6len <= 128) {
-				iface->min_v6_plen = minv6len;
+				iface->ip6_plen = minv6len;
 			}
 
 		} else if (!strcmp(cmd, "ifdown")) {
