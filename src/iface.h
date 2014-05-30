@@ -120,7 +120,7 @@ struct iface {
 	struct in6_addr cer;
 
 	// Config
-	uint8_t min_v6_plen; //Min plen to be used when making new assignment
+	uint8_t ip6_plen; //Min plen to be used when making new assignment
 
 	// Prefix storage
 	struct vlist_tree assigned;

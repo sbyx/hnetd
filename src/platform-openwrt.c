@@ -581,7 +581,7 @@ enum {
 	DATA_ATTR_PREFIX,
 	DATA_ATTR_LINK_ID,
 	DATA_ATTR_IFACE_ID,
-	DATA_ATTR_MIN_V6_PLEN,
+	DATA_ATTR_IP6_PLEN,
 	DATA_ATTR_ADHOC,
 	DATA_ATTR_DISABLE_PA,
 	DATA_ATTR_PASSTHRU,
@@ -613,7 +613,7 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_PREFIX] = { .name = "prefix", .type = BLOBMSG_TYPE_ARRAY },
 	[DATA_ATTR_LINK_ID] = { .name = "link_id", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_IFACE_ID] = { .name = "iface_id", .type = BLOBMSG_TYPE_ARRAY },
-	[DATA_ATTR_MIN_V6_PLEN] = { .name = "min_v6_plen", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_IP6_PLEN] = { .name = "ip6_plen", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_ADHOC] = { .name = "adhoc", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_DISABLE_PA] = { .name = "disable_pa", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_PASSTHRU] = { .name = "passthru", .type = BLOBMSG_TYPE_STRING },
@@ -830,11 +830,11 @@ static void platform_update(void *data, size_t len)
 			}
 		}
 
-		unsigned minv6len;
-		if(c && dtb[DATA_ATTR_MIN_V6_PLEN]
-		               && sscanf(blobmsg_get_string(dtb[DATA_ATTR_MIN_V6_PLEN]), "%u", &minv6len)
-		               && minv6len <= 128) {
-			c->min_v6_plen = minv6len;
+		unsigned ip6_plen;
+		if(c && dtb[DATA_ATTR_IP6_PLEN]
+		               && sscanf(blobmsg_get_string(dtb[DATA_ATTR_IP6_PLEN]), "%u", &ip6_plen)
+		               && ip6_plen <= 128) {
+			c->ip6_plen = ip6_plen;
 		}
 	}
 
