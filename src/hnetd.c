@@ -93,10 +93,15 @@ int main(__unused int argc, char *argv[])
 	hncp_sd_params_s sd_params;
 
 #ifdef WITH_IPC
-	if (strstr(argv[0], "hnet-call"))
+	if (strstr(argv[0], "hnet-call")) {
+		if(argc < 2)
+			return 3;
 		return ipc_client(argv[1]);
-	else if ((strstr(argv[0], "hnet-ifup") || strstr(argv[0], "hnet-ifdown")) && argc >= 2)
+	} else if ((strstr(argv[0], "hnet-ifup") || strstr(argv[0], "hnet-ifdown"))) {
+		if(argc < 2)
+			return 3;
 		return ipc_ifupdown(argc, argv);
+	}
 #endif
 
 	openlog("hnetd", LOG_PERROR | LOG_PID, LOG_DAEMON);
@@ -244,6 +249,11 @@ int main(__unused int argc, char *argv[])
 
 	/* Fire up the prefix assignment code. */
 	pa_start(&pa);
+
+#ifdef WITH_IPC
+	/* Configure ipc */
+	ipc_conf(h);
+#endif
 
 	uloop_run();
 	return 0;

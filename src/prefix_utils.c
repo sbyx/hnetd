@@ -62,13 +62,15 @@ ssize_t unhexlify(uint8_t *dst, size_t len, const char *src)
 	return c;
 }
 
-void hexlify(char *dst, const uint8_t *src, size_t len)
+char *hexlify(char *dst, const uint8_t *src, size_t len)
 {
+	char *ret = dst;
 	for (size_t i = 0; i < len; ++i) {
 		*dst++ = hexdigits[src[i] >> 4];
 		*dst++ = hexdigits[src[i] & 0x0f];
 	}
 	*dst = 0;
+	return ret;
 }
 
 static int bmemcmp(const void *m1, const void *m2, size_t bitlen)

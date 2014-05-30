@@ -22,10 +22,13 @@
 #include "dhcp.h"
 #include "dhcpv6.h"
 #include "prefix_utils.h"
+#include "hncp_dump.h"
 
 static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events);
 static struct uloop_fd ipcsock = { .cb = ipc_handle };
 static const char *ipcpath = "/var/run/hnetd.sock";
+static const char *ipcpath_client = "/var/run/hnetd-client%d.sock";
+static hncp ipchncp = NULL;
 
 enum ipc_option {
 	OPT_COMMAND,
@@ -93,10 +96,16 @@ int ipc_init(void)
 	return 0;
 }
 
+void ipc_conf(hncp hncp)
+{
+	ipchncp = hncp;
+}
 
 // CLI JSON->IPC TLV converter for 3rd party dhcp client integration
 int ipc_client(const char *buffer)
 {
+	char sockaddr[108]; //Client address
+	struct sockaddr_un serveraddr; //Server sockaddr
 	struct blob_buf b = {NULL, NULL, 0, NULL};
 	blob_buf_init(&b, 0);
 
@@ -105,16 +114,44 @@ int ipc_client(const char *buffer)
 		return 1;
 	}
 
+
+	serveraddr.sun_family = AF_UNIX;
+	strcpy(serveraddr.sun_path, ipcpath);
 	for (ssize_t len = blob_len(b.head); true; sleep(1)) {
-		int sock = usock(USOCK_UNIX | USOCK_UDP, ipcpath, NULL);
-		if (sock < 0)
+		snprintf(sockaddr, 107, ipcpath_client, random() % 1000);
+		unlink(sockaddr);
+		int sock = usock(USOCK_UNIX | USOCK_SERVER | USOCK_UDP, sockaddr, NULL);
+		if (sock < 0) {
 			perror("Failed to open socket");
+			continue;
+		}
 
-		if (send(sock, blob_data(b.head), len, 0) == len)
+		if (sendto(sock, blob_data(b.head), len, 0, &serveraddr, sizeof(serveraddr)) == len) {
+			char buff[1024];
+			struct timeval tv = {.tv_sec = 2, .tv_usec = 0};
+			if(setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv,sizeof(struct timeval)))
+				perror("Failed to set socket read timeout");
+
+			ssize_t rcvlen;
+			while((rcvlen = recv(sock, buff, 1023, 0)) > 0) {
+				if(buff[rcvlen - 1] == '\0') {
+					printf("%s", buff);
+					break;
+				} else {
+					buff[rcvlen] = '\0';
+					printf("%s", buff);
+				}
+			}
+			if(rcvlen < 0)
+				perror("Receive error");
+
+			close(sock);
+			unlink(sockaddr);
 			break;
-
+		}
 		perror("Failed to talk to hnetd");
 		close(sock);
+		unlink(sockaddr);
 	}
 	return 0;
 }
@@ -210,14 +247,34 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 	while ((len = recvfrom(fd->fd, buf, sizeof(buf), MSG_DONTWAIT,
 			(struct sockaddr*)&sender, &sender_len)) >= 0) {
 		blobmsg_parse(ipc_policy, OPT_MAX, tb, buf, len);
-		if (!tb[OPT_COMMAND] || !tb[OPT_IFNAME])
+		if(!tb[OPT_COMMAND])
 			continue;
-
-		const char *ifname = blobmsg_get_string(tb[OPT_IFNAME]);
-		struct iface *c = iface_get(ifname);
 
 		const char *cmd = blobmsg_get_string(tb[OPT_COMMAND]);
 		L_DEBUG("Handling ipc command %s", cmd);
+		if (!strcmp(cmd, "hncp_dump")) {
+			struct blob_buf *b;
+			if(!ipchncp || !(b = hncp_dump(ipchncp))) {
+				const char *message = "Error\n";
+				sendto(fd->fd, message, strlen(message) + 1, MSG_DONTWAIT, &sender, sender_len);
+			} else {
+				char *buff = blobmsg_format_json_indent(b->head, true, 1);
+				sendto(fd->fd, buff, strlen(buff), MSG_DONTWAIT, &sender, sender_len);
+				sendto(fd->fd, "\n", 2, MSG_DONTWAIT, &sender, sender_len);
+				free(buff);
+				hncp_dump_free(b);
+			}
+		}
+
+
+		if (!tb[OPT_IFNAME]) {
+			const char *message = "No ifname\n";
+			sendto(fd->fd, message, strlen(message) + 1, MSG_DONTWAIT, &sender, sender_len);
+			continue;
+		}
+
+		const char *ifname = blobmsg_get_string(tb[OPT_IFNAME]);
+		struct iface *c = iface_get(ifname);
 		if (!strcmp(cmd, "ifup")) {
 			iface_flags flags = 0;
 
@@ -392,5 +449,8 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			if (!c->v4uplink)
 				iface_remove(c);
 		}
+
+		//Send an empty response
+		sendto(fd->fd, "", 1, MSG_DONTWAIT, &sender, sender_len);
 	}
 }

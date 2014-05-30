@@ -6,12 +6,15 @@
 
 #pragma once
 #include "hnetd.h"
+#include "hncp.h"
 
 // IPC init
-int ipc_init(void);
+int ipc_init();
 
 // IPC CLI client
 int ipc_client(const char *buffer);
 
 // IPC ifup/ifdown client
 int ipc_ifupdown(int argc, char *argv[]);
+
+void ipc_conf(hncp hncp);
