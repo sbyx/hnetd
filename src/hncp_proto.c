@@ -628,7 +628,7 @@ void hncp_tlv_ap_update(hncp o,
     ah->link_id = cpu_to_be32(l->iid);
   ah->flags =
     HNCP_T_ASSIGNED_PREFIX_FLAG_PREFERENCE(preference)
-    | authoritative ? HNCP_T_ASSIGNED_PREFIX_FLAG_AUTHORITATIVE : 0;
+    | (authoritative ? HNCP_T_ASSIGNED_PREFIX_FLAG_AUTHORITATIVE : 0);
   ah->prefix_length_bits = p.plen;
   ah++;
   memcpy(ah, &p, plen);
