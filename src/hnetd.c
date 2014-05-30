@@ -90,7 +90,7 @@ int main(__unused int argc, char *argv[])
 	int c;
 	hncp_iface_user_s hiu;
 	hncp_glue hg;
-	hncp_sd_params_s sd_params;
+	hncp_sd_params_s sd_params = {NULL};
 
 #ifdef WITH_IPC
 	if (strstr(argv[0], "hnet-call")) {
