@@ -274,7 +274,10 @@ void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t l
 
 		char *rawbuf = malloc(c->dhcpv6_len_out * 2 + 10);
 		strncpy(rawbuf, "PASSTHRU=", 10);
-		hexlify(&rawbuf[9], c->dhcpv6_data_out, c->dhcpv6_len_out);
+
+		dhcpv6_for_each_option(c->dhcpv6_data_out, ((uint8_t*)c->dhcpv6_data_out) + c->dhcpv6_len_out, otype, olen, odata)
+			if (otype != DHCPV6_OPT_DNS_SERVERS && otype != DHCPV6_OPT_DNS_DOMAIN)
+				hexlify(rawbuf + strlen(rawbuf), &odata[-4], olen + 4);
 
 		char *radefaultbuf = malloc(16);
 		snprintf(radefaultbuf, 16, "RA_DEFAULT=%d", (c->flags & IFACE_FLAG_ULA_DEFAULT) ? 1 : 0);

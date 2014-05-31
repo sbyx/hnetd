@@ -443,7 +443,13 @@ static void platform_commit(struct uloop_timeout *t)
 
 	if (c->internal && c->linkowner) {
 		char *dst = blobmsg_alloc_string_buffer(&b, "dhcpv6_raw", c->dhcpv6_len_out * 2 + 1);
-		hexlify(dst, c->dhcpv6_data_out, c->dhcpv6_len_out);
+		dst[0] = 0;
+
+		// Filter DNS-server and DNS-domain which we handle separatly
+		dhcpv6_for_each_option(c->dhcpv6_data_out, ((uint8_t*)c->dhcpv6_data_out) + c->dhcpv6_len_out, otype, olen, odata)
+			if (otype != DHCPV6_OPT_DNS_SERVERS)
+				hexlify(dst + strlen(dst), &odata[-4], olen + 4);
+
 		blobmsg_add_string_buffer(&b);
 
 		blobmsg_add_u32(&b, "ra_default", (c->flags & IFACE_FLAG_ULA_DEFAULT) ? 1 : 0);
