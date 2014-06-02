@@ -90,8 +90,9 @@ int main(__unused int argc, char *argv[])
 	int c;
 	hncp_iface_user_s hiu;
 	hncp_glue hg;
-	hncp_sd_params_s sd_params = {NULL};
+	hncp_sd_params_s sd_params;
 
+	memset(&sd_params, 0, sizeof(sd_params));
 #ifdef WITH_IPC
 	if (strstr(argv[0], "hnet-call")) {
 		if(argc < 2)
