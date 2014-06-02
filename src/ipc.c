@@ -127,13 +127,13 @@ int ipc_client(const char *buffer)
 		}
 
 		if (sendto(sock, blob_data(b.head), len, 0, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) == len) {
-			char buff[1024];
+			char buff[1024 * 128]; //It's big, but datagrams can't be received in pieces.
 			struct timeval tv = {.tv_sec = 2, .tv_usec = 0};
 			if(setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv,sizeof(struct timeval)))
 				perror("Failed to set socket read timeout");
 
 			ssize_t rcvlen;
-			while((rcvlen = recv(sock, buff, 1023, 0)) > 0) {
+			while((rcvlen = recv(sock, buff, 1024 * 128 - 1, 0)) > 0) {
 				if(buff[rcvlen - 1] == '\0') {
 					printf("%s", buff);
 					break;

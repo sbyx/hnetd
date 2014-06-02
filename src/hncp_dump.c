@@ -1,5 +1,6 @@
 #include "hncp_dump.h"
 
+#include "hncp_routing.h"
 #include "hncp_i.h"
 #include <libubox/blobmsg_json.h>
 
@@ -26,6 +27,25 @@ static hnetd_time_t hd_now; //time hncp_dump is called
 #define blobmsg_add_named_blob(buf, name, attr) blobmsg_add_field(buf, blobmsg_type(attr), name, \
 													blobmsg_data(attr), blobmsg_data_len(attr))
 
+static int hd_push_dn(struct blob_buf *b, const char *name, uint8_t *ll, size_t ll_len)
+{
+	char zone[301];
+	hd_a(ll2escaped(ll, ll_len, zone, 300) >= 0, return -1);
+	hd_a(!blobmsg_add_string(b, name, zone), return -1);
+	return 0;
+}
+
+static int hd_push_string(struct blob_buf *b, const char *name, void *data, size_t data_len)
+{
+	char *options;
+	hd_a(options = malloc(data_len + 1), return -1);
+	memcpy(options, data, data_len);
+	options[data_len] = '\0';
+	hd_a(!blobmsg_add_string(b, name, options), free(options); return -1;);
+	free(options);
+	return 0;
+}
+
 static int hd_push_hex(struct blob_buf *b, const char *name, void *data, size_t data_len)
 {
 	char *options;
@@ -34,6 +54,36 @@ static int hd_push_hex(struct blob_buf *b, const char *name, void *data, size_t 
 	options[data_len*2] = '\0';
 	hd_a(!blobmsg_add_string(b, name, options), free(options); return -1;);
 	free(options);
+	return 0;
+}
+
+static int hd_node_routing(struct tlv_attr *tlv, struct blob_buf *b)
+{
+	hncp_t_routing_protocol rp = (hncp_t_routing_protocol) tlv_data(tlv);
+	if(tlv_len(tlv) != sizeof(hncp_t_routing_protocol_s))
+		return -1;
+
+	hd_a(!blobmsg_add_u16(b, "protocol", rp->protocol), return -1);
+	hd_a(!blobmsg_add_string(b, "name", hncp_routing_namebyid(rp->protocol)), return -1);
+	hd_a(!blobmsg_add_u16(b, "preference", rp->preference), return -1);
+	return 0;
+}
+
+static int hd_node_zone(struct tlv_attr *tlv, struct blob_buf *b)
+{
+	hncp_t_dns_delegated_zone zo = (hncp_t_dns_delegated_zone) tlv_data(tlv);
+
+	if(tlv_len(tlv) < sizeof(hncp_t_dns_delegated_zone_s))
+		return -1;
+
+	hd_a(!blobmsg_add_string(b, "address", ADDR_REPR((struct in6_addr *)&zo->address)), return -1);
+	hd_a(!blobmsg_add_u8(b, "search", !!(zo->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_SEARCH)), return -1);
+	hd_a(!blobmsg_add_u8(b, "browse", !!(zo->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE)), return -1);
+
+	if(tlv_len(tlv) == sizeof(hncp_t_dns_delegated_zone_s))
+		return 0;
+
+	hd_a(!hd_push_dn(b, "domain", zo->ll, tlv_len(tlv) - sizeof(hncp_t_dns_delegated_zone_s)), return -1);
 	return 0;
 }
 
@@ -131,13 +181,15 @@ static int hd_node_prefix(struct tlv_attr *tlv, struct blob_buf *b)
 static int hd_node(hncp o, hncp_node n, struct blob_buf *b)
 {
 	struct tlv_attr *tlv;
+	hncp_t_version v;
 	struct blob_buf prefixes = {NULL, NULL, 0, NULL},
 			neighbors = {NULL, NULL, 0, NULL},
 			externals = {NULL, NULL, 0, NULL},
-			addresses = {NULL, NULL, 0, NULL};
+			addresses = {NULL, NULL, 0, NULL},
+			zones = {NULL, NULL, 0, NULL},
+			routing = {NULL, NULL, 0, NULL};
 	int ret = -1;
 
-	hd_a(!blobmsg_add_u32(b, "version", n->version), return -1);
 	hd_a(!blobmsg_add_u32(b, "update", n->update_number), return -1);
 	hd_a(!blobmsg_add_u64(b, "age", hd_now - n->origination_time), return -1);
 	if(n == o->own_node)
@@ -147,6 +199,8 @@ static int hd_node(hncp o, hncp_node n, struct blob_buf *b)
 	hd_a(!blob_buf_init(&neighbors, BLOBMSG_TYPE_ARRAY), goto nh);
 	hd_a(!blob_buf_init(&externals, BLOBMSG_TYPE_ARRAY), goto el);
 	hd_a(!blob_buf_init(&addresses, BLOBMSG_TYPE_ARRAY), goto ad);
+	hd_a(!blob_buf_init(&zones, BLOBMSG_TYPE_ARRAY), goto zo);
+	hd_a(!blob_buf_init(&routing, BLOBMSG_TYPE_ARRAY), goto ro);
 
 	hncp_node_for_each_tlv(n, tlv) {
 		switch (tlv_id(tlv)) {
@@ -162,6 +216,25 @@ static int hd_node(hncp o, hncp_node n, struct blob_buf *b)
 			case HNCP_T_ROUTER_ADDRESS:
 				hd_do_in_table(&addresses, NULL, hd_node_address(tlv, &addresses), goto err);
 				break;
+			case HNCP_T_VERSION:
+				v = (hncp_t_version)tlv_data(tlv);
+				if(tlv_len(tlv))
+					hd_a(!blobmsg_add_u32(b, "version", ntohl(v->version)), goto err);
+				if(tlv_len(tlv) > sizeof(hncp_t_version_s))
+					hd_a(!hd_push_string(b, "user-agent", v->user_agent, tlv_len(tlv) - sizeof(hncp_t_version_s)), goto err);
+				break;
+			case HNCP_T_DNS_DELEGATED_ZONE:
+				hd_do_in_table(&zones, NULL, hd_node_zone(tlv, &zones), goto err);
+				break;
+			case HNCP_T_DNS_ROUTER_NAME:
+				hd_a(!hd_push_string(b, "router-name", tlv_data(tlv), tlv_len(tlv)), goto err);
+				break;
+			case HNCP_T_DNS_DOMAIN_NAME:
+				hd_a(!hd_push_dn(b, "domain", tlv_data(tlv), tlv_len(tlv)), goto err);
+				break;
+			case HNCP_T_ROUTING_PROTOCOL:
+				hd_do_in_table(&routing, NULL, hd_node_routing(tlv, &routing), goto err);
+				break;
 			default:
 				break;
 		}
@@ -171,8 +244,14 @@ static int hd_node(hncp o, hncp_node n, struct blob_buf *b)
 	hd_a(!blobmsg_add_named_blob(b, "prefixes", prefixes.head), goto err);
 	hd_a(!blobmsg_add_named_blob(b, "uplinks", externals.head), goto err);
 	hd_a(!blobmsg_add_named_blob(b, "addresses", addresses.head), goto err);
+	hd_a(!blobmsg_add_named_blob(b, "zones", zones.head), goto err);
+	hd_a(!blobmsg_add_named_blob(b, "routing", routing.head), goto err);
 	ret = 0;
 err:
+	blob_buf_free(&routing);
+ro:
+	blob_buf_free(&zones);
+zo:
 	blob_buf_free(&addresses);
 ad:
 	blob_buf_free(&externals);

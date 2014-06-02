@@ -24,4 +24,6 @@ enum hncp_routing_protocol {
 	HNCP_ROUTING_MAX
 };
 
+const char *hncp_routing_namebyid(enum hncp_routing_protocol id);
+
 #endif /* HNCP_ROUTING_H_ */

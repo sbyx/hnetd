@@ -30,13 +30,18 @@
  * NODE : Represents some router's data TLVs
  * {
  *   version : version-number (u32)
+ *   user-agent : user-agent version (string)
  *   update : update-number (u32)
  *   age : age in ms (u64)
  *   self : whether it is self (bool)
+ *   router-name : Router name (string)
+ *   domain : DNS domain name (string)
  *   neighbors : [ NEIGHBOR ... ]
  *   prefixes : [ PREFIX ... ]
  *   uplinks : [ UPLINK ... ]
  *   addresses : [ ADDRESS ... ]
+ *   zones : [ ZONE ... ]
+ *   routing : [ ROUTING ... ]
  * }
  *
  * NEIGHBOR : One router's neighbor
@@ -72,6 +77,21 @@
  * {
  *   address : The address value (string/address)
  *   link-id : Link on which the address is assigned (u32)
+ * }
+ *
+ * ZONE : A domain name zone announced by the node
+ * {
+ *   address : Server address (string/address)
+ *   search : Search bit (bool)
+ *   browse : Browse bit (bool)
+ *   domain : The domain name
+ * }
+ *
+ * ROUTING : A routing protocol option
+ * {
+ *   protocol : Protocol id (u8)
+ *   name : Protocol name (string)
+ *   preference : Protocol preference (u8)
  * }
  *
  */
