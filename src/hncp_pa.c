@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Mon Jun  2 13:49:08 2014 mstenber
- * Edit time:     464 min
+ * Last modified: Mon Jun  2 22:09:51 2014 mstenber
+ * Edit time:     470 min
  *
  */
 
@@ -99,6 +99,7 @@ static void _schedule_refresh_ec(hncp_glue g)
 {
   hncp o = g->hncp;
 
+  L_DEBUG("_schedule_refresh_ec");
   o->republish_tlvs = true;
   hncp_schedule(o);
 }
@@ -842,6 +843,9 @@ void hncp_pa_set_external_link(hncp_glue glue, const char *ifname,
 {
   hncp_external_link el = _find_or_create_external_link(glue, ifname, false);
 
+  L_DEBUG("hncp_pa_set_external_link %s/%s = %p/%d",
+          ifname, index == HNCP_PA_EXTDATA_IPV6 ? "dhcpv6" : "dhcp",
+          data, (int)data_len);
   if (!data_len)
     data = NULL;
   if (!el)
