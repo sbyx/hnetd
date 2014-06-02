@@ -126,7 +126,7 @@ int ipc_client(const char *buffer)
 			continue;
 		}
 
-		if (sendto(sock, blob_data(b.head), len, 0, &serveraddr, sizeof(serveraddr)) == len) {
+		if (sendto(sock, blob_data(b.head), len, 0, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) == len) {
 			char buff[1024];
 			struct timeval tv = {.tv_sec = 2, .tv_usec = 0};
 			if(setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv,sizeof(struct timeval)))
@@ -256,11 +256,11 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			struct blob_buf *b;
 			if(!ipchncp || !(b = hncp_dump(ipchncp))) {
 				const char *message = "Error\n";
-				sendto(fd->fd, message, strlen(message) + 1, MSG_DONTWAIT, &sender, sender_len);
+				sendto(fd->fd, message, strlen(message) + 1, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
 			} else {
 				char *buff = blobmsg_format_json_indent(b->head, true, 1);
-				sendto(fd->fd, buff, strlen(buff), MSG_DONTWAIT, &sender, sender_len);
-				sendto(fd->fd, "\n", 2, MSG_DONTWAIT, &sender, sender_len);
+				sendto(fd->fd, buff, strlen(buff), MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
+				sendto(fd->fd, "\n", 2, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
 				free(buff);
 				hncp_dump_free(b);
 			}
@@ -269,7 +269,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 
 		if (!tb[OPT_IFNAME]) {
 			const char *message = "No ifname\n";
-			sendto(fd->fd, message, strlen(message) + 1, MSG_DONTWAIT, &sender, sender_len);
+			sendto(fd->fd, message, strlen(message) + 1, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
 			continue;
 		}
 
@@ -451,6 +451,6 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 		}
 
 		//Send an empty response
-		sendto(fd->fd, "", 1, MSG_DONTWAIT, &sender, sender_len);
+		sendto(fd->fd, "", 1, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
 	}
 }
