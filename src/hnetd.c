@@ -58,13 +58,25 @@ void hncp_iface_intiface_callback(struct iface_user *u,
 
 
 void hncp_iface_extdata_callback(struct iface_user *u,
-								 const char *ifname __unused,
-								 const void *dhcpv6_data __unused,
-								 size_t dhcpv6_len __unused)
+								 const char *ifname,
+								 const void *dhcpv6_data,
+								 size_t dhcpv6_len)
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
 
-	hncp_pa_set_dhcpv6_data_in_dirty(hiu->glue);
+	hncp_pa_set_external_link(hiu->glue, ifname, dhcpv6_data, dhcpv6_len,
+							  HNCP_PA_EXTDATA_IPV6);
+}
+
+void hncp_iface_ext4data_callback(struct iface_user *u,
+								  const char *ifname,
+								  const void *dhcpv4_data,
+								  size_t dhcpv4_len)
+{
+	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
+
+	hncp_pa_set_external_link(hiu->glue, ifname, dhcpv4_data, dhcpv4_len,
+							  HNCP_PA_EXTDATA_IPV4);
 }
 
 
@@ -75,7 +87,7 @@ void hncp_iface_glue(hncp_iface_user hiu, hncp h, hncp_glue g)
 	hiu->iu.cb_intiface = hncp_iface_intiface_callback;
 	hiu->iu.cb_intaddr = hncp_iface_intaddr_callback;
 	hiu->iu.cb_extdata = hncp_iface_extdata_callback;
-	hiu->iu.cb_ext4data = hncp_iface_extdata_callback;
+	hiu->iu.cb_ext4data = hncp_iface_ext4data_callback;
 	hiu->hncp = h;
 	hiu->glue = g;
 
