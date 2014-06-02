@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Mon Jun  2 13:38:35 2014 mstenber
- * Edit time:     462 min
+ * Last modified: Mon Jun  2 13:49:08 2014 mstenber
+ * Edit time:     464 min
  *
  */
 
@@ -99,8 +99,7 @@ static void _schedule_refresh_ec(hncp_glue g)
 {
   hncp o = g->hncp;
 
-  o->tlvs_dirty = true;
-  hncp_node_set_tlvs(o->own_node, NULL);
+  o->republish_tlvs = true;
   hncp_schedule(o);
 }
 

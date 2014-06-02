@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Jun  2 11:49:23 2014 mstenber
- * Edit time:     519 min
+ * Last modified: Mon Jun  2 13:50:39 2014 mstenber
+ * Edit time:     520 min
  *
  */
 
@@ -601,10 +601,10 @@ void hncp_self_flush(hncp_node n)
       vlist_flush(&o->tlvs);
     }
 
-  if (!o->tlvs_dirty)
+  if (!o->tlvs_dirty && !o->republish_tlvs)
     return;
 
-  if (!_set_own_tlvs(n))
+  if (!_set_own_tlvs(n) && !o->republish_tlvs)
     {
       L_DEBUG("hncp_self_flush: state did not change -> nothing to flush");
       return;
@@ -615,6 +615,7 @@ void hncp_self_flush(hncp_node n)
 
   _set_own_tlvs(n);
 
+  o->republish_tlvs = false;
   n->update_number++;
   n->origination_time = hncp_time(o);
   L_DEBUG("hncp_self_flush: %p -> update_number = %d @ %lld",

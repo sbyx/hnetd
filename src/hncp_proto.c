@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu May  8 17:56:27 2014 mstenber
+ * Last modified: Mon Jun  2 13:49:32 2014 mstenber
  * Edit time:     401 min
  *
  */
@@ -538,9 +538,8 @@ handle_message(hncp_link l,
         return;
       /* Don't accept updates to 'self' from network. Instead,
        * increment own update number. */
-      n->update_number = new_update_number + 1;
-      o->tlvs_dirty = true;
-      hncp_node_set_tlvs(n, NULL);
+      n->update_number = new_update_number;
+      o->republish_tlvs = true;
       hncp_schedule(o);
       return;
     }

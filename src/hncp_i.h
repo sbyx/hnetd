@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu May 22 14:05:46 2014 mstenber
- * Edit time:     166 min
+ * Last modified: Mon Jun  2 13:47:45 2014 mstenber
+ * Edit time:     169 min
  *
  */
 
@@ -61,8 +61,13 @@ struct hncp_struct {
   /* flag which indicates that we should re-publish links. */
   bool links_dirty;
 
-  /* flag which indicates that we should re-publish our node in nodes. */
+  /* flag which indicates that we should perhaps re-publish our node
+   * in nodes. */
   bool tlvs_dirty;
+
+  /* flag which indicates that we MUST re-publish our node, regardless
+   * of what's in local tlvs currently. */
+  bool republish_tlvs;
 
   /* flag which indicates that we (or someone connected) may have
    * changed connectivity. */
