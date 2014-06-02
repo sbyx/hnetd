@@ -247,9 +247,9 @@ static void iface_notify_internal_state(struct iface *c, bool enabled)
 
 static void iface_notify_data_state(struct iface *c, bool enabled)
 {
-	void *data = enabled ? c->dhcpv6_data_in : NULL;
-	size_t len = enabled ? c->dhcpv6_len_in : 0;
-	void *data4 = (enabled && c->v4uplink) ? c->dhcp_data_in : NULL;
+	void *data = (enabled && !avl_is_empty(&c->delegated.avl)) ? (c->dhcpv6_data_in ? c->dhcpv6_data_in : (void*)1) : NULL;
+	size_t len = (enabled && !avl_is_empty(&c->delegated.avl)) ? c->dhcpv6_len_in : 0;
+	void *data4 = (enabled && c->v4uplink) ? (c->dhcp_data_in ? c->dhcp_data_in : (void*)1) : NULL;
 	size_t len4 = (enabled && c->v4uplink) ? c->dhcp_len_in : 0;
 
 	struct iface_user *u;
