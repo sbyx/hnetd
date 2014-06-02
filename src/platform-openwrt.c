@@ -453,6 +453,7 @@ static void platform_commit(struct uloop_timeout *t)
 		blobmsg_add_string_buffer(&b);
 
 		blobmsg_add_u32(&b, "ra_default", (c->flags & IFACE_FLAG_ULA_DEFAULT) ? 1 : 0);
+		blobmsg_add_string(&b, "filter_class", "HOMENET");
 	}
 
 
