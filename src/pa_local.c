@@ -245,6 +245,17 @@ static void __pa_local_ipv4_cb(struct pa_data_user *user,
 static void __pa_local_dps_cb(struct pa_data_user *user, struct pa_dp *dp, uint32_t flags)
 {
 	struct pa_local *local = container_of(user, struct pa_local, data_user);
+
+	if((flags & PADF_DP_TODELETE) && dp->local) {
+		//This is a safety if some other part of the program deletes the ldp.
+		//It should not happen, but an unexplained bug made me add it.
+		if(local->ipv4.ldp && dp == &local->ipv4.ldp->dp) {
+			local->ipv4.ldp = NULL;
+		} else if (local->ula.ldp && dp == &local->ula.ldp->dp) {
+			local->ula.ldp = NULL;
+		}
+	}
+
 	if((flags & (PADF_DP_CREATED | PADF_DP_TODELETE)) && (!local->ipv4.ldp || &local->ipv4.ldp->dp != dp) &&
 			(!local->ula.ldp || &local->ula.ldp->dp != dp))
 		pa_timer_set_earlier(&local->t, 0, true);
