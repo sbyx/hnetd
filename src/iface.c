@@ -753,12 +753,12 @@ static bool iface_discover_border(struct iface *c)
 		c->internal = internal;
 		uloop_timeout_cancel(&c->transition); // Flapped back to original state
 
-		if (internal)
+		if (internal) {
 			uloop_timeout_set(&c->transition, 5000);
-		else
+			return true;
+                } else
 			iface_announce_border(&c->transition);
 
-		return true;
 	} else if (c->flags & IFACE_FLAG_ACCEPT_CERID) {
 		iface_announce_border(&c->transition);
 	}
