@@ -323,7 +323,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 						char astr[55], fstr[55];
 						struct prefix filter, addr;
 						int res = sscanf(blobmsg_get_string(k), "%54s %54s", astr, fstr);
-						if(!res || !prefix_pton(astr, &addr) || (res > 1 && !prefix_pton(fstr, &filter))) {
+						if(res <= 0 || !prefix_pton(astr, &addr) || (res > 1 && !prefix_pton(fstr, &filter))) {
 							L_ERR("Incorrect iface_id syntax %s", blobmsg_get_string(k));
 							continue;
 						}
@@ -338,7 +338,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 
 			unsigned minv6len;
 			if(iface && tb[OPT_IP6_PLEN]
-			               && sscanf(blobmsg_get_string(tb[OPT_IP6_PLEN]), "%u", &minv6len)
+			               && sscanf(blobmsg_get_string(tb[OPT_IP6_PLEN]), "%u", &minv6len) == 1
 			               && minv6len <= 128) {
 				iface->ip6_plen = minv6len;
 			}

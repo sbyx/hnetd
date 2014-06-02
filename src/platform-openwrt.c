@@ -824,7 +824,7 @@ static void platform_update(void *data, size_t len)
 					char astr[55], fstr[55];
 					struct prefix filter, addr;
 					int res = sscanf(blobmsg_get_string(k), "%54s %54s", astr, fstr);
-					if(!res || !prefix_pton(astr, &addr) || (res > 1 && !prefix_pton(fstr, &filter))) {
+					if(res <= 0 || !prefix_pton(astr, &addr) || (res > 1 && !prefix_pton(fstr, &filter))) {
 						L_ERR("Incorrect iface_id syntax %s", blobmsg_get_string(k));
 						continue;
 					}
@@ -839,7 +839,7 @@ static void platform_update(void *data, size_t len)
 
 		unsigned ip6_plen;
 		if(c && dtb[DATA_ATTR_IP6_PLEN]
-		               && sscanf(blobmsg_get_string(dtb[DATA_ATTR_IP6_PLEN]), "%u", &ip6_plen)
+		               && sscanf(blobmsg_get_string(dtb[DATA_ATTR_IP6_PLEN]), "%u", &ip6_plen) == 1
 		               && ip6_plen <= 128) {
 			c->ip6_plen = ip6_plen;
 		}
