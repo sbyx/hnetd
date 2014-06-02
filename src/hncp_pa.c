@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Mon Jun  2 13:30:11 2014 mstenber
- * Edit time:     459 min
+ * Last modified: Mon Jun  2 13:38:35 2014 mstenber
+ * Edit time:     462 min
  *
  */
 
@@ -173,7 +173,7 @@ static hncp_external_link _find_or_create_external_link(hncp_glue g,
   if (el)
     {
       strcpy(el->ifname, ifname);
-      list_add(&g->external_links, &el->lh);
+      list_add(&el->lh, &g->external_links);
     }
   return el;
 }
