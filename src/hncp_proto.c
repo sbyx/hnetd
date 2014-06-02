@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Mon Jun  2 13:49:32 2014 mstenber
- * Edit time:     401 min
+ * Last modified: Mon Jun  2 15:37:15 2014 mstenber
+ * Edit time:     406 min
  *
  */
 
@@ -430,7 +430,6 @@ handle_message(hncp_link l,
             if (n == o->own_node
                 && (new_update_number > n->update_number
                     || (new_update_number == n->update_number
-                        && hncp_node_is_self(n)
                         && memcmp(&n->node_data_hash,
                                   &ns->node_data_hash,
                                   sizeof(n->node_data_hash)) != 0)))
@@ -521,10 +520,9 @@ handle_message(hncp_link l,
   new_update_number = be32_to_cpu(ns->update_number);
   if (n->update_number > new_update_number
       || (n->update_number == new_update_number
-          && (!hncp_node_is_self(n)
-              || !memcmp(&n->node_data_hash,
-                         &ns->node_data_hash,
-                         sizeof(n->node_data_hash)))))
+          && !memcmp(&n->node_data_hash,
+                     &ns->node_data_hash,
+                     sizeof(n->node_data_hash))))
     {
       L_DEBUG("received update number %d, but already have %d",
               new_update_number, n->update_number);
