@@ -265,6 +265,7 @@ bool hncp_init(hncp o, const void *node_identifier, int len)
   o->nodes.keep_old = true;
   vlist_init(&o->tlvs, compare_tlvs, update_tlv);
   vlist_init(&o->links, compare_links, update_link);
+  INIT_LIST_HEAD(&o->link_confs);
   hncp_calculate_hash(node_identifier, len, &h);
   if (inet_pton(AF_INET6, HNCP_MCAST_GROUP, &o->multicast_address) < 1) {
     L_ERR("unable to inet_pton multicast group address");
@@ -447,6 +448,32 @@ int hncp_remove_tlvs_by_type(hncp o, int type)
   return c;
 }
 
+void hncp_link_conf_set_default(hncp_link_conf conf)
+{
+	conf->trickle_imax = HNCP_TRICKLE_IMIN;
+	conf->trickle_imax = HNCP_TRICKLE_IMAX;
+	conf->trickle_k = HNCP_TRICKLE_K;
+	conf->ping_worried_t = HNCP_INTERVAL_WORRIED;
+	conf->ping_retry_base_t = HNCP_INTERVAL_BASE;
+	conf->ping_retries = HNCP_INTERVAL_RETRIES;
+}
+
+hncp_link_conf hncp_find_link_conf_by_name(hncp o, const char *ifname)
+{
+	hncp_link_conf conf;
+	list_for_each_entry(conf, &o->link_confs, in_link_confs) {
+		if(!strcmp(ifname, conf->ifname))
+			return conf;
+	}
+
+	if(!(conf = malloc(sizeof(hncp_link_conf_s))))
+		return NULL;
+
+	hncp_link_conf_set_default(conf);
+	strcpy(conf->ifname, ifname);
+	list_add(&conf->in_link_confs, &o->link_confs);
+	return conf;
+}
 
 hncp_link hncp_find_link_by_name(hncp o, const char *ifname, bool create)
 {
@@ -463,6 +490,11 @@ hncp_link hncp_find_link_by_name(hncp o, const char *ifname, bool create)
       l = (hncp_link) calloc(1, sizeof(*l));
       if (!l)
         return NULL;
+      l->conf = hncp_find_link_conf_by_name(o, ifname);
+      if(!l->conf) {
+    	  free(l);
+    	  return NULL;
+      }
       l->hncp = o;
       l->iid = o->first_free_iid++;
       vlist_init(&l->neighbors, compare_neighbors, update_neighbor);

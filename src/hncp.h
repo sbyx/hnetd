@@ -21,6 +21,9 @@
 /* in6_addr */
 #include <netinet/in.h>
 
+/* IFNAMSIZ */
+#include <net/if.h>
+
 #include <libubox/list.h>
 
 /* Opaque pointer that represents hncp instance. */
@@ -104,6 +107,26 @@ struct hncp_subscriber_struct {
    */
   void (*link_change_callback)(hncp_subscriber s);
 };
+
+/************************************************ API for configuration */
+
+typedef struct hncp_link_conf_struct hncp_link_conf_s, *hncp_link_conf;
+struct hncp_link_conf_struct {
+  struct list_head in_link_confs;
+  char ifname[IFNAMSIZ]; /* Name of the link. */
+
+  /* Trickle conf */
+  hnetd_time_t trickle_imin, trickle_imax;
+  int trickle_k;
+
+  /* Unreachability conf */
+  hnetd_time_t ping_worried_t, ping_retry_base_t;
+  int ping_retries;
+};
+
+hncp_link_conf hncp_find_link_conf_by_name(hncp o, const char *ifname);
+
+void hncp_link_conf_set_default(hncp_link_conf conf);
 
 /************************************************ API for whole hncp instance */
 

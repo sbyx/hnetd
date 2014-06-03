@@ -28,14 +28,14 @@ static void trickle_upgrade(hncp_link l)
 {
   int i = l->trickle_i * 2;
 
-  i = i < HNCP_TRICKLE_IMIN ? HNCP_TRICKLE_IMIN
-    : i > HNCP_TRICKLE_IMAX ? HNCP_TRICKLE_IMAX : i;
+  i = i < l->conf->trickle_imin ? l->conf->trickle_imin
+    : i > l->conf->trickle_imax ? l->conf->trickle_imax : i;
   trickle_set_i(l, i);
 }
 
 static void trickle_send(hncp_link l)
 {
-  if (l->trickle_c < HNCP_TRICKLE_K)
+  if (l->trickle_c < l->conf->trickle_k)
     {
       if (!hncp_link_send_network_state(l, &l->hncp->multicast_address,
                                         HNCP_MAXIMUM_MULTICAST_SIZE))
@@ -162,7 +162,7 @@ void hncp_link_reset_trickle(hncp_link l)
 {
   if (l->join_pending)
     return;
-  trickle_set_i(l, HNCP_TRICKLE_IMIN);
+  trickle_set_i(l, l->conf->trickle_imin);
   hncp_schedule(l->hncp);
 }
 
@@ -235,7 +235,7 @@ void hncp_run(hncp o)
         {
           if (time_since_failed_join >= HNCP_REJOIN_INTERVAL
               && hncp_link_join(l))
-            trickle_set_i(l, HNCP_TRICKLE_IMIN);
+            trickle_set_i(l, l->conf->trickle_imin);
           else
             {
               next = TMIN(next, now + HNCP_REJOIN_INTERVAL - (now - o->join_failed_time));
@@ -267,9 +267,9 @@ void hncp_run(hncp o)
           hnetd_time_t next_time;
 
           if (!n->ping_count)
-            next_time = n->last_response + HNCP_INTERVAL_WORRIED;
+            next_time = n->last_response + l->conf->ping_worried_t;
           else
-            next_time = n->last_ping + (HNCP_INTERVAL_BASE << n->ping_count);
+            next_time = n->last_ping + (l->conf->ping_retry_base_t << n->ping_count);
 
           /* No cause to do anything right now. */
           if (next_time > now)
@@ -278,7 +278,7 @@ void hncp_run(hncp o)
               continue;
             }
 
-          if (n->ping_count++== HNCP_INTERVAL_RETRIES)
+          if (n->ping_count++== l->conf->ping_retries)
             {
               /* Zap the neighbor */
               L_DEBUG("neighbor %llx is gone - no response to pings",

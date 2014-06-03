@@ -35,9 +35,7 @@
 #define HNCP_UPDATE_COLLISION_N 60000
 
 #include <libubox/vlist.h>
-
-/* IFNAMSIZ */
-#include <net/if.h>
+#include <libubox/list.h>
 
 typedef uint32_t iid_t;
 
@@ -57,6 +55,9 @@ struct hncp_struct {
 
   /* local links (those API's clients want active). */
   struct vlist_tree links;
+
+  /* Link configuration options */
+  struct list_head link_confs;
 
   /* flag which indicates that we should re-publish links. */
   bool links_dirty;
@@ -127,6 +128,9 @@ struct hncp_link_struct {
 
   /* Backpointer to hncp */
   hncp hncp;
+
+  /* Pointer to some hncp_link configuration structure */
+  hncp_link_conf conf;
 
   /* Who are the neighbors on the link. */
   struct vlist_tree neighbors;
