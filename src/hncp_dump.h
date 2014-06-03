@@ -95,9 +95,6 @@
  * }
  *
  */
-struct blob_buf *hncp_dump(hncp o);
-
-/* Frees any blob buffer returned by hncp_dump functions */
-#define hncp_dump_free(dump) blob_buf_free(dump)
+int hncp_dump(struct blob_buf *b, hncp o);
 
 #endif /* HNCP_DUMP_H_ */

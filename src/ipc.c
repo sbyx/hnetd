@@ -14,6 +14,7 @@
 
 #include <libubox/usock.h>
 #include <libubox/uloop.h>
+#include <libubox/blob.h>
 #include <libubox/blobmsg.h>
 #include <libubox/blobmsg_json.h>
 
@@ -114,45 +115,40 @@ int ipc_client(const char *buffer)
 		return 1;
 	}
 
-
 	serveraddr.sun_family = AF_UNIX;
 	strcpy(serveraddr.sun_path, ipcpath);
+
+	snprintf(sockaddr, 107, ipcpath_client, random() % 1000);
+	unlink(sockaddr);
+	int sock = usock(USOCK_UNIX | USOCK_SERVER | USOCK_UDP, sockaddr, NULL);
+	if (sock < 0) {
+		perror("Failed to open socket");
+		return 1;
+	}
+
 	for (ssize_t len = blob_len(b.head); true; sleep(1)) {
-		snprintf(sockaddr, 107, ipcpath_client, random() % 1000);
-		unlink(sockaddr);
-		int sock = usock(USOCK_UNIX | USOCK_SERVER | USOCK_UDP, sockaddr, NULL);
-		if (sock < 0) {
-			perror("Failed to open socket");
-			continue;
-		}
-
 		if (sendto(sock, blob_data(b.head), len, 0, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) == len) {
-			char buff[1024 * 128]; //It's big, but datagrams can't be received in pieces.
+			struct {
+				struct blob_attr hdr;
+				uint8_t buf[1024*128];
+			} resp;
+
 			struct timeval tv = {.tv_sec = 2, .tv_usec = 0};
-			if(setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv,sizeof(struct timeval)))
-				perror("Failed to set socket read timeout");
+			setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval));
 
-			ssize_t rcvlen;
-			while((rcvlen = recv(sock, buff, 1024 * 128 - 1, 0)) > 0) {
-				if(buff[rcvlen - 1] == '\0') {
-					printf("%s", buff);
-					break;
-				} else {
-					buff[rcvlen] = '\0';
-					printf("%s", buff);
-				}
+			ssize_t rcvlen = recv(sock, resp.buf, sizeof(resp.buf), 0);
+			if (rcvlen > 0) {
+				blob_set_raw_len(&resp.hdr, rcvlen);
+				char *buf = blobmsg_format_json_indent(&resp.hdr, true, true);
+				puts(buf);
+				free(buf);
 			}
-			if(rcvlen < 0)
-				perror("Receive error");
-
-			close(sock);
-			unlink(sockaddr);
 			break;
 		}
-		perror("Failed to talk to hnetd");
-		close(sock);
-		unlink(sockaddr);
 	}
+
+	close(sock);
+	unlink(sockaddr);
 	return 0;
 }
 
@@ -252,24 +248,21 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 
 		const char *cmd = blobmsg_get_string(tb[OPT_COMMAND]);
 		L_DEBUG("Handling ipc command %s", cmd);
-		if (!strcmp(cmd, "hncp_dump")) {
-			struct blob_buf *b;
-			if(!ipchncp || !(b = hncp_dump(ipchncp))) {
-				const char *message = "Error\n";
-				sendto(fd->fd, message, strlen(message) + 1, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
-			} else {
-				char *buff = blobmsg_format_json_indent(b->head, true, 1);
-				sendto(fd->fd, buff, strlen(buff), MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
-				sendto(fd->fd, "\n", 2, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
-				free(buff);
-				hncp_dump_free(b);
-			}
+		if (!strcmp(cmd, "dump")) {
+			struct blob_buf b = {NULL, NULL, 0, NULL};
+			blob_buf_init(&b, 0);
+
+			hncp_dump(&b, ipchncp);
+			sendto(fd->fd, blob_data(b.head), blob_len(b.head),
+					MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
+
+			blob_buf_free(&b);
+			continue;
 		}
 
 
 		if (!tb[OPT_IFNAME]) {
-			const char *message = "No ifname\n";
-			sendto(fd->fd, message, strlen(message) + 1, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
+			sendto(fd->fd, NULL, 0, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
 			continue;
 		}
 
@@ -451,6 +444,6 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 		}
 
 		//Send an empty response
-		sendto(fd->fd, "", 1, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
+		sendto(fd->fd, NULL, 0, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
 	}
 }

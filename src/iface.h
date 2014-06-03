@@ -8,6 +8,7 @@
 #define _IFACE_H
 
 #include "hnetd.h"
+#include "hncp.h"
 #include "prefix_utils.h"
 
 #include <libubox/list.h>
@@ -157,7 +158,7 @@ struct iface {
 #include "pa.h"
 
 // Generic initializer to be called by main()
-int iface_init(struct pa *pa, const char *pd_socket);
+int iface_init(hncp hncp, struct pa *pa, const char *pd_socket);
 
 // Get an interface by name
 struct iface* iface_get(const char *ifname);

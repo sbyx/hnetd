@@ -330,7 +330,7 @@ void iface_set_unreachable_route(const struct prefix *p, bool enable)
 
 #endif /* __linux__ */
 
-int iface_init(struct pa *pa, const char *pd_socket)
+int iface_init(hncp hncp, struct pa *pa, const char *pd_socket)
 {
 #ifdef __linux__
 	rtnl_fd.fd = socket(AF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, NETLINK_ROUTE);
@@ -350,7 +350,7 @@ int iface_init(struct pa *pa, const char *pd_socket)
 
 	pa_data_subscribe(&pa->data, &pa_data_cb);
 	pa_p = pa;
-	return platform_init(&pa->data, pd_socket);
+	return platform_init(hncp, &pa->data, pd_socket);
 }
 
 

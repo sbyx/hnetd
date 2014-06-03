@@ -287,22 +287,13 @@ static int hd_info(hncp o, struct blob_buf *b)
 }
 
 
-struct blob_buf *hncp_dump(hncp o)
+int hncp_dump(struct blob_buf *b, hncp o)
 {
-	struct blob_buf *b;
 	hd_now = hnetd_time();
-	hd_a(b = calloc(1, sizeof(*b)), goto alloc);
-	hd_a(!blob_buf_init(b, 0), goto init);
-	hd_a(!hd_info(o, b), goto fill);
-	hd_do_in_table(b, "links", hd_links(o,b), goto fill);
-	hd_do_in_table(b, "nodes", hd_nodes(o,b), goto fill);
-	return b;
-fill:
-	blob_buf_free(b);
-init:
-	free(b);
-alloc:
-	return NULL;
+	hd_a(!hd_info(o, b), return -1);
+	hd_do_in_table(b, "links", hd_links(o,b), return -1);
+	hd_do_in_table(b, "nodes", hd_nodes(o,b), return -1);
+	return 0;
 }
 
 

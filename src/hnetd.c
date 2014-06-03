@@ -252,7 +252,7 @@ int main(__unused int argc, char *argv[])
 		hncp_routing_create(h, routing_script);
 
 	/* Init ipc */
-	iface_init(&pa, pd_socket_path);
+	iface_init(h, &pa, pd_socket_path);
 
 	/* Glue together HNCP, PA-glue and and iface */
 	hncp_iface_glue(&hiu, h, hg);

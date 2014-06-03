@@ -31,7 +31,7 @@ struct platform_iface {
 	pid_t dhcpv6;
 };
 
-int platform_init(__unused struct pa_data *data, const char *pd_socket)
+int platform_init(__unused hncp hncp, __unused struct pa_data *data, const char *pd_socket)
 {
 	hnetd_pd_socket = pd_socket;
 	return 0;

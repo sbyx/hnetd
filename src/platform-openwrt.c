@@ -23,11 +23,13 @@
 #include "dhcp.h"
 #include "platform.h"
 #include "iface.h"
+#include "hncp_dump.h"
 
 static struct ubus_context *ubus = NULL;
 static struct ubus_subscriber netifd;
 static uint32_t ubus_network_interface = 0;
 static struct pa_data *pa_data = NULL;
+static hncp p_hncp = NULL;
 
 static int handle_update(__unused struct ubus_context *ctx,
 		__unused struct ubus_object *obj, __unused struct ubus_request_data *req,
@@ -35,7 +37,24 @@ static int handle_update(__unused struct ubus_context *ctx,
 static void handle_dump(__unused struct ubus_request *req,
 		__unused int type, struct blob_attr *msg);
 
+static int hnet_dump(struct ubus_context *ctx, __unused struct ubus_object *obj,
+		struct ubus_request_data *req, __unused const char *method,
+		__unused struct blob_attr *msg);
+
 static struct ubus_request req_dump = { .list = LIST_HEAD_INIT(req_dump.list) };
+
+static struct ubus_method hnet_object_methods[] = {
+	{.name = "dump", .handler = hnet_dump},
+};
+static struct ubus_object_type hnet_object_type =
+		UBUS_OBJECT_TYPE("hnet", hnet_object_methods);
+
+static struct ubus_object main_object = {
+        .name = "hnet",
+        .type = &hnet_object_type,
+        .methods = hnet_object_methods,
+        .n_methods = ARRAY_SIZE(hnet_object_methods),
+};
 
 static void platform_commit(struct uloop_timeout *t);
 struct platform_iface {
@@ -89,7 +108,7 @@ static void handle_event(__unused struct ubus_context *ctx, __unused struct ubus
 static struct ubus_event_handler event_handler = { .cb = handle_event };
 static const char *hnetd_pd_socket = NULL;
 
-int platform_init(struct pa_data *data, const char *pd_socket)
+int platform_init(hncp hncp, struct pa_data *data, const char *pd_socket)
 {
 	if (!(ubus = ubus_connect(NULL))) {
 		L_ERR("Failed to connect to ubus: %s", strerror(errno));
@@ -100,12 +119,14 @@ int platform_init(struct pa_data *data, const char *pd_socket)
 	ubus_register_subscriber(ubus, &netifd);
 
 	ubus_add_uloop(ubus);
+	ubus_add_object(ubus, &main_object);
 	ubus_register_event_handler(ubus, &event_handler, "ubus.object.add");
 	if (!ubus_lookup_id(ubus, "network.interface", &ubus_network_interface))
 		sync_netifd(true);
 
 	hnetd_pd_socket = pd_socket;
 	pa_data = data;
+	p_hncp = hncp;
 	return 0;
 }
 
@@ -965,5 +986,17 @@ static void handle_dump(__unused struct ubus_request *req,
 		platform_update(blobmsg_data(c), blobmsg_data_len(c));
 
 	iface_commit();
+}
+
+static int hnet_dump(struct ubus_context *ctx, __unused struct ubus_object *obj,
+		struct ubus_request_data *req, __unused const char *method,
+		__unused struct blob_attr *msg)
+{
+	struct blob_buf b = {NULL, NULL, 0, NULL};
+	blob_buf_init(&b, 0);
+	hncp_dump(&b, p_hncp);
+	ubus_send_reply(ctx, req, b.head);
+	blob_buf_free(&b);
+	return 0;
 }
 
