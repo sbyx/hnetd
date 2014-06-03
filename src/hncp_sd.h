@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 20:09:23 2014 mstenber
- * Last modified: Thu May 22 13:02:32 2014 mstenber
- * Edit time:     4 min
+ * Last modified: Thu May 22 13:10:44 2014 mstenber
+ * Edit time:     7 min
  *
  */
 
@@ -23,17 +23,22 @@ typedef struct hncp_sd_struct hncp_sd_s, *hncp_sd;
  * sd_create to sd_destroy. */
 typedef struct hncp_sd_params_struct
 {
-  /* Which script is used to prod at dnsmasq */
+  /* Which script is used to prod at dnsmasq (required for SD) */
   const char *dnsmasq_script;
 
-  /* And where to store the dnsmasq.conf */
+  /* And where to store the dnsmasq.conf (required for SD) */
   const char *dnsmasq_bonus_file;
 
-  /* Which script is used to prod at ohybridproxy */
+  /* Which script is used to prod at ohybridproxy (required for SD) */
   const char *ohp_script;
+
+  /* Which script is used to prod at minimalist-pcproxy (optional) */
+  const char *pcp_script;
 
   /* Router name (if desired, optional) */
   const char *router_name;
+
+  /* Domain name (if desired, optional, copied from others if set there) */
   const char *domain_name;
 } hncp_sd_params_s, *hncp_sd_params;
 

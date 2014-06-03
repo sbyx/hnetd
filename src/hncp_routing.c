@@ -23,6 +23,14 @@ static void hncp_routing_run(struct uloop_timeout *t);
 static void hncp_routing_callback(hncp_subscriber s, __unused hncp_node n,
 		__unused struct tlv_attr *tlv, __unused bool add);
 
+static const char *hncp_routing_names[HNCP_ROUTING_MAX] = {
+		[HNCP_ROUTING_NONE] = "Fallback routing",
+		[HNCP_ROUTING_BABEL] = "Babel",
+		[HNCP_ROUTING_OSPF] = "OSPF",
+		[HNCP_ROUTING_ISIS] = "IS-IS",
+		[HNCP_ROUTING_RIP] = "RIP",
+};
+
 struct hncp_routing_struct {
 	hncp_subscriber_s subscr;
 	hncp hncp;
@@ -348,4 +356,12 @@ static void hncp_routing_run(struct uloop_timeout *t)
 		list_del(&c->bfs.head);
 	}
 	iface_commit_routes();
+}
+
+const char *hncp_routing_namebyid(enum hncp_routing_protocol id)
+{
+	if(id >= HNCP_ROUTING_MAX)
+		return "Unknown routing protocol";
+
+	return hncp_routing_names[id];
 }

@@ -88,6 +88,8 @@ setdhcpv6)
 	set dhcp.$2=dhcp
 	set dhcp.$2.dns="$DNS"
 	set dhcp.$2.domain="$SEARCH"
+	set dhcp.$2.dhcpv6_raw="$PASSTHRU"
+	set dhcp.$2.ra_default="$RA_DEFAULT"
 	commit dhcp
 EOF
 	killall -SIGHUP odhcpd

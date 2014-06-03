@@ -33,6 +33,7 @@
 #include "iface.h"
 #include "platform.h"
 #include "pa_data.h"
+#include "dhcpv6.h"
 
 void iface_pa_ifs(struct pa_data_user *, struct pa_iface *, uint32_t flags);
 void iface_pa_cps(struct pa_data_user *, struct pa_cp *, uint32_t flags);
@@ -246,10 +247,10 @@ static void iface_notify_internal_state(struct iface *c, bool enabled)
 
 static void iface_notify_data_state(struct iface *c, bool enabled)
 {
-	void *data = (enabled) ? (c->dhcpv6_data_in ? c->dhcpv6_data_in : (void*)1) : NULL;
-	size_t len = (enabled) ? c->dhcpv6_len_in : 0;
-	void *data4 = (enabled) ? (c->dhcp_data_in ? c->dhcp_data_in : (void*)1) : NULL;
-	size_t len4 = (enabled) ? c->dhcp_len_in : 0;
+	void *data = (enabled && !avl_is_empty(&c->delegated.avl)) ? (c->dhcpv6_data_in ? c->dhcpv6_data_in : (void*)1) : NULL;
+	size_t len = (enabled && !avl_is_empty(&c->delegated.avl)) ? c->dhcpv6_len_in : 0;
+	void *data4 = (enabled && c->v4uplink) ? (c->dhcp_data_in ? c->dhcp_data_in : (void*)1) : NULL;
+	size_t len4 = (enabled && c->v4uplink) ? c->dhcp_len_in : 0;
 
 	struct iface_user *u;
 	list_for_each_entry(u, &users, head) {
@@ -752,12 +753,12 @@ static bool iface_discover_border(struct iface *c)
 		c->internal = internal;
 		uloop_timeout_cancel(&c->transition); // Flapped back to original state
 
-		if (internal)
+		if (internal) {
 			uloop_timeout_set(&c->transition, 5000);
-		else
+			return true;
+                } else
 			iface_announce_border(&c->transition);
 
-		return true;
 	} else if (c->flags & IFACE_FLAG_ACCEPT_CERID) {
 		iface_announce_border(&c->transition);
 	}

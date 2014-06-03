@@ -26,7 +26,9 @@ bool fr_mask_random = false;
 inline static long int fr_random() {
 	long int res;
 	if(fr_mask_random) {
-		res = smock_pull_int(FR_RANDOM_QUEUE);
+		int64_t *i = (int64_t *)smock_pull_int(FR_RANDOM_QUEUE);
+		res = *i;
+		free(i);
 	} else {
 		res = random();
 	}

@@ -34,7 +34,7 @@ static struct pa_test_iface {
 	struct iface iface;
 } iface = { .user = NULL,
 		.iface = { .eui64_addr = {.s6_addr = { 0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00, PL_EUI64 }},
-				.min_v6_plen = 0,
+				.ip6_plen = 0,
 } };
 
 #define iface_register_user   pa_test_iface_register_user
@@ -73,6 +73,8 @@ static struct pa_rid rid_lower = { .id = {0x10} };
 static struct prefix p1 = PL_P1;
 static struct prefix p1_1 = PL_P1_01;
 static struct prefix p1_2 = PL_P1_02;
+static struct prefix p1_11 = PL_P1_11;
+static struct prefix p1_24 = PL_P1_24;
 
 static struct prefix p2 = PL_P2;
 static struct prefix p2_1 = PL_P2_01;
@@ -216,6 +218,7 @@ void test_pa_ipv4()
 	}
 
 	fr_md5_push_prefix(&pv4_1); //The network address should not be used and pv4_1_1 should be used instead
+	fr_md5_push_prefix(&pv4_1_1);
 	sput_fail_unless(to_getfirst() == &pa.core.aaa_to.t && !to_run(1), "Run aaa");
 	sput_fail_unless(_pa_cpl(cp)->laa, "Created laa");
 	if(_pa_cpl(cp)->laa)
@@ -322,6 +325,7 @@ void test_pa_network()
 	pa_ap_set_priority(ap, PA_PRIORITY_AUTO_MAX);
 	pa_ap_notify(&pa.data, ap);
 	fr_md5_push_prefix(&p1_1); /* This one should be ignored and the second one should be chosen */
+	fr_md5_push_prefix(&p1_2);
 	res = to_run(1);
 	sput_fail_unless(!res, "Run paa");
 	sput_fail_if(btrie_empty(&pa.data.cps), "The cp remains");
@@ -350,6 +354,7 @@ void test_pa_network()
 	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, &p1_excluded, valid, preferred, NULL, 0);
 	/* That should trigger paa only */
 	fr_md5_push_prefix(&p1_2); // <-this one is in excluded
+	fr_md5_push_prefix(&p1_11); //This one will be used
 	sput_fail_unless(to_getfirst() == &pa.core.paa_to.t, "Paa is to be run");
 	res = to_run(1);
 	sput_fail_unless(!res, "Run paa");
@@ -360,6 +365,28 @@ void test_pa_network()
 
 	res = to_run(2);
 	sput_fail_unless(!res && !to_getfirst(), "No remaining timeout");
+
+	/* Tests for randomized selection */
+	/* Let's invalidate that assignment */
+	ap = pa_ap_get(&pa.data, &p1_11, &rid_higher, true);
+	pa_ap_notify(&pa.data, ap);
+
+	// Fill the pseudo random queue with invalid stuff
+	int i;
+	for(i = 0; i < PA_CORE_PSEUDORAND_TENTATIVES; i++)
+		fr_md5_push_prefix(&p1_2); // <-this one is in excluded
+
+	fr_mask_random = true;
+	fr_random_push(19); //We want the 20'th available prefix in p1 that is not in excluded or p1_2. It is p1_24
+	to_run(4);
+	fr_mask_random = false;
+	sput_fail_unless(!res && !to_getfirst(), "No remaining timeout");
+
+	cp = btrie_first_down_entry(cp, &pa.data.cps, (btrie_key_t *)&p1_24, 64, be);
+	sput_fail_unless(cp && !prefix_cmp(&cp->prefix, &p1_24), "Correct new prefix");
+	/* End of tests for randomized selection */
+	pa_ap_todelete(ap);
+	pa_ap_notify(&pa.data, ap);
 
 	/* Let's remove the excluded */
 	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, valid, preferred, NULL, 0);
@@ -808,7 +835,7 @@ void test_pa_minv6len()
 	pa_flood_notify(&pa.data);
 	pa_start(&pa);
 
-	iface.iface.min_v6_plen = 92;
+	iface.iface.ip6_plen = 92;
 	iface.user->cb_intiface(iface.user, PL_IFNAME1, true);
 	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, now_time + 100000 , now_time + 50000, NULL, 0);
 	fr_md5_push_prefix(&p1_1);
@@ -822,7 +849,7 @@ void test_pa_minv6len()
 	//TERM
 	pa_stop(&pa);
 	pa_term(&pa);
-	iface.iface.min_v6_plen = 0;
+	iface.iface.ip6_plen = 0;
 }
 
 int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)

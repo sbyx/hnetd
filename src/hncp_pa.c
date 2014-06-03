@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Tue Apr 29 17:19:46 2014 mstenber
- * Edit time:     403 min
+ * Last modified: Mon Jun  2 22:09:51 2014 mstenber
+ * Edit time:     470 min
  *
  */
 
@@ -68,6 +68,9 @@ typedef struct {
 } hncp_dp_s, *hncp_dp;
 
 struct hncp_glue_struct {
+  /* List of external links */
+  struct list_head external_links;
+
   /* Delegated prefix list (hncp_dp) */
   struct vlist_tree dps;
 
@@ -82,6 +85,24 @@ struct hncp_glue_struct {
   struct pa_data *pa_data;
   struct pa_data_user data_user;
 };
+
+typedef struct {
+  struct list_head lh;
+
+  char ifname[IFNAMSIZ];
+
+  void *extdata[NUM_HNCP_PA_EXTDATA];
+  size_t extdata_len[NUM_HNCP_PA_EXTDATA];
+} *hncp_external_link;
+
+static void _schedule_refresh_ec(hncp_glue g)
+{
+  hncp o = g->hncp;
+
+  L_DEBUG("_schedule_refresh_ec");
+  o->republish_tlvs = true;
+  hncp_schedule(o);
+}
 
 static void _refresh_ec(hncp_glue g, bool publish);
 
@@ -133,6 +154,28 @@ static hncp_dp _find_or_create_dp(hncp_glue g,
       vlist_add(&g->dps, &dp->in_dps, dp);
     }
   return dp;
+}
+
+static hncp_external_link _find_or_create_external_link(hncp_glue g,
+                                                        const char *ifname,
+                                                        bool allow_add)
+{
+  hncp_external_link el;
+
+  list_for_each_entry(el, &g->external_links, lh)
+    {
+      if (strcmp(el->ifname, ifname) == 0)
+        return el;
+    }
+  if (!allow_add)
+    return NULL;
+  el = calloc(1, sizeof(*el));
+  if (el)
+    {
+      strcpy(el->ifname, ifname);
+      list_add(&el->lh, &g->external_links);
+    }
+  return el;
 }
 
 static hncp_link _find_local_link(hncp_node onode, uint32_t olink_no)
@@ -382,7 +425,7 @@ static void _tlv_cb(hncp_subscriber s,
         if (!c)
           L_INFO("empty external connection TLV");
 
-        /* Don't republish here, only updated outgoing dhcp options */
+        /* Don't republish here, only update outgoing dhcp options */
         _refresh_ec(g, false);
 
       }
@@ -392,10 +435,8 @@ static void _tlv_cb(hncp_subscriber s,
       break;
     case HNCP_T_ROUTER_ADDRESS:
       {
-        hncp_t_router_address ra;
-
-        ra = tlv_data(tlv);
-        if (tlv_len(tlv) == sizeof(*ra))
+        hncp_t_router_address ra = hncp_tlv_router_address(tlv);
+        if (ra)
         {
           _update_pa_eaa(g->pa_data, &ra->address,
                          (struct pa_rid *)&n->node_identifier_hash,
@@ -419,14 +460,6 @@ static void _tlv_cb(hncp_subscriber s,
       return;
     }
 
-}
-
-void hncp_pa_set_dhcpv6_data_in_dirty(hncp_glue g)
-{
-  hncp o = g->hncp;
-
-  o->tlvs_dirty = true;
-  hncp_schedule(o);
 }
 
 #define APPEND_BUF(buf, len, ibuf, ilen)        \
@@ -457,6 +490,7 @@ static void _refresh_ec(hncp_glue g, bool publish)
   struct tlv_buf tb;
   char *dhcpv6_options = NULL, *dhcp_options = NULL;
   int dhcpv6_options_len = 0, dhcp_options_len = 0;
+  hncp_external_link el;
 
   if (publish)
     hncp_remove_tlvs_by_type(o, HNCP_T_EXTERNAL_CONNECTION);
@@ -505,18 +539,22 @@ static void _refresh_ec(hncp_glue g, bool publish)
           tlv_nest_end(&tb, cookie);
         }
       tlv_sort(tlv_data(tb.head), tlv_len(tb.head));
-      struct iface *ifo = iface_get(dp2->ifname);
-      if (ifo && ifo->dhcpv6_data_in && ifo->dhcpv6_len_in)
+      el = _find_or_create_external_link(g, dp2->ifname, false);
+      if (el && el->extdata[HNCP_PA_EXTDATA_IPV6])
         {
-          st = tlv_new(&tb, HNCP_T_DHCPV6_OPTIONS, ifo->dhcpv6_len_in);
-          memcpy(tlv_data(st), ifo->dhcpv6_data_in, ifo->dhcpv6_len_in);
+          void *data = el->extdata[HNCP_PA_EXTDATA_IPV6];
+          size_t len = el->extdata_len[HNCP_PA_EXTDATA_IPV6];
+          st = tlv_new(&tb, HNCP_T_DHCPV6_OPTIONS, len);
+          memcpy(tlv_data(st), data, len);
           APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
                      tlv_data(st), tlv_len(st));
         }
-      if (ifo && ifo->dhcp_data_in && ifo->dhcp_len_in)
+      if (el && el->extdata[HNCP_PA_EXTDATA_IPV4])
         {
-          st = tlv_new(&tb, HNCP_T_DHCP_OPTIONS, ifo->dhcp_len_in);
-          memcpy(tlv_data(st), ifo->dhcp_data_in, ifo->dhcp_len_in);
+          void *data = el->extdata[HNCP_PA_EXTDATA_IPV4];
+          size_t len = el->extdata_len[HNCP_PA_EXTDATA_IPV4];
+          st = tlv_new(&tb, HNCP_T_DHCP_OPTIONS, len);
+          memcpy(tlv_data(st), data, len);
           APPEND_BUF(dhcp_options, dhcp_options_len,
                      tlv_data(st), tlv_len(st));
         }
@@ -621,15 +659,39 @@ static void _republish_cb(hncp_subscriber s)
   _refresh_ec(container_of(s, hncp_glue_s, subscriber), true);
 }
 
+#define SAME(d1,l1,d2,l2) \
+  (l1 == l2 && (!l1 || (d1 && d2 && !memcmp(d1, d2, l1))))
+
+#define REPLACE(d1,l1,d2,l2)    \
+do                              \
+  {                             \
+    if (d1)                     \
+      free(d1);                 \
+    d1 = NULL;                  \
+    if (l2)                     \
+      {                         \
+        d1 = malloc(l2);        \
+        if (d1)                 \
+          {                     \
+            l1 = l2;            \
+            memcpy(d1, d2, l2); \
+          }                     \
+        else                    \
+          {                     \
+            l1 = 0;             \
+          }                     \
+      }                         \
+  } while(0)
+
 static void _updated_ldp(hncp_glue g,
                          const struct prefix *prefix,
                          const char *dp_ifname,
                          hnetd_time_t valid_until, hnetd_time_t preferred_until,
                          const void *dhcpv6_data, size_t dhcpv6_len)
 {
-  hncp o = g->hncp;
   bool add = valid_until != 0;
   hncp_dp dp = _find_or_create_dp(g, prefix, add);
+  bool changed = false;
 
   /* Nothing to update, and it was delete. Do nothing. */
   if (!dp)
@@ -644,35 +706,27 @@ static void _updated_ldp(hncp_glue g,
     {
       /* Add or update. So update the fields. */
       if (dp_ifname)
-        strcpy(dp->ifname, dp_ifname);
+        {
+          changed = strcmp(dp->ifname, dp_ifname) == 0 || changed;
+          strcpy(dp->ifname, dp_ifname);
+        }
       else
-        dp->ifname[0] = 0;
+        {
+          changed = dp->ifname[0] || changed;
+          dp->ifname[0] = 0;
+        }
+      changed = dp->valid_until == valid_until || changed;
       dp->valid_until = valid_until;
+      changed = dp->preferred_until == preferred_until || changed;
       dp->preferred_until = preferred_until;
-      if (dp->dhcpv6_data)
-        {
-          free(dp->dhcpv6_data);
-          dp->dhcpv6_data = NULL;
-        }
-      if (dhcpv6_data)
-        {
-          dp->dhcpv6_data = malloc(dhcpv6_len);
-          if (!dp->dhcpv6_data)
-            {
-              dp->dhcpv6_len = 0;
-              L_ERR("oom in dhcpv6_data malloc %d", (int)dhcpv6_len);
-            }
-          else
-            {
-              dp->dhcpv6_len = dhcpv6_len;
-              memcpy(dp->dhcpv6_data, dhcpv6_data, dhcpv6_len);
-            }
-        }
+      changed = SAME(dp->dhcpv6_data, dp->dhcpv6_len,
+                     dhcpv6_data, dhcpv6_len) || changed;
+      REPLACE(dp->dhcpv6_data, dp->dhcpv6_len,
+              dhcpv6_data, dhcpv6_len);
     }
-  /* Force republish (the actual TLV will be actually refreshed in the
-   * subscriber callback) */
-  o->tlvs_dirty = true;
-  hncp_schedule(o);
+
+  if (changed)
+    _schedule_refresh_ec(g);
 }
 
 
@@ -746,9 +800,11 @@ hncp_glue hncp_pa_glue_create(hncp o, struct pa_data *pa_data)
 {
   struct pa_rid *rid = (struct pa_rid *)&o->own_node->node_identifier_hash;
   hncp_glue g = calloc(1, sizeof(*g));
+
   if (!g)
     return false;
 
+  INIT_LIST_HEAD(&g->external_links);
   vlist_init(&g->dps, compare_dps, update_dp);
   g->subscriber.tlv_change_callback = _tlv_cb;
   /* g->subscriber.node_change_callback = _node_cb; */
@@ -779,4 +835,45 @@ void hncp_pa_glue_destroy(hncp_glue g)
   uloop_timeout_cancel(&g->ap_if_update_timeout);
   vlist_flush_all(&g->dps);
   free(g);
+}
+
+void hncp_pa_set_external_link(hncp_glue glue, const char *ifname,
+                               const void *data, size_t data_len,
+                               hncp_pa_extdata_type index)
+{
+  hncp_external_link el = _find_or_create_external_link(glue, ifname, false);
+
+  L_DEBUG("hncp_pa_set_external_link %s/%s = %p/%d",
+          ifname, index == HNCP_PA_EXTDATA_IPV6 ? "dhcpv6" : "dhcp",
+          data, (int)data_len);
+  if (!data_len)
+    data = NULL;
+  if (!el)
+    {
+      if (!data)
+        return;
+      el = _find_or_create_external_link(glue, ifname, true);
+      if (!el)
+        return;
+    }
+  /* Let's consider if there was a change. */
+  if (SAME(el->extdata[index], el->extdata_len[index], data, data_len))
+    return;
+  REPLACE(el->extdata[index], el->extdata_len[index], data, data_len);
+
+  if (!data)
+    {
+      /* Let's see if we should get rid of the external link */
+      int i;
+      for (i = 0 ; i < NUM_HNCP_PA_EXTDATA ; i++)
+        if (el->extdata[i])
+          break;
+      if (i == NUM_HNCP_PA_EXTDATA)
+        {
+          list_del(&el->lh);
+          free(el);
+        }
+    }
+
+  _schedule_refresh_ec(glue);
 }

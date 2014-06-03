@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Thu May 22 13:01:50 2014 mstenber
- * Edit time:     496 min
+ * Last modified: Mon May 26 21:11:00 2014 mstenber
+ * Edit time:     498 min
  *
  */
 
@@ -37,19 +37,27 @@
 
 #define LOCAL_OHP_ADDRESS "127.0.0.2"
 #define LOCAL_OHP_PORT 54
-#define OHP_ARGS_MAX_LEN 512
-#define OHP_ARGS_MAX_COUNT 64
+#define ARGS_MAX_LEN 512
+#define ARGS_MAX_COUNT 64
 
+/* Different 'daemons' to be restarted/reconfigured */
 #define UPDATE_FLAG_DNSMASQ 1
 #define UPDATE_FLAG_OHP     2
-#define UPDATE_FLAG_DDZ     4
-#define UPDATE_FLAG_DOMAIN  8
-#define UPDATE_FLAG_ALL  0x0F
+#define UPDATE_FLAG_PCP     4
+
+/* TLVs to be updated (and possibly other internal state) */
+#define UPDATE_FLAG_DDZ     0x10
+#define UPDATE_FLAG_DOMAIN  0x20
+
+#define UPDATE_FLAG_ALL     0x37
 
 /* How long a timeout we schedule for the actual update (that occurs
  * in a timeout). This effectively sets an upper bound on how
- * frequently the dnsmasq/ohp scripts are called. */
-#define UPDATE_TIMEOUT 100
+ * frequently the dnsmasq/ohp scripts are called. If there's changes
+ * that mutate system state, the timer gets reset. At SOME POINT the
+ * system should calm down though, and if it doesn't, it's perhaps
+ * best it is visible to user it's broken in some way :) */
+#define UPDATE_TIMEOUT 3000
 
 struct hncp_sd_struct
 {
@@ -74,6 +82,7 @@ struct hncp_sd_struct
   /* State hashes used to keep track of what has been committed. */
   hncp_hash_s dnsmasq_state;
   hncp_hash_s ohp_state;
+  hncp_hash_s pcp_state;
 };
 
 
@@ -93,11 +102,9 @@ static void _fork_execv(char *argv[])
 static void _should_update(hncp_sd sd, int v)
 {
   L_DEBUG("hncp_sd/should_update:%d", v);
-  if ((sd->should_update & v) == v)
-    return;
   sd->should_update |= v;
-  /* Schedule the timeout (note: we won't configure anything until the
-   * churn slows down. This is intentional.) */
+  /* Reset the timeout. We intentionally will not configure anything
+   * until the churn slows down.*/
   uloop_timeout_set(&sd->timeout, UPDATE_TIMEOUT);
 }
 
@@ -369,12 +376,12 @@ bool hncp_sd_restart_dnsmasq(hncp_sd sd)
 #define PUSH_ARG(s) do                                  \
     {                                                   \
       int _arg = narg++;                                \
-      if (narg == OHP_ARGS_MAX_COUNT)                   \
+      if (narg == ARGS_MAX_COUNT)                       \
         {                                               \
           L_DEBUG("too many arguments");                \
           return false;                                 \
         }                                               \
-      if (strlen(s) + 1 + c > (buf + OHP_ARGS_MAX_LEN)) \
+      if (strlen(s) + 1 + c > (buf + ARGS_MAX_LEN))     \
         {                                               \
           L_DEBUG("out of buffer");                     \
         }                                               \
@@ -386,9 +393,9 @@ bool hncp_sd_restart_dnsmasq(hncp_sd sd)
 bool hncp_sd_reconfigure_ohp(hncp_sd sd)
 {
   hncp_link l;
-  char buf[OHP_ARGS_MAX_LEN];
+  char buf[ARGS_MAX_LEN];
   char *c = buf;
-  char *args[OHP_ARGS_MAX_COUNT];
+  char *args[ARGS_MAX_COUNT];
   int narg = 0;
   char tbuf[DNS_MAX_ESCAPED_LEN];
   bool first = true;
@@ -406,7 +413,8 @@ bool hncp_sd_reconfigure_ohp(hncp_sd sd)
     {
       /* XXX - what sort of naming scheme should we use for links? */
       sprintf(tbuf, "%s=%s.%s.%s",
-              l->ifname, REWRITE_IFNAME(l->ifname), sd->router_name, sd->hncp->domain);
+              l->ifname,
+              REWRITE_IFNAME(l->ifname), sd->router_name, sd->hncp->domain);
       md5_hash(tbuf, strlen(tbuf), &ctx);
       if (first)
         {
@@ -428,8 +436,104 @@ bool hncp_sd_reconfigure_ohp(hncp_sd sd)
     }
   args[narg] = NULL;
   if (_sh_changed(&ctx, &sd->ohp_state))
-    _fork_execv(args);
-  return true;
+    {
+      _fork_execv(args);
+      return true;
+    }
+  return false;
+}
+
+bool hncp_sd_reconfigure_pcp(hncp_sd sd)
+{
+  char buf[ARGS_MAX_LEN];
+  char *c = buf;
+  char *args[ARGS_MAX_COUNT];
+  int narg = 0;
+  bool first = true;
+  md5_ctx_t ctx;
+  hncp_node n;
+  struct tlv_attr *tlv, *a;
+  hncp_t_router_address ra;
+  hncp_t_delegated_prefix_header dp;
+  char tbuf[123];
+
+  md5_begin(&ctx);
+  PUSH_ARG(sd->p.pcp_script);
+
+  /* ohp can _always_ listen to all interfaces that have been
+   * configured. Less flapping of the binary, and it hurts nobody if
+   * it is active on few more interfaces (well, fine, slight overhead
+   * from mdnsresponder, but who cares). */
+
+  hncp_for_each_node(sd->hncp, n)
+    {
+      struct in6_addr *a4 = NULL, *a6 = NULL;
+      hncp_node_for_each_tlv(n, tlv)
+        {
+          if (tlv_id(tlv) == HNCP_T_EXTERNAL_CONNECTION)
+            {
+              if (!a4 && !a6)
+                {
+                  hncp_node_for_each_tlv(n, a)
+                    {
+                      if ((ra = hncp_tlv_router_address(a)))
+                        {
+                          if (IN6_IS_ADDR_V4MAPPED(&ra->address))
+                            a4 = &ra->address;
+                          else
+                            a6 = &ra->address;
+                        }
+                    }
+                  /* If we don't know address for real, might as well give up */
+                  if (!a4 && !a6)
+                    {
+                      L_DEBUG("no address at all found for %s",
+                              HNCP_NODE_REPR(n));
+                      break;
+                    }
+                }
+              tlv_for_each_attr(a, tlv)
+                {
+                  if ((dp = hncp_tlv_dp(a)))
+                    {
+                      struct prefix p = {.plen = dp->prefix_length_bits };
+                      bmemcpy(&p.prefix, dp->prefix_data, 0, p.plen);
+
+                      bool is_ipv4 = prefix_is_ipv4(&p);
+                      struct in6_addr *sa = is_ipv4 ? a4 : a6;
+                      if (!sa)
+                        {
+                          L_INFO("no PCP server found for %s", PREFIX_REPR(&p));
+                          continue;
+                        }
+
+                      sprintf(tbuf, "%s=%s", PREFIX_REPR(&p),
+                              n == sd->hncp->own_node ?
+                              is_ipv4 ? "127.0.0.1" : "::1" :
+                              ADDR_REPR(sa));
+                      md5_hash(tbuf, strlen(tbuf), &ctx);
+                      if (first)
+                        {
+                          PUSH_ARG("start");
+                          first = false;
+                        }
+                      PUSH_ARG(tbuf);
+                    }
+                }
+            }
+        }
+    }
+
+  if (first)
+    PUSH_ARG("stop");
+
+  args[narg] = NULL;
+  if (_sh_changed(&ctx, &sd->pcp_state))
+    {
+      _fork_execv(args);
+      return true;
+    }
+  return false;
 }
 
 static void
@@ -543,20 +647,6 @@ static void _local_tlv_cb(hncp_subscriber s,
     }
 }
 
-static void _republish_cb(hncp_subscriber s)
-{
-  hncp_sd sd = container_of(s, hncp_sd_s, subscriber);
-
-  _publish_ddzs(sd);
-}
-
-static void _force_republish_cb(hncp_subscriber s)
-{
-  hncp_sd sd = container_of(s, hncp_sd_s, subscriber);
-
-  _should_update(sd, UPDATE_FLAG_ALL);
-}
-
 static struct tlv_attr *_get_dns_domain_tlv(hncp o)
 {
   hncp_node n;
@@ -588,6 +678,9 @@ static void _refresh_domain(hncp_sd sd)
   hncp o = sd->hncp;
   char new_domain[DNS_MAX_ESCAPED_LEN];
 
+  if (!(sd->should_update & UPDATE_FLAG_DOMAIN))
+    return;
+  sd->should_update &= ~UPDATE_FLAG_DOMAIN;
   _get_dns_domain(o, new_domain, sizeof(new_domain));
   L_DEBUG("_refresh_domain:%s", new_domain);
   if (strcmp(new_domain, sd->hncp->domain))
@@ -608,11 +701,11 @@ static void _tlv_cb(hncp_subscriber s,
            add ? "add" : "remove",
            n == o->own_node ? "local" : HNCP_NODE_REPR(n),
            TLV_REPR(tlv));
-
-  /* Handle router name collision detection; we're interested only in
-   * nodes with higher router id overriding our choice. */
-  if (tlv_id(tlv) == HNCP_T_DNS_ROUTER_NAME)
+  switch (tlv_id(tlv))
     {
+    case HNCP_T_DNS_ROUTER_NAME:
+      /* Handle router name collision detection; we're interested only in
+       * nodes with higher router id overriding our choice. */
       if (add
           && n != o->own_node
           && _tlv_router_name_matches(sd, tlv))
@@ -629,12 +722,13 @@ static void _tlv_cb(hncp_subscriber s,
         }
       /* Router name itself should not trigger reconfiguration unless
        * local; however, remote DDZ changes should. */
-    }
+      break;
 
-  /* Dnsmasq forwarder file reflects what's in published DDZ's. If
-   * they change, it (could) change too. */
-  if (tlv_id(tlv) == HNCP_T_DNS_DELEGATED_ZONE)
-    {
+    case HNCP_T_DNS_DELEGATED_ZONE:
+      /* Dnsmasq forwarder file reflects what's in published DDZ's. If
+       * they change, it (could) change too. */
+      _should_update(sd, UPDATE_FLAG_DNSMASQ);
+
       /* Check also if it's name matches our router name directly ->
        * rename us if it does. */
       if (_tlv_ddz_matches(sd, tlv)
@@ -643,28 +737,33 @@ static void _tlv_cb(hncp_subscriber s,
           L_DEBUG("found matching DDZ with our router name -> force rename");
           _change_router_name(sd);
         }
+      break;
 
-      _should_update(sd, UPDATE_FLAG_DNSMASQ);
-    }
-
-  /* As the TLVs aren't _yet_ valid on the node, there's a race
-   * condition potential here. So we just do things after a
-   * timeout. */
-  if (tlv_id(tlv) == HNCP_T_DNS_DOMAIN_NAME)
-    {
+    case HNCP_T_DNS_DOMAIN_NAME:
+      /* As the TLVs aren't _yet_ valid on the node, there's a race
+       * condition potential here. So we just do things after a
+       * timeout. */
       _should_update(sd, UPDATE_FLAG_DOMAIN);
+      break;
+
+    case HNCP_T_EXTERNAL_CONNECTION:
+      /* Delegated prefixes may have changed */
+    case HNCP_T_ROUTER_ADDRESS:
+      /* Addresses of where to find PCP server may have changed */
+      _should_update(sd, UPDATE_FLAG_PCP);
+      break;
     }
 }
 
 void hncp_sd_update(hncp_sd sd)
 {
   L_DEBUG("hncp_sd_update:%d", sd->should_update);
-  if (sd->should_update & UPDATE_FLAG_DOMAIN)
-    {
-      sd->should_update &= ~UPDATE_FLAG_DOMAIN;
-      _refresh_domain(sd);
-    }
+
+  /* First the always present, internal state mutating things.. */
+  _refresh_domain(sd);
   _publish_ddzs(sd);
+
+  /* Then play with external scripts, if they are present */
   if (sd->should_update & UPDATE_FLAG_DNSMASQ)
     {
       sd->should_update &= ~UPDATE_FLAG_DNSMASQ;
@@ -680,6 +779,12 @@ void hncp_sd_update(hncp_sd sd)
       if (sd->p.ohp_script)
         hncp_sd_reconfigure_ohp(sd);
     }
+  if (sd->should_update & UPDATE_FLAG_PCP)
+    {
+      sd->should_update &= ~UPDATE_FLAG_PCP;
+      if (sd->p.pcp_script)
+        hncp_sd_reconfigure_pcp(sd);
+    }
   if (sd->should_update)
     L_DEBUG("hncp_sd_update leftovers:%d", sd->should_update);
 }
@@ -691,6 +796,21 @@ static void _timeout_cb(struct uloop_timeout *t)
   hncp_sd_update(sd);
 }
 
+
+static void _republish_cb(hncp_subscriber s)
+{
+  hncp_sd sd = container_of(s, hncp_sd_s, subscriber);
+
+  _refresh_domain(sd);
+  _publish_ddzs(sd);
+}
+
+static void _force_republish_cb(hncp_subscriber s)
+{
+  hncp_sd sd = container_of(s, hncp_sd_s, subscriber);
+
+  _should_update(sd, UPDATE_FLAG_ALL);
+}
 
 hncp_sd hncp_sd_create(hncp h, hncp_sd_params p)
 {

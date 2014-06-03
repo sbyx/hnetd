@@ -96,6 +96,7 @@ typedef uint8_t iface_flags;
 #define IFACE_FLAG_GUEST         0x02
 #define IFACE_FLAG_ADHOC         0x04
 #define IFACE_FLAG_DISABLE_PA    0x08
+#define IFACE_FLAG_ULA_DEFAULT	 0x10
 
 struct iface {
 	struct list_head head;
@@ -119,7 +120,7 @@ struct iface {
 	struct in6_addr cer;
 
 	// Config
-	uint8_t min_v6_plen; //Min plen to be used when making new assignment
+	uint8_t ip6_plen; //Min plen to be used when making new assignment
 
 	// Prefix storage
 	struct vlist_tree assigned;

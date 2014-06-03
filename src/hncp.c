@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu May  8 17:56:12 2014 mstenber
- * Edit time:     509 min
+ * Last modified: Mon Jun  2 13:50:39 2014 mstenber
+ * Edit time:     520 min
  *
  */
 
@@ -527,13 +527,39 @@ hncp_node hncp_node_get_next(hncp_node n)
     }
 }
 
+static bool _set_own_tlvs(hncp_node n)
+{
+  struct tlv_buf tb;
+  hncp o = n->hncp;
+  hncp_tlv t;
+
+  if (!o->tlvs_dirty)
+    return false;
+
+  /* Dump the contents of hncp->tlvs to single tlv_buf. */
+  /* Based on whether or not that would cause change in things, 'do stuff'. */
+  memset(&tb, 0, sizeof(tb));
+  tlv_buf_init(&tb, 0); /* not passed anywhere */
+  vlist_for_each_element(&o->tlvs, t, in_tlvs)
+    if (!tlv_put_raw(&tb, &t->tlv, tlv_pad_len(&t->tlv)))
+      {
+        L_ERR("hncp_self_flush: tlv_put_raw failed?!?");
+        tlv_buf_free(&tb);
+        return false;
+      }
+  tlv_fill_pad(tb.head);
+
+  /* Ok, all puts _did_ succeed. */
+  o->tlvs_dirty = false;
+
+  return hncp_node_set_tlvs(n, tb.head);
+}
+
 void hncp_self_flush(hncp_node n)
 {
   hncp o = n->hncp;
-  hncp_tlv t;
   hncp_link l;
   hncp_neighbor ne;
-  struct tlv_buf tb;
 
   if (o->links_dirty)
     {
@@ -575,38 +601,21 @@ void hncp_self_flush(hncp_node n)
       vlist_flush(&o->tlvs);
     }
 
-  if (!o->tlvs_dirty)
+  if (!o->tlvs_dirty && !o->republish_tlvs)
     return;
 
-  L_DEBUG("hncp_self_flush: notify about to republish tlvs");
-  hncp_notify_subscribers_about_to_republish_tlvs(n);
-
-  /* Dump the contents of hncp->tlvs to single tlv_buf. */
-  /* Based on whether or not that would cause change in things, 'do stuff'. */
-  memset(&tb, 0, sizeof(tb));
-  tlv_buf_init(&tb, 0); /* not passed anywhere */
-  vlist_for_each_element(&o->tlvs, t, in_tlvs)
-    if (!tlv_put_raw(&tb, &t->tlv, tlv_pad_len(&t->tlv)))
-      {
-        L_ERR("hncp_self_flush: tlv_put_raw failed?!?");
-        tlv_buf_free(&tb);
-        return;
-      }
-  tlv_fill_pad(tb.head);
-
-  /* Ok, all puts _did_ succeed. */
-  o->tlvs_dirty = false;
-
-  /* Should we check if this caused a real change or not? If we
-   * should, and there wasn't any, we should just free tb's contents
-   * and bail out.*/
-
-  /* Replace old state with new _if_ it's really new. */
-  if (!hncp_node_set_tlvs(n, tb.head))
+  if (!_set_own_tlvs(n) && !o->republish_tlvs)
     {
       L_DEBUG("hncp_self_flush: state did not change -> nothing to flush");
       return;
     }
+
+  L_DEBUG("hncp_self_flush: notify about to republish tlvs");
+  hncp_notify_subscribers_about_to_republish_tlvs(n);
+
+  _set_own_tlvs(n);
+
+  o->republish_tlvs = false;
   n->update_number++;
   n->origination_time = hncp_time(o);
   L_DEBUG("hncp_self_flush: %p -> update_number = %d @ %lld",

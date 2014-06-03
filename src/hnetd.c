@@ -8,6 +8,7 @@
 
 #include <time.h>
 #include <errno.h>
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -57,13 +58,25 @@ void hncp_iface_intiface_callback(struct iface_user *u,
 
 
 void hncp_iface_extdata_callback(struct iface_user *u,
-								 const char *ifname __unused,
-								 const void *dhcpv6_data __unused,
-								 size_t dhcpv6_len __unused)
+								 const char *ifname,
+								 const void *dhcpv6_data,
+								 size_t dhcpv6_len)
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
 
-	hncp_pa_set_dhcpv6_data_in_dirty(hiu->glue);
+	hncp_pa_set_external_link(hiu->glue, ifname, dhcpv6_data, dhcpv6_len,
+							  HNCP_PA_EXTDATA_IPV6);
+}
+
+void hncp_iface_ext4data_callback(struct iface_user *u,
+								  const char *ifname,
+								  const void *dhcpv4_data,
+								  size_t dhcpv4_len)
+{
+	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
+
+	hncp_pa_set_external_link(hiu->glue, ifname, dhcpv4_data, dhcpv4_len,
+							  HNCP_PA_EXTDATA_IPV4);
 }
 
 
@@ -74,7 +87,7 @@ void hncp_iface_glue(hncp_iface_user hiu, hncp h, hncp_glue g)
 	hiu->iu.cb_intiface = hncp_iface_intiface_callback;
 	hiu->iu.cb_intaddr = hncp_iface_intaddr_callback;
 	hiu->iu.cb_extdata = hncp_iface_extdata_callback;
-	hiu->iu.cb_ext4data = hncp_iface_extdata_callback;
+	hiu->iu.cb_ext4data = hncp_iface_ext4data_callback;
 	hiu->hncp = h;
 	hiu->glue = g;
 
@@ -89,13 +102,19 @@ int main(__unused int argc, char *argv[])
 	int c;
 	hncp_iface_user_s hiu;
 	hncp_glue hg;
-	hncp_sd_params_s sd_params = {};
+	hncp_sd_params_s sd_params;
 
+	memset(&sd_params, 0, sizeof(sd_params));
 #ifdef WITH_IPC
-	if (strstr(argv[0], "hnet-call"))
+	if (strstr(argv[0], "hnet-call")) {
+		if(argc < 2)
+			return 3;
 		return ipc_client(argv[1]);
-	else if ((strstr(argv[0], "hnet-ifup") || strstr(argv[0], "hnet-ifdown")) && argc >= 2)
+	} else if ((strstr(argv[0], "hnet-ifup") || strstr(argv[0], "hnet-ifdown"))) {
+		if(argc < 2)
+			return 3;
 		return ipc_ifupdown(argc, argv);
+	}
 #endif
 
 	openlog("hnetd", LOG_PERROR | LOG_PID, LOG_DAEMON);
@@ -124,8 +143,22 @@ int main(__unused int argc, char *argv[])
 	const char *routing_script = NULL;
 	const char *pa_store_file = NULL;
 	const char *pd_socket_path = "/var/run/hnetd_pd";
+	const char *pa_ip4prefix = NULL;
+	const char *pa_ulaprefix = NULL;
 
-	while ((c = getopt(argc, argv, "d:f:o:n:r:s:p:m:")) != -1) {
+	enum {
+		GOL_IPPREFIX = 1000,
+		GOL_ULAPREFIX,
+	};
+
+	struct option longopts[] = {
+			//Can use no_argument, required_argument or optional_argument
+			{ "ip4prefix",   required_argument,      NULL,           GOL_IPPREFIX },
+			{ "ulaprefix",   required_argument,      NULL,           GOL_ULAPREFIX },
+			{ NULL,          0,                      NULL,           0 }
+	};
+
+	while ((c = getopt_long(argc, argv, "d:f:o:n:r:s:p:m:c:", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'd':
 			sd_params.dnsmasq_script = optarg;
@@ -135,6 +168,9 @@ int main(__unused int argc, char *argv[])
 			break;
 		case 'o':
 			sd_params.ohp_script = optarg;
+			break;
+		case 'c':
+			sd_params.pcp_script = optarg;
 			break;
 		case 'n':
 			sd_params.router_name = optarg;
@@ -151,12 +187,50 @@ int main(__unused int argc, char *argv[])
 		case 'p':
 			pd_socket_path = optarg;
 			break;
+		case GOL_IPPREFIX:
+			pa_ip4prefix = optarg;
+			break;
+		case GOL_ULAPREFIX:
+			pa_ulaprefix = optarg;
+			break;
+		case '?':
+			L_ERR("Unrecognized option");
+			return 3;
 		}
 	}
 
 	pa_init(&pa, NULL);
 	if(pa_store_file)
 		pa_store_setfile(&pa.store, pa_store_file);
+
+	if(pa_ip4prefix) {
+		if(!prefix_pton(pa_ip4prefix, &pa.local.conf.v4_prefix)) {
+			L_ERR("Unable to parse ipv4 prefix option '%s'", pa_ip4prefix);
+			return 40;
+		} else if (!prefix_is_ipv4(&pa.local.conf.v4_prefix)) {
+			L_ERR("The ip4prefix option '%s' is not an IPv4 prefix", pa_ip4prefix);
+			return 41;
+		} else {
+			L_INFO("Setting %s as IPv4 prefix", PREFIX_REPR(&pa.local.conf.v4_prefix));
+		}
+	}
+
+	if(pa_ulaprefix) {
+		if(!prefix_pton(pa_ulaprefix, &pa.local.conf.ula_prefix)) {
+			L_ERR("Unable to parse ula prefix option '%s'", pa_ulaprefix);
+			return 40;
+		} else if (prefix_is_ipv4(&pa.local.conf.ula_prefix)) {
+			L_ERR("The ulaprefix option '%s' is an IPv4 prefix", pa_ulaprefix);
+			return 41;
+		} else {
+			if (!prefix_is_ipv6_ula(&pa.local.conf.ula_prefix)) {
+				L_WARN("The provided ULA prefix %s is not an ULA. I hope you know what you are doing.",
+						PREFIX_REPR(&pa.local.conf.ula_prefix));
+			}
+			pa.local.conf.use_random_ula = false;
+			L_INFO("Setting %s as ULA prefix", PREFIX_REPR(&pa.local.conf.ula_prefix));
+		}
+	}
 
 	h = hncp_create();
 	if (!h) {
@@ -170,7 +244,7 @@ int main(__unused int argc, char *argv[])
 	}
 
 	if (!hncp_sd_create(h, &sd_params)) {
-		L_ERR("unable to initialize rd, exiting");
+		L_ERR("unable to initialize sd, exiting");
 		return 71;
 	}
 
@@ -188,6 +262,11 @@ int main(__unused int argc, char *argv[])
 
 	/* Fire up the prefix assignment code. */
 	pa_start(&pa);
+
+#ifdef WITH_IPC
+	/* Configure ipc */
+	ipc_conf(h);
+#endif
 
 	uloop_run();
 	return 0;

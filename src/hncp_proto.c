@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu May  8 17:56:27 2014 mstenber
- * Edit time:     401 min
+ * Last modified: Mon Jun  2 15:37:15 2014 mstenber
+ * Edit time:     406 min
  *
  */
 
@@ -430,7 +430,6 @@ handle_message(hncp_link l,
             if (n == o->own_node
                 && (new_update_number > n->update_number
                     || (new_update_number == n->update_number
-                        && hncp_node_is_self(n)
                         && memcmp(&n->node_data_hash,
                                   &ns->node_data_hash,
                                   sizeof(n->node_data_hash)) != 0)))
@@ -521,10 +520,9 @@ handle_message(hncp_link l,
   new_update_number = be32_to_cpu(ns->update_number);
   if (n->update_number > new_update_number
       || (n->update_number == new_update_number
-          && (!hncp_node_is_self(n)
-              || !memcmp(&n->node_data_hash,
-                         &ns->node_data_hash,
-                         sizeof(n->node_data_hash)))))
+          && !memcmp(&n->node_data_hash,
+                     &ns->node_data_hash,
+                     sizeof(n->node_data_hash))))
     {
       L_DEBUG("received update number %d, but already have %d",
               new_update_number, n->update_number);
@@ -538,9 +536,8 @@ handle_message(hncp_link l,
         return;
       /* Don't accept updates to 'self' from network. Instead,
        * increment own update number. */
-      n->update_number = new_update_number + 1;
-      o->tlvs_dirty = true;
-      hncp_node_set_tlvs(n, NULL);
+      n->update_number = new_update_number;
+      o->republish_tlvs = true;
       hncp_schedule(o);
       return;
     }
@@ -628,7 +625,7 @@ void hncp_tlv_ap_update(hncp o,
     ah->link_id = cpu_to_be32(l->iid);
   ah->flags =
     HNCP_T_ASSIGNED_PREFIX_FLAG_PREFERENCE(preference)
-    | authoritative ? HNCP_T_ASSIGNED_PREFIX_FLAG_AUTHORITATIVE : 0;
+    | (authoritative ? HNCP_T_ASSIGNED_PREFIX_FLAG_AUTHORITATIVE : 0);
   ah->prefix_length_bits = p.plen;
   ah++;
   memcpy(ah, &p, plen);

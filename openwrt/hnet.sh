@@ -14,17 +14,18 @@ proto_hnet_init_config() {
     proto_config_add_string 'prefix'
     proto_config_add_string 'link_id'
     proto_config_add_string 'iface_id'
-    proto_config_add_string 'min_v6_plen'
+    proto_config_add_string 'ip6_plen'
     proto_config_add_string 'adhoc'
     proto_config_add_string 'disable_pa'
+    proto_config_add_string 'ula_default_router'
 }
 
 proto_hnet_setup() {
     local interface="$1"
     local device="$2"
 
-    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id min_v6_plen adhoc disable_pa
-    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id min_v6_plen adhoc disable_pa
+    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id ip6_plen adhoc disable_pa ula_default_router
+    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id ip6_plen adhoc disable_pa ula_default_router
 
     logger -t proto-hnet "proto_hnet_setup $device/$interface"
 
@@ -45,6 +46,7 @@ proto_hnet_setup() {
     [ "$accept_cerid" = "1" ] && json_add_boolean accept_cerid 1
     [ "$adhoc" = "1" ] && json_add_boolean adhoc 1
     [ "$disable_pa" = "1" ] && json_add_boolean disable_pa 1
+    [ "$ula_default_router" = "1" ] && json_add_boolean ula_default_router 1
     json_add_array prefix
     for p in $prefix; do
     	json_add_string "" "$p"
@@ -56,7 +58,7 @@ proto_hnet_setup() {
     	json_add_string "" "$p"
     done
     json_close_array
-    json_add_string min_v6_plen "$min_v6_plen"
+    json_add_string ip6_plen "$ip6_plen"
     proto_close_data
 
     proto_send_update "$interface"

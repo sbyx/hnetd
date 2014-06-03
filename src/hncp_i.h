@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu May  8 18:02:40 2014 mstenber
- * Edit time:     165 min
+ * Last modified: Mon Jun  2 13:47:45 2014 mstenber
+ * Edit time:     169 min
  *
  */
 
@@ -61,8 +61,13 @@ struct hncp_struct {
   /* flag which indicates that we should re-publish links. */
   bool links_dirty;
 
-  /* flag which indicates that we should re-publish our node in nodes. */
+  /* flag which indicates that we should perhaps re-publish our node
+   * in nodes. */
   bool tlvs_dirty;
+
+  /* flag which indicates that we MUST re-publish our node, regardless
+   * of what's in local tlvs currently. */
+  bool republish_tlvs;
 
   /* flag which indicates that we (or someone connected) may have
    * changed connectivity. */
@@ -373,6 +378,14 @@ hncp_tlv_neighbor(const struct tlv_attr *a)
   return tlv_data(a);
 }
 
+static inline hncp_t_router_address
+hncp_tlv_router_address(const struct tlv_attr *a)
+{
+  if (tlv_id(a) != HNCP_T_ROUTER_ADDRESS
+      || tlv_len(a) != sizeof(hncp_t_router_address_s))
+    return NULL;
+  return tlv_data(a);
+}
 
 static inline hncp_node
 hncp_node_find_neigh_bidir2(hncp_node n,

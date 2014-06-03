@@ -84,7 +84,7 @@ set(HNCP_IO $<TARGET_OBJECTS:L_HNCP_IO>)
 add_library(L_TRUST OBJECT src/hncp_trust.c src/trust_graph.c src/local_trust.c src/crypto.c src/hncp_crypto.c)
 set(TRUST $<TARGET_OBJECTS:L_TRUST>)
 set(HNCP ${HNCP_WITH_GLUE} ${HNCP_IO})
-add_executable(hnetd ${HNCP} src/hncp_routing.c src/hnetd.c src/iface.c src/pd.c ${PA} src/ ${BACKEND_SOURCE})
+add_executable(hnetd ${HNCP} src/hncp_routing.c src/hncp_dump.c src/hnetd.c src/iface.c src/pd.c ${PA} src/ ${BACKEND_SOURCE})
 target_link_libraries(hnetd ubox blobmsg_json resolv polarssl ${BACKEND_LINK})
 install(TARGETS hnetd DESTINATION sbin/)
 

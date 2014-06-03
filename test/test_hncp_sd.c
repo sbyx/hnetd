@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Thu May 22 12:58:56 2014 mstenber
- * Edit time:     86 min
+ * Last modified: Thu May 22 15:39:48 2014 mstenber
+ * Edit time:     104 min
  *
  */
 
@@ -29,22 +29,24 @@
 /* Stub out the code that calls things */
 #define execv(cmd, argv) do                             \
 {                                                       \
-  if (check_exec)                                       \
+  if (check_exec || debug_exec)                         \
     {                                                   \
       int i;                                            \
       L_DEBUG("execv: '%s'", cmd);                      \
-      smock_pull_string_is("execv_cmd", cmd);           \
+      if (check_exec)                                   \
+        smock_pull_string_is("execv_cmd", cmd);         \
       for (i = 1; argv[i]; i++)                         \
         {                                               \
           L_DEBUG(" arg#%d: '%s'", i, argv[i]);         \
-          smock_pull_string_is("execv_arg", argv[i]);   \
+          if (check_exec)                               \
+            smock_pull_string_is("execv_arg", argv[i]); \
         }                                               \
     }                                                   \
   else                                                  \
     execs++;                                            \
 } while (0)
 
-bool check_exec;
+bool check_exec, debug_exec;
 int execs;
 
 #define vfork() 0
@@ -128,7 +130,7 @@ bool net_sim_is_busy(net_sim s)
 #ifndef DISABLE_HNCP_SD
       if (!s->disable_sd && n->sd->should_update)
         {
-          L_DEBUG("net_sim_is_busy: should update sd");
+          L_DEBUG("net_sim_is_busy: should_update: %d", n->sd->should_update);
           return true;
         }
 #endif /* !DISABLE_HNCP_SD */
@@ -146,6 +148,7 @@ void test_hncp_sd(void)
   bool rv;
 
   check_exec = false;
+  debug_exec = false;
   execs = 0;
   net_sim_init(&s);
   n1 = net_sim_find_hncp(&s, "n1");
@@ -198,14 +201,14 @@ void test_hncp_sd(void)
   file_contains("/tmp/n2.conf", "r1.home");
 
   check_exec = true;
-  smock_push("execv_cmd", "/bin/yes");
+  smock_push("execv_cmd", "s-dnsmasq");
   smock_push("execv_arg", "restart");
   rv = hncp_sd_restart_dnsmasq(node1->sd);
   sput_fail_unless(rv, "restart dnsmasq works");
   smock_is_empty();
 
   /* Play with ohybridproxy */
-  smock_push("execv_cmd", "/bin/no");
+  smock_push("execv_cmd", "s-ohp");
   smock_push("execv_arg", "start");
   smock_push("execv_arg", "-a");
   smock_push("execv_arg", "127.0.0.2");
@@ -219,10 +222,10 @@ void test_hncp_sd(void)
 
   /* Make sure second run is NOP */
   rv = hncp_sd_reconfigure_ohp(node1->sd);
-  sput_fail_unless(rv, "reconfigure ohp works");
+  sput_fail_unless(!rv, "reconfigure ohp works (2)");
   smock_is_empty();
 
-  smock_push("execv_cmd", "/bin/no");
+  smock_push("execv_cmd", "s-ohp");
   smock_push("execv_arg", "start");
   smock_push("execv_arg", "-a");
   smock_push("execv_arg", "127.0.0.2");
@@ -237,19 +240,31 @@ void test_hncp_sd(void)
 
   /* Make sure second run is NOP */
   rv = hncp_sd_reconfigure_ohp(node2->sd);
-  sput_fail_unless(rv, "reconfigure ohp works");
+  sput_fail_unless(!rv, "reconfigure ohp works (2)");
   smock_is_empty();
+
+  check_exec = false;
+  debug_exec = true;
+  /* Play with PCP - due to dynamic addresses, unfortunately unable to
+   * check arguments. */
+  memset(&node2->sd->pcp_state, 0, HNCP_HASH_LEN);
+  rv = hncp_sd_reconfigure_pcp(node2->sd);
+  sput_fail_unless(rv, "reconfigure pcp works (1)");
+
+  rv = hncp_sd_reconfigure_pcp(node2->sd);
+  sput_fail_unless(!rv, "reconfigure pcp works (2)");
+  debug_exec = false;
+
 
   /* Add third node, with hardcoded .domain (yay). It should result in
    * .home disappearing from n1 eventually. */
-  check_exec = false;
   s.disable_sd = true;
   n3 = net_sim_find_hncp(&s, "n3");
   node3 = container_of(n3, net_node_s, n);
   static hncp_sd_params_s sd_params = {
-    .dnsmasq_script = "/bin/yes",
+    .dnsmasq_script = "s-dnsmasq",
     .dnsmasq_bonus_file = "/tmp/n3.conf",
-    .ohp_script = "/bin/no",
+    .ohp_script = "s-ohp",
     .router_name = "xorbo",
     .domain_name = "domain."
   };

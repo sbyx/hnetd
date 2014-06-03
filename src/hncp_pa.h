@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:34:12 2013 mstenber
- * Last modified: Wed Feb 12 17:30:59 2014 mstenber
- * Edit time:     2 min
+ * Last modified: Mon Jun  2 12:44:35 2014 mstenber
+ * Edit time:     4 min
  *
  */
 
@@ -31,7 +31,13 @@ hncp_glue hncp_pa_glue_create(hncp o, struct pa_data *data);
 
 void hncp_pa_glue_destroy(hncp_glue glue);
 
-/* Callback to indicate that (some) iface dhcpv6_data_in changed. */
-void hncp_pa_set_dhcpv6_data_in_dirty(hncp_glue glue);
+typedef enum { HNCP_PA_EXTDATA_IPV4=0,
+               HNCP_PA_EXTDATA_IPV6=1,
+               NUM_HNCP_PA_EXTDATA=2 } hncp_pa_extdata_type;
+
+/* Callback to indicate that (some) iface dhcp{v6,}_data_in changed. */
+void hncp_pa_set_external_link(hncp_glue glue, const char *ifname,
+                               const void *data, size_t data_len,
+                               hncp_pa_extdata_type index);
 
 #endif /* HNCP_PA_H */

@@ -22,10 +22,13 @@
 #include "dhcp.h"
 #include "dhcpv6.h"
 #include "prefix_utils.h"
+#include "hncp_dump.h"
 
 static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events);
 static struct uloop_fd ipcsock = { .cb = ipc_handle };
 static const char *ipcpath = "/var/run/hnetd.sock";
+static const char *ipcpath_client = "/var/run/hnetd-client%d.sock";
+static hncp ipchncp = NULL;
 
 enum ipc_option {
 	OPT_COMMAND,
@@ -38,10 +41,11 @@ enum ipc_option {
 	OPT_GUEST,
 	OPT_LINK_ID,
 	OPT_IFACE_ID,
-	OPT_MIN_V6_PLEN,
+	OPT_IP6_PLEN,
 	OPT_ADHOC,
 	OPT_DISABLE_PA,
 	OPT_PASSTHRU,
+	OPT_ULA_DEFAULT_ROUTER,
 	OPT_MAX
 };
 
@@ -56,10 +60,11 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_GUEST] = {"guest", BLOBMSG_TYPE_BOOL},
 	[OPT_LINK_ID] = {"link_id", BLOBMSG_TYPE_STRING},
 	[OPT_IFACE_ID] = {"iface_id", BLOBMSG_TYPE_ARRAY},
-	[OPT_MIN_V6_PLEN] = {"min_v6_plen", BLOBMSG_TYPE_STRING},
+	[OPT_IP6_PLEN] = {"ip6_plen", BLOBMSG_TYPE_STRING},
 	[OPT_ADHOC] = {"adhoc", BLOBMSG_TYPE_BOOL},
 	[OPT_DISABLE_PA] = {"disable_pa", BLOBMSG_TYPE_BOOL},
 	[OPT_PASSTHRU] = {"passthru", BLOBMSG_TYPE_STRING},
+	[OPT_ULA_DEFAULT_ROUTER] = {"ula_default_router", BLOBMSG_TYPE_BOOL},
 };
 
 enum ipc_prefix_option {
@@ -91,10 +96,16 @@ int ipc_init(void)
 	return 0;
 }
 
+void ipc_conf(hncp hncp)
+{
+	ipchncp = hncp;
+}
 
 // CLI JSON->IPC TLV converter for 3rd party dhcp client integration
 int ipc_client(const char *buffer)
 {
+	char sockaddr[108]; //Client address
+	struct sockaddr_un serveraddr; //Server sockaddr
 	struct blob_buf b = {NULL, NULL, 0, NULL};
 	blob_buf_init(&b, 0);
 
@@ -103,16 +114,44 @@ int ipc_client(const char *buffer)
 		return 1;
 	}
 
+
+	serveraddr.sun_family = AF_UNIX;
+	strcpy(serveraddr.sun_path, ipcpath);
 	for (ssize_t len = blob_len(b.head); true; sleep(1)) {
-		int sock = usock(USOCK_UNIX | USOCK_UDP, ipcpath, NULL);
-		if (sock < 0)
+		snprintf(sockaddr, 107, ipcpath_client, random() % 1000);
+		unlink(sockaddr);
+		int sock = usock(USOCK_UNIX | USOCK_SERVER | USOCK_UDP, sockaddr, NULL);
+		if (sock < 0) {
 			perror("Failed to open socket");
+			continue;
+		}
 
-		if (send(sock, blob_data(b.head), len, 0) == len)
+		if (sendto(sock, blob_data(b.head), len, 0, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) == len) {
+			char buff[1024 * 128]; //It's big, but datagrams can't be received in pieces.
+			struct timeval tv = {.tv_sec = 2, .tv_usec = 0};
+			if(setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv,sizeof(struct timeval)))
+				perror("Failed to set socket read timeout");
+
+			ssize_t rcvlen;
+			while((rcvlen = recv(sock, buff, 1024 * 128 - 1, 0)) > 0) {
+				if(buff[rcvlen - 1] == '\0') {
+					printf("%s", buff);
+					break;
+				} else {
+					buff[rcvlen] = '\0';
+					printf("%s", buff);
+				}
+			}
+			if(rcvlen < 0)
+				perror("Receive error");
+
+			close(sock);
+			unlink(sockaddr);
 			break;
-
+		}
 		perror("Failed to talk to hnetd");
 		close(sock);
+		unlink(sockaddr);
 	}
 	return 0;
 }
@@ -130,7 +169,7 @@ int ipc_ifupdown(int argc, char *argv[])
 	char *entry;
 
 	int c;
-	while ((c = getopt(argc, argv, "ecgadp:l:i:m:")) > 0) {
+	while ((c = getopt(argc, argv, "ecgadp:l:i:m:u")) > 0) {
 		switch(c) {
 		case 'e':
 			external = true;
@@ -167,7 +206,7 @@ int ipc_ifupdown(int argc, char *argv[])
 			break;
 
 		case 'm':
-			blobmsg_add_string(&b, "min_v6_plen", optarg);
+			blobmsg_add_string(&b, "ip6_plen", optarg);
 			break;
 
 		case 'd':
@@ -176,6 +215,10 @@ int ipc_ifupdown(int argc, char *argv[])
 
 		case 'a':
 			blobmsg_add_u8(&b, "adhoc", 1);
+			break;
+
+		case 'u':
+			blobmsg_add_u8(&b, "ula_default_router", 1);
 			break;
 		}
 	}
@@ -204,14 +247,34 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 	while ((len = recvfrom(fd->fd, buf, sizeof(buf), MSG_DONTWAIT,
 			(struct sockaddr*)&sender, &sender_len)) >= 0) {
 		blobmsg_parse(ipc_policy, OPT_MAX, tb, buf, len);
-		if (!tb[OPT_COMMAND] || !tb[OPT_IFNAME])
+		if(!tb[OPT_COMMAND])
 			continue;
-
-		const char *ifname = blobmsg_get_string(tb[OPT_IFNAME]);
-		struct iface *c = iface_get(ifname);
 
 		const char *cmd = blobmsg_get_string(tb[OPT_COMMAND]);
 		L_DEBUG("Handling ipc command %s", cmd);
+		if (!strcmp(cmd, "hncp_dump")) {
+			struct blob_buf *b;
+			if(!ipchncp || !(b = hncp_dump(ipchncp))) {
+				const char *message = "Error\n";
+				sendto(fd->fd, message, strlen(message) + 1, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
+			} else {
+				char *buff = blobmsg_format_json_indent(b->head, true, 1);
+				sendto(fd->fd, buff, strlen(buff), MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
+				sendto(fd->fd, "\n", 2, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
+				free(buff);
+				hncp_dump_free(b);
+			}
+		}
+
+
+		if (!tb[OPT_IFNAME]) {
+			const char *message = "No ifname\n";
+			sendto(fd->fd, message, strlen(message) + 1, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
+			continue;
+		}
+
+		const char *ifname = blobmsg_get_string(tb[OPT_IFNAME]);
+		struct iface *c = iface_get(ifname);
 		if (!strcmp(cmd, "ifup")) {
 			iface_flags flags = 0;
 
@@ -226,6 +289,9 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 
 			if (tb[OPT_DISABLE_PA] && blobmsg_get_bool(tb[OPT_DISABLE_PA]))
 				flags |= IFACE_FLAG_DISABLE_PA;
+
+			if (tb[OPT_ULA_DEFAULT_ROUTER] && blobmsg_get_bool(tb[OPT_ULA_DEFAULT_ROUTER]))
+				flags |= IFACE_FLAG_ULA_DEFAULT;
 
 			struct iface *iface = iface_create(ifname, tb[OPT_HANDLE] == NULL ? NULL :
 					blobmsg_get_string(tb[OPT_HANDLE]), flags);
@@ -242,10 +308,10 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 				}
 			}
 
-			unsigned link_id, link_mask;
+			unsigned link_id, link_mask = 8;
 			if (iface && tb[OPT_LINK_ID] && sscanf(
 						blobmsg_get_string(tb[OPT_LINK_ID]),
-						"%x/%u", &link_id, &link_mask) == 2)
+						"%x/%u", &link_id, &link_mask) >= 1)
 					iface_set_link_id(iface, link_id, link_mask);
 
 			if (iface && tb[OPT_IFACE_ID]) {
@@ -257,7 +323,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 						char astr[55], fstr[55];
 						struct prefix filter, addr;
 						int res = sscanf(blobmsg_get_string(k), "%54s %54s", astr, fstr);
-						if(!res || !prefix_pton(astr, &addr) || (res > 1 && !prefix_pton(fstr, &filter))) {
+						if(res <= 0 || !prefix_pton(astr, &addr) || (res > 1 && !prefix_pton(fstr, &filter))) {
 							L_ERR("Incorrect iface_id syntax %s", blobmsg_get_string(k));
 							continue;
 						}
@@ -271,10 +337,10 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			}
 
 			unsigned minv6len;
-			if(iface && tb[OPT_MIN_V6_PLEN]
-			               && sscanf(blobmsg_get_string(tb[OPT_MIN_V6_PLEN]), "%u", &minv6len)
+			if(iface && tb[OPT_IP6_PLEN]
+			               && sscanf(blobmsg_get_string(tb[OPT_IP6_PLEN]), "%u", &minv6len) == 1
 			               && minv6len <= 128) {
-				iface->min_v6_plen = minv6len;
+				iface->ip6_plen = minv6len;
 			}
 
 		} else if (!strcmp(cmd, "ifdown")) {
@@ -383,5 +449,8 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			if (!c->v4uplink)
 				iface_remove(c);
 		}
+
+		//Send an empty response
+		sendto(fd->fd, "", 1, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
 	}
 }
