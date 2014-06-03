@@ -22,6 +22,8 @@ static void hncp_trust_tlv_update_callback(hncp_subscriber s, hncp_node n, struc
 
 static void hncp_trust_local_tlv_callback(hncp_subscriber s, struct tlv_attr *tlv, bool add);
 
+static void hncp_trust_node_change_callback(hncp_subscriber s, hncp_node n, bool add);
+
 /* Add the graph node to the graph list. */
 static inline void hncp_trust_add_node(hncp o, hncp_trust_graph g){
   vlist_add(&o->trust->trust_graphs,&g->vlist_node, &g->hash);
@@ -49,6 +51,7 @@ int hncp_trust_init(hncp o, char * private_key_file){
 
   int r = 0;
   o->trust = s;
+  s->hncp = o;
   s->crypto_used = false;
 
   /* Don't consider random adresses as functions */
@@ -59,6 +62,7 @@ int hncp_trust_init(hncp o, char * private_key_file){
     s->sub.local_tlv_change_callback = hncp_trust_local_tlv_callback;
     s->sub.tlv_change_callback = hncp_trust_tlv_update_callback;
   }
+  s->sub.node_change_callback = hncp_trust_node_change_callback;
   hncp_hash own_hash = &(o->own_node->node_identifier_hash);
   /* No arrow yet */
 
@@ -72,12 +76,13 @@ int hncp_trust_init(hncp o, char * private_key_file){
 
 void hncp_trust_destroy(hncp o){
   hncp_trust t = o->trust;
+  if(t->crypto_used) hncp_crypto_del_data(t->crypto);
+  t->crypto_used = false;
+  hncp_unsubscribe(o, &t->sub);
   vlist_flush_all(&o->trust->trust_graphs);
   if(t->local_trust_array)
     free(t->local_trust_array);
-  t->crypto_used = false;
-  hncp_unsubscribe(o, &t->sub);
-  if(t->crypto_used) hncp_crypto_del_data(t->crypto);
+
   free(t);
 }
 
@@ -88,7 +93,7 @@ hncp_trust_graph hncp_trust_get_graph_or_create_it(hncp o, hncp_hash hash){
   return g;
 }
 
-void hncp_trust_flood_trust_links(hncp o, hncp_trust_graph g){
+void hncp_trust_flood_trust_links(hncp_trust_graph g){
   struct list_head head;
   INIT_LIST_HEAD(&head);
   if(g->trusted){
@@ -166,7 +171,7 @@ bool hncp_trust_node_trusts_me(hncp o, hncp_hash hash){
 /** Two things :
   * a function to check the validity of the message (hncp_trust_message_integrity_check() )
   * functions to parse the tlvs (using subscription stuff) (at this time, only key & trust links) */
-void hncp_trust_update_key(hncp_subscriber s, __unused hncp_node n, struct tlv_attr *tlv, __unused bool add){
+void hncp_trust_update_key(hncp_subscriber s, __unused hncp_node n, struct tlv_attr *tlv, bool add){
   if(add){
     hncp_trust t = container_of(s, hncp_trust_s, sub);
     trust_key k = hncp_crypto_raw_key_to_trust_key(tlv->data, tlv_len(tlv), false);
@@ -181,9 +186,9 @@ void hncp_trust_update_trusts_links(hncp_subscriber s, hncp_node n, struct tlv_a
 
   hncp_trust t = container_of(s, hncp_trust_s, sub);
   if(add){
-    hncp_trust_update_graph(t->crypto->hncp, &n->node_identifier_hash, ta->hashes, size);
+    hncp_trust_update_graph(t->hncp, &n->node_identifier_hash, ta->hashes, size);
   }else
-    hncp_trust_update_graph(t->crypto->hncp, &n->node_identifier_hash, NULL, 0);
+    hncp_trust_update_graph(t->hncp, &n->node_identifier_hash, NULL, 0);
 }
 
 /* The signature_tlv must be a pointer to the last element of tlvs */
@@ -215,8 +220,7 @@ bool _hncp_trust_integrity_check(hncp o, unsigned char *tlvs, hncp_hash h, struc
   return r;
 }
 
-bool hncp_trust_message_integrity_check(hncp o, struct tlv_attr *tlv_container){
-  hncp_hash h = NULL;
+bool hncp_trust_message_integrity_check(hncp o, hncp_hash identifier_hash, struct tlv_attr *tlv_container){
   struct tlv_attr *node_key_tlv = NULL;
   struct tlv_attr *trust_array_tlv = NULL;
   struct tlv_attr *signature_tlv = NULL;
@@ -230,9 +234,6 @@ bool hncp_trust_message_integrity_check(hncp o, struct tlv_attr *tlv_container){
     if(id == uid)
       return false;
     switch(id){
-      case HNCP_T_NODE_STATE:
-        h = &((hncp_t_node_state) iter_tlv->data)->node_identifier_hash;
-        goto end_unique;
       case HNCP_T_NODE_DATA_KEY:
         node_key_tlv = iter_tlv;
         goto end_unique;
@@ -245,7 +246,9 @@ bool hncp_trust_message_integrity_check(hncp o, struct tlv_attr *tlv_container){
         uid = tlv_id(iter_tlv);
     }
   }
- return _hncp_trust_integrity_check(o, (unsigned char *) tlv_container->data, h, node_key_tlv, trust_array_tlv, signature_tlv);
+  if(!node_key_tlv || !signature_tlv)
+    return false;
+ return _hncp_trust_integrity_check(o, (unsigned char *) tlv_container->data, identifier_hash, node_key_tlv, trust_array_tlv, signature_tlv);
 }
 
 static void hncp_trust_local_tlv_callback(hncp_subscriber s, struct tlv_attr *tlv, bool add){
@@ -265,6 +268,8 @@ static void hncp_trust_tlv_update_callback(hncp_subscriber s, hncp_node n, struc
 }
 
 static void hncp_trust_node_change_callback(hncp_subscriber s, hncp_node n, bool add){
-  hncp_trust_graph g = hncp_trust_get_graph_or_create_it(o, &n->node_identifier_hash);
+  hncp_trust t = container_of(s, hncp_trust_s, sub);
+  hncp_trust_graph g = hncp_trust_get_graph_or_create_it(t->hncp, &n->node_identifier_hash);
+  n->trusted = false;
   g->hncp_node = add ? n : NULL;
 }

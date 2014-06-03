@@ -31,6 +31,11 @@ void print_polarssl_err(int err){
     return;
 }
 
+void hncp_crypto_set_key_tlv(hncp o, trust_key k){
+  hncp_remove_tlvs_by_type(o, HNCP_T_NODE_DATA_KEY);
+  hncp_update_tlv_raw(o, HNCP_T_NODE_DATA_KEY, k->raw_key, k->size, true);
+}
+
 int hncp_crypto_init(hncp o, char * private_key_file){
 
   o->trust->crypto = malloc(sizeof(struct crypto_data));
@@ -69,10 +74,10 @@ int hncp_crypto_init(hncp o, char * private_key_file){
   crypto->other_keys.no_delete = false;
 
   o->trust->crypto_used = true;
-  crypto->hncp = o;
+
   crypto->sign_hash = SIGN_HASH_SHA512;
   crypto->sign_type = SIGN_TYPE_RSA_SSAPSS;
-
+  hncp_crypto_set_key_tlv(o, &crypto->key);
   return 0;
 };
 
@@ -171,10 +176,6 @@ int hncp_crypto_write_trusted_key(__unused hncp o, trust_key c, char * trust_dir
   return crypto_write_key_file(&c->ctx, c->key_file, c->private);
 }
 
-bool hncp_crypto_hash_derived_from_key(hncp_hash h, trust_key k){
-  return crypto_hash_derived_from_raw(h, k->raw_key, k->size);
-}
-
 int hncp_crypto_sign_tlvs(hncp o, uint16_t sign_type, uint16_t hash_type){
   if(!o->trust->crypto_used)
     return 0;
@@ -214,19 +215,15 @@ trust_key hncp_crypto_key_from_hash(hncp o, hncp_hash hash){
   return t;
 }
 
-int hncp_crypto_verify_tlvs(hncp o, void * tlvs, size_t size, hncp_hash emitter, hncp_t_signature tlv){
-  trust_key t = hncp_crypto_key_from_hash(o, emitter);
-  if(t)
-    return crypto_verify_signature(tlv, &t->ctx, tlvs, size);
-  return false;
-}
 
 void hncp_crypto_local_update_callback(hncp_subscriber s, struct tlv_attr *tlv, __unused bool add){
   hncp_trust t = container_of(s, hncp_trust_s, sub);
-  hncp o = t->crypto->hncp;
-  if(tlv_id(tlv) != HNCP_T_SIGNATURE){
-    if(hncp_crypto_sign_tlvs(o, t->crypto->sign_type, t->crypto->sign_hash))
-      L_ERR("Failed to update signature");
+  if(t->crypto_used){
+    hncp o = t->hncp;
+    if(tlv_id(tlv) != HNCP_T_SIGNATURE){
+      if(hncp_crypto_sign_tlvs(o, t->crypto->sign_type, t->crypto->sign_hash))
+        L_ERR("Failed to update signature");
+    }
   }
 }
 

@@ -35,11 +35,14 @@ struct hncp_trust_struct{
   /* Contains keys, entropy & prng */
   struct crypto_data *crypto;
 
-  /* whether the PKI is used (disabling only affect structure destruction) */
-  bool crypto_used;
-
+  hncp hncp;
   /* version number of the local trust links */
   uint32_t tlv_version;
+
+  /* whether the PKI is used (disabling for some unit testing) */
+  bool crypto_used;
+
+
 
 
 };
@@ -69,7 +72,7 @@ int hncp_trust_init(hncp o, char * priv_key_file);
   * The node identifier hash is the md5 hash of the key
   * The signature is valid
   * There is only one hash, one key, one trust array, one signature */
-bool hncp_trust_message_integrity_check(hncp o, struct tlv_attr *tlv_container);
+bool hncp_trust_message_integrity_check(hncp o, hncp_hash node_identifier_hash, struct tlv_attr *tlv_container);
 
 /** Checks if the node hash is trusted */
 bool hncp_trust_node_trusted(hncp o, hncp_hash hash);

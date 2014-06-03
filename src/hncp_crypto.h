@@ -51,8 +51,6 @@ struct crypto_data{
   ctr_drbg_context ctr_drbg;
   md_context_t md_ctx;
 
-  hncp hncp;
-
   uint16_t sign_type;
   uint16_t sign_hash;
 };
@@ -86,17 +84,11 @@ void hncp_crypto_init_key(trust_key t, char * file_name, bool private);
 /* Convert a hash to an hex string */
 char * hash2str(hncp_hash h);
 
-/** Checks the node */
-int hncp_crypto_verify_tlvs(hncp o, void * tlvs, size_t size, hncp_hash emitter, hncp_t_signature tlv);
-
 /** Create the internal key structure */
 trust_key hncp_crypto_raw_key_to_trust_key(char * key, size_t size, bool private);
 
 /** Get a registered key from the hash (or NULL if not found) */
 trust_key hncp_crypto_key_from_hash(hncp o, hncp_hash hash);
-
-/** Check if the hash is valid */
-bool hncp_crypto_hash_derived_from_key(hncp_hash h, trust_key k);
 
 /** Callback for sign update in case of tlv change */
 void hncp_crypto_local_update_callback(hncp_subscriber s, struct tlv_attr *tlv, __unused bool add);

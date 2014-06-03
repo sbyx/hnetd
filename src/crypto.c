@@ -177,7 +177,7 @@ int crypto_make_signature(ctr_drbg_context* p_rng, pk_context* ctx, unsigned cha
 
 int crypto_verify_signature(hncp_t_signature sign, pk_context* ctx, void * data, size_t size){
   md_type_t hash_type = polarssl_digest_wrapper(sign->hash_type);
-  unsigned char * hash = malloc(crypto_hash_len(hash_type));
+  unsigned char * hash = alloca(crypto_hash_len(hash_type));
   crypto_hash_from_raw(hash, data, size, hash_type);
 
   return pk_verify(ctx, hash_type, hash, 0, sign->signature, size);
