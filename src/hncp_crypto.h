@@ -1,11 +1,17 @@
+/*
+ * Author : Xavier Bonnetain
+ *
+ * Copyright (c) 2014 cisco Systems, Inc.
+ */
 
 #pragma once
 #include "hncp_i.h"
-#include "hncp_trust.h"
+#include "hncp_proto.h"
 #include "crypto.h"
 #include <libubox/vlist.h>
-#define TRUST_PRIVATE_KEY_FILE "priv.key"
+
 #define RSA_KEY_SIZE 2048
+
 
 struct trust_key_struct{
   /* Structured key */
@@ -32,17 +38,41 @@ struct trust_key_struct{
 
 typedef struct trust_key_struct trust_key_s, *trust_key;
 
+struct crypto_data{
+  /* keys trusted locally */
+  struct vlist_tree local_trust_keys;
+  /* other keys. 2 vlists are not useful without key hash
+     collision support, but may be if/when added */
+  struct vlist_tree other_keys;
+
+  trust_key_s key;
+
+  entropy_context entropy;
+  ctr_drbg_context ctr_drbg;
+  md_context_t md_ctx;
+
+  hncp hncp;
+
+  uint16_t sign_type;
+  uint16_t sign_hash;
+};
+
+typedef struct crypto_data hncp_crypto_s, *hncp_crypto;
+
 /** 1 if key generation failed
   * 2 if key file opening failed (if file exists)
   * else 0 */
-int hncp_crypto_init(hncp o);
+int hncp_crypto_init(hncp o, char * private_key_file);
 
 /** 0 on success
   * Appropriate polarssl err code on failure */
-int hncp_crypto_write_trusted_key(hncp o, trust_key c);
+int hncp_crypto_write_trusted_key(hncp o, trust_key c, char * trust_dir);
 
-/** Suppress a key */
+/** Free key elements (but not the key) */
 void hncp_crypto_del_key(trust_key c);
+
+/** Free the intern cryptographic structure */
+void hncp_crypto_del_data(struct crypto_data *data);
 
 /** fetch all the files in trusted_dir & try to cast them in keys
   * and to trust them for now, fails miserably if an invalid
@@ -50,12 +80,26 @@ void hncp_crypto_del_key(trust_key c);
   * returns the number of keys, or -1 if the directory isn't available */
 int hncp_crypto_get_trusted_keys(hncp o, char *trusted_dir);
 
-/** generate an RSA key structure, for any usage
-  * (The init function takes care of the local key) */
-trust_key hncp_crypto_gen_rsa_key(hncp o, int key_size);
+/**  initialize the struct from the context in it */
+void hncp_crypto_init_key(trust_key t, char * file_name, bool private);
 
 /* Convert a hash to an hex string */
 char * hash2str(hncp_hash h);
+
+/** Checks the node */
+int hncp_crypto_verify_tlvs(hncp o, void * tlvs, size_t size, hncp_hash emitter, hncp_t_signature tlv);
+
+/** Create the internal key structure */
+trust_key hncp_crypto_raw_key_to_trust_key(char * key, size_t size, bool private);
+
+/** Get a registered key from the hash (or NULL if not found) */
+trust_key hncp_crypto_key_from_hash(hncp o, hncp_hash hash);
+
+/** Check if the hash is valid */
+bool hncp_crypto_hash_derived_from_key(hncp_hash h, trust_key k);
+
+/** Callback for sign update in case of tlv change */
+void hncp_crypto_local_update_callback(hncp_subscriber s, struct tlv_attr *tlv, __unused bool add);
 /*
 hncp_crypto_change_keys(hncp o, void *new_algorithm);
 

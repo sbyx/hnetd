@@ -90,6 +90,19 @@ enum {
   HNCP_T_SIGNATURE = 0xFFFF /* not implemented */
 };
 
+enum {
+  SIGN_HASH_SHA1 = 1,
+  SIGN_HASH_SHA224 = 2,
+  SIGN_HASH_SHA256 = 3,
+  SIGN_HASH_SHA384 = 4,
+  SIGN_HASH_SHA512 = 5
+};
+
+enum {
+  SIGN_TYPE_RSA_PKCS15 = 1,
+  SIGN_TYPE_RSA_SSAPSS = 2
+};
+
 #define TLV_SIZE sizeof(struct tlv_attr)
 
 typedef struct __packed {
@@ -124,7 +137,7 @@ typedef struct __packed {
 
 /* HNCP_T_NODE_DATA_KEY has only raw public key (perhaps it should
  * have more information though?
- * We may want to specify the hash type/salt here */
+ */
 
 /* HNCP_T_NODE_DATA_NEIGHBOR */
 typedef struct __packed {
@@ -201,18 +214,15 @@ typedef struct __packed {
 /* HNCP_T_TRUST_ARRAY */
 typedef struct __packed {
   uint32_t sequence_number;
-  /* Duration (in seconds) of the trusts links after the node disconnection (todo/to forget) */
-  uint32_t timeout;
   /* Nodes trusted */
   hncp_hash_s hashes[];
 } hncp_t_trust_array_s, *hncp_t_trust_array;
 
 /* HNCP_T_SIGNATURE */
 typedef struct __packed {
-  /* Type (algorithm + variant) of the signature) */
-  uint32_t type;
+  uint16_t hash_type;
+  uint16_t sign_type;
   uint8_t signature[];
-
 } hncp_t_signature_s, *hncp_t_signature;
 
 /**************************************************************** Addressing */

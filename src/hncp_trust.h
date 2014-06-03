@@ -20,17 +20,11 @@
 #include <polarssl/pk.h>
 #include "hncp_crypto.h"
 
-/* Fetch a graph pointer from a node identifier hash pointer */
-#define graph_from_hash(o, hash)\
-  vlist_find(&(o->trust->trust_graphs), hash, o->trust->my_graph, vlist_node)
-
 struct hncp_trust_struct{
   /* list of nodes in the graph, indexed by node hash */
   struct vlist_tree trust_graphs;
 
-  /* List of keys directly trusted, indexed by their hash, wich must be the according node hash */
-  struct vlist_tree local_trust_keys;
-
+  hncp_subscriber_s sub;
   /* pointer to me in the graph */
   hncp_trust_graph my_graph;
 
@@ -38,28 +32,44 @@ struct hncp_trust_struct{
   hncp_hash local_trust_array;
   unsigned int array_size;
 
-  /* Local crypto structure */
-  pk_context ctx;
+  /* Contains keys, entropy & prng */
+  struct crypto_data *crypto;
+
+  /* whether the PKI is used (disabling only affect structure destruction) */
+  bool crypto_used;
 
   /* version number of the local trust links */
   uint32_t tlv_version;
 
-  /* Directory to store the trusted keys */
-  char * local_trust_dir;
 
 };
+
+typedef struct hncp_trust_struct hncp_trust_s, *hncp_trust;
 
 struct hash_list{
   struct list_head list;
   hncp_hash_s h;
 };
 
+/* Fetch a graph pointer from a node identifier hash pointer */
+#define graph_from_hash(o, hash)\
+  vlist_find(&(o->trust->trust_graphs), hash, o->trust->my_graph, vlist_node)
+
+/** Hash comparison, for vlists */
+static int __unused compare_hash(const void *hash1, const void *hash2, __unused void *c){
+  return HASH_CMP(hash1, hash2);
+};
+
 /** Creates an empty web of trust
   *  -1 if the crypto init failed, else 0 */
-int hncp_trust_init(hncp o);
+int hncp_trust_init(hncp o, char * priv_key_file);
 
-/** Checks if the hash is really derived from the key (TODO) */
-bool hncp_trust_valid_key(hncp_hash hash, struct key* key);
+/** Checks if the tlv set (assumed to be ordered) is valid :
+  * The key is valid
+  * The node identifier hash is the md5 hash of the key
+  * The signature is valid
+  * There is only one hash, one key, one trust array, one signature */
+bool hncp_trust_message_integrity_check(hncp o, struct tlv_attr *tlv_container);
 
 /** Checks if the node hash is trusted */
 bool hncp_trust_node_trusted(hncp o, hncp_hash hash);
@@ -71,12 +81,7 @@ bool hncp_trust_node_trusts_me(hncp o, hncp_hash hash);
  * trusted : array of hashes
  * size : size of the array */
 void hncp_trust_update_graph(hncp o, hncp_hash emitter, hncp_hash trusted, int size);
-/* Checks if some trust links are obsoleted, and updates the graph accordingly */
-//void hncp_trust_time_update();
-/** Destroys all the nodes & links */
-static inline void hncp_trust_destroy_nodes(hncp o){
-  vlist_flush_all(&o->trust->trust_graphs);
-};
+
 /** Destroys everything, frees all memory */
 void hncp_trust_destroy(hncp o);
 

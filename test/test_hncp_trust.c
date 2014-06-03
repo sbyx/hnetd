@@ -39,7 +39,7 @@ void trust_graph(void){
   hncp o = hncp_create();
   hncp_hash h = &(o->own_node->node_identifier_hash);
 
-  hncp_trust_init(o);
+  sput_fail_if(hncp_trust_init(o, NULL), "Init check");
   hncp_trust_graph g = o->trust->my_graph;
   sput_fail_unless(trust_graph_is_trusted(g, h), "I trust myself");
 
@@ -98,7 +98,7 @@ void trust_graph(void){
 void hncp_trust_test(void){
   hncp o = hncp_create();
   hncp_hash h = &(o->own_node->node_identifier_hash);
-  hncp_trust_init(o);
+  sput_fail_if(hncp_trust_init(o, NULL), "Init check");
   //hncp_trust_graph g = o->trust->my_graph;
   sput_fail_unless(hncp_trust_node_trusted(o, h), "I trust myself");
 
@@ -117,18 +117,18 @@ void hncp_trust_test(void){
   sput_fail_if(g1->trusted || g2->trusted || list_first_entry(&g1->arrows, struct _trusted_list, list)->node != g2, "Consistency check");
   sput_fail_if(hncp_trust_node_trusted(o, h1) || !hncp_trust_node_trusts_me(o, h1), "Distant link insertion ok");
 
-  local_trust_add_trusted_array(o, list, 2);
+  local_trust_add_trusted_array(o, list, 2, true);
   hncp_hash h3 = create_hash(3);
   hncp_trust_update_graph(o, h3, h1, 1);
   sput_fail_unless(!hncp_trust_node_trusted(o, h3) && hncp_trust_node_trusts_me(o, h3), "Local insertion ok");
   /* here : g3 => g1 <=> g2 <=> g => g1 */
-  sput_fail_unless(local_trust_remove_trusted_hash(o, h2), "Local removal ok");
-  sput_fail_if(local_trust_remove_trusted_hash(o, h2), "Removal, bis");
-  local_trust_purge_trusted_array(o);
-  sput_fail_if(local_trust_remove_trusted_array(o, list, 2),"Empty array check");
+  sput_fail_unless(local_trust_remove_trusted_hash(o, h2, true), "Local removal ok");
+  sput_fail_if(local_trust_remove_trusted_hash(o, h2, false), "Removal, bis");
+  local_trust_purge_trusted_array(o, true);
+  sput_fail_if(local_trust_remove_trusted_array(o, list, 2, true),"Empty array check");
   sput_fail_if(hncp_trust_node_trusted(o, h1) || hncp_trust_node_trusted(o, h2), "Local complete deletion ok");
-  local_trust_add_trusted_hash(o, h3);
-  local_trust_replace_trusted_array(o, h2, 1);
+  local_trust_add_trusted_hash(o, h3, true);
+  local_trust_replace_trusted_array(o, h2, 1, true);
   /* here : g3 => g1 <=> g2 <=> g */
   sput_fail_unless(hncp_trust_node_trusts_me(o, h3) && !hncp_trust_node_trusted(o, h3), "Inserting again ok");
   hncp_trust_destroy(o);

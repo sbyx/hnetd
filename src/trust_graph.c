@@ -7,6 +7,24 @@
 
 #include "trust_graph.h"
 
+void trust_graph_init(hncp_trust_graph g, hncp_hash hash){
+  g->hash = *hash;
+  INIT_LIST_HEAD(&g->arrows);
+  g->marked = false;
+  g->trusted = false;
+  g->hncp_node = NULL;
+}
+
+
+hncp_trust_graph trust_graph_create(hncp_hash hash){
+  hncp_trust_graph g = malloc(sizeof(hncp_trust_graph_s));
+  if(g)
+    trust_graph_init(g, hash);
+  else
+    L_ERR("graph allocation failed");
+  return g;
+}
+
 
 void init_explo(struct list_head* l, hncp_trust_graph g){
   INIT_LIST_HEAD(l);
@@ -29,7 +47,7 @@ bool trust_graph_is_trusted(hncp_trust_graph g, hncp_hash node_hash){
   struct list_head l;
   init_explo(&l, g);
   bool result = false;
-  if(memcmp(node_hash, &(g->hash), HNCP_HASH_LEN) == 0){
+  if(HASH_EQUALS(node_hash, &g->hash)){
     result = true;
     goto end;
   };
@@ -41,7 +59,7 @@ bool trust_graph_is_trusted(hncp_trust_graph g, hncp_hash node_hash){
     _for_each_trust_graph(graph, item){
       hncp_trust_graph node = item->node;
       if(!node->marked){
-        if(memcmp(node_hash, &(node->hash),HNCP_HASH_LEN) == 0){
+        if(HASH_EQUALS(node_hash, &node->hash)){
           /* Node found */
           result = true;
           goto end;
@@ -68,6 +86,7 @@ void trust_graph_add_trust_link(hncp_trust_graph emitter, hncp_trust_graph trust
   link->node = trusted;
   list_add_tail(&link->list,&emitter->arrows);
 };
+
 
 void trust_graph_add_trust_array(hncp_trust_graph emitter, hncp_trust_graph array[], unsigned int size){
   for(unsigned int i = 0; i<size; i++)

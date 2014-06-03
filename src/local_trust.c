@@ -16,7 +16,6 @@ void local_trust_update_tlv(hncp o){
   }
 
   tlv->sequence_number = ++(o->trust->tlv_version);
-  tlv->timeout = 0; /* Dummy */
   memcpy(tlv->hashes, o->trust->local_trust_array, len);
   hncp_trust_update_graph(o, &o->own_node->node_identifier_hash, o->trust->local_trust_array, o->trust->array_size);
 
@@ -58,7 +57,7 @@ bool local_trust_remove_trusted_hash(hncp o, hncp_hash h, bool update){
   unsigned int i;
   hncp_trust t = o->trust;
   for(i = 0; i < t->array_size; i++){
-    if(memcmp(&t->local_trust_array[i], h, HNCP_HASH_LEN) == 0)
+    if(HASH_EQUALS(&t->local_trust_array[i], h))
       goto remove;
   }
   return false;

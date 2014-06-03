@@ -205,9 +205,10 @@ struct hncp_node_struct {
 
   uint32_t version;
 
-  /* Pointer to the trust graph node. graph->trusted to know
-   * if it's trusted */
-  hncp_trust_graph graph;
+  /* trust link version, to limit packet replay impact */
+  uint32_t trust_link_version;
+  /* whether the node is trusted */
+  bool trusted;
 
   /* When was the last prune during which this node was reachable */
   hnetd_time_t last_reachable_prune;
