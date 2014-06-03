@@ -450,7 +450,7 @@ int hncp_remove_tlvs_by_type(hncp o, int type)
 
 void hncp_link_conf_set_default(hncp_link_conf conf)
 {
-	conf->trickle_imax = HNCP_TRICKLE_IMIN;
+	conf->trickle_imin = HNCP_TRICKLE_IMIN;
 	conf->trickle_imax = HNCP_TRICKLE_IMAX;
 	conf->trickle_k = HNCP_TRICKLE_K;
 	conf->ping_worried_t = HNCP_INTERVAL_WORRIED;
