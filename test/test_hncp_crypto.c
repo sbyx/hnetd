@@ -163,6 +163,8 @@ void test_public_key(void){
     free(h);
   }
   sput_fail_unless(smock_empty(), "Right number of hashes");
+  hncp_run(o);
+  sput_fail_unless(hncp_trust_message_integrity_check(o, &o->own_node->node_identifier_hash, o->own_node->tlv_container), "Valid published tlvs");
   hncp_trust_destroy(o);
   hncp_destroy(o);
 }
