@@ -7,7 +7,7 @@ dhcpv4client)
 	;;
 	
 dhcpv6client)
-	exec odhcp6c -P0 -F -s /usr/share/hnetd/dhcpv6.script -u HOMENET "$2"
+	exec odhcp6c -t120 -P0 -F -s /usr/share/hnetd/dhcpv6.script -u HOMENET "$2"
 	;;
 	
 setfilter|unsetfilter)
