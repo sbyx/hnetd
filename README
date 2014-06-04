@@ -95,7 +95,8 @@ Afterwards run hnetd with appropriate parameters.
 Once both services are running, you can use the hnet CLI tools:
 
 hnet-ifup [-e] [-g] [-a] [-d] [-u] [-p prefix] [-l id[/idmask]]
-	[-i id/idmask [filter-prefix]] [-m ip6_plen] <interfacename>
+	[-i id/idmask [filter-prefix]] [-m ip6_plen] [-k trickle_k] 
+	[-P ping_interval] <interfacename>
 adds the network interface <interfacename> (e.g. eth0) to the homenet.
 -e is an optional parameter indicating the interface is fixed-external.
 -g is an optional parameter indicating it is a guest interface.
@@ -108,6 +109,8 @@ adds the network interface <interfacename> (e.g. eth0) to the homenet.
 -a is an optional parameter indicating the interface is adhoc.
 -u is an optional parameter indicating that an IPv6 default route should be
 	announced even when there is only a ULA-prefix present.
+-k is an optional parameter indicating the interface's trickle K parameter.
+-P is an optional parameter indicating the dead-peer-detection interval value in ms.
 
 hnet-ifdown <interfacename> removes an interface from hnet again.
 

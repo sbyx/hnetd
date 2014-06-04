@@ -614,6 +614,8 @@ enum {
 	DATA_ATTR_DISABLE_PA,
 	DATA_ATTR_PASSTHRU,
 	DATA_ATTR_ULA_DEFAULT_ROUTER,
+	DATA_ATTR_PING_INTERVAL,
+	DATA_ATTR_TRICKLE_K,
 	DATA_ATTR_MAX
 };
 
@@ -646,6 +648,8 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_DISABLE_PA] = { .name = "disable_pa", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_PASSTHRU] = { .name = "passthru", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_ULA_DEFAULT_ROUTER] = { .name = "ula_default_router", .type = BLOBMSG_TYPE_BOOL },
+	[DATA_ATTR_PING_INTERVAL] = { .name = "ping_interval", .type = BLOBMSG_TYPE_INT32 },
+	[DATA_ATTR_TRICKLE_K] = { .name = "trickle_k", .type = BLOBMSG_TYPE_INT32 },
 };
 
 
@@ -864,6 +868,19 @@ static void platform_update(void *data, size_t len)
 		               && ip6_plen <= 128) {
 			c->ip6_plen = ip6_plen;
 		}
+
+		hncp_link_conf conf;
+		if(c && dtb[DATA_ATTR_PING_INTERVAL] && (conf = hncp_find_link_conf_by_name(p_hncp, c->ifname))) {
+			conf->ping_worried_t = (((hnetd_time_t) blobmsg_get_u32(dtb[DATA_ATTR_PING_INTERVAL])) * HNETD_TIME_PER_SECOND) / 1000;
+			conf->ping_retry_base_t = conf->ping_worried_t / 8;
+			if(conf->ping_retry_base_t < 100)
+				conf->ping_retry_base_t = 100;
+			conf->ping_retries = 3;
+		}
+
+		if(c && dtb[DATA_ATTR_TRICKLE_K] && (conf = hncp_find_link_conf_by_name(p_hncp, c->ifname)))
+			conf->trickle_k = (int) blobmsg_get_u32(dtb[DATA_ATTR_TRICKLE_K]);
+
 	}
 
 	if (c)

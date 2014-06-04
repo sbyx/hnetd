@@ -47,6 +47,8 @@ enum ipc_option {
 	OPT_DISABLE_PA,
 	OPT_PASSTHRU,
 	OPT_ULA_DEFAULT_ROUTER,
+	OPT_PING_INTERVAL,
+	OPT_TRICKLE_K,
 	OPT_MAX
 };
 
@@ -66,6 +68,8 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_DISABLE_PA] = {"disable_pa", BLOBMSG_TYPE_BOOL},
 	[OPT_PASSTHRU] = {"passthru", BLOBMSG_TYPE_STRING},
 	[OPT_ULA_DEFAULT_ROUTER] = {"ula_default_router", BLOBMSG_TYPE_BOOL},
+	[OPT_PING_INTERVAL] = { .name = "ping_interval", .type = BLOBMSG_TYPE_INT32 },
+	[OPT_TRICKLE_K] = { .name = "trickle_k", .type = BLOBMSG_TYPE_INT32 },
 };
 
 enum ipc_prefix_option {
@@ -168,8 +172,8 @@ int ipc_ifupdown(int argc, char *argv[])
 	char *buf;
 	char *entry;
 
-	int c;
-	while ((c = getopt(argc, argv, "ecgadp:l:i:m:u")) > 0) {
+	int c, i;
+	while ((c = getopt(argc, argv, "ecgadp:l:i:m:uk:P:")) > 0) {
 		switch(c) {
 		case 'e':
 			external = true;
@@ -219,6 +223,14 @@ int ipc_ifupdown(int argc, char *argv[])
 
 		case 'u':
 			blobmsg_add_u8(&b, "ula_default_router", 1);
+			break;
+		case 'k':
+			if(sscanf(optarg, "%d", &i) == 1)
+				blobmsg_add_u32(&b, "trickle_k", i);
+			break;
+		case 'P':
+			if(sscanf(optarg, "%d", &i) == 1)
+				blobmsg_add_u32(&b, "ping_interval", i);
 			break;
 		}
 	}
@@ -339,6 +351,18 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			               && minv6len <= 128) {
 				iface->ip6_plen = minv6len;
 			}
+
+			hncp_link_conf conf;
+			if(c && tb[OPT_PING_INTERVAL] && (conf = hncp_find_link_conf_by_name(ipchncp, c->ifname))) {
+				conf->ping_worried_t = (((hnetd_time_t) blobmsg_get_u32(tb[OPT_PING_INTERVAL])) * HNETD_TIME_PER_SECOND) / 1000;
+				conf->ping_retry_base_t = conf->ping_worried_t / 8;
+				if(conf->ping_retry_base_t < 100)
+					conf->ping_retry_base_t = 100;
+				conf->ping_retries = 3;
+			}
+
+			if(c && tb[OPT_TRICKLE_K] && (conf = hncp_find_link_conf_by_name(ipchncp, c->ifname)))
+				conf->trickle_k = (int) blobmsg_get_u32(tb[OPT_TRICKLE_K]);
 
 		} else if (!strcmp(cmd, "ifdown")) {
 			iface_remove(c);
