@@ -118,6 +118,7 @@ int ipc_client(const char *buffer)
 	serveraddr.sun_family = AF_UNIX;
 	strcpy(serveraddr.sun_path, ipcpath);
 
+	srandom(time(NULL) ^ getpid());
 	snprintf(sockaddr, 107, ipcpath_client, random() % 1000);
 	unlink(sockaddr);
 	int sock = usock(USOCK_UNIX | USOCK_SERVER | USOCK_UDP, sockaddr, NULL);
@@ -152,6 +153,10 @@ int ipc_client(const char *buffer)
 	return 0;
 }
 
+int ipc_dump(void)
+{
+	return ipc_client("{\"command\": \"dump\"}");
+}
 
 // Multicall handler for hnet-ifup/hnet-ifdown
 int ipc_ifupdown(int argc, char *argv[])

@@ -17,4 +17,7 @@ int ipc_client(const char *buffer);
 // IPC ifup/ifdown client
 int ipc_ifupdown(int argc, char *argv[]);
 
+// IPC dump client
+int ipc_dump(void);
+
 void ipc_conf(hncp hncp);

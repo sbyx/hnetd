@@ -110,6 +110,8 @@ int main(__unused int argc, char *argv[])
 		if(argc < 2)
 			return 3;
 		return ipc_client(argv[1]);
+	} else if (strstr(argv[0], "hnet-dump")) {
+		return ipc_dump();
 	} else if ((strstr(argv[0], "hnet-ifup") || strstr(argv[0], "hnet-ifdown"))) {
 		if(argc < 2)
 			return 3;
