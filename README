@@ -53,6 +53,9 @@ hnetd uses cmake:
 * To build / install use: "make" / "make install" afterwards.
 * To build DEB or RPM packages use: "make package" afterwards.
 
+Note: The script "build-generic.sh" can aid in building hnet and its
+dependencies and tools on Debian/Ubuntu/Mint and related Linux distributions.
+
 
 ** OpenWrt Firmware Integration **
 
