@@ -118,8 +118,7 @@ int ipc_client(const char *buffer)
 	serveraddr.sun_family = AF_UNIX;
 	strcpy(serveraddr.sun_path, ipcpath);
 
-	srandom(time(NULL) ^ getpid());
-	snprintf(sockaddr, 107, ipcpath_client, random() % 1000);
+	snprintf(sockaddr, 107, ipcpath_client, getpid());
 	unlink(sockaddr);
 	int sock = usock(USOCK_UNIX | USOCK_SERVER | USOCK_UDP, sockaddr, NULL);
 	if (sock < 0) {
