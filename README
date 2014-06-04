@@ -92,11 +92,11 @@ adapt them if needed.
 If you are using odhcpd as DHCP/DHCPv6/RA server start it as a daemon.
 Afterwards run hnetd with appropriate parameters.
 
-Once both services are running, you can use hnet-ifup and hnet-ifdown:
+Once both services are running, you can use the hnet CLI tools:
 
 hnet-ifup [-e] [-g] [-a] [-d] [-u] [-p prefix] [-l id[/idmask]]
 	[-i id/idmask [filter-prefix]] [-m ip6_plen] <interfacename>
-<interfacename> is the name of the network interface to add (e.g. eth0).
+adds the network interface <interfacename> (e.g. eth0) to the homenet.
 -e is an optional parameter indicating the interface is fixed-external.
 -g is an optional parameter indicating it is a guest interface.
 -p is an optional parameter indicating one or more static prefixes.
@@ -110,3 +110,5 @@ hnet-ifup [-e] [-g] [-a] [-d] [-u] [-p prefix] [-l id[/idmask]]
 	announced even when there is only a ULA-prefix present.
 
 hnet-ifdown <interfacename> removes an interface from hnet again.
+
+hnet-dump dumps you (most of) the current state of the network as JSON.
