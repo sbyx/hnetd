@@ -14,7 +14,7 @@ proto_hnet_init_config() {
     proto_config_add_string 'prefix'
     proto_config_add_string 'link_id'
     proto_config_add_string 'iface_id'
-    proto_config_add_string 'ip6_plen'
+    proto_config_add_string 'ip6assign'
     proto_config_add_string 'adhoc'
     proto_config_add_string 'disable_pa'
     proto_config_add_string 'ula_default_router'
@@ -26,8 +26,8 @@ proto_hnet_setup() {
     local interface="$1"
     local device="$2"
 
-    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id ip6_plen adhoc disable_pa ula_default_router ping_interval trickle_k
-    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id ip6_plen adhoc disable_pa ula_default_router ping_interval trickle_k
+    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id ip6assign adhoc disable_pa ula_default_router ping_interval trickle_k
+    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id ip6assign adhoc disable_pa ula_default_router ping_interval trickle_k
 
     logger -t proto-hnet "proto_hnet_setup $device/$interface"
 
@@ -62,7 +62,7 @@ proto_hnet_setup() {
     	json_add_string "" "$p"
     done
     json_close_array
-    json_add_string ip6_plen "$ip6_plen"
+    json_add_string ip6_plen "$ip6assign"
     proto_close_data
 
     proto_send_update "$interface"
