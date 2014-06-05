@@ -114,7 +114,8 @@ void iface_pa_ifs(__attribute__((unused))struct pa_data_user *user,
 			return;
 		assert(c->platform != NULL);
 
-		bool owner = (flags & PADF_IF_TODELETE)?false:iface->do_dhcp;
+		bool owner = ((flags & PADF_IF_TODELETE)?false:iface->do_dhcp) &&
+				!(c->flags & IFACE_FLAG_LOOPBACK);
 		if (owner != c->linkowner) {
 			c->linkowner = owner;
 			platform_set_owner(c, owner);
@@ -744,7 +745,7 @@ static bool iface_discover_border(struct iface *c)
 		return false;
 
 	// Perform border-discovery (border on DHCPv4 assignment or DHCPv6-PD)
-	bool internal = c->carrier && ((c->flags & IFACE_FLAG_GUEST) ||
+	bool internal = c->carrier && ((c->flags & (IFACE_FLAG_GUEST | IFACE_FLAG_LOOPBACK)) ||
 			(avl_is_empty(&c->delegated.avl) && !c->v4uplink));
 	if (c->internal != internal) {
 		L_INFO("iface: %s border discovery detected state %s",
@@ -773,6 +774,11 @@ struct iface* iface_create(const char *ifname, const char *handle, iface_flags f
 		size_t namelen = strlen(ifname) + 1;
 		c = calloc(1, sizeof(*c) + namelen);
 		memcpy(c->ifname, ifname, namelen);
+
+		if (!strcmp(ifname, "lo") || !strcmp(ifname, "lo0")) {
+			c->flags = IFACE_FLAG_LOOPBACK;
+			c->ip6_plen = 128;
+		}
 
 		// Get EUI-64 address
 		struct ifaddrs *ifaddr, *ifa;

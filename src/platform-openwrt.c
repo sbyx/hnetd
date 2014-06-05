@@ -456,7 +456,7 @@ static void platform_commit(struct uloop_timeout *t)
 
 	k = blobmsg_open_table(&b, "data");
 
-	const char *service = (c->internal && c->linkowner) ? "server" : "disabled";
+	const char *service = (c->internal && c->linkowner && !(c->flags & IFACE_FLAG_LOOPBACK)) ? "server" : "disabled";
 	blobmsg_add_string(&b, "ra", service);
 	blobmsg_add_string(&b, "dhcpv4", service);
 	blobmsg_add_string(&b, "dhcpv6", service);
