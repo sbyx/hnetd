@@ -38,9 +38,6 @@ proto_hnet_setup() {
         return
     fi
 
-    # It won't be 'up' before we provide first config.
-    # So we provide _empty_ config here, and let pm.lua deal with
-    # configuring real parameters there later..
     proto_init_update "*" 1
 
     proto_add_data
