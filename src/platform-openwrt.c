@@ -871,10 +871,10 @@ static void platform_update(void *data, size_t len)
 
 		hncp_link_conf conf;
 		if(c && dtb[DATA_ATTR_PING_INTERVAL] && (conf = hncp_find_link_conf_by_name(p_hncp, c->ifname))) {
-			conf->ping_worried_t = (hnetd_time_t) blobmsg_get_u32(dtb[DATA_ATTR_PING_INTERVAL]) * HNETD_TIME_PER_SECOND;
-                        if (conf->ping_worried_t < HNETD_TIME_PER_SECOND)
-                          conf->ping_worried_t = HNETD_TIME_PER_SECOND;
+			conf->ping_worried_t = (((hnetd_time_t) blobmsg_get_u32(dtb[DATA_ATTR_PING_INTERVAL])) * HNETD_TIME_PER_SECOND) / 1000;
 			conf->ping_retry_base_t = conf->ping_worried_t / 8;
+			if(conf->ping_retry_base_t < 100)
+				conf->ping_retry_base_t = 100;
 			conf->ping_retries = 3;
 		}
 
