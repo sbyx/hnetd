@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Jun  9 18:36:54 2014 mstenber
+ * Last modified: Mon Jun  9 18:55:57 2014 mstenber
  * Edit time:     199 min
  *
  */
@@ -17,6 +17,8 @@
 #include "hncp.h"
 
 #include "dns_util.h"
+
+#include <assert.h>
 
 #include <libubox/uloop.h>
 
@@ -119,6 +121,19 @@ struct hncp_struct {
 
   /* search domain provided to clients. */
   char domain[DNS_MAX_ESCAPED_LEN];
+
+  /* Number of TLV indexes we have. */
+  int num_tlv_indexes;
+
+  /* An array that contains indicator _which_ TLV is in that slot. The
+   * index is the return value given to the caller who does
+   * hncp_get_tlv_index, and stays the same for duration of HNCP
+   * instance's lifetime. */
+  uint16_t *tlv_indexes;
+
+  /* An array that contains indexes of tlv_indexes, sorted by
+   * ascending value. */
+  int *tlv_indexes_sorted;
 };
 
 typedef struct hncp_link_struct hncp_link_s, *hncp_link;
@@ -193,7 +208,6 @@ struct hncp_bfs_head {
   unsigned hopcount;
 };
 
-
 struct hncp_node_struct {
   /* hncp->nodes entry */
   struct vlist_node in_nodes;
@@ -222,15 +236,24 @@ struct hncp_node_struct {
    * received/created. We could probably also maintain this at end of
    * the structure, but that'd mandate re-inserts whenever content
    * changes, so probably just faster to keep a pointer to it. */
-
-  /* (We actually _do_ parse incoming TLV and create a new TLV, just
-   * to make sure there's no 'bad actors' somewhere with invalid sizes
-   * or whatever). */
   struct tlv_attr *tlv_container;
 
   /* TLV data, that is of correct version # and otherwise looks like
    * it should be used by us. Either tlv_container, or NULL. */
   struct tlv_attr *tlv_container_valid;
+
+  /* An index of HNCP TLV indexes (that have been registered and
+   * precomputed for this node). Typically NULL, until first access
+   * during which we have to traverse all TLVs in any case and this
+   * gets populated. It contains 'first', 'next' pairs for each
+   * registered index. */
+  struct tlv_attr **tlv_index;
+
+  /* Flag which indicates whether contents of tlv_idnex are up to date
+   * with tlv_container. As a result of this, there's no need for
+   * re-alloc when tlv_container changes and we don't immediately want
+   * to recalculate tlv_index. */
+  bool tlv_index_dirty;
 };
 
 typedef struct hncp_tlv_struct hncp_tlv_s, *hncp_tlv;
@@ -260,8 +283,14 @@ void hncp_link_reset_trickle(hncp_link l);
 
 bool hncp_node_set_tlvs(hncp_node n, struct tlv_attr *a);
 int hncp_node_cmp(hncp_node n1, hncp_node n2);
+void hncp_node_recalculate_index(hncp_node n);
 
 bool hncp_get_ipv6_address(hncp o, char *prefer_ifname, struct in6_addr *addr);
+
+/* Get index for specific typed TLV searching/iteration, or -1 in case
+ * of an error. */
+int hncp_get_tlv_index(hncp o, uint16_t type);
+
 void hncp_schedule(hncp o);
 
 /* Flush own TLV changes to own node. */
@@ -336,6 +365,25 @@ static inline hnetd_time_t hncp_time(hncp o)
 
 #define hncp_node_for_each_tlv_i(n, a)  \
   tlv_for_each_attr(a, (n)->tlv_container)
+
+static inline struct tlv_attr *
+hncp_node_get_index(hncp_node n, int index, bool first)
+{
+  assert(n && index >= 0 && index < n->hncp->num_tlv_indexes);
+  if (n->tlv_index_dirty)
+    {
+      hncp_node_recalculate_index(n);
+      if (!n->tlv_index)
+        return NULL;
+    }
+  int i = index * 2 + (first ? 0 : 1);
+  return n->tlv_index[i];
+}
+
+#define hncp_node_for_each_tlv_in_index(n, a, index)    \
+  for (a = hncp_node_get_index(n, index, true) ;        \
+       a && a != hncp_node_get_index(n, index, false) ; \
+       a = tlv_next(a))
 
 #define ROUND_BITS_TO_BYTES(b) (((b) + 7) / 8)
 #define ROUND_BYTES_TO_4BYTES(b) ((((b) + 3) / 4) * 4)

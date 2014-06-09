@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Jun  9 18:47:47 2014 mstenber
- * Edit time:     584 min
+ * Last modified: Mon Jun  9 18:56:40 2014 mstenber
+ * Edit time:     587 min
  *
  */
 
@@ -94,6 +94,7 @@ bool hncp_node_set_tlvs(hncp_node n, struct tlv_attr *a)
     free(n->tlv_container);
   n->tlv_container = a;
   n->tlv_container_valid = a_valid;
+  n->tlv_index_dirty = true;
   n->hncp->network_hash_dirty = true;
   n->node_data_hash_dirty = true;
   n->hncp->graph_dirty = true;
@@ -116,12 +117,15 @@ static void update_node(__unused struct vlist_tree *t,
   if (n_old)
     {
       hncp_node_set_tlvs(n_old, NULL);
+      if (n_old->tlv_index)
+        free(n_old->tlv_index);
       free(n_old);
     }
   if (n_new)
     {
       n_new->node_data_hash_dirty = true;
       n_new->last_reachable_prune = 0;
+      n_new->tlv_index_dirty = true;
     }
   o->network_hash_dirty = true;
   o->graph_dirty = true;
@@ -257,6 +261,7 @@ hncp_node hncp_find_node_by_hash(hncp o, hncp_hash h, bool create)
     return false;
   n->node_identifier_hash = *h;
   n->hncp = o;
+  n->tlv_index_dirty = true;
   vlist_add(&o->nodes, &n->in_nodes, n);
   return n;
 }
@@ -361,6 +366,13 @@ void hncp_uninit(hncp o)
 
   /* Finally, we can kill own node too. */
   vlist_flush_all(&o->nodes);
+
+  /* Get rid of TLV indexes. */
+  if (o->num_tlv_indexes)
+    {
+      free(o->tlv_indexes);
+      free(o->tlv_indexes_sorted);
+    }
 }
 
 void hncp_destroy(hncp o)
@@ -735,6 +747,46 @@ hncp_get_ipv6_address(hncp o, char *prefer_ifname, struct in6_addr *addr)
   return false;
 }
 
+int hncp_get_tlv_index(hncp o, uint16_t type)
+{
+  int nti = o->num_tlv_indexes + 1;
+  uint16_t *ni = realloc(o->tlv_indexes,
+                         nti * sizeof(o->tlv_indexes[0]));
+  if (!ni)
+    return -1;
+  int *nis = realloc(o->tlv_indexes_sorted,
+                     nti * sizeof(o->tlv_indexes_sorted[0]));
+  if (!nis)
+    {
+      free(ni);
+      return -1;
+    }
+  ni[o->num_tlv_indexes] = type;
+  int i;
+  for (i = 0 ; i < o->num_tlv_indexes ; i++)
+    if (ni[nis[i]] > type)
+      break;
+  /* i = insertion point */
+  memmove(&nis[i+1], &nis[i], (o->num_tlv_indexes - i) * sizeof(nis[0]));
+  nis[i] = o->num_tlv_indexes;
+
+  o->tlv_indexes = ni;
+  o->tlv_indexes_sorted = nis;
+
+  /* Free existing indexes */
+  hncp_node n;
+  hncp_for_each_node(o, n)
+    {
+      if (n->tlv_index)
+        {
+          free(n->tlv_index);
+          n->tlv_index = NULL;
+          n->tlv_index_dirty = true;
+        }
+    }
+  return o->num_tlv_indexes++;
+}
+
 
 void
 hncp_link_set_ipv6_address(hncp_link l, const struct in6_addr *addr)
@@ -766,4 +818,55 @@ hncp_set_ipv6_address(hncp o, const char *ifname, const struct in6_addr *a)
   hncp_link l = hncp_find_link_by_name(o, ifname, false);
   if (l)
     hncp_link_set_ipv6_address(l, a);
+}
+
+void hncp_node_recalculate_index(hncp_node n)
+{
+  int size = n->hncp->num_tlv_indexes * 2 *  sizeof(n->tlv_index[0]);
+  assert(n->tlv_index_dirty);
+  if (!n->tlv_index)
+    {
+      n->tlv_index = malloc(size);
+      if (!n->tlv_index)
+        return;
+    }
+  memset(n->tlv_index, 0, size);
+
+  hncp o = n->hncp;
+  struct tlv_attr *a;
+  uint16_t type = 0;
+  int idx = 0, idx2 = 0;
+
+  /* Note: This algorithm isn't particularly clever - while linear in
+   * speed (O(# of indexes + # of entries in tlv_container), it has bit
+   * too significant constant factor for comfort. */
+  hncp_node_for_each_tlv(n, a)
+    {
+      /* Two modes; either we're iterating _within_ supported index,
+       * or not. 'idx' tracks the tlv_indexes_sorted entries, and
+       * 'idx2' is the index stored in tlv_indexes_sorted[idx] that
+       * refers to real internal index numbers which are the values
+       * provided to the users of API. */
+      if (type == 0 || tlv_id(a) != type)
+        {
+          while (idx < o->num_tlv_indexes
+                 && tlv_id(a) >
+                 (type = o->tlv_indexes[(idx2=o->tlv_indexes_sorted[idx])]))
+            idx++;
+          /* If we encountered end here, that's it. */
+          if (idx == o->num_tlv_indexes)
+            break;
+          if (tlv_id(a) != type)
+            {
+              type = 0;
+              continue;
+            }
+          n->tlv_index[2 * idx2] = a;
+        }
+      if (type)
+        {
+          n->tlv_index[2 * idx2 + 1] = tlv_next(a);
+        }
+    }
+  n->tlv_index_dirty = false;
 }

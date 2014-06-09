@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Jun  9 16:20:35 2014 mstenber
- * Edit time:     507 min
+ * Last modified: Mon Jun  9 17:59:23 2014 mstenber
+ * Edit time:     524 min
  *
  */
 
@@ -83,6 +83,11 @@ struct hncp_sd_struct
   hncp_hash_s dnsmasq_state;
   hncp_hash_s ohp_state;
   hncp_hash_s pcp_state;
+
+  /* HNCP (TLV) indexes we require for fast operation. */
+  int ec_index; /* External Connection */
+  int drn_index; /* DNS Router Name */
+  int ddz_index; /* DNS Delegated Zone */
 };
 
 
@@ -313,49 +318,48 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
   md5_hash(sd->hncp->domain, strlen(sd->hncp->domain), &ctx);
   hncp_for_each_node(sd->hncp, n)
     {
-      hncp_node_for_each_tlv_i(n, a)
-        if (tlv_id(a) == HNCP_T_DNS_DELEGATED_ZONE)
-          {
-            /* Decode the labels */
-            char buf[DNS_MAX_ESCAPED_LEN];
-            char buf2[256];
-            char *server;
-            int port;
-            hncp_t_dns_delegated_zone dh;
+      hncp_node_for_each_tlv_in_index(n, a, sd->ddz_index)
+        {
+          /* Decode the labels */
+          char buf[DNS_MAX_ESCAPED_LEN];
+          char buf2[256];
+          char *server;
+          int port;
+          hncp_t_dns_delegated_zone dh;
 
-            if (tlv_len(a) < (sizeof(*dh)+1))
-              continue;
+          if (tlv_len(a) < (sizeof(*dh)+1))
+            continue;
 
-            dh = tlv_data(a);
-            if (ll2escaped(dh->ll, tlv_len(a) - sizeof(*dh),
-                           buf, sizeof(buf)) < 0)
-              continue;
+          dh = tlv_data(a);
+          if (ll2escaped(dh->ll, tlv_len(a) - sizeof(*dh),
+                         buf, sizeof(buf)) < 0)
+            continue;
 
-            md5_hash(a, tlv_raw_len(a), &ctx);
+          md5_hash(a, tlv_raw_len(a), &ctx);
 
-            if (dh->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE)
-              {
-                fprintf(f, "ptr-record=b._dns-sd._udp.%s,%s\n",
-                        sd->hncp->domain, buf);
-              }
-            if (hncp_node_is_self(n))
-              {
-                server = LOCAL_OHP_ADDRESS;
-                port = LOCAL_OHP_PORT;
-              }
-            else
-              {
-                server = buf2;
-                port = DNS_PORT;
-                if (!inet_ntop(AF_INET6, dh->address,
-                               buf2, sizeof(buf2)))
-                  {
-                    L_ERR("inet_ntop failed in hncp_sd_write_dnsmasq_conf");
-                    continue;
-                  }
-              }
-            fprintf(f, "server=/%s/%s#%d\n", buf, server, port);
-          }
+          if (dh->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE)
+            {
+              fprintf(f, "ptr-record=b._dns-sd._udp.%s,%s\n",
+                      sd->hncp->domain, buf);
+            }
+          if (hncp_node_is_self(n))
+            {
+              server = LOCAL_OHP_ADDRESS;
+              port = LOCAL_OHP_PORT;
+            }
+          else
+            {
+              server = buf2;
+              port = DNS_PORT;
+              if (!inet_ntop(AF_INET6, dh->address,
+                             buf2, sizeof(buf2)))
+                {
+                  L_ERR("inet_ntop failed in hncp_sd_write_dnsmasq_conf");
+                  continue;
+                }
+            }
+          fprintf(f, "server=/%s/%s#%d\n", buf, server, port);
+        }
     }
   /* Default is 150. Given 0.5 second lifetime on service queries,
    * that's not much. */
@@ -468,57 +472,54 @@ bool hncp_sd_reconfigure_pcp(hncp_sd sd)
   hncp_for_each_node(sd->hncp, n)
     {
       struct in6_addr *a4 = NULL, *a6 = NULL;
-      hncp_node_for_each_tlv(n, tlv)
+      hncp_node_for_each_tlv_in_index(n, tlv, sd->ec_index)
         {
-          if (tlv_id(tlv) == HNCP_T_EXTERNAL_CONNECTION)
+          if (!a4 && !a6)
             {
-              if (!a4 && !a6)
+              hncp_node_for_each_tlv(n, a)
                 {
-                  hncp_node_for_each_tlv(n, a)
+                  if ((ra = hncp_tlv_router_address(a)))
                     {
-                      if ((ra = hncp_tlv_router_address(a)))
-                        {
-                          if (IN6_IS_ADDR_V4MAPPED(&ra->address))
-                            a4 = &ra->address;
-                          else
-                            a6 = &ra->address;
-                        }
-                    }
-                  /* If we don't know address for real, might as well give up */
-                  if (!a4 && !a6)
-                    {
-                      L_DEBUG("no address at all found for %s",
-                              HNCP_NODE_REPR(n));
-                      break;
+                      if (IN6_IS_ADDR_V4MAPPED(&ra->address))
+                        a4 = &ra->address;
+                      else
+                        a6 = &ra->address;
                     }
                 }
-              tlv_for_each_attr(a, tlv)
+              /* If we don't know address for real, might as well give up */
+              if (!a4 && !a6)
                 {
-                  if ((dp = hncp_tlv_dp(a)))
+                  L_DEBUG("no address at all found for %s",
+                          HNCP_NODE_REPR(n));
+                  break;
+                }
+            }
+          tlv_for_each_attr(a, tlv)
+            {
+              if ((dp = hncp_tlv_dp(a)))
+                {
+                  struct prefix p = {.plen = dp->prefix_length_bits };
+                  bmemcpy(&p.prefix, dp->prefix_data, 0, p.plen);
+
+                  bool is_ipv4 = prefix_is_ipv4(&p);
+                  struct in6_addr *sa = is_ipv4 ? a4 : a6;
+                  if (!sa)
                     {
-                      struct prefix p = {.plen = dp->prefix_length_bits };
-                      bmemcpy(&p.prefix, dp->prefix_data, 0, p.plen);
-
-                      bool is_ipv4 = prefix_is_ipv4(&p);
-                      struct in6_addr *sa = is_ipv4 ? a4 : a6;
-                      if (!sa)
-                        {
-                          L_INFO("no PCP server found for %s", PREFIX_REPR(&p));
-                          continue;
-                        }
-
-                      sprintf(tbuf, "%s=%s", PREFIX_REPR(&p),
-                              n == sd->hncp->own_node ?
-                              is_ipv4 ? "127.0.0.1" : "::1" :
-                              ADDR_REPR(sa));
-                      md5_hash(tbuf, strlen(tbuf), &ctx);
-                      if (first)
-                        {
-                          PUSH_ARG("start");
-                          first = false;
-                        }
-                      PUSH_ARG(tbuf);
+                      L_INFO("no PCP server found for %s", PREFIX_REPR(&p));
+                      continue;
                     }
+
+                  sprintf(tbuf, "%s=%s", PREFIX_REPR(&p),
+                          n == sd->hncp->own_node ?
+                          is_ipv4 ? "127.0.0.1" : "::1" :
+                          ADDR_REPR(sa));
+                  md5_hash(tbuf, strlen(tbuf), &ctx);
+                  if (first)
+                    {
+                      PUSH_ARG("start");
+                      first = false;
+                    }
+                  PUSH_ARG(tbuf);
                 }
             }
         }
@@ -594,7 +595,7 @@ _find_router_name(hncp_sd sd)
 
   hncp_for_each_node(sd->hncp, n)
     {
-      hncp_node_for_each_tlv_i(n, a)
+      hncp_node_for_each_tlv_in_index(n, a, sd->drn_index)
         {
           if (_tlv_router_name_matches(sd, a))
             return n;
@@ -642,7 +643,7 @@ static struct tlv_attr *_get_dns_domain_tlv(hncp o)
 
   hncp_for_each_node(o, n)
     {
-      hncp_node_for_each_tlv_i(n, a)
+      hncp_node_for_each_tlv(n, a)
         {
           if (tlv_id(a) == HNCP_T_DNS_DOMAIN_NAME)
             best = a;
@@ -810,6 +811,9 @@ hncp_sd hncp_sd_create(hncp h, hncp_sd_params p)
   if (!sd)
     return NULL;
 
+  sd->ec_index = hncp_get_tlv_index(h, HNCP_T_EXTERNAL_CONNECTION);
+  sd->drn_index = hncp_get_tlv_index(h, HNCP_T_DNS_ROUTER_NAME);
+  sd->ddz_index = hncp_get_tlv_index(h, HNCP_T_DNS_DELEGATED_ZONE);
   /* Handle domain name */
   if (p->domain_name)
     {

@@ -6,13 +6,12 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Mon Jun  9 18:37:23 2014 mstenber
+ * Last modified: Mon Jun  9 18:55:36 2014 mstenber
  * Edit time:     248 min
  *
  */
 
 #include "hncp_i.h"
-#include <assert.h>
 
 static void trickle_set_i(hncp_link l, int i)
 {

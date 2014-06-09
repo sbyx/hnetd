@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Thu May 22 15:39:48 2014 mstenber
- * Edit time:     104 min
+ * Last modified: Mon Jun  9 18:13:22 2014 mstenber
+ * Edit time:     108 min
  *
  */
 
@@ -157,6 +157,17 @@ void test_hncp_sd(void)
   sput_fail_unless(prefix_pton("2001:dead:beef::/64", &p), "prefix_pton");
   hncp_tlv_ap_update(n1, &p, "eth0.0", false, 0, true);
 
+  /* Make sure the indexes look sane. */
+  int i, j;
+  for (i = 0 ; i < node1->sd->hncp->num_tlv_indexes ; i++)
+    for (j = 0 ; j < node1->sd->hncp->num_tlv_indexes ; j++)
+      {
+        hncp o = node1->sd->hncp;
+        int t1 = o->tlv_indexes[o->tlv_indexes_sorted[i]];
+        int t2 = o->tlv_indexes[o->tlv_indexes_sorted[j]];
+        sput_fail_unless(t1 < t2 == i < j,
+                         "indexing works");
+      }
   /* Make sure .home shows up even with zero conf and no TLV traffic */
   SIM_WHILE(&s, 100, !net_sim_is_converged(&s));
   rv = hncp_sd_write_dnsmasq_conf(node1->sd, "/tmp/n0.conf");
