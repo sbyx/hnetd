@@ -119,7 +119,7 @@ void hncp_bfs_one(void)
 	ap.prefix.s6_addr[7] = 1;
 	tlv_put(&b, HNCP_T_ASSIGNED_PREFIX, &ap, sizeof(ap));
 
-	n0->tlv_container = tlv_memdup(b.head);
+	hncp_node_set_tlvs(n0, tlv_memdup(b.head));
 
 
 	tlv_buf_init(&b, 0);
@@ -142,7 +142,7 @@ void hncp_bfs_one(void)
 	ap.prefix.s6_addr[7] = 1;
 	tlv_put(&b, HNCP_T_ASSIGNED_PREFIX, &ap, sizeof(ap));
 
-	n1->tlv_container = tlv_memdup(b.head);
+	hncp_node_set_tlvs(n1, tlv_memdup(b.head));
 
 
 	tlv_buf_init(&b, 0);
@@ -178,7 +178,7 @@ void hncp_bfs_one(void)
 	tlv_put(&b, HNCP_T_DELEGATED_PREFIX, &dp, sizeof(dp));
 	tlv_nest_end(&b, cookie);
 
-	n2->tlv_container = tlv_memdup(b.head);
+	hncp_node_set_tlvs(n2, tlv_memdup(b.head));
 
 
 	tlv_buf_init(&b, 0);
@@ -209,10 +209,10 @@ void hncp_bfs_one(void)
 	tlv_put(&b, HNCP_T_DELEGATED_PREFIX, &dp, sizeof(dp));
 	tlv_nest_end(&b, cookie);
 
-	n3->tlv_container = tlv_memdup(b.head);
+	hncp_node_set_tlvs(n3, tlv_memdup(b.head));
 
 	tlv_buf_init(&b, 0);
-	n4->tlv_container = tlv_memdup(b.head);
+	hncp_node_set_tlvs(n4, tlv_memdup(b.head));
 
 
 	hncp_routing_run(&bfs->t);

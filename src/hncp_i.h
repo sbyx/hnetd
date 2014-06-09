@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Jun  2 13:47:45 2014 mstenber
- * Edit time:     169 min
+ * Last modified: Mon Jun  9 18:36:54 2014 mstenber
+ * Edit time:     199 min
  *
  */
 
@@ -227,6 +227,10 @@ struct hncp_node_struct {
    * to make sure there's no 'bad actors' somewhere with invalid sizes
    * or whatever). */
   struct tlv_attr *tlv_container;
+
+  /* TLV data, that is of correct version # and otherwise looks like
+   * it should be used by us. Either tlv_container, or NULL. */
+  struct tlv_attr *tlv_container_valid;
 };
 
 typedef struct hncp_tlv_struct hncp_tlv_s, *hncp_tlv;

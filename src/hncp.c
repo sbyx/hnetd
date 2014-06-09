@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Jun  2 13:50:39 2014 mstenber
- * Edit time:     520 min
+ * Last modified: Mon Jun  9 18:47:47 2014 mstenber
+ * Edit time:     584 min
  *
  */
 
@@ -45,6 +45,8 @@ void hncp_schedule(hncp o)
 
 bool hncp_node_set_tlvs(hncp_node n, struct tlv_attr *a)
 {
+  struct tlv_attr *a_valid = a;
+
   L_DEBUG("hncp_node_set_tlvs %llx/%p %p",
           hncp_hash64(&n->node_identifier_hash), n, a);
   if (n->tlv_container && a && tlv_attr_equal(n->tlv_container, a))
@@ -52,22 +54,13 @@ bool hncp_node_set_tlvs(hncp_node n, struct tlv_attr *a)
       free(a);
       return false;
     }
-  if (n->last_reachable_prune == n->hncp->last_prune)
-    hncp_notify_subscribers_tlvs_changed(n, n->tlv_container, a);
-  if (n->tlv_container)
-    free(n->tlv_container);
-  n->tlv_container = a;
-  n->hncp->network_hash_dirty = true;
-  n->node_data_hash_dirty = true;
-  n->hncp->graph_dirty = true;
-  hncp_schedule(n->hncp);
-
   if (a)
     {
       uint32_t version = 0;
       const char *agent = NULL;
       int agent_len = 0;
       struct tlv_attr *va;
+      hncp_node on = n->hncp->own_node;
 
       tlv_for_each_attr(va, a)
         {
@@ -81,18 +74,31 @@ bool hncp_node_set_tlvs(hncp_node n, struct tlv_attr *a)
               break;
             }
         }
-      if (n->version != version)
+      if (on && on != n && on->version && version != on->version)
+        a_valid = NULL;
+      if (a && n->version != version)
         {
-          hncp_node on = n->hncp->own_node;
-          if (on && on->version && version != on->version)
+          if (!a_valid)
             L_ERR("Incompatible node: %s version %u (%.*s) != %u",
                   HNCP_NODE_REPR(n), version, agent_len, agent, on->version);
           else if (!n->version)
             L_INFO("%s runs %.*s",
                    HNCP_NODE_REPR(n), agent_len, agent);
+          n->version = version;
         }
-      n->version = version;
     }
+  if (n->last_reachable_prune == n->hncp->last_prune)
+    hncp_notify_subscribers_tlvs_changed(n, n->tlv_container_valid,
+                                         a_valid);
+  if (n->tlv_container)
+    free(n->tlv_container);
+  n->tlv_container = a;
+  n->tlv_container_valid = a_valid;
+  n->hncp->network_hash_dirty = true;
+  n->node_data_hash_dirty = true;
+  n->hncp->graph_dirty = true;
+  hncp_schedule(n->hncp);
+
   return true;
 }
 
@@ -656,9 +662,7 @@ void hncp_self_flush(hncp_node n)
 
 struct tlv_attr *hncp_node_get_tlvs(hncp_node n)
 {
-  if (n->version != n->hncp->own_node->version)
-    return NULL;
-  return n->tlv_container;
+  return n->tlv_container_valid;
 }
 
 

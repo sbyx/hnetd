@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu May  8 18:42:36 2014 mstenber
- * Edit time:     247 min
+ * Last modified: Mon Jun  9 18:37:23 2014 mstenber
+ * Edit time:     248 min
  *
  */
 
@@ -54,12 +54,12 @@ static void _node_set_reachable(hncp_node n, bool value)
       o->network_hash_dirty = true;
 
       if (!value)
-        hncp_notify_subscribers_tlvs_changed(n, n->tlv_container, NULL);
+        hncp_notify_subscribers_tlvs_changed(n, n->tlv_container_valid, NULL);
 
       hncp_notify_subscribers_node_changed(n, value);
 
       if (value)
-        hncp_notify_subscribers_tlvs_changed(n, NULL, n->tlv_container);
+        hncp_notify_subscribers_tlvs_changed(n, NULL, n->tlv_container_valid);
     }
   if (value)
     n->last_reachable_prune = hncp_time(o);
