@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Jun  9 17:59:23 2014 mstenber
- * Edit time:     524 min
+ * Last modified: Mon Jun  9 19:07:19 2014 mstenber
+ * Edit time:     529 min
  *
  */
 
@@ -87,6 +87,7 @@ struct hncp_sd_struct
   /* HNCP (TLV) indexes we require for fast operation. */
   int ec_index; /* External Connection */
   int drn_index; /* DNS Router Name */
+  int ddn_index; /* DNS Domain Name */
   int ddz_index; /* DNS Delegated Zone */
 };
 
@@ -636,14 +637,14 @@ static void _local_tlv_cb(hncp_subscriber s,
     }
 }
 
-static struct tlv_attr *_get_dns_domain_tlv(hncp o)
+static struct tlv_attr *_get_dns_domain_tlv(hncp_sd sd)
 {
   hncp_node n;
   struct tlv_attr *a, *best = NULL;
 
-  hncp_for_each_node(o, n)
+  hncp_for_each_node(sd->hncp, n)
     {
-      hncp_node_for_each_tlv(n, a)
+      hncp_node_for_each_tlv_in_index(n, a, sd->ddn_index)
         {
           if (tlv_id(a) == HNCP_T_DNS_DOMAIN_NAME)
             best = a;
@@ -652,9 +653,9 @@ static struct tlv_attr *_get_dns_domain_tlv(hncp o)
   return best;
 }
 
-static void _get_dns_domain(hncp o, char *dest, int dest_len)
+static void _get_dns_domain(hncp_sd sd, char *dest, int dest_len)
 {
-  struct tlv_attr *a = _get_dns_domain_tlv(o);
+  struct tlv_attr *a = _get_dns_domain_tlv(sd);
 
   if (a && ll2escaped(tlv_data(a), tlv_len(a), dest, dest_len) > 0)
     return;
@@ -664,13 +665,12 @@ static void _get_dns_domain(hncp o, char *dest, int dest_len)
 
 static void _refresh_domain(hncp_sd sd)
 {
-  hncp o = sd->hncp;
   char new_domain[DNS_MAX_ESCAPED_LEN];
 
   if (!(sd->should_update & UPDATE_FLAG_DOMAIN))
     return;
   sd->should_update &= ~UPDATE_FLAG_DOMAIN;
-  _get_dns_domain(o, new_domain, sizeof(new_domain));
+  _get_dns_domain(sd, new_domain, sizeof(new_domain));
   L_DEBUG("_refresh_domain:%s", new_domain);
   if (strcmp(new_domain, sd->hncp->domain))
     {
@@ -813,6 +813,7 @@ hncp_sd hncp_sd_create(hncp h, hncp_sd_params p)
 
   sd->ec_index = hncp_get_tlv_index(h, HNCP_T_EXTERNAL_CONNECTION);
   sd->drn_index = hncp_get_tlv_index(h, HNCP_T_DNS_ROUTER_NAME);
+  sd->ddn_index = hncp_get_tlv_index(h, HNCP_T_DNS_DOMAIN_NAME);
   sd->ddz_index = hncp_get_tlv_index(h, HNCP_T_DNS_DELEGATED_ZONE);
   /* Handle domain name */
   if (p->domain_name)
