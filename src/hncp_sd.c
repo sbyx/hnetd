@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Jun  9 19:07:19 2014 mstenber
- * Edit time:     529 min
+ * Last modified: Mon Jun  9 19:55:33 2014 mstenber
+ * Edit time:     542 min
  *
  */
 
@@ -86,6 +86,7 @@ struct hncp_sd_struct
 
   /* HNCP (TLV) indexes we require for fast operation. */
   int ec_index; /* External Connection */
+  int ra_index; /* Router Address */
   int drn_index; /* DNS Router Name */
   int ddn_index; /* DNS Domain Name */
   int ddz_index; /* DNS Delegated Zone */
@@ -298,7 +299,7 @@ static void _publish_ddzs(hncp_sd sd)
 bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
 {
   hncp_node n;
-  struct tlv_attr *a;
+  struct tlv_attr *a, *a2;
   FILE *f = fopen(filename, "w");
   md5_ctx_t ctx;
 
@@ -312,6 +313,9 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
    * producing appropriate configuration file.
    *
    * What do we need to take care of?
+   * - <routername>.<domain>
+   *
+   * (These are all in DNS Delegated Zone TLVs)
    * - b._dns-sd._udp.<domain> => browseable domain
    * <subdomain>'s ~NS (remote, real IP)
    * <subdomain>'s ~NS (local, LOCAL_OHP_ADDRESS)
@@ -319,6 +323,26 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
   md5_hash(sd->hncp->domain, strlen(sd->hncp->domain), &ctx);
   hncp_for_each_node(sd->hncp, n)
     {
+      hncp_node_for_each_tlv_in_index(n, a, sd->drn_index)
+        if (tlv_len(a) <= DNS_MAX_L_LEN)
+          {
+            char router_name[DNS_MAX_L_LEN+1];
+            hncp_t_router_address ra;
+
+            memcpy(router_name, tlv_data(a), tlv_len(a));
+            router_name[tlv_len(a)] = 0;
+            md5_hash(router_name, strlen(router_name), &ctx);
+            hncp_node_for_each_tlv_in_index(n, a2, sd->ra_index)
+              if ((ra = hncp_tlv_router_address(a2)))
+              {
+                md5_hash(ra, sizeof(*ra), &ctx);
+                fprintf(f, "host-record=%s.%s,%s\n",
+                        router_name, sd->hncp->domain,
+                        ADDR_REPR(&ra->address));
+              }
+            break;
+          }
+
       hncp_node_for_each_tlv_in_index(n, a, sd->ddz_index)
         {
           /* Decode the labels */
@@ -812,6 +836,7 @@ hncp_sd hncp_sd_create(hncp h, hncp_sd_params p)
     return NULL;
 
   sd->ec_index = hncp_get_tlv_index(h, HNCP_T_EXTERNAL_CONNECTION);
+  sd->ra_index = hncp_get_tlv_index(h, HNCP_T_ROUTER_ADDRESS);
   sd->drn_index = hncp_get_tlv_index(h, HNCP_T_DNS_ROUTER_NAME);
   sd->ddn_index = hncp_get_tlv_index(h, HNCP_T_DNS_DOMAIN_NAME);
   sd->ddz_index = hncp_get_tlv_index(h, HNCP_T_DNS_DELEGATED_ZONE);

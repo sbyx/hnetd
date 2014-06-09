@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Mon Jun  9 19:16:12 2014 mstenber
- * Edit time:     110 min
+ * Last modified: Mon Jun  9 19:43:05 2014 mstenber
+ * Edit time:     111 min
  *
  */
 
@@ -156,6 +156,8 @@ void test_hncp_sd(void)
   l1 = net_sim_hncp_find_link_by_name(n1, "eth0.0");
   sput_fail_unless(prefix_pton("2001:dead:beef::/64", &p), "prefix_pton");
   hncp_tlv_ap_update(n1, &p, "eth0.0", false, 0, true);
+  sput_fail_unless(prefix_pton("2001:dead:beef::1/128", &p), "prefix_pton");
+  hncp_tlv_ra_update(n1, 0, &p.prefix, true);
 
   /* Make sure the indexes look sane. */
   int i, j;
@@ -191,6 +193,7 @@ void test_hncp_sd(void)
   sput_fail_unless(prefix_pton("1.2.3.4/24", &p), "prefix_pton");
   sput_fail_unless(prefix_is_ipv4(&p), "IPv4 prefix parsing failed");
   hncp_tlv_ap_update(n1, &p, "eth0.0", false, 0, true);
+  hncp_tlv_ra_update(n1, 1, &p.prefix, true);
   sput_fail_unless(prefix_pton("2001:feed:beef::/64", &p), "prefix_pton");
   hncp_tlv_ap_update(n2, &p, "eth2", false, 0, true);
   SIM_WHILE(&s, 100, !net_sim_is_converged(&s));

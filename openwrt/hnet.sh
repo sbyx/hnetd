@@ -18,6 +18,7 @@ proto_hnet_init_config() {
     proto_config_add_string 'adhoc'
     proto_config_add_string 'disable_pa'
     proto_config_add_string 'ula_default_router'
+    proto_config_add_string 'sd_ifname'
     proto_config_add_int 'ping_interval'
     proto_config_add_int 'trickle_k'
 }
