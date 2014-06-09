@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Mon Jun  2 22:09:51 2014 mstenber
- * Edit time:     470 min
+ * Last modified: Mon Jun  9 19:20:48 2014 mstenber
+ * Edit time:     478 min
  *
  */
 
@@ -84,6 +84,11 @@ struct hncp_glue_struct {
   hncp hncp;
   struct pa_data *pa_data;
   struct pa_data_user data_user;
+
+  int ec_index;
+  int ddz_index;
+  int ap_index;
+  int neigh_index;
 };
 
 typedef struct {
@@ -178,7 +183,8 @@ static hncp_external_link _find_or_create_external_link(hncp_glue g,
   return el;
 }
 
-static hncp_link _find_local_link(hncp_node onode, uint32_t olink_no)
+static hncp_link _find_local_link(hncp_glue g,
+                                  hncp_node onode, uint32_t olink_no)
 {
   hncp o = onode->hncp;
   struct tlv_attr *a;
@@ -187,7 +193,7 @@ static hncp_link _find_local_link(hncp_node onode, uint32_t olink_no)
   /* We're lazy and just compare published information; we _could_
    * of course also look at per-link and per-neighbor structures,
    * but this is simpler.. */
-  hncp_node_for_each_tlv_i(o->own_node, a)
+  hncp_node_for_each_tlv_in_index(o->own_node, a, g->neigh_index)
     if ((nh = hncp_tlv_neighbor(a)))
       {
         if (nh->neighbor_link_id != olink_no)
@@ -215,7 +221,7 @@ static void _update_a_tlv(hncp_glue g, hncp_node n,
   p.plen = ah->prefix_length_bits;
   plen = ROUND_BITS_TO_BYTES(p.plen);
   memcpy(&p, ah->prefix_data, plen);
-  l = _find_local_link(n, ah->link_id);
+  l = _find_local_link(g, n, ah->link_id);
 
   struct pa_ap *ap = pa_ap_get(g->pa_data, &p, (struct pa_rid *)&n->node_identifier_hash, add);
   if (!ap)
@@ -366,7 +372,7 @@ static void _update_a_local_links(hncp_glue g)
   L_DEBUG("_update_a_local_links");
   hncp_for_each_node(o, n)
     {
-      hncp_node_for_each_tlv(n, a)
+      hncp_node_for_each_tlv_in_index(n, a, g->ap_index)
         {
           if (!(ah = hncp_tlv_ap(a)))
             continue;
@@ -374,7 +380,7 @@ static void _update_a_local_links(hncp_glue g)
           p.plen = ah->prefix_length_bits;
           int plen = ROUND_BITS_TO_BYTES(p.plen);
           memcpy(&p, ah->prefix_data, plen);
-          l = _find_local_link(n, ah->link_id);
+          l = _find_local_link(g, n, ah->link_id);
           struct pa_ap *ap = pa_ap_get(g->pa_data, &p, (struct pa_rid *)&n->node_identifier_hash, false);
           if (!ap)
             {
@@ -593,53 +599,47 @@ static void _refresh_ec(hncp_glue g, bool publish)
 
   hncp_for_each_node(o, n)
     {
-      hncp_node_for_each_tlv_i(n, a)
-        switch (tlv_id(a))
+      if (n != o->own_node)
+        hncp_node_for_each_tlv_in_index(n, a, g->ec_index)
           {
-          case HNCP_T_EXTERNAL_CONNECTION:
-            if (n != o->own_node)
-              {
-                tlv_for_each_attr(a2, a)
-                  if (tlv_id(a2) == HNCP_T_DHCPV6_OPTIONS)
-                    {
-                      APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
-                                 tlv_data(a2), tlv_len(a2));
-                    }
-                  else if (tlv_id(a2) == HNCP_T_DHCP_OPTIONS)
-                    {
-                      APPEND_BUF(dhcp_options, dhcp_options_len,
-                                 tlv_data(a2), tlv_len(a2));
-                    }
-              }
-            break;
-          case HNCP_T_DNS_DELEGATED_ZONE:
-            {
-              hncp_t_dns_delegated_zone ddz = tlv_data(a);
-              if (ddz->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_SEARCH)
+            tlv_for_each_attr(a2, a)
+              if (tlv_id(a2) == HNCP_T_DHCPV6_OPTIONS)
                 {
-                  char domainbuf[256];
-                  uint16_t fake_header[2];
-                  uint8_t fake4_header[2];
-                  uint8_t *data = tlv_data(a);
-                  int l = tlv_len(a) - sizeof(*ddz);
-
-                  fake_header[0] = cpu_to_be16(DHCPV6_OPT_DNS_DOMAIN);
-                  fake_header[1] = cpu_to_be16(l);
                   APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
-                             &fake_header[0], 4);
-                  APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
-                             ddz->ll, l);
-
-                  if (ll2escaped(data, l, domainbuf, sizeof(domainbuf)) >= 0) {
-                    fake4_header[0] = DHCPV4_OPT_DOMAIN;
-                    fake4_header[1] = strlen(domainbuf);
-                    APPEND_BUF(dhcp_options, dhcp_options_len, fake4_header, 2);
-                    APPEND_BUF(dhcp_options, dhcp_options_len, domainbuf, fake4_header[1]);
-                  }
+                             tlv_data(a2), tlv_len(a2));
                 }
-            }
-            break;
+              else if (tlv_id(a2) == HNCP_T_DHCP_OPTIONS)
+                {
+                  APPEND_BUF(dhcp_options, dhcp_options_len,
+                             tlv_data(a2), tlv_len(a2));
+                }
           }
+      hncp_node_for_each_tlv_in_index(n, a, g->ddz_index)
+        {
+          hncp_t_dns_delegated_zone ddz = tlv_data(a);
+          if (ddz->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_SEARCH)
+            {
+              char domainbuf[256];
+              uint16_t fake_header[2];
+              uint8_t fake4_header[2];
+              uint8_t *data = tlv_data(a);
+              int l = tlv_len(a) - sizeof(*ddz);
+
+              fake_header[0] = cpu_to_be16(DHCPV6_OPT_DNS_DOMAIN);
+              fake_header[1] = cpu_to_be16(l);
+              APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
+                         &fake_header[0], 4);
+              APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
+                         ddz->ll, l);
+
+              if (ll2escaped(data, l, domainbuf, sizeof(domainbuf)) >= 0) {
+                fake4_header[0] = DHCPV4_OPT_DOMAIN;
+                fake4_header[1] = strlen(domainbuf);
+                APPEND_BUF(dhcp_options, dhcp_options_len, fake4_header, 2);
+                APPEND_BUF(dhcp_options, dhcp_options_len, domainbuf, fake4_header[1]);
+              }
+            }
+        }
     }
 
   iface_all_set_dhcp_send(dhcpv6_options, dhcpv6_options_len,
@@ -817,6 +817,10 @@ hncp_glue hncp_pa_glue_create(hncp o, struct pa_data *pa_data)
   g->data_user.dps = hncp_pa_dps;
   g->data_user.aas = hncp_pa_aas;
   g->ap_if_update_timeout.cb = _ap_if_update_timeout_cb;
+  g->ec_index = hncp_get_tlv_index(o, HNCP_T_EXTERNAL_CONNECTION);
+  g->ddz_index = hncp_get_tlv_index(o, HNCP_T_DNS_DELEGATED_ZONE);
+  g->neigh_index = hncp_get_tlv_index(o, HNCP_T_NODE_DATA_NEIGHBOR);
+  g->ap_index = hncp_get_tlv_index(o, HNCP_T_ASSIGNED_PREFIX);
 
   /* Set the rid */
   pa_flood_set_rid(pa_data, rid);
