@@ -41,6 +41,8 @@ struct hncp_routing_struct {
 	const char *script;
 	const char **ifaces;
 	size_t ifaces_cnt;
+	int rp_index;
+	int ra_index;
 };
 
 static int call_backend(hncp_bfs bfs, const char *action, int stdin)
@@ -118,6 +120,8 @@ hncp_bfs hncp_routing_create(hncp hncp, const char *script)
 	bfs->script = script;
 	bfs->iface.cb_intiface = hncp_routing_intiface;
 	bfs->iface.cb_intaddr = hncp_routing_intaddr;
+	bfs->rp_index = hncp_get_tlv_index(hncp, HNCP_T_ROUTING_PROTOCOL);
+	bfs->ra_index = hncp_get_tlv_index(hncp, HNCP_T_ROUTER_ADDRESS);
 	hncp_subscribe(hncp, &bfs->subscr);
 	iface_register_user(&bfs->iface);
 
@@ -197,10 +201,9 @@ static void hncp_routing_run(struct uloop_timeout *t)
 		c->bfs.hopcount = 0;
 
 		++routercnt;
-		struct tlv_attr *a, *tlvs = hncp_node_get_tlvs(c);
-		tlv_for_each_attr(a, tlvs) {
-			if (tlv_id(a) == HNCP_T_ROUTING_PROTOCOL &&
-					tlv_len(a) >= sizeof(hncp_t_routing_protocol_s)) {
+		struct tlv_attr *a;
+		hncp_node_for_each_tlv_in_index(c, a, bfs->rp_index) {
+			if (tlv_len(a) >= sizeof(hncp_t_routing_protocol_s)) {
 				hncp_t_routing_protocol p = tlv_data(a);
 				if (p->protocol < HNCP_ROUTING_MAX) {
 					++routing_supported[p->protocol];
@@ -249,8 +252,8 @@ static void hncp_routing_run(struct uloop_timeout *t)
 		c = container_of(list_first_entry(&queue, struct hncp_bfs_head, head), hncp_node_s, bfs);
 		L_WARN("Router %d", c->node_identifier_hash.buf[0]);
 
-		struct tlv_attr *a, *a2, *tlvs = hncp_node_get_tlvs(c);
-		tlv_for_each_attr(a, tlvs) {
+		struct tlv_attr *a, *a2;
+		hncp_node_for_each_tlv(c, a) {
 			hncp_t_assigned_prefix_header ap;
 			hncp_t_node_data_neighbor ne;
 			if ((ne = hncp_tlv_neighbor(a))) {
@@ -281,12 +284,10 @@ static void hncp_routing_run(struct uloop_timeout *t)
 						n->bfs.ifname = link->ifname;
 					}
 
-					struct tlv_attr *na, *ntlvs = hncp_node_get_tlvs(n);
+					struct tlv_attr *na;
 					hncp_t_router_address ra;
-					tlv_for_each_attr(na, ntlvs) {
-						if (tlv_id(na) == HNCP_T_ROUTER_ADDRESS &&
-						    tlv_len(na) == sizeof(*ra)) {
-							ra = tlv_data(na);
+					hncp_node_for_each_tlv_in_index(n, na, bfs->ra_index) {
+						if ((ra = hncp_tlv_router_address(na))) {
 							if (ra->link_id == ne->neighbor_link_id &&
 							    IN6_IS_ADDR_V4MAPPED(&ra->address)) {
 								n->bfs.next_hop4 = &ra->address;
