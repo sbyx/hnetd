@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon May 26 21:11:00 2014 mstenber
- * Edit time:     498 min
+ * Last modified: Mon Jun  9 16:20:35 2014 mstenber
+ * Edit time:     507 min
  *
  */
 
@@ -537,20 +537,11 @@ bool hncp_sd_reconfigure_pcp(hncp_sd sd)
 }
 
 static void
-_set_router_name(hncp_sd sd, bool add)
+_set_router_name(hncp_sd sd)
 {
-  /* Set the current router name. */
-  unsigned char buf[sizeof(struct tlv_attr) + DNS_MAX_ESCAPED_L_LEN + 5];
-  struct tlv_attr *a = (struct tlv_attr *)buf;
-  int rlen = strlen(sd->router_name);
-
-  tlv_init(a, HNCP_T_DNS_ROUTER_NAME, TLV_SIZE + rlen);
-  memcpy(tlv_data(a), sd->router_name, rlen);
-  tlv_fill_pad(a);
-  if (!hncp_update_tlv(sd->hncp, a, add))
-    {
-      L_ERR("failed to update router name TLV");
-    }
+  hncp_remove_tlvs_by_type(sd->hncp, HNCP_T_DNS_ROUTER_NAME);
+  hncp_update_tlv_raw(sd->hncp, HNCP_T_DNS_ROUTER_NAME,
+                      sd->router_name, strlen(sd->router_name), true);
 }
 
 static bool
@@ -615,9 +606,6 @@ _find_router_name(hncp_sd sd)
 static void
 _change_router_name(hncp_sd sd)
 {
-  /* Remove the old name. */
-  _set_router_name(sd, false);
-
   /* Try to look for new one. */
   while (1)
     {
@@ -626,7 +614,7 @@ _change_router_name(hncp_sd sd)
       if (!_find_router_name(sd))
         {
           L_DEBUG("renamed to %s", sd->router_name);
-          _set_router_name(sd, true);
+          _set_router_name(sd);
           _should_update(sd, UPDATE_FLAG_DDZ);
           return;
         }
@@ -846,7 +834,7 @@ hncp_sd hncp_sd_create(hncp h, hncp_sd_params p)
   else
     strcpy(sd->router_name_base, "r");
   strcpy(sd->router_name, sd->router_name_base);
-  _set_router_name(sd, true);
+  _set_router_name(sd);
 
   /* Set up the hncp subscriber */
   sd->subscriber.local_tlv_change_callback = _local_tlv_cb;
