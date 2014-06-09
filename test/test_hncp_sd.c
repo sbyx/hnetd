@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Mon Jun  9 18:13:22 2014 mstenber
- * Edit time:     108 min
+ * Last modified: Mon Jun  9 19:16:12 2014 mstenber
+ * Edit time:     110 min
  *
  */
 
@@ -168,6 +168,12 @@ void test_hncp_sd(void)
         sput_fail_unless(t1 < t2 == i < j,
                          "indexing works");
       }
+  /* Make sure trying to add extra indexes results in same # */
+  sput_fail_unless(hncp_get_tlv_index(node1->sd->hncp, 123) >= 0,
+                   "tlv index add works");
+  sput_fail_unless(hncp_get_tlv_index(node1->sd->hncp, 123) ==
+                   hncp_get_tlv_index(node1->sd->hncp, 123), "add = get");
+
   /* Make sure .home shows up even with zero conf and no TLV traffic */
   SIM_WHILE(&s, 100, !net_sim_is_converged(&s));
   rv = hncp_sd_write_dnsmasq_conf(node1->sd, "/tmp/n0.conf");

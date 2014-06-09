@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Jun  9 18:56:40 2014 mstenber
- * Edit time:     587 min
+ * Last modified: Mon Jun  9 19:14:20 2014 mstenber
+ * Edit time:     589 min
  *
  */
 
@@ -749,6 +749,11 @@ hncp_get_ipv6_address(hncp o, char *prefer_ifname, struct in6_addr *addr)
 
 int hncp_get_tlv_index(hncp o, uint16_t type)
 {
+  int i;
+  for (i = 0 ; i < o->num_tlv_indexes ; i++)
+    if (o->tlv_indexes[i] == type)
+      return i;
+
   int nti = o->num_tlv_indexes + 1;
   uint16_t *ni = realloc(o->tlv_indexes,
                          nti * sizeof(o->tlv_indexes[0]));
@@ -762,7 +767,6 @@ int hncp_get_tlv_index(hncp o, uint16_t type)
       return -1;
     }
   ni[o->num_tlv_indexes] = type;
-  int i;
   for (i = 0 ; i < o->num_tlv_indexes ; i++)
     if (ni[nis[i]] > type)
       break;
