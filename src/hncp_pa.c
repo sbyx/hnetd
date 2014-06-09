@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Mon Jun  9 19:20:48 2014 mstenber
- * Edit time:     478 min
+ * Last modified: Mon Jun  9 19:41:16 2014 mstenber
+ * Edit time:     480 min
  *
  */
 
@@ -753,6 +753,8 @@ static void hncp_pa_dps(struct pa_data_user *user, struct pa_dp *dp, uint32_t fl
 	}
 }
 
+
+
 static void hncp_pa_aas(struct pa_data_user *user, struct pa_aa *aa, uint32_t flags)
 {
 	hncp_glue g = container_of(user, struct hncp_glue_struct, data_user);
@@ -763,12 +765,7 @@ static void hncp_pa_aas(struct pa_data_user *user, struct pa_aa *aa, uint32_t fl
 		hncp_link l = hncp_find_link_by_name(g->hncp, laa->cpl->iface->ifname, false);
 		if (!l)
 			return;
-		hncp_t_router_address_s ra;
-		ra.link_id = cpu_to_be32(l->iid);
-		ra.address = aa->address;
-		hncp_update_tlv_raw(g->hncp, HNCP_T_ROUTER_ADDRESS,
-				&ra, sizeof(ra),
-				(flags & PADF_AA_CREATED));
+		hncp_tlv_ra_update(g->hncp, l->iid, &aa->address, (flags & PADF_AA_CREATED));
 	}
 }
 

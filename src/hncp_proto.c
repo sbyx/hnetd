@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Mon Jun  2 15:37:15 2014 mstenber
- * Edit time:     406 min
+ * Last modified: Mon Jun  9 19:41:39 2014 mstenber
+ * Edit time:     408 min
  *
  */
 
@@ -598,6 +598,19 @@ void hncp_poll(hncp o)
 }
 
 /* Utilities for formatting TLVs. */
+void hncp_tlv_ra_update(hncp o,
+                        uint32_t lid,
+                        const struct in6_addr *address,
+                        bool add)
+{
+  hncp_t_router_address_s ra;
+
+  ra.link_id = cpu_to_be32(lid);
+  ra.address = *address;
+  hncp_update_tlv_raw(o, HNCP_T_ROUTER_ADDRESS, &ra, sizeof(ra), add);
+}
+
+
 void hncp_tlv_ap_update(hncp o,
                         const struct prefix *prefix,
                         const char *ifname,

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Jun  9 18:55:57 2014 mstenber
- * Edit time:     199 min
+ * Last modified: Mon Jun  9 19:40:29 2014 mstenber
+ * Edit time:     201 min
  *
  */
 
@@ -349,6 +349,11 @@ void hncp_tlv_ap_update(hncp o,
                         const char *ifname,
                         bool authoritative,
                         unsigned int preference,
+                        bool add);
+
+void hncp_tlv_ra_update(hncp o,
+                        uint32_t lid,
+                        const struct in6_addr *address,
                         bool add);
 
 /* Inlined utilities. */
