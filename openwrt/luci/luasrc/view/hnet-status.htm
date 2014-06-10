@@ -1,0 +1,79 @@
+<%+header%>
+<h1><%:Homenet Status%></h1>
+
+<div><%:Click on a node of the graph to view detailed information.%></div>
+
+<div>
+<div style="height:200px; width:auto; border:solid; padding:5px; ">
+  <div style="float:left; width: 100%; height:100%">
+    <textarea name="display" id="display" style="width: 100%; height: inherit;" readonly="readonly"></textarea>
+  </div>
+</div>
+
+<div style="height: 500px; border: solid">
+	<div id="hncpmonitor" style="width: 100%; height: 100%;"></div>
+</div>
+</div>
+<script type="text/javascript" src="<% write (resource) %>/vis.js"></script>
+<script type="text/javascript" src="<% write (resource) %>/hnet-monitor.js"></script>
+<script type="text/javascript">
+/* <![CDATA[ */
+	var graph;
+	var update_timer = null;
+	var httpRequest = null;
+	
+	function load() {
+		if(httpRequest) {
+			console.log("Request is already pending");
+			return;
+		}
+		
+		httpRequest = new XMLHttpRequest();
+		httpRequest.onreadystatechange = function() {
+			if (httpRequest.readyState === 4) {
+				if (httpRequest.status === 200) {
+					hncp = JSON.parse(httpRequest.responseText);
+					graph.update(hncp);
+				} else {
+					console.log("Request error: "+httpRequest.status+" "+httpRequest.statusText);
+				}
+				httpRequest = null;
+			}
+		};
+		var src = "<% write (controller) %>/admin/status/hnet-dump";
+		httpRequest.timeout = 10000;
+		httpRequest.ontimeout = function() {
+				console.log("Request timeout");
+				httpRequest = null;
+			}
+		httpRequest.open('GET', src);
+		httpRequest.send();
+	}
+	
+	function abort() {
+		if(httpRequest) {
+			httpRequest.abort();
+			httpRequest = null;
+		}
+	}
+	
+	function display(s) {
+		document.getElementById("display").value = s;
+	}
+	
+	function autoupdate() {
+		if (!update_timer) {
+			load();
+			update_timer = setInterval(function() {load()}, 1000);
+		}
+	}
+
+	graph = new hnet.Monitor(document.getElementById('hncpmonitor'));
+	graph.displayCallback = display;
+	autoupdate();
+	changesource();
+/* ]]> */
+</script>
+<%+footer%>
+
+
