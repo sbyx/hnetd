@@ -50,6 +50,7 @@ enum ipc_option {
 	OPT_ULA_DEFAULT_ROUTER,
 	OPT_PING_INTERVAL,
 	OPT_TRICKLE_K,
+        OPT_DNSNAME,
 	OPT_MAX
 };
 
@@ -72,6 +73,7 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_ULA_DEFAULT_ROUTER] = {"ula_default_router", BLOBMSG_TYPE_BOOL},
 	[OPT_PING_INTERVAL] = { .name = "ping_interval", .type = BLOBMSG_TYPE_INT32 },
 	[OPT_TRICKLE_K] = { .name = "trickle_k", .type = BLOBMSG_TYPE_INT32 },
+        [OPT_DNSNAME] = { .name = "dnsname", .type = BLOBMSG_TYPE_STRING},
 };
 
 enum ipc_prefix_option {
@@ -376,6 +378,8 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 
 			if(c && tb[OPT_TRICKLE_K] && (conf = hncp_find_link_conf_by_name(ipchncp, c->ifname)))
 				conf->trickle_k = (int) blobmsg_get_u32(tb[OPT_TRICKLE_K]);
+			if(c && tb[OPT_DNSNAME] && (conf = hncp_find_link_conf_by_name(ipchncp, c->ifname)))
+				strncpy(conf->dnsname, blobmsg_get_string(tb[OPT_DNSNAME]), sizeof(conf->dnsname));
 
 		} else if (!strcmp(cmd, "ifdown")) {
 			iface_remove(c);

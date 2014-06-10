@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Jun 10 12:54:55 2014 mstenber
- * Edit time:     638 min
+ * Last modified: Tue Jun 10 15:58:33 2014 mstenber
+ * Edit time:     641 min
  *
  */
 
@@ -463,7 +463,7 @@ int hncp_remove_tlvs_by_type(hncp o, int type)
   return c;
 }
 
-void hncp_link_conf_set_default(hncp_link_conf conf)
+static void hncp_link_conf_set_default(hncp_link_conf conf, const char *ifname)
 {
 	conf->trickle_imin = HNCP_TRICKLE_IMIN;
 	conf->trickle_imax = HNCP_TRICKLE_IMAX;
@@ -471,6 +471,8 @@ void hncp_link_conf_set_default(hncp_link_conf conf)
 	conf->ping_worried_t = HNCP_INTERVAL_WORRIED;
 	conf->ping_retry_base_t = HNCP_INTERVAL_BASE;
 	conf->ping_retries = HNCP_INTERVAL_RETRIES;
+	strncpy(conf->dnsname, ifname, sizeof(conf->ifname));
+	strncpy(conf->ifname, ifname, sizeof(conf->ifname));
 }
 
 hncp_link_conf hncp_find_link_conf_by_name(hncp o, const char *ifname)
@@ -484,8 +486,7 @@ hncp_link_conf hncp_find_link_conf_by_name(hncp o, const char *ifname)
 	if(!(conf = malloc(sizeof(hncp_link_conf_s))))
 		return NULL;
 
-	hncp_link_conf_set_default(conf);
-	strcpy(conf->ifname, ifname);
+	hncp_link_conf_set_default(conf, ifname);
 	list_add(&conf->in_link_confs, &o->link_confs);
 	return conf;
 }

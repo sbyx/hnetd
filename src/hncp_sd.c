@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Tue Jun 10 13:14:06 2014 mstenber
- * Edit time:     553 min
+ * Last modified: Tue Jun 10 16:27:55 2014 mstenber
+ * Edit time:     555 min
  *
  */
 
@@ -185,6 +185,27 @@ const char *_rewrite_ifname(const char *src, char *dst)
 #define REWRITE_IFNAME(ifname) \
   _rewrite_ifname(ifname, alloca(strlen(ifname)+1))
 
+static void _dump_link_fqdn(hncp_sd sd, hncp_link l,
+                            char *buf, size_t buf_len)
+{
+  const char *ifname;
+
+  if (l->conf->dnsname[0])
+    {
+      if (strcmp(l->ifname, l->conf->dnsname) && strchr(l->conf->dnsname, '.'))
+        {
+          strncpy(buf, l->conf->dnsname, buf_len);
+          return;
+        }
+      ifname = l->conf->dnsname;
+    }
+  else
+    ifname = l->ifname;
+  ifname = REWRITE_IFNAME(ifname);
+  snprintf(buf, buf_len, "%s.%s.%s",
+           ifname, sd->router_name, sd->hncp->domain);
+}
+
 static void _publish_ddz(hncp_sd sd, hncp_link l,
                          int flags_forward,
                          struct prefix *assigned_prefix)
@@ -200,7 +221,7 @@ static void _publish_ddz(hncp_sd sd, hncp_link l,
   if (!hncp_get_ipv6_address(sd->hncp, l->ifname,
                              (struct in6_addr *)&dh->address))
     return;
-  sprintf(tbuf, "%s.%s.%s", REWRITE_IFNAME(l->ifname), sd->router_name, sd->hncp->domain);
+  _dump_link_fqdn(sd, l, tbuf, sizeof(tbuf));
   int r = escaped2ll(tbuf, dh->ll, DNS_MAX_ESCAPED_LEN);
   if (r < 0)
     return;
@@ -419,7 +440,7 @@ bool hncp_sd_reconfigure_ohp(hncp_sd sd)
   char *c = buf;
   char *args[ARGS_MAX_COUNT];
   int narg = 0;
-  char tbuf[DNS_MAX_ESCAPED_LEN];
+  char tbuf[DNS_MAX_ESCAPED_LEN+IFNAMSIZ+1];
   bool first = true;
   md5_ctx_t ctx;
 
@@ -433,10 +454,8 @@ bool hncp_sd_reconfigure_ohp(hncp_sd sd)
 
   vlist_for_each_element(&sd->hncp->links, l, in_links)
     {
-      /* XXX - what sort of naming scheme should we use for links? */
-      sprintf(tbuf, "%s=%s.%s.%s",
-              l->ifname,
-              REWRITE_IFNAME(l->ifname), sd->router_name, sd->hncp->domain);
+      sprintf(tbuf, "%s=", l->ifname);
+      _dump_link_fqdn(sd, l, tbuf+strlen(tbuf), sizeof(tbuf)-strlen(tbuf));
       md5_hash(tbuf, strlen(tbuf), &ctx);
       if (first)
         {

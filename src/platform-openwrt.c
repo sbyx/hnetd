@@ -617,6 +617,7 @@ enum {
 	DATA_ATTR_ULA_DEFAULT_ROUTER,
 	DATA_ATTR_PING_INTERVAL,
 	DATA_ATTR_TRICKLE_K,
+	DATA_ATTR_DNSNAME,
 	DATA_ATTR_MAX
 };
 
@@ -652,6 +653,7 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_ULA_DEFAULT_ROUTER] = { .name = "ula_default_router", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_PING_INTERVAL] = { .name = "ping_interval", .type = BLOBMSG_TYPE_INT32 },
 	[DATA_ATTR_TRICKLE_K] = { .name = "trickle_k", .type = BLOBMSG_TYPE_INT32 },
+	[DATA_ATTR_DNSNAME] = { .name = "dnsname", .type = BLOBMSG_TYPE_STRING },
 };
 
 
@@ -889,6 +891,9 @@ static void platform_update(void *data, size_t len)
 
 		if(c && dtb[DATA_ATTR_TRICKLE_K] && (conf = hncp_find_link_conf_by_name(p_hncp, c->ifname)))
 			conf->trickle_k = (int) blobmsg_get_u32(dtb[DATA_ATTR_TRICKLE_K]);
+
+		if(c && dtb[DATA_ATTR_DNSNAME] && (conf = hncp_find_link_conf_by_name(p_hncp, c->ifname)))
+			strncpy(conf->dnsname, blobmsg_get_string(dtb[DATA_ATTR_DNSNAME]), sizeof(conf->dnsname));;
 
 	}
 

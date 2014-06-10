@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Tue Jun 10 11:28:36 2014 mstenber
- * Edit time:     114 min
+ * Last modified: Tue Jun 10 16:30:10 2014 mstenber
+ * Edit time:     116 min
  *
  */
 
@@ -154,6 +154,7 @@ void test_hncp_sd(void)
   n1 = net_sim_find_hncp(&s, "n1");
   node1 = container_of(n1, net_node_s, n);
   l1 = net_sim_hncp_find_link_by_name(n1, "eth0.0");
+  strcpy(l1->conf->dnsname, "label");
   sput_fail_unless(prefix_pton("2001:dead:beef::/64", &p), "prefix_pton");
   hncp_tlv_ap_update(n1, &p, "eth0.0", false, 0, true);
   sput_fail_unless(prefix_pton("2001:dead:beef::1/128", &p), "prefix_pton");
@@ -170,6 +171,7 @@ void test_hncp_sd(void)
   node2 = container_of(n2, net_node_s, n);
   l2 = net_sim_hncp_find_link_by_name(n2, "eth1");
   l21 = net_sim_hncp_find_link_by_name(n2, "eth2");
+  strcpy(l21->conf->dnsname, "fqdn.");
   net_sim_set_connected(l1, l2, true);
   net_sim_set_connected(l2, l1, true);
 
@@ -200,7 +202,7 @@ void test_hncp_sd(void)
   rv = hncp_sd_write_dnsmasq_conf(node2->sd, "/tmp/n2.conf");
   sput_fail_unless(rv, "write 2 works");
   smock_is_empty();
-  file_contains("/tmp/n2.conf", "r.home");
+  file_contains("/tmp/n2.conf", "label.r.home");
   file_contains("/tmp/n2.conf", "r1.home");
 
   check_exec = true;
@@ -217,7 +219,7 @@ void test_hncp_sd(void)
   smock_push("execv_arg", "127.0.0.2");
   smock_push("execv_arg", "-p");
   smock_push("execv_arg", "54");
-  smock_push("execv_arg", "eth0.0=eth0_0.r.home.");
+  smock_push("execv_arg", "eth0.0=label.r.home.");
   memset(&node1->sd->ohp_state, 0, HNCP_HASH_LEN);
   rv = hncp_sd_reconfigure_ohp(node1->sd);
   sput_fail_unless(rv, "reconfigure ohp works");
@@ -235,7 +237,7 @@ void test_hncp_sd(void)
   smock_push("execv_arg", "-p");
   smock_push("execv_arg", "54");
   smock_push("execv_arg", "eth1=eth1.r1.home.");
-  smock_push("execv_arg", "eth2=eth2.r1.home.");
+  smock_push("execv_arg", "eth2=fqdn.");
   memset(&node2->sd->ohp_state, 0, HNCP_HASH_LEN);
   rv = hncp_sd_reconfigure_ohp(node2->sd);
   sput_fail_unless(rv, "reconfigure ohp works");

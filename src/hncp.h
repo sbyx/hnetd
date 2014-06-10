@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Wed Feb 26 17:08:14 2014 mstenber
+ * Last modified: Tue Jun 10 16:02:02 2014 mstenber
  * Edit time:     114 min
  *
  */
@@ -23,6 +23,9 @@
 
 /* IFNAMSIZ */
 #include <net/if.h>
+
+/* DNS_MAX_ESCAPED_LEN */
+#include "dns_util.h"
 
 #include <libubox/list.h>
 
@@ -114,6 +117,7 @@ typedef struct hncp_link_conf_struct hncp_link_conf_s, *hncp_link_conf;
 struct hncp_link_conf_struct {
   struct list_head in_link_confs;
   char ifname[IFNAMSIZ]; /* Name of the link. */
+  char dnsname[DNS_MAX_ESCAPED_LEN]; /* DNS FQDN or label */
 
   /* Trickle conf */
   hnetd_time_t trickle_imin, trickle_imax;
@@ -125,8 +129,6 @@ struct hncp_link_conf_struct {
 };
 
 hncp_link_conf hncp_find_link_conf_by_name(hncp o, const char *ifname);
-
-void hncp_link_conf_set_default(hncp_link_conf conf);
 
 /************************************************ API for whole hncp instance */
 

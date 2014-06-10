@@ -19,7 +19,7 @@ proto_hnet_init_config() {
     proto_config_add_string 'adhoc'
     proto_config_add_string 'disable_pa'
     proto_config_add_string 'ula_default_router'
-    proto_config_add_string 'sd_ifname'
+    proto_config_add_string 'dnsname'
     proto_config_add_int 'ping_interval'
     proto_config_add_int 'trickle_k'
 }
@@ -28,8 +28,8 @@ proto_hnet_setup() {
     local interface="$1"
     local device="$2"
 
-    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id ip6assign ip4assign adhoc disable_pa ula_default_router ping_interval trickle_k
-    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id ip6assign ip4assign adhoc disable_pa ula_default_router ping_interval trickle_k
+    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id ip6assign ip4assign adhoc disable_pa ula_default_router ping_interval trickle_k dnsname
+    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id ip6assign ip4assign adhoc disable_pa ula_default_router ping_interval trickle_k dnsname
 
     logger -t proto-hnet "proto_hnet_setup $device/$interface"
 
@@ -53,6 +53,7 @@ proto_hnet_setup() {
     [ -n "$ip6assign" ] && json_add_string ip6assign "$ip6assign"
     [ -n "$ip4assign" ] && json_add_string ip4assign "$ip4assign"
 
+    json_add_string dnsname "${dnsname:-$interface}"
     json_add_array prefix
     for p in $prefix; do
     	json_add_string "" "$p"
