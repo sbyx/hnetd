@@ -122,7 +122,8 @@ struct iface {
 	struct in6_addr cer;
 
 	// Config
-	uint8_t ip6_plen; //Min plen to be used when making new assignment
+	uint8_t ip6_plen; //Fixed IPv6 assignment prefix length or 0
+	uint8_t ip4_plen; //Fixed IPv4 assignment prefix length or 0
 
 	// Prefix storage
 	struct vlist_tree assigned;

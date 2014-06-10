@@ -103,11 +103,14 @@ void pa_term(struct pa *pa)
 static uint8_t __pa_custom_plen(__unused struct pa_iface *iface, struct pa_dp *dp, void *priv, bool scarcity)
 {
 	struct iface *i = (struct iface *)priv;
-	uint8_t plen = pa_core_default_plen(dp, scarcity);
-	if(plen != i->ip6_plen && !prefix_is_ipv4(&dp->prefix))
-		return i->ip6_plen;
-
-	return plen;
+	if(prefix_is_ipv4(&dp->prefix)) {
+		if(i->ip4_plen)
+			return 96 + i->ip4_plen;
+	} else {
+		if(i->ip6_plen)
+			return i->ip6_plen;
+	}
+	return pa_core_default_plen(dp, scarcity);
 }
 
 static void __pa_ifu_intiface(struct iface_user *u, const char *ifname, bool enabled)
@@ -132,7 +135,7 @@ static void __pa_ifu_intiface(struct iface_user *u, const char *ifname, bool ena
 	pa_iface_set_internal(iface, enabled);
 	pa_iface_set_adhoc(iface, !!(i->flags & IFACE_FLAG_ADHOC));
 
-	if(!enabled || !i->ip6_plen) {
+	if(!enabled || !(i->ip6_plen || i->ip4_plen)) {
 		iface->custom_plen = NULL;
 		iface->custom_plen_priv = NULL;
 	} else {

@@ -43,6 +43,7 @@ enum ipc_option {
 	OPT_LINK_ID,
 	OPT_IFACE_ID,
 	OPT_IP6_PLEN,
+	OPT_IP4_PLEN,
 	OPT_ADHOC,
 	OPT_DISABLE_PA,
 	OPT_PASSTHRU,
@@ -63,7 +64,8 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_GUEST] = {"guest", BLOBMSG_TYPE_BOOL},
 	[OPT_LINK_ID] = {"link_id", BLOBMSG_TYPE_STRING},
 	[OPT_IFACE_ID] = {"iface_id", BLOBMSG_TYPE_ARRAY},
-	[OPT_IP6_PLEN] = {"ip6_plen", BLOBMSG_TYPE_STRING},
+	[OPT_IP6_PLEN] = {"ip6assign", BLOBMSG_TYPE_STRING},
+	[OPT_IP4_PLEN] = {"ip4assign", BLOBMSG_TYPE_STRING},
 	[OPT_ADHOC] = {"adhoc", BLOBMSG_TYPE_BOOL},
 	[OPT_DISABLE_PA] = {"disable_pa", BLOBMSG_TYPE_BOOL},
 	[OPT_PASSTHRU] = {"passthru", BLOBMSG_TYPE_STRING},
@@ -173,7 +175,7 @@ int ipc_ifupdown(int argc, char *argv[])
 	char *entry;
 
 	int c, i;
-	while ((c = getopt(argc, argv, "ecgadp:l:i:m:uk:P:")) > 0) {
+	while ((c = getopt(argc, argv, "ecgadp:l:i:m:n:uk:P:")) > 0) {
 		switch(c) {
 		case 'e':
 			external = true;
@@ -210,7 +212,11 @@ int ipc_ifupdown(int argc, char *argv[])
 			break;
 
 		case 'm':
-			blobmsg_add_string(&b, "ip6_plen", optarg);
+			blobmsg_add_string(&b, "ip6assign", optarg);
+			break;
+
+		case 'n':
+			blobmsg_add_string(&b, "ip4assign", optarg);
 			break;
 
 		case 'd':
@@ -345,11 +351,18 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 				}
 			}
 
-			unsigned minv6len;
+			unsigned ip6_plen;
 			if(iface && tb[OPT_IP6_PLEN]
-			               && sscanf(blobmsg_get_string(tb[OPT_IP6_PLEN]), "%u", &minv6len) == 1
-			               && minv6len <= 128) {
-				iface->ip6_plen = minv6len;
+			               && sscanf(blobmsg_get_string(tb[OPT_IP6_PLEN]), "%u", &ip6_plen) == 1
+			               && ip6_plen <= 128) {
+				iface->ip6_plen = ip6_plen;
+			}
+
+			unsigned ip4_plen;
+			if(iface && tb[OPT_IP4_PLEN]
+			               && sscanf(blobmsg_get_string(tb[OPT_IP4_PLEN]), "%u", &ip4_plen) == 1
+			               && ip4_plen <= 128) {
+				iface->ip4_plen = ip4_plen;
 			}
 
 			hncp_link_conf conf;
