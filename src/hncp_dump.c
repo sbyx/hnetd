@@ -266,7 +266,7 @@ px:
 static int hd_nodes(hncp o, struct blob_buf *b)
 {
 	hncp_node node;
-	vlist_for_each_element(&o->nodes, node, in_nodes)
+	hncp_for_each_node(o, node)
 		hd_do_in_table(b, hd_hash_to_hex(&node->node_identifier_hash), hd_node(o, node,b), return -1);
 	return 0;
 }
