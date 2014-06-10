@@ -328,6 +328,7 @@ static void platform_commit(struct uloop_timeout *t)
 		blobmsg_add_string_buffer(&b);
 
 		blobmsg_add_u32(&b, "metric", r->metric);
+		blobmsg_add_u8(&b, "onlink", true);
 
 		L_DEBUG("	to %s/%s via %s", buf, buf2, buf3);
 
