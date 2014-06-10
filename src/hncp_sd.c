@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Tue Jun 10 11:28:19 2014 mstenber
+ * Last modified: Tue Jun 10 13:02:46 2014 mstenber
  * Edit time:     549 min
  *
  */
@@ -662,10 +662,7 @@ static struct tlv_attr *_get_dns_domain_tlv(hncp_sd sd)
   hncp_for_each_node(sd->hncp, n)
     {
       hncp_node_for_each_tlv_with_type(n, a, HNCP_T_DNS_DOMAIN_NAME)
-        {
-          if (tlv_id(a) == HNCP_T_DNS_DOMAIN_NAME)
-            best = a;
-        }
+        best = a;
     }
   return best;
 }
