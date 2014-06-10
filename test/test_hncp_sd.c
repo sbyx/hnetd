@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Mon Jun  9 19:43:05 2014 mstenber
- * Edit time:     111 min
+ * Last modified: Tue Jun 10 11:28:36 2014 mstenber
+ * Edit time:     114 min
  *
  */
 
@@ -158,23 +158,6 @@ void test_hncp_sd(void)
   hncp_tlv_ap_update(n1, &p, "eth0.0", false, 0, true);
   sput_fail_unless(prefix_pton("2001:dead:beef::1/128", &p), "prefix_pton");
   hncp_tlv_ra_update(n1, 0, &p.prefix, true);
-
-  /* Make sure the indexes look sane. */
-  int i, j;
-  for (i = 0 ; i < node1->sd->hncp->num_tlv_indexes ; i++)
-    for (j = 0 ; j < node1->sd->hncp->num_tlv_indexes ; j++)
-      {
-        hncp o = node1->sd->hncp;
-        int t1 = o->tlv_indexes[o->tlv_indexes_sorted[i]];
-        int t2 = o->tlv_indexes[o->tlv_indexes_sorted[j]];
-        sput_fail_unless(t1 < t2 == i < j,
-                         "indexing works");
-      }
-  /* Make sure trying to add extra indexes results in same # */
-  sput_fail_unless(hncp_get_tlv_index(node1->sd->hncp, 123) >= 0,
-                   "tlv index add works");
-  sput_fail_unless(hncp_get_tlv_index(node1->sd->hncp, 123) ==
-                   hncp_get_tlv_index(node1->sd->hncp, 123), "add = get");
 
   /* Make sure .home shows up even with zero conf and no TLV traffic */
   SIM_WHILE(&s, 100, !net_sim_is_converged(&s));

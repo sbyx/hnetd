@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Jun  9 19:40:29 2014 mstenber
- * Edit time:     201 min
+ * Last modified: Tue Jun 10 12:59:07 2014 mstenber
+ * Edit time:     225 min
  *
  */
 
@@ -122,18 +122,16 @@ struct hncp_struct {
   /* search domain provided to clients. */
   char domain[DNS_MAX_ESCAPED_LEN];
 
-  /* Number of TLV indexes we have. */
+  /* An array that contains type -> index+1 (if available) or type ->
+   * 0 (if no index yet allocated). */
+  int *tlv_type_to_index;
+
+  /* Highest allocated TLV index. */
+  int tlv_type_to_index_length;
+
+  /* Number of TLV indexes we have. That is, the # of non-empty slots
+   * in the tlv_type_to_index. */
   int num_tlv_indexes;
-
-  /* An array that contains indicator _which_ TLV is in that slot. The
-   * index is the return value given to the caller who does
-   * hncp_get_tlv_index, and stays the same for duration of HNCP
-   * instance's lifetime. */
-  uint16_t *tlv_indexes;
-
-  /* An array that contains indexes of tlv_indexes, sorted by
-   * ascending value. */
-  int *tlv_indexes_sorted;
 };
 
 typedef struct hncp_link_struct hncp_link_s, *hncp_link;
@@ -285,11 +283,9 @@ bool hncp_node_set_tlvs(hncp_node n, struct tlv_attr *a);
 int hncp_node_cmp(hncp_node n1, hncp_node n2);
 void hncp_node_recalculate_index(hncp_node n);
 
-bool hncp_get_ipv6_address(hncp o, char *prefer_ifname, struct in6_addr *addr);
+bool hncp_add_tlv_index(hncp o, uint16_t type);
 
-/* Get index for specific typed TLV searching/iteration, or -1 in case
- * of an error. */
-int hncp_get_tlv_index(hncp o, uint16_t type);
+bool hncp_get_ipv6_address(hncp o, char *prefer_ifname, struct in6_addr *addr);
 
 void hncp_schedule(hncp o);
 
@@ -368,26 +364,35 @@ static inline hnetd_time_t hncp_time(hncp o)
 
 #define HNCP_NODE_REPR(n) HEX_REPR(&n->node_identifier_hash, HNCP_HASH_LEN)
 
-#define hncp_node_for_each_tlv_i(n, a)  \
-  tlv_for_each_attr(a, (n)->tlv_container)
-
 static inline struct tlv_attr *
-hncp_node_get_index(hncp_node n, int index, bool first)
+hncp_node_get_tlv_with_type(hncp_node n, uint16_t type, bool first)
 {
-  assert(n && index >= 0 && index < n->hncp->num_tlv_indexes);
+  if (type >= n->hncp->tlv_type_to_index_length
+      || !n->hncp->tlv_type_to_index[type])
+    if (!hncp_add_tlv_index(n->hncp, type))
+      return NULL;
   if (n->tlv_index_dirty)
     {
       hncp_node_recalculate_index(n);
       if (!n->tlv_index)
         return NULL;
     }
+  int index = n->hncp->tlv_type_to_index[type] - 1;
+  assert(index >= 0 && index < n->hncp->num_tlv_indexes);
   int i = index * 2 + (first ? 0 : 1);
   return n->tlv_index[i];
 }
 
-#define hncp_node_for_each_tlv_in_index(n, a, index)    \
-  for (a = hncp_node_get_index(n, index, true) ;        \
-       a && a != hncp_node_get_index(n, index, false) ; \
+#define hncp_for_each_node_including_unreachable(o, n)                  \
+  for (n = (avl_is_empty(&o->nodes.avl) ?                               \
+            NULL : avl_first_element(&o->nodes.avl, n, in_nodes.avl)) ; \
+       n ;                                                              \
+       n = (n == avl_last_element(&o->nodes.avl, n, in_nodes.avl) ?     \
+            NULL : avl_next_element(n, in_nodes.avl)))
+
+#define hncp_node_for_each_tlv_with_type(n, a, type)            \
+  for (a = hncp_node_get_tlv_with_type(n, type, true) ;         \
+       a && a != hncp_node_get_tlv_with_type(n, type, false) ;  \
        a = tlv_next(a))
 
 #define ROUND_BITS_TO_BYTES(b) (((b) + 7) / 8)

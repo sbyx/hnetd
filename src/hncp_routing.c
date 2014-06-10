@@ -41,8 +41,6 @@ struct hncp_routing_struct {
 	const char *script;
 	const char **ifaces;
 	size_t ifaces_cnt;
-	int rp_index;
-	int ra_index;
 };
 
 static int call_backend(hncp_bfs bfs, const char *action, int stdin)
@@ -120,8 +118,6 @@ hncp_bfs hncp_routing_create(hncp hncp, const char *script)
 	bfs->script = script;
 	bfs->iface.cb_intiface = hncp_routing_intiface;
 	bfs->iface.cb_intaddr = hncp_routing_intaddr;
-	bfs->rp_index = hncp_get_tlv_index(hncp, HNCP_T_ROUTING_PROTOCOL);
-	bfs->ra_index = hncp_get_tlv_index(hncp, HNCP_T_ROUTER_ADDRESS);
 	hncp_subscribe(hncp, &bfs->subscr);
 	iface_register_user(&bfs->iface);
 
@@ -202,7 +198,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 
 		++routercnt;
 		struct tlv_attr *a;
-		hncp_node_for_each_tlv_in_index(c, a, bfs->rp_index) {
+		hncp_node_for_each_tlv_with_type(c, a, HNCP_T_ROUTING_PROTOCOL) {
 			if (tlv_len(a) >= sizeof(hncp_t_routing_protocol_s)) {
 				hncp_t_routing_protocol p = tlv_data(a);
 				if (p->protocol < HNCP_ROUTING_MAX) {
@@ -286,7 +282,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 
 					struct tlv_attr *na;
 					hncp_t_router_address ra;
-					hncp_node_for_each_tlv_in_index(n, na, bfs->ra_index) {
+					hncp_node_for_each_tlv_with_type(n, na, HNCP_T_ROUTER_ADDRESS) {
 						if ((ra = hncp_tlv_router_address(na))) {
 							if (ra->link_id == ne->neighbor_link_id &&
 							    IN6_IS_ADDR_V4MAPPED(&ra->address)) {

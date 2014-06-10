@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Mon Jun  9 19:41:16 2014 mstenber
- * Edit time:     480 min
+ * Last modified: Tue Jun 10 11:55:39 2014 mstenber
+ * Edit time:     482 min
  *
  */
 
@@ -85,10 +85,6 @@ struct hncp_glue_struct {
   struct pa_data *pa_data;
   struct pa_data_user data_user;
 
-  int ec_index;
-  int ddz_index;
-  int ap_index;
-  int neigh_index;
 };
 
 typedef struct {
@@ -183,8 +179,7 @@ static hncp_external_link _find_or_create_external_link(hncp_glue g,
   return el;
 }
 
-static hncp_link _find_local_link(hncp_glue g,
-                                  hncp_node onode, uint32_t olink_no)
+static hncp_link _find_local_link(hncp_node onode, uint32_t olink_no)
 {
   hncp o = onode->hncp;
   struct tlv_attr *a;
@@ -193,7 +188,7 @@ static hncp_link _find_local_link(hncp_glue g,
   /* We're lazy and just compare published information; we _could_
    * of course also look at per-link and per-neighbor structures,
    * but this is simpler.. */
-  hncp_node_for_each_tlv_in_index(o->own_node, a, g->neigh_index)
+  hncp_node_for_each_tlv_with_type(o->own_node, a, HNCP_T_NODE_DATA_NEIGHBOR)
     if ((nh = hncp_tlv_neighbor(a)))
       {
         if (nh->neighbor_link_id != olink_no)
@@ -221,7 +216,7 @@ static void _update_a_tlv(hncp_glue g, hncp_node n,
   p.plen = ah->prefix_length_bits;
   plen = ROUND_BITS_TO_BYTES(p.plen);
   memcpy(&p, ah->prefix_data, plen);
-  l = _find_local_link(g, n, ah->link_id);
+  l = _find_local_link(n, ah->link_id);
 
   struct pa_ap *ap = pa_ap_get(g->pa_data, &p, (struct pa_rid *)&n->node_identifier_hash, add);
   if (!ap)
@@ -372,7 +367,7 @@ static void _update_a_local_links(hncp_glue g)
   L_DEBUG("_update_a_local_links");
   hncp_for_each_node(o, n)
     {
-      hncp_node_for_each_tlv_in_index(n, a, g->ap_index)
+      hncp_node_for_each_tlv_with_type(n, a, HNCP_T_ASSIGNED_PREFIX)
         {
           if (!(ah = hncp_tlv_ap(a)))
             continue;
@@ -380,7 +375,7 @@ static void _update_a_local_links(hncp_glue g)
           p.plen = ah->prefix_length_bits;
           int plen = ROUND_BITS_TO_BYTES(p.plen);
           memcpy(&p, ah->prefix_data, plen);
-          l = _find_local_link(g, n, ah->link_id);
+          l = _find_local_link(n, ah->link_id);
           struct pa_ap *ap = pa_ap_get(g->pa_data, &p, (struct pa_rid *)&n->node_identifier_hash, false);
           if (!ap)
             {
@@ -600,7 +595,7 @@ static void _refresh_ec(hncp_glue g, bool publish)
   hncp_for_each_node(o, n)
     {
       if (n != o->own_node)
-        hncp_node_for_each_tlv_in_index(n, a, g->ec_index)
+        hncp_node_for_each_tlv_with_type(n, a, HNCP_T_EXTERNAL_CONNECTION)
           {
             tlv_for_each_attr(a2, a)
               if (tlv_id(a2) == HNCP_T_DHCPV6_OPTIONS)
@@ -614,7 +609,7 @@ static void _refresh_ec(hncp_glue g, bool publish)
                              tlv_data(a2), tlv_len(a2));
                 }
           }
-      hncp_node_for_each_tlv_in_index(n, a, g->ddz_index)
+      hncp_node_for_each_tlv_with_type(n, a, HNCP_T_DNS_DELEGATED_ZONE)
         {
           hncp_t_dns_delegated_zone ddz = tlv_data(a);
           if (ddz->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_SEARCH)
@@ -814,10 +809,6 @@ hncp_glue hncp_pa_glue_create(hncp o, struct pa_data *pa_data)
   g->data_user.dps = hncp_pa_dps;
   g->data_user.aas = hncp_pa_aas;
   g->ap_if_update_timeout.cb = _ap_if_update_timeout_cb;
-  g->ec_index = hncp_get_tlv_index(o, HNCP_T_EXTERNAL_CONNECTION);
-  g->ddz_index = hncp_get_tlv_index(o, HNCP_T_DNS_DELEGATED_ZONE);
-  g->neigh_index = hncp_get_tlv_index(o, HNCP_T_NODE_DATA_NEIGHBOR);
-  g->ap_index = hncp_get_tlv_index(o, HNCP_T_ASSIGNED_PREFIX);
 
   /* Set the rid */
   pa_flood_set_rid(pa_data, rid);

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Jun  9 19:14:20 2014 mstenber
- * Edit time:     589 min
+ * Last modified: Tue Jun 10 12:54:55 2014 mstenber
+ * Edit time:     638 min
  *
  */
 
@@ -367,12 +367,9 @@ void hncp_uninit(hncp o)
   /* Finally, we can kill own node too. */
   vlist_flush_all(&o->nodes);
 
-  /* Get rid of TLV indexes. */
+  /* Get rid of TLV index. */
   if (o->num_tlv_indexes)
-    {
-      free(o->tlv_indexes);
-      free(o->tlv_indexes_sorted);
-    }
+    free(o->tlv_type_to_index);
 }
 
 void hncp_destroy(hncp o)
@@ -747,39 +744,38 @@ hncp_get_ipv6_address(hncp o, char *prefer_ifname, struct in6_addr *addr)
   return false;
 }
 
-int hncp_get_tlv_index(hncp o, uint16_t type)
+bool hncp_add_tlv_index(hncp o, uint16_t type)
 {
-  int i;
-  for (i = 0 ; i < o->num_tlv_indexes ; i++)
-    if (o->tlv_indexes[i] == type)
-      return i;
-
-  int nti = o->num_tlv_indexes + 1;
-  uint16_t *ni = realloc(o->tlv_indexes,
-                         nti * sizeof(o->tlv_indexes[0]));
-  if (!ni)
-    return -1;
-  int *nis = realloc(o->tlv_indexes_sorted,
-                     nti * sizeof(o->tlv_indexes_sorted[0]));
-  if (!nis)
+  if (type < o->tlv_type_to_index_length)
     {
-      free(ni);
-      return -1;
+      if (o->tlv_type_to_index[type])
+        {
+          L_DEBUG("hncp_add_tlv_index called for existing index (type %d)",
+                  (int)type);
+          return true;
+        }
     }
-  ni[o->num_tlv_indexes] = type;
-  for (i = 0 ; i < o->num_tlv_indexes ; i++)
-    if (ni[nis[i]] > type)
-      break;
-  /* i = insertion point */
-  memmove(&nis[i+1], &nis[i], (o->num_tlv_indexes - i) * sizeof(nis[0]));
-  nis[i] = o->num_tlv_indexes;
+  else
+    {
+      int old_len = o->tlv_type_to_index_length;
+      int old_size = old_len * sizeof(o->tlv_type_to_index[0]);
+      int new_len = type + 1;
+      int new_size = new_len * sizeof(o->tlv_type_to_index[0]);
+      int *ni = realloc(o->tlv_type_to_index, new_size);
+      if (!ni)
+        return false;
+      memset((void *)ni + old_size, 0, new_size - old_size);
+      o->tlv_type_to_index = ni;
+      o->tlv_type_to_index_length = new_len;
+      L_DEBUG("hncp_add_tlv_index grew tlv_type_to_index to %d", new_len);
+    }
 
-  o->tlv_indexes = ni;
-  o->tlv_indexes_sorted = nis;
+  L_DEBUG("hncp_add_tlv_index: type #%d = index #%d", type, o->num_tlv_indexes);
+  o->tlv_type_to_index[type] = ++o->num_tlv_indexes;
 
   /* Free existing indexes */
   hncp_node n;
-  hncp_for_each_node(o, n)
+  hncp_for_each_node_including_unreachable(o, n)
     {
       if (n->tlv_index)
         {
@@ -787,8 +783,9 @@ int hncp_get_tlv_index(hncp o, uint16_t type)
           n->tlv_index = NULL;
           n->tlv_index_dirty = true;
         }
+      assert(n->tlv_index_dirty);
     }
-  return o->num_tlv_indexes++;
+  return true;
 }
 
 
@@ -826,51 +823,43 @@ hncp_set_ipv6_address(hncp o, const char *ifname, const struct in6_addr *a)
 
 void hncp_node_recalculate_index(hncp_node n)
 {
-  int size = n->hncp->num_tlv_indexes * 2 *  sizeof(n->tlv_index[0]);
+  int size = n->hncp->num_tlv_indexes * 2 * sizeof(n->tlv_index[0]);
+
   assert(n->tlv_index_dirty);
   if (!n->tlv_index)
     {
-      n->tlv_index = malloc(size);
+      n->tlv_index = calloc(1, size);
       if (!n->tlv_index)
         return;
     }
-  memset(n->tlv_index, 0, size);
+  else
+    {
+      memset(n->tlv_index, 0, size);
+    }
 
   hncp o = n->hncp;
   struct tlv_attr *a;
-  uint16_t type = 0;
-  int idx = 0, idx2 = 0;
+  int type = -1;
+  int idx = 0;
 
   /* Note: This algorithm isn't particularly clever - while linear in
    * speed (O(# of indexes + # of entries in tlv_container), it has bit
    * too significant constant factor for comfort. */
   hncp_node_for_each_tlv(n, a)
     {
-      /* Two modes; either we're iterating _within_ supported index,
-       * or not. 'idx' tracks the tlv_indexes_sorted entries, and
-       * 'idx2' is the index stored in tlv_indexes_sorted[idx] that
-       * refers to real internal index numbers which are the values
-       * provided to the users of API. */
-      if (type == 0 || tlv_id(a) != type)
+      if ((int)tlv_id(a) != type)
         {
-          while (idx < o->num_tlv_indexes
-                 && tlv_id(a) >
-                 (type = o->tlv_indexes[(idx2=o->tlv_indexes_sorted[idx])]))
-            idx++;
-          /* If we encountered end here, that's it. */
-          if (idx == o->num_tlv_indexes)
+          type = tlv_id(a);
+          /* No more indexes here -> stop iteration */
+          if (type >= o->tlv_type_to_index_length)
             break;
-          if (tlv_id(a) != type)
-            {
-              type = 0;
-              continue;
-            }
-          n->tlv_index[2 * idx2] = a;
+          if (!(idx = o->tlv_type_to_index[type]))
+            continue;
+          n->tlv_index[2 * idx - 2] = a;
+          assert(idx <= n->hncp->num_tlv_indexes);
         }
-      if (type)
-        {
-          n->tlv_index[2 * idx2 + 1] = tlv_next(a);
-        }
+      if (idx)
+        n->tlv_index[2 * idx - 1] = tlv_next(a);
     }
   n->tlv_index_dirty = false;
 }

@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Jun  9 19:55:33 2014 mstenber
- * Edit time:     542 min
+ * Last modified: Tue Jun 10 11:28:19 2014 mstenber
+ * Edit time:     549 min
  *
  */
 
@@ -83,13 +83,6 @@ struct hncp_sd_struct
   hncp_hash_s dnsmasq_state;
   hncp_hash_s ohp_state;
   hncp_hash_s pcp_state;
-
-  /* HNCP (TLV) indexes we require for fast operation. */
-  int ec_index; /* External Connection */
-  int ra_index; /* Router Address */
-  int drn_index; /* DNS Router Name */
-  int ddn_index; /* DNS Domain Name */
-  int ddz_index; /* DNS Delegated Zone */
 };
 
 
@@ -323,7 +316,7 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
   md5_hash(sd->hncp->domain, strlen(sd->hncp->domain), &ctx);
   hncp_for_each_node(sd->hncp, n)
     {
-      hncp_node_for_each_tlv_in_index(n, a, sd->drn_index)
+      hncp_node_for_each_tlv_with_type(n, a, HNCP_T_DNS_ROUTER_NAME)
         if (tlv_len(a) <= DNS_MAX_L_LEN)
           {
             char router_name[DNS_MAX_L_LEN+1];
@@ -332,7 +325,7 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
             memcpy(router_name, tlv_data(a), tlv_len(a));
             router_name[tlv_len(a)] = 0;
             md5_hash(router_name, strlen(router_name), &ctx);
-            hncp_node_for_each_tlv_in_index(n, a2, sd->ra_index)
+            hncp_node_for_each_tlv_with_type(n, a2, HNCP_T_ROUTER_ADDRESS)
               if ((ra = hncp_tlv_router_address(a2)))
               {
                 md5_hash(ra, sizeof(*ra), &ctx);
@@ -343,7 +336,7 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
             break;
           }
 
-      hncp_node_for_each_tlv_in_index(n, a, sd->ddz_index)
+      hncp_node_for_each_tlv_with_type(n, a, HNCP_T_DNS_DELEGATED_ZONE)
         {
           /* Decode the labels */
           char buf[DNS_MAX_ESCAPED_LEN];
@@ -497,7 +490,7 @@ bool hncp_sd_reconfigure_pcp(hncp_sd sd)
   hncp_for_each_node(sd->hncp, n)
     {
       struct in6_addr *a4 = NULL, *a6 = NULL;
-      hncp_node_for_each_tlv_in_index(n, tlv, sd->ec_index)
+      hncp_node_for_each_tlv_with_type(n, tlv, HNCP_T_EXTERNAL_CONNECTION)
         {
           if (!a4 && !a6)
             {
@@ -620,7 +613,7 @@ _find_router_name(hncp_sd sd)
 
   hncp_for_each_node(sd->hncp, n)
     {
-      hncp_node_for_each_tlv_in_index(n, a, sd->drn_index)
+      hncp_node_for_each_tlv_with_type(n, a, HNCP_T_DNS_ROUTER_NAME)
         {
           if (_tlv_router_name_matches(sd, a))
             return n;
@@ -668,7 +661,7 @@ static struct tlv_attr *_get_dns_domain_tlv(hncp_sd sd)
 
   hncp_for_each_node(sd->hncp, n)
     {
-      hncp_node_for_each_tlv_in_index(n, a, sd->ddn_index)
+      hncp_node_for_each_tlv_with_type(n, a, HNCP_T_DNS_DOMAIN_NAME)
         {
           if (tlv_id(a) == HNCP_T_DNS_DOMAIN_NAME)
             best = a;
@@ -835,11 +828,6 @@ hncp_sd hncp_sd_create(hncp h, hncp_sd_params p)
   if (!sd)
     return NULL;
 
-  sd->ec_index = hncp_get_tlv_index(h, HNCP_T_EXTERNAL_CONNECTION);
-  sd->ra_index = hncp_get_tlv_index(h, HNCP_T_ROUTER_ADDRESS);
-  sd->drn_index = hncp_get_tlv_index(h, HNCP_T_DNS_ROUTER_NAME);
-  sd->ddn_index = hncp_get_tlv_index(h, HNCP_T_DNS_DOMAIN_NAME);
-  sd->ddz_index = hncp_get_tlv_index(h, HNCP_T_DNS_DELEGATED_ZONE);
   /* Handle domain name */
   if (p->domain_name)
     {
