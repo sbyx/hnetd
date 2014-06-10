@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Tue Jun 10 13:02:46 2014 mstenber
- * Edit time:     549 min
+ * Last modified: Tue Jun 10 13:14:06 2014 mstenber
+ * Edit time:     553 min
  *
  */
 
@@ -723,8 +723,9 @@ static void _tlv_cb(hncp_subscriber s,
               L_DEBUG("router name conflict, we're higher, ignoring");
             }
         }
-      /* Router name itself should not trigger reconfiguration unless
-       * local; however, remote DDZ changes should. */
+      /* Router name/address changes trigger dnsmasq update due to
+       * synthesized <routername>.<domain> host records. */
+      _should_update(sd, UPDATE_FLAG_DNSMASQ);
       break;
 
     case HNCP_T_DNS_DELEGATED_ZONE:
@@ -749,12 +750,18 @@ static void _tlv_cb(hncp_subscriber s,
       _should_update(sd, UPDATE_FLAG_DOMAIN);
       break;
 
-    case HNCP_T_EXTERNAL_CONNECTION:
-      /* Delegated prefixes may have changed */
     case HNCP_T_ROUTER_ADDRESS:
-      /* Addresses of where to find PCP server may have changed */
+      /* Router name/address changes trigger dnsmasq update due to
+       * synthesized <routername>.<domain> host records. */
+      /* Addresses of where to find PCP server may also have changed */
+      _should_update(sd, UPDATE_FLAG_DNSMASQ | UPDATE_FLAG_PCP);
+      break;
+
+    case HNCP_T_EXTERNAL_CONNECTION:
+      /* Delegated prefixes may have changed -> possibly update PCP */
       _should_update(sd, UPDATE_FLAG_PCP);
       break;
+
     }
 }
 
