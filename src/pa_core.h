@@ -150,7 +150,7 @@ void pa_core_term(struct pa_core *);
 
 //Default plen selection policy function
 uint8_t pa_core_default_plen(struct pa_dp *dp, bool scarcity);
-#define pa_iface_plen(iface, scarcity) \
+#define pa_iface_plen(iface, dp, scarcity) \
 	(iface)->custom_plen?(iface)->custom_plen(iface, dp, (iface)->custom_plen_priv, scarcity):pa_core_default_plen(dp, scarcity)
 
 void pa_core_rule_init(struct pa_rule *rule, const char *name, enum pa_rule_pref best_priority, rule_try try);

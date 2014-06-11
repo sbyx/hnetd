@@ -233,11 +233,11 @@ static int pa_rule_try_random(struct pa_core *core, struct pa_rule *rule,
 			prefix_count[p.plen]++;
 	}
 
-	if(!pa_rule_try_random_plen(core, rule, dp, iface, pa_iface_plen(iface, false), prefix_count)) {
+	if(!pa_rule_try_random_plen(core, rule, dp, iface, pa_iface_plen(iface,dp,  false), prefix_count)) {
 		rule->result.preference = PAR_PREF_RANDOM;
 		return 0;
 	} else if(best_found_priority > PAR_PREF_RANDOM_S &&
-					!pa_rule_try_random_plen(core, rule, dp, iface, pa_iface_plen(iface, true), prefix_count)) {
+					!pa_rule_try_random_plen(core, rule, dp, iface, pa_iface_plen(iface,dp,  true), prefix_count)) {
 		rule->result.preference = PAR_PREF_RANDOM_S;
 		return 0;
 	}
@@ -958,7 +958,7 @@ static int pa_rule_try_link_id(struct pa_core *core, struct pa_rule *rule,
 	if((lrule->ifname[0] != '\0' && strcmp(lrule->ifname, iface->ifname)))
 		return -1;
 
-	if(((plen = pa_core_default_plen(dp, false)) > 128) || ((plen - dp->prefix.plen) < lrule->link_id_len))
+	if(((plen = pa_iface_plen(iface, dp, false)) > 128) || ((plen - dp->prefix.plen) < lrule->link_id_len))
 		return -1;
 
 	prefix_canonical(&p, &dp->prefix);

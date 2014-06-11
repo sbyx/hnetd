@@ -363,8 +363,8 @@ static int pa_rule_try_storage(struct pa_core *core, struct pa_rule *rule,
 	if(!iface->designated)
 		return -1;
 
-	plen = pa_iface_plen(iface, false);
-	plen_scarcity = pa_iface_plen(iface, true);
+	plen = pa_iface_plen(iface, dp, false);
+	plen_scarcity = pa_iface_plen(iface, dp, true);
 
 	rule->result.preference = PAR_PREF_MAX;
 	pa_for_each_sp_in_iface(sp, iface) {
