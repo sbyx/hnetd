@@ -855,7 +855,7 @@ static void platform_update(void *data, size_t len)
 					char astr[55], fstr[55];
 					struct prefix filter, addr;
 					char *buf = blobmsg_get_string(k);
-					char *at = strchr(buf, "@");
+					char *at = strchr(buf, '@');
 					if (at)
 						*at = ' ';
 					int res = sscanf(buf, "%54s %54s", astr, fstr);
