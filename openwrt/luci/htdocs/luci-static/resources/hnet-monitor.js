@@ -1,53 +1,72 @@
 
 var hnet = (function() {
-	
-	/* Main monitor object */
-	function Monitor(container) {
-		var me = this;
-		this.conf = {
-			LENGTH_IFACES: 1,
-			WIDTH_IFACES: 4,
-			LENGTH_NEIGHBOR: 100,
-			WIDTH_NEIGHBOR: 2,
-			LENGTH_UPLINK: 100,
-			WIDTH_UPLINK: 2,
-			
-			colors : {
+
+
+	var sizes = {
+		default : {
+				LENGTH_IFACES: 1,
+				WIDTH_IFACES: 2,
+				LENGTH_NEIGHBOR: 100,
+				WIDTH_NEIGHBOR: 1,
+				LENGTH_UPLINK: 100,
+				WIDTH_UPLINK: 1,
+				LENGTH_BROWSER: 1,
+				WIDTH_BROWSER: 1,
+				DESIGNATED_IFACE_RADIUS: 120, //Doesn't work for some reason
+				IFACE_RADIUS: 80,
+			},
+		
+		}
+
+	var colors = {
+		
+		default : {
 				ROUTER : '#FF9900',
-				OWN_ROUTER: "red",
+				OWN_ROUTER: '#FF9900',
 				UNKNOWN_ROUTER: "grey",
-			
+				UPLINK_ROUTER: "#FF99A0",
 				IFACE : "#2B7CE9",
 				DESIGNATED_IFACE : "red",
 				UNKNOWN_IFACE: "grey",
-			
 				UPLINK : "violet",
-				
 				CONNEXION_UNIDIR : "#009966",
 				CONNEXION_BIDIR : "#003333",
+				BROWSER : "green"
 			},
-			
+		home : {
+			ROUTER : "#7BCB00",
+			OWN_ROUTER: "#7BCB40",
+			UNKNOWN_ROUTER: "#B6BCB6",
+			UPLINK_ROUTER: "#7BCBC0",
+			IFACE : "#C0FB64",
+			DESIGNATED_IFACE : "#7BCB00",
+			UNKNOWN_IFACE: "#B6BCB6",
+			UPLINK : "#B3C2EE",
+			CONNEXION_UNIDIR : "#89D414",
+			CONNEXION_BIDIR : "#7BCB00",
+			BROWSER : "#7BCBA0",
+		},
+	}
+
+	function clone(object, extend) {
+		var o = {};	
+		for(var k in object) {
+			o[k] = object[k];
+		}
+		if(extend) {
+			for(var k in extend) {
+				o[k] = extend[k];
+			}
+		}
+		return o;
+	}
+
+	/* Main monitor object */
+	function Monitor(container, options) {
+		var me = this;
+		this.conf = {
 			options: {
 				smoothCurves : false,
-				groups: {
-					router: {
-						shape: 'circle',
-						value: 5,
-						//radius: 100,
-					},
-					iface: {
-						shape: 'dot',
-						value: 3,
-						//radius: 1,
-					},
-					uplink: {
-						shape: 'box',
-						fontSize: 10,
-						//value: 3,
-						//radius: 20,
-					},
-				},
-				//configurePhysics:true,
 				physics: {
 					barnesHut: {
 							enabled: true,
@@ -64,6 +83,13 @@ var hnet = (function() {
 				},
 			},
 		}
+		
+		var customColors = (options && ("colors" in options))?options.colors:undefined;
+		this.conf.colors = clone(colors.default, customColors);
+		
+		var customSizes = (options && ("sizes" in options))?options.sizes:undefined;
+		this.conf.sizes = clone(sizes.default, customSizes);
+		
 		this.container = container;
 		this.edges = new vis.DataSet();
 		this.nodes = new vis.DataSet();
@@ -76,6 +102,7 @@ var hnet = (function() {
 		this.entities = [];
 		this.entityPositions = {};
 		this.routers = {};
+		this.browser = null;
 		this.version = 0;
 	}
 	
@@ -116,11 +143,22 @@ var hnet = (function() {
 		return this.routers[id];
 	}
 	
+	Monitor.prototype.getBrowser = function(router) {
+		if((!this.browser) || (this.browser.router.id != router.id)) {
+			new Browser(router);
+		}
+		this.browser.update();
+		return this.browser;
+	}
+	
 	Monitor.prototype.updateDB = function() {
 		this.version++;
 		for(var id in this.hncp["nodes"]) {
 			var rhncp = hncp["nodes"][id];
 			var r = this.getRouter(id);
+			if(("self" in rhncp) && rhncp["self"]) {
+				this.getBrowser(r);
+			}
 	
 			for(var i = 0; i<rhncp["neighbors"].length; i++) {
 				var hncp_n = rhncp["neighbors"][i];
@@ -213,11 +251,9 @@ var hnet = (function() {
 					n.allowedToMoveY = true;
 				}
 				monitor.nodes.add(n);
-				me.addGraphElement(n.id);
 			};
 			fedges = function(n) {
 				monitor.edges.add(n);
-				me.addGraphElement(n.id);
 			};
 		}
 		this.inGraph = true;
@@ -230,7 +266,7 @@ var hnet = (function() {
 	function Router(monitor, id) {
 		NetworkEntity.call(this, monitor);
 		this.id = id;
-		this.node = {id: "r-"+id, label: id.substr(0,6), group:"router"};
+		this.node = {id: "r-"+id, label: id.substr(0,6), shape: "circle"};
 		this.addGraphElement(this.node.id);
 		this.nodes.push(this.node);
 		this.ifaces = {};
@@ -298,7 +334,9 @@ var hnet = (function() {
 	Router.prototype.upgrade = function() {
 		if(!this.monitor.hncp.nodes[this.id]) {
 			this.node.color = this.monitor.conf.colors.UNKNOWN_ROUTER;
-		} else if(this.id == this.monitor.hncp["node-id"]) {
+		} else if (("uplinks" in this.monitor.hncp.nodes[this.id]) && this.monitor.hncp.nodes[this.id].uplinks.length) {
+			this.node.color = this.monitor.conf.colors.UPLINK_ROUTER;
+		}else if(this.id == this.monitor.hncp["node-id"]) {
 			this.node.color = this.monitor.conf.colors.OWN_ROUTER;
 		} else {
 			this.node.color = this.monitor.conf.colors.ROUTER;
@@ -320,11 +358,11 @@ var hnet = (function() {
 		NetworkEntity.call(this, router.monitor);
 		this.router = router;
 		this.id = id;
-		this.node = {id: "i-"+id+"-"+router.id, label: id+"", group:"iface"};
+		this.node = {id: "i-"+id+"-"+router.id, label: id+"", shape:"dot"};
 		this.edge = {from: router.node.id, to: this.node.id,
-							length: this.monitor.conf.LENGTH_IFACES, 
-							width: this.monitor.conf.WIDTH_IFACES};
-		this.addGraphElement[this.node.id] = this;
+							length: this.monitor.conf.sizes.LENGTH_IFACES, 
+							width: this.monitor.conf.sizes.WIDTH_IFACES};
+		this.addGraphElement(this.node.id);
 		this.nodes.push(this.node);
 		this.edges.push(this.edge);
 		this.neighbors = [];
@@ -333,7 +371,7 @@ var hnet = (function() {
 	
 	Iface.prototype.destroy = function() {
 		delete this.router.ifaces[this.id];
-		this.removeGraphElement[this.node.id];
+		this.removeGraphElement(this.node.id);
 		NetworkEntity.prototype.destroy.call(this);
 	}
 	
@@ -351,8 +389,10 @@ var hnet = (function() {
 		hncp_p.forEach(function(p) {if(p.link == me.id) prefix_present = true;});
 		
 		if(prefix_present) {
+			this.node.radius = this.monitor.conf.sizes.DESIGNATED_IFACE_RADIUS;
 			this.node.color = this.monitor.conf.colors.DESIGNATED_IFACE;
 		} else {
+			this.node.radius = this.monitor.conf.sizes.IFACE_RADIUS;
 			this.node.color = this.monitor.conf.colors.IFACE;
 		}
 		//this.node.title = this.title();
@@ -389,14 +429,38 @@ var hnet = (function() {
 		this.monitor.displayObject(o);
 	}
 	
+	Browser.prototype = Object.create(NetworkEntity.prototype, {constructor: Browser});
+	function Browser(router) {
+		NetworkEntity.call(this, router.monitor);
+		this.router = router;
+		this.node = {id: "browser-"+router.id, label:"", shape:"triangle",
+						color: this.monitor.conf.colors.BROWSER};
+		this.edge = {from: router.node.id, to: this.node.id,
+							length: this.monitor.conf.sizes.LENGTH_BROWSER, 
+							width: this.monitor.conf.sizes.WIDTH_BROWSER};
+		this.nodes.push(this.node);
+		this.edges.push(this.edge);
+		this.addGraphElement(this.node.id);
+		this.monitor.browser = this;
+	}
+	
+	Browser.prototype.onSelect = function() {
+		this.monitor.displayString("This element is connected to the router hosting this page.");
+	}
+	
+	Browser.prototype.destroy = function() {
+		this.addGraphElement(this.node.id);	
+		NetworkEntity.prototype.destroy.call(this);
+	}
+	
 	Neighbor.prototype = Object.create(NetworkEntity.prototype, {constructor: Neighbor});
 	function Neighbor(iface, neigh_iface) {
 		NetworkEntity.call(this, iface.router.monitor);
 		this.iface = iface;
 		this.neigh_iface = neigh_iface;
 		this.edge = {from: iface.node.id, to: neigh_iface.node.id, 
-							length: this.monitor.conf.LENGTH_NEIGHBOR, 
-							width: this.monitor.conf.WIDTH_NEIGHBOR};
+							length: this.monitor.conf.sizes.LENGTH_NEIGHBOR, 
+							width: this.monitor.conf.sizes.WIDTH_NEIGHBOR};
 		this.edges.push(this.edge);
 		this.ifaceIndex = this.iface.neighbors.push(this) - 1;
 	}
@@ -438,18 +502,19 @@ var hnet = (function() {
 		NetworkEntity.call(this, router.monitor);
 		this.router = router;
 		this.id = id;
-		this.node = {id: "u-"+id+"-"+router.id, label: "+", group:"uplink"};
+		this.node = {id: "u-"+id+"-"+router.id, shape:"box", fontsize:10};
 		this.edge = {from: router.node.id, to: this.node.id,
-						length: this.monitor.conf.LENGTH_UPLINK, width: this.monitor.conf.WIDTH_UPLINK};
-		this.monitor.graphElements[this.node.id] = this;
+						length: this.monitor.conf.sizes.LENGTH_UPLINK, 
+						width: this.monitor.conf.sizes.WIDTH_UPLINK};
+		this.addGraphElement(this.node.id);
 		this.nodes.push(this.node);
 		this.edges.push(this.edge);
 		this.router.uplinks[id] = this;
-		console.log("New uplink");
 	}
 	
 	Uplink.prototype.destroy = function() {
 		delete this.router.uplinks[this.id];
+		this.removeGraphElement(this.node.id);
 		NetworkEntity.prototype.destroy.call(this);
 	}
 	
@@ -490,10 +555,13 @@ var hnet = (function() {
 		}
 		this.node.title = this.getTitle();
 		this.node.label = this.getLabel();
+		this.node.color = this.monitor.conf.colors.UPLINK;
 	}
 	
 	var module = {
 		Monitor : Monitor,
+		colors : colors,
+		sizes : sizes
 	}
 	return module;
 

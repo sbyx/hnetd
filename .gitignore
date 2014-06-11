@@ -24,4 +24,4 @@ install_manifest.txt
 .settings
 /coverage
 /coverage.info
-
+.DS_Store

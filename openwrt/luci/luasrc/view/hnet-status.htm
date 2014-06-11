@@ -19,8 +19,8 @@
 <script type="text/javascript">
 /* <![CDATA[ */
 	var graph;
-	var update_timer = null;
 	var httpRequest = null;
+	var src = "<% write (controller) %>/admin/status/hnet-dump";
 	
 	function load() {
 		if(httpRequest) {
@@ -40,7 +40,6 @@
 				httpRequest = null;
 			}
 		};
-		var src = "<% write (controller) %>/admin/status/hnet-dump";
 		httpRequest.timeout = 10000;
 		httpRequest.ontimeout = function() {
 				console.log("Request timeout");
@@ -50,28 +49,14 @@
 		httpRequest.send();
 	}
 	
-	function abort() {
-		if(httpRequest) {
-			httpRequest.abort();
-			httpRequest = null;
-		}
-	}
-	
 	function display(s) {
 		document.getElementById("display").value = s;
 	}
-	
-	function autoupdate() {
-		if (!update_timer) {
-			load();
-			update_timer = setInterval(function() {load()}, 1000);
-		}
-	}
 
-	graph = new hnet.Monitor(document.getElementById('hncpmonitor'));
+	graph = new hnet.Monitor(document.getElementById('hncpmonitor'), { colors : hnet.colors.home});
 	graph.displayCallback = display;
-	autoupdate();
-	changesource();
+	load();
+	setInterval(function() {load()}, 1000);
 /* ]]> */
 </script>
 <%+footer%>
