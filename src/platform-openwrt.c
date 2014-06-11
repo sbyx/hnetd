@@ -1,3 +1,4 @@
+
 /*
  * Author: Steven Barth <steven@midlink.org>
  *
@@ -853,7 +854,11 @@ static void platform_update(void *data, size_t len)
 				if (blobmsg_type(k) == BLOBMSG_TYPE_STRING) {
 					char astr[55], fstr[55];
 					struct prefix filter, addr;
-					int res = sscanf(blobmsg_get_string(k), "%54s@%54s", astr, fstr);
+					char *buf = blobmsg_get_string(k);
+					char *at = strchr(buf, "@");
+					if (at)
+						*at = ' ';
+					int res = sscanf(buf, "%54s %54s", astr, fstr);
 					if(res <= 0 || !prefix_pton(astr, &addr) || (res > 1 && !prefix_pton(fstr, &filter))) {
 						L_ERR("Incorrect iface_id syntax %s", blobmsg_get_string(k));
 						continue;
