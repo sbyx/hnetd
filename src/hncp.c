@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Jun 10 15:58:33 2014 mstenber
- * Edit time:     641 min
+ * Last modified: Thu Jun 12 17:24:19 2014 mstenber
+ * Edit time:     648 min
  *
  */
 
@@ -666,6 +666,8 @@ void hncp_self_flush(hncp_node n)
   o->republish_tlvs = false;
   n->update_number++;
   n->origination_time = hncp_time(o);
+  n->hncp->network_hash_dirty = true;
+
   L_DEBUG("hncp_self_flush: %p -> update_number = %d @ %lld",
           n, n->update_number, (long long)n->origination_time);
 }
@@ -713,7 +715,9 @@ void hncp_calculate_network_hash(hncp o)
   md5_begin(&ctx);
   hncp_for_each_node(o, n)
     {
+      uint32_t update_number = cpu_to_be32(n->update_number);;
       hncp_calculate_node_data_hash(n);
+      md5_hash(&update_number, sizeof(update_number), &ctx);
       md5_hash(&n->node_data_hash, HNCP_HASH_LEN, &ctx);
     }
   md5_end(&o->network_hash, &ctx);
