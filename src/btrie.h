@@ -207,7 +207,7 @@ struct btrie *btrie_next_available_loop(struct btrie *prev,
 
 #define btrie_for_each_available_loop_stop(root, node, n0, l0, iter_key, iter_len, contain_key, contain_len, first_len) \
 		for(node = btrie_first_available_loop(root, iter_key, iter_len, contain_key, contain_len, first_len), n0 = NULL; \
-					(n0)?(node != n0 || *iter_len != l0):((n0 = node) && ((l0 = *iter_len) || 1)); \
+					(n0)?(node != n0 || *(iter_len) != l0):((n0 = node) && ((l0 = *(iter_len)) || 1)); \
 							node = btrie_next_available_loop(node, iter_key, iter_len, contain_len))
 
 /* Returns the amount of key space available in the given subtree.

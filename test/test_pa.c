@@ -86,6 +86,7 @@ static struct prefix p1_1_addr2 = PL_P1_01A2;
 static struct prefix p1_2_addr = PL_P1_02A;
 static struct prefix pv4_1 = PL_PV4_1;
 static struct prefix pv4_1_1 = PL_PV4_1_1;
+static struct prefix pv4_1_f = PL_PV4_1_ff;
 
 #define PA_TEST_FLOOD 1000
 #define PA_TEST_FLOOD_LL 100
@@ -821,14 +822,14 @@ void test_pa_iface_addr() {
 	pa_term(&pa);
 }
 
-void test_pa_minv6len()
+void test_pa_plen()
 {
 	struct pa_cpl *cpl;
 
 	//INIT
 	uloop_init();
 	pa_init(&pa, NULL);
-	pa.local.conf.use_ipv4 = false;
+	pa.local.conf.use_ipv4 = true;
 	pa.local.conf.use_ula = false;
 	pa_flood_set_flooddelays(&pa.data, PA_TEST_FLOOD, PA_TEST_FLOOD_LL);
 	pa_flood_set_rid(&pa.data, &rid);
@@ -836,6 +837,7 @@ void test_pa_minv6len()
 	pa_start(&pa);
 
 	iface.iface.ip6_plen = 92;
+	iface.iface.ip4_plen = 28;
 	iface.user->cb_intiface(iface.user, PL_IFNAME1, true);
 	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, now_time + 100000 , now_time + 50000, NULL, 0);
 	fr_md5_push_prefix(&p1_1);
@@ -846,10 +848,20 @@ void test_pa_minv6len()
 	sput_fail_unless(cpl, "Cpl exists");
 	sput_fail_unless(cpl->cp.prefix.plen == 92, "Custom prefix length");
 
+	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1, NULL, 0 , 0, NULL, 0);
+	iface.user->cb_ext4data(iface.user, PL_IFNAME2, PL_DHCP_DATA, PL_DHCP_LEN);
+	fr_md5_push_prefix(&pv4_1_f);
+	fr_md5_push_prefix(&pv4_1_f);
+	to_run(6);
+	cpl = _pa_cpl(btrie_first_down_entry(&cpl->cp, &pa.data.cps, NULL, 0, be));
+	sput_fail_unless(cpl, "Cpl exists");
+	sput_fail_unless(cpl->cp.prefix.plen == 124, "Custom prefix length");
+
 	//TERM
 	pa_stop(&pa);
 	pa_term(&pa);
 	iface.iface.ip6_plen = 0;
+	iface.iface.ip4_plen = 0;
 }
 
 int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
@@ -865,7 +877,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 	sput_run_test(test_pa_static);
 	sput_run_test(test_pa_link_id);
 	sput_run_test(test_pa_iface_addr);
-	sput_run_test(test_pa_minv6len);
+	sput_run_test(test_pa_plen);
 	sput_leave_suite(); /* optional */
 	sput_finish_testing();
 	return sput_get_return_value();

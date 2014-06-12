@@ -40,6 +40,7 @@
 
 #define PL_PV4_1   { .plen = 120, .prefix = { .s6_addr = {PL_ROOT4, 0x00, 0x01}} }
 #define PL_PV4_1_1 { .plen = 128, .prefix = { .s6_addr = {PL_ROOT4, 0x00, 0x01,0x01}} }
+#define PL_PV4_1_ff { .plen = 128, .prefix = { .s6_addr = {PL_ROOT4, 0x00, 0x01,0xff}} }
 
 #define PL_ULA1    { .plen = 48 , .prefix = { .s6_addr = {0xfd,0x00, 0x00,0x00, 0x00,0x01}} }
 #define PL_ULA2    { .plen = 48 , .prefix = { .s6_addr = {0xfd,0x00, 0x00,0x00, 0x00,0x02}} }
