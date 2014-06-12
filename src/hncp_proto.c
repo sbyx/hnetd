@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Mon Jun  9 19:41:39 2014 mstenber
- * Edit time:     408 min
+ * Last modified: Fri Jun 13 00:58:58 2014 mstenber
+ * Edit time:     428 min
  *
  */
 
@@ -549,13 +549,12 @@ handle_message(hncp_link l,
     {
       L_DEBUG("updated node %s %d -> %d",
               HNCP_NODE_REPR(n), n->update_number, new_update_number);
-      n->update_number = new_update_number;
-      n->origination_time = hncp_time(o) - be32_to_cpu(ns->ms_since_origination);
       L_DEBUG("received origination time:%lld (-%d)",
               (long long)n->origination_time,
               (int)be32_to_cpu(ns->ms_since_origination));
-      hncp_node_set_tlvs(n, tb.head);
-      hncp_schedule(o);
+      hncp_node_set(n, new_update_number,
+                    hncp_time(o) - be32_to_cpu(ns->ms_since_origination),
+                    tb.head);
     }
   else
     {

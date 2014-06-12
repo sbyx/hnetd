@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Jun 10 15:58:33 2014 mstenber
- * Edit time:     641 min
+ * Last modified: Fri Jun 13 01:15:56 2014 mstenber
+ * Edit time:     695 min
  *
  */
 
@@ -43,64 +43,97 @@ void hncp_schedule(hncp o)
     o->should_schedule = true;
 }
 
-bool hncp_node_set_tlvs(hncp_node n, struct tlv_attr *a)
+void hncp_node_set(hncp_node n, uint32_t update_number,
+                   hnetd_time_t t, struct tlv_attr *a)
 {
   struct tlv_attr *a_valid = a;
+  bool node_hash_changed = true;
 
-  L_DEBUG("hncp_node_set_tlvs %llx/%p %p",
+  L_DEBUG("hncp_node_set %llx/%p %p",
           hncp_hash64(&n->node_identifier_hash), n, a);
-  if (n->tlv_container && a && tlv_attr_equal(n->tlv_container, a))
-    {
-      free(a);
-      return false;
-    }
+
+  /* If new data is set, consider if similar, and if not,
+   * handle version check  */
   if (a)
     {
-      uint32_t version = 0;
-      const char *agent = NULL;
-      int agent_len = 0;
-      struct tlv_attr *va;
-      hncp_node on = n->hncp->own_node;
-
-      tlv_for_each_attr(va, a)
+      if (n->tlv_container && tlv_attr_equal(n->tlv_container, a))
         {
-          if (tlv_id(va) == HNCP_T_VERSION &&
-              tlv_len(va) >= sizeof(hncp_t_version_s))
+          if (n->tlv_container != a)
             {
-              hncp_t_version v = tlv_data(va);
-              version = ntohl(v->version);
-              agent = v->user_agent;
-              agent_len = tlv_len(va) - sizeof(hncp_t_version_s);
-              break;
+              free(a);
+              a = n->tlv_container;
+            }
+          a_valid = n->tlv_container_valid;
+          node_hash_changed = false; /* provisionally, depend on update#  */
+        }
+      else
+        {
+          uint32_t version = 0;
+          const char *agent = NULL;
+          int agent_len = 0;
+          struct tlv_attr *va;
+          hncp_node on = n->hncp->own_node;
+
+          tlv_for_each_attr(va, a)
+            {
+              if (tlv_id(va) == HNCP_T_VERSION &&
+                  tlv_len(va) >= sizeof(hncp_t_version_s))
+                {
+                  hncp_t_version v = tlv_data(va);
+                  version = ntohl(v->version);
+                  agent = v->user_agent;
+                  agent_len = tlv_len(va) - sizeof(hncp_t_version_s);
+                  break;
+                }
+            }
+          if (on && on != n && on->version && version != on->version)
+            a_valid = NULL;
+          if (a && n->version != version)
+            {
+              if (!a_valid)
+                L_ERR("Incompatible node: %s version %u (%.*s) != %u",
+                      HNCP_NODE_REPR(n), version, agent_len, agent, on->version);
+              else if (!n->version)
+                L_INFO("%s runs %.*s",
+                       HNCP_NODE_REPR(n), agent_len, agent);
+              n->version = version;
             }
         }
-      if (on && on != n && on->version && version != on->version)
-        a_valid = NULL;
-      if (a && n->version != version)
-        {
-          if (!a_valid)
-            L_ERR("Incompatible node: %s version %u (%.*s) != %u",
-                  HNCP_NODE_REPR(n), version, agent_len, agent, on->version);
-          else if (!n->version)
-            L_INFO("%s runs %.*s",
-                   HNCP_NODE_REPR(n), agent_len, agent);
-          n->version = version;
-        }
     }
-  if (n->last_reachable_prune == n->hncp->last_prune)
-    hncp_notify_subscribers_tlvs_changed(n, n->tlv_container_valid,
-                                         a_valid);
-  if (n->tlv_container)
-    free(n->tlv_container);
-  n->tlv_container = a;
-  n->tlv_container_valid = a_valid;
-  n->tlv_index_dirty = true;
-  n->hncp->network_hash_dirty = true;
-  n->node_data_hash_dirty = true;
-  n->hncp->graph_dirty = true;
-  hncp_schedule(n->hncp);
 
-  return true;
+  /* Replace update number if any */
+  if (n->update_number != update_number)
+    {
+      node_hash_changed = true;
+      n->update_number = update_number;
+    }
+
+  /* Replace origination time if any */
+  if (t)
+    n->origination_time = t;
+
+  /* Replace data (if it is a different pointer) */
+  if (n->tlv_container != a)
+    {
+      if (n->last_reachable_prune == n->hncp->last_prune)
+        hncp_notify_subscribers_tlvs_changed(n, n->tlv_container_valid,
+                                             a_valid);
+      if (n->tlv_container)
+        free(n->tlv_container);
+      n->tlv_container = a;
+      n->tlv_container_valid = a_valid;
+      n->tlv_index_dirty = true;
+    }
+
+  /* If something that affects network hash has changed,
+   * set various flags + schedule hncp_run. */
+  if (node_hash_changed)
+    {
+      n->node_data_hash_dirty = true;
+      n->hncp->network_hash_dirty = true;
+      n->hncp->graph_dirty = true;
+      hncp_schedule(n->hncp);
+    }
 }
 
 
@@ -116,7 +149,7 @@ static void update_node(__unused struct vlist_tree *t,
     return;
   if (n_old)
     {
-      hncp_node_set_tlvs(n_old, NULL);
+      hncp_node_set(n_old, 0, 0, NULL);
       if (n_old->tlv_index)
         free(n_old->tlv_index);
       free(n_old);
@@ -575,14 +608,14 @@ hncp_node hncp_node_get_next(hncp_node n)
     }
 }
 
-static bool _set_own_tlvs(hncp_node n)
+static struct tlv_attr *_produce_new_tlvs(hncp_node n)
 {
   struct tlv_buf tb;
   hncp o = n->hncp;
   hncp_tlv t;
 
   if (!o->tlvs_dirty)
-    return false;
+    return NULL;
 
   /* Dump the contents of hncp->tlvs to single tlv_buf. */
   /* Based on whether or not that would cause change in things, 'do stuff'. */
@@ -593,14 +626,19 @@ static bool _set_own_tlvs(hncp_node n)
       {
         L_ERR("hncp_self_flush: tlv_put_raw failed?!?");
         tlv_buf_free(&tb);
-        return false;
+        return NULL;
       }
   tlv_fill_pad(tb.head);
 
   /* Ok, all puts _did_ succeed. */
   o->tlvs_dirty = false;
 
-  return hncp_node_set_tlvs(n, tb.head);
+  if (n->tlv_container && tlv_attr_equal(tb.head, n->tlv_container))
+    {
+      tlv_buf_free(&tb);
+      return NULL;
+    }
+  return tb.head;
 }
 
 void hncp_self_flush(hncp_node n)
@@ -608,6 +646,7 @@ void hncp_self_flush(hncp_node n)
   hncp o = n->hncp;
   hncp_link l;
   hncp_neighbor ne;
+  struct tlv_attr *a, *a2;
 
   if (o->links_dirty)
     {
@@ -649,10 +688,7 @@ void hncp_self_flush(hncp_node n)
       vlist_flush(&o->tlvs);
     }
 
-  if (!o->tlvs_dirty && !o->republish_tlvs)
-    return;
-
-  if (!_set_own_tlvs(n) && !o->republish_tlvs)
+  if (!(a = _produce_new_tlvs(n)) && !o->republish_tlvs)
     {
       L_DEBUG("hncp_self_flush: state did not change -> nothing to flush");
       return;
@@ -661,11 +697,16 @@ void hncp_self_flush(hncp_node n)
   L_DEBUG("hncp_self_flush: notify about to republish tlvs");
   hncp_notify_subscribers_about_to_republish_tlvs(n);
 
-  _set_own_tlvs(n);
-
   o->republish_tlvs = false;
-  n->update_number++;
-  n->origination_time = hncp_time(o);
+  a2 = _produce_new_tlvs(n);
+  if (a2)
+    {
+      if (a)
+        free(a);
+      a = a2;
+    }
+  hncp_node_set(n, ++n->update_number, hncp_time(o),
+                a ? a : n->tlv_container);
   L_DEBUG("hncp_self_flush: %p -> update_number = %d @ %lld",
           n, n->update_number, (long long)n->origination_time);
 }

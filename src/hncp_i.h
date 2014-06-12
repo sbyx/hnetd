@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Jun 12 16:43:28 2014 mstenber
- * Edit time:     226 min
+ * Last modified: Fri Jun 13 00:40:39 2014 mstenber
+ * Edit time:     228 min
  *
  */
 
@@ -280,9 +280,10 @@ hncp_node hncp_find_node_by_hash(hncp o, const hncp_hash h, bool create);
 
 /* Private utility - shouldn't be used by clients. */
 void hncp_link_reset_trickle(hncp_link l);
-
-bool hncp_node_set_tlvs(hncp_node n, struct tlv_attr *a);
 int hncp_node_cmp(hncp_node n1, hncp_node n2);
+void hncp_node_set(hncp_node n,
+                   uint32_t update_number, hnetd_time_t t,
+                   struct tlv_attr *a);
 void hncp_node_recalculate_index(hncp_node n);
 
 bool hncp_add_tlv_index(hncp o, uint16_t type);
