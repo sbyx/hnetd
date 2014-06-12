@@ -152,6 +152,7 @@ var hnet = (function() {
 	}
 	
 	Monitor.prototype.updateDB = function() {
+		var me = this;
 		this.version++;
 		for(var id in this.hncp["nodes"]) {
 			var rhncp = hncp["nodes"][id];
@@ -159,15 +160,27 @@ var hnet = (function() {
 			if(("self" in rhncp) && rhncp["self"]) {
 				this.getBrowser(r);
 			}
-	
-			for(var i = 0; i<rhncp["neighbors"].length; i++) {
-				var hncp_n = rhncp["neighbors"][i];
-				var r2 = this.getRouter(hncp_n["node-id"]);
-				var iface = r.getIface(hncp_n["local-link"]);
-				var iface2 = r2.getIface(hncp_n["neighbor-link"]);
-				var n = iface.getNeighbor(iface2);
-			}
 			
+			if("neighbors" in rhncp) 
+				rhncp.neighbors.forEach(function(e) {
+					var r2 = me.getRouter(e["node-id"]);
+					var iface = r.getIface(e["local-link"]);
+					var iface2 = r2.getIface(e["neighbor-link"]);
+					var n = iface.getNeighbor(iface2);
+				});
+			
+			if("prefixes" in rhncp)
+				rhncp.prefixes.forEach(function(e) {
+					if("link" in e)
+						var iface = r.getIface(e["link"]);
+				});
+			
+			if("addresses" in rhncp)
+				rhncp.addresses.forEach(function(e) {
+					if("link-id" in e)
+						var iface = r.getIface(e["link-id"]);
+				});
+				
 			for(var i = 0; i<rhncp["uplinks"].length; i++) {
 				var uplink = r.getUplink(i);
 			}
@@ -502,7 +515,7 @@ var hnet = (function() {
 		NetworkEntity.call(this, router.monitor);
 		this.router = router;
 		this.id = id;
-		this.node = {id: "u-"+id+"-"+router.id, shape:"box", fontsize:10};
+		this.node = {id: "u-"+id+"-"+router.id, shape:"box", fontSize:10};
 		this.edge = {from: router.node.id, to: this.node.id,
 						length: this.monitor.conf.sizes.LENGTH_UPLINK, 
 						width: this.monitor.conf.sizes.WIDTH_UPLINK};
