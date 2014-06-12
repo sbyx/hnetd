@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu May 22 15:21:53 2014 mstenber
- * Edit time:     129 min
+ * Last modified: Fri Jun 13 01:29:37 2014 mstenber
+ * Edit time:     134 min
  *
  */
 
@@ -565,6 +565,8 @@ sanity_check_buf(void *buf, size_t len)
   int a_len;
   int last_len;
   bool ok = true;
+  size_t dhs = sizeof(hncp_t_node_data_header_s);
+
   tlv_for_each_in_buf(a, buf, len)
     {
       a_len = tlv_pad_len(a);
@@ -583,7 +585,7 @@ sanity_check_buf(void *buf, size_t len)
       switch (tlv_id(a))
         {
         case HNCP_T_NODE_DATA:
-          sanity_check_buf(tlv_data(a), tlv_len(a));
+          sanity_check_buf(tlv_data(a)+dhs, tlv_len(a)-dhs);
           break;
         }
     }
