@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Jun 10 12:59:07 2014 mstenber
- * Edit time:     225 min
+ * Last modified: Thu Jun 12 16:43:28 2014 mstenber
+ * Edit time:     226 min
  *
  */
 
@@ -31,10 +31,12 @@
  * here) should work.  */
 #define HNCP_MAXIMUM_MULTICAST_SIZE (1280-40-8)
 
+/* Collision time window. */
+#define HNCP_UPDATE_COLLISION_N (60 * HNETD_TIME_PER_SECOND)
+
+/* How many collisions are needed in time window for renumbering. */
 #define HNCP_UPDATE_COLLISIONS_IN_N 3
 
-/* in hnetd_time */
-#define HNCP_UPDATE_COLLISION_N 60000
 
 #include <libubox/vlist.h>
 #include <libubox/list.h>
