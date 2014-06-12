@@ -142,6 +142,7 @@ void bmemcpy_t(void)
 	uint8_t u3[] = {0xff, 0xff, 0x00, 0x00};
 	uint8_t u4[] = {0x07, 0xff, 0xff, 0x00};
 	uint8_t u5[] = {0x01, 0xff, 0xff, 0xc0};
+	uint8_t u6[] = {0x00, 0xff, 0xff, 0xf0};
 	uint8_t dst[4];
 
 	bmemcpy(&dst, &u2, 0, 32);
@@ -158,6 +159,10 @@ void bmemcpy_t(void)
 	memset(dst, 0, 4);
 	bmemcpy(&dst, &u1, 7, 19);
 	sput_fail_if(memcmp(dst, u5, 4), "7 to 26 bits copy");
+
+	memset(dst, 0, 4);
+	bmemcpy(&dst, &u1, 8, 20);
+	sput_fail_if(memcmp(dst, u6, 4), "8 to 28 bits copy");
 
 }
 

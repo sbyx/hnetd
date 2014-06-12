@@ -118,26 +118,29 @@ void bmemcpy(void *dst, const void *src,
 
 	size_t frombyte = frombit >> 3;
 	size_t tobyte = tobit >> 3;
+	size_t nbyte = tobyte - frombyte;
 	uint8_t frombitrem = frombit & 0x07;
 	uint8_t tobitrem = tobit & 0x07;
 
 	dst+=frombyte;
 	src+=frombyte;
 
-	if(frombyte == tobyte) {
+	if(!nbyte) {
 		bbytecpy(dst, src, frombitrem, nbits);
 		return;
 	}
 
 	if(frombitrem) {
 		bbytecpy(dst, src, frombitrem, 8 - frombitrem);
-		memcpy(dst + 1, src + 1, tobyte - frombyte - 1);
-	} else {
-		memcpy(dst, src, tobyte - frombyte);
+		dst += 1;
+		src += 1;
+		nbyte -= 1;
 	}
 
+	memcpy(dst, src, nbyte);
+
 	if(tobitrem)
-		bbytecpy(dst + tobyte, src + tobyte, 0, tobitrem);
+		bbytecpy(dst + nbyte, src + nbyte, 0, tobitrem);
 }
 
 void bmemcpy_shift(void *dst, size_t dst_start,
