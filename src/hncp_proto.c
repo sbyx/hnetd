@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu Jun 12 17:22:38 2014 mstenber
- * Edit time:     418 min
+ * Last modified: Mon Jun  9 19:41:39 2014 mstenber
+ * Edit time:     408 min
  *
  */
 
@@ -551,7 +551,6 @@ handle_message(hncp_link l,
               HNCP_NODE_REPR(n), n->update_number, new_update_number);
       n->update_number = new_update_number;
       n->origination_time = hncp_time(o) - be32_to_cpu(ns->ms_since_origination);
-      n->hncp->network_hash_dirty = true;
       L_DEBUG("received origination time:%lld (-%d)",
               (long long)n->origination_time,
               (int)be32_to_cpu(ns->ms_since_origination));
