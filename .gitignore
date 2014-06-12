@@ -25,3 +25,4 @@ install_manifest.txt
 /coverage
 /coverage.info
 .DS_Store
+/cscope.*
