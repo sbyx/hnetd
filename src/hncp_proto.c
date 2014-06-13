@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Fri Jun 13 11:30:14 2014 mstenber
- * Edit time:     460 min
+ * Last modified: Fri Jun 13 12:07:36 2014 mstenber
+ * Edit time:     464 min
  *
  */
 
@@ -437,18 +437,12 @@ handle_message(hncp_link l,
             ns = tlv_data(a);
             n = hncp_find_node_by_hash(o, &ns->node_identifier_hash, false);
             new_update_number = be32_to_cpu(ns->update_number);
-            bool interesting = !n || n->update_number < new_update_number;
-            if (n == o->own_node
-                && (new_update_number > n->update_number
-                    || (new_update_number == n->update_number
-                        && memcmp(&n->node_data_hash,
-                                  &ns->node_data_hash,
-                                  sizeof(n->node_data_hash)) != 0)))
-              {
-                L_DEBUG("potential conflicting node state update %d>=%d",
-                        new_update_number, n->update_number);
-                interesting = true;
-              }
+            bool interesting = !n
+              || (new_update_number > n->update_number
+                  || (new_update_number == n->update_number
+                      && memcmp(&n->node_data_hash,
+                                &ns->node_data_hash,
+                                sizeof(n->node_data_hash)) != 0));
             if (interesting)
               {
                 L_DEBUG("saw something new for %llx/%p (update number %d)",
