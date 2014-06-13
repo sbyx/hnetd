@@ -60,12 +60,14 @@ enum {
   HNCP_T_NODE_STATE = 5,
 
   HNCP_T_NODE_DATA = 6,
-  HNCP_T_NODE_DATA_KEY = 7, /* public key payload, not implemented*/
+  HNCP_T_NODE_DATA_KEY = 7, /* public key payload, not implemented */
   HNCP_T_NODE_DATA_NEIGHBOR = 8,
 
   HNCP_T_CUSTOM = 9, /* not implemented */
 
   HNCP_T_VERSION = 10,
+
+  HNCP_T_READABLE_DATA = 11, /* ni, a pure-ASCII string with human-readable info on the router */
 
   HNCP_T_EXTERNAL_CONNECTION = 41,
   HNCP_T_DELEGATED_PREFIX = 42, /* may contain TLVs */
@@ -79,10 +81,40 @@ enum {
   HNCP_T_DNS_DOMAIN_NAME = 52, /* non-default domain (very optional) */
 
   HNCP_T_ROUTING_PROTOCOL = 60,
-  
-  HNCP_T_TRUST_LIST = 70,
+
+  HNCP_T_TRUST_LINK = 70, /* Direct trust link */
+  HNCP_T_SHARED_KEY = 71, /* Key used for symmetric tlv encryption
+                           * tuple (node receiver, assymetrically encrypted key) */
+  HNCP_T_ENCRYPTED_DATA = 72, /* should contain TLVs */
+  HNCP_T_SHARED_SECRET = 73,
+  HNCP_T_WANT_FRIEND = 74, /* Currently empty */
 
   HNCP_T_SIGNATURE = 0xFFFF /* not implemented */
+};
+
+enum {
+  SIGN_HASH_SHA1 = 1,
+  SIGN_HASH_SHA224 = 2,
+  SIGN_HASH_SHA256 = 3,
+  SIGN_HASH_SHA384 = 4,
+  SIGN_HASH_SHA512 = 5
+};
+
+enum {
+  SIGN_TYPE_RSA_PKCS15 = 1,
+  SIGN_TYPE_RSA_SSAPSS = 2
+};
+
+enum {
+  CRYPT_TYPE_RSAAES_PKCS15 = 1,
+  CRYPT_TYPE_RSAAES_OAEP = 2
+};
+
+enum {
+  SYMMETRIC_CRYPT_AES = 1,
+  SYMMETRIC_CRYPT_CAMELLIA = 2,
+  SYMMETRIC_CRYPT_BLOWFISH = 3,
+  SYMMETRIC_CRYPT_3DES = 4
 };
 
 #define TLV_SIZE sizeof(struct tlv_attr)
@@ -118,14 +150,15 @@ typedef struct __packed {
 } hncp_t_node_data_header_s, *hncp_t_node_data_header;
 
 /* HNCP_T_NODE_DATA_KEY has only raw public key (perhaps it should
- * have more information though? 
- * We may want to specify the hash type/salt here */
+ * have more information though?
+ */
 
 /* HNCP_T_NODE_DATA_NEIGHBOR */
 typedef struct __packed {
   hncp_hash_s neighbor_node_identifier_hash;
   uint32_t neighbor_link_id;
   uint32_t link_id;
+
 } hncp_t_node_data_neighbor_s, *hncp_t_node_data_neighbor;
 
 /* HNCP_T_CUSTOM custom data, with H-64 of URI at start to identify type TBD */
@@ -192,24 +225,39 @@ typedef struct __packed {
   uint8_t preference;
 } hncp_t_routing_protocol_s, *hncp_t_routing_protocol;
 
+/* HNCP_T_TRUST_LINK */
 typedef struct __packed {
-  /* relative time of validity of the trust link */
-  uint32_t timeout;
-  /* Node trusted */
-  hncp_hash_s node;
+  hncp_hash_s trusted_hash;
 } hncp_t_trust_link_s, *hncp_t_trust_link;
 
-/* HNCP_T_TRUST_LIST
- * List of the nodes trusted by the emitter
- * Only an array of hncp_t_trust_link
- */
-
-
+/* HNCP_T_SIGNATURE */
 typedef struct __packed {
-  /* Type (algorithm + variant) of the signature) */
-  uint32_t type;
-  uint32_t signature[];
+  uint16_t sign_type;
+  uint16_t hash_type;
+  uint8_t signature[];
 } hncp_t_signature_s, *hncp_t_signature;
+
+/* HNCP_T_SHARED_KEY */
+typedef struct __packed {
+  uint32_t key_id;
+  hncp_hash_s target;
+  uint16_t crypt_type;
+  uint16_t crypt_variant;
+  uint8_t encrypted_key[];
+} hncp_t_shared_key_s, *hnct_shared_key;
+
+/* HNCP_T_SHARED_SECRET */
+typedef struct __packed {
+  uint32_t secret_use;
+  uint8_t secret[];
+} hncp_t_shared_secret_s, *hncp_t_shared_secret;
+
+/* HNCP_T_ENCRYPTED_DATA */
+typedef struct __packed {
+  uint32_t key_id;
+  hncp_hash_s key_emitter;
+  uint8_t data[];
+} hncp_t_encrypted_data_s, *hncp_t_encrypted_data;
 
 /**************************************************************** Addressing */
 
