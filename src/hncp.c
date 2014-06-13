@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Fri Jun 13 03:43:01 2014 mstenber
- * Edit time:     716 min
+ * Last modified: Fri Jun 13 04:18:31 2014 mstenber
+ * Edit time:     720 min
  *
  */
 
@@ -271,7 +271,9 @@ static void update_neighbor(struct vlist_tree *t,
     free(t_old);
   else if (t_new)
     return;
-  /* Real new neighbor change(?). */
+  /* Only immediate topology difference is _delete_. Add is delayed,
+   * as we don't advertise nodes we're not sure are reachable
+   * (=> we have to wait for unicast reachability check). */
   o->links_dirty = true;
   hncp_schedule(o);
 }
@@ -670,7 +672,7 @@ void hncp_self_flush(hncp_node n)
           vlist_for_each_element(&l->neighbors, ne, in_neighbors)
             {
               /* If we don't assume bidirectional reachability, only
-               * advertise routers that _do_ respond to our unicast at
+               * advertise nodes that _do_ respond to our unicast at
                * least once. */
               if (!ne->last_response)
                 continue;
