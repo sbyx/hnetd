@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Fri Jun 13 03:58:44 2014 mstenber
- * Edit time:     264 min
+ * Last modified: Fri Jun 13 11:30:10 2014 mstenber
+ * Edit time:     273 min
  *
  */
 
@@ -112,33 +112,12 @@ static void hncp_prune(hncp o)
   assert(now != o->last_prune);
 
   L_DEBUG("hncp_prune %p", o);
+
   /* Prune the node graph. IOW, start at own node, flood fill, and zap
    * anything that didn't seem appropriate. */
   vlist_update(&o->nodes);
-  hncp_link l;
-  hncp_neighbor ne;
 
-  /* We're always reachable. */
-  vlist_add(&o->nodes, &o->own_node->in_nodes, o->own_node);
-  _node_set_reachable(o->own_node, true);
-
-  /* Only neighbors we believe to be reachable are the ones we can
-   * find in our own link -> neighbor relations, with non-zero
-   * last_response. */
-  vlist_for_each_element(&o->links, l, in_links)
-    {
-      vlist_for_each_element(&l->neighbors, ne, in_neighbors)
-        {
-          if (!ne->last_response)
-            continue;
-          hncp_node n2 = hncp_node_find_neigh_bidir2(o->own_node,
-                                                     cpu_to_be32(l->iid),
-                                                     cpu_to_be32(ne->iid),
-                                                     &ne->node_identifier_hash);
-          if (n2)
-            hncp_prune_rec(n2);
-        }
-    }
+  hncp_prune_rec(o->own_node);
 
   hncp_node n;
   hnetd_time_t next_time = 0;
@@ -283,8 +262,8 @@ void hncp_run(hncp o)
           if (n->ping_count++== l->conf->ping_retries)
             {
               /* Zap the neighbor */
-              L_DEBUG("neighbor %llx is gone - no response to pings",
-                      hncp_hash64(&n->node_identifier_hash));
+              L_DEBUG("neighbor %llx gone on link %d",
+                      hncp_hash64(&n->node_identifier_hash), l->iid);
               vlist_delete(&l->neighbors, &n->in_neighbors);
               continue;
             }

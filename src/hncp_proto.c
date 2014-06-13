@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Fri Jun 13 03:43:37 2014 mstenber
- * Edit time:     450 min
+ * Last modified: Fri Jun 13 12:07:36 2014 mstenber
+ * Edit time:     464 min
  *
  */
 
@@ -219,8 +219,9 @@ _heard(hncp_link l, hncp_t_link_id lid, struct in6_addr *src)
         return NULL;
       memcpy(n, &nc, sizeof(nc));
       vlist_add(&l->neighbors, &n->in_neighbors, n);
-      L_DEBUG("_heard %llx on link %p",
-              hncp_hash64(&lid->node_identifier_hash), l);
+      L_DEBUG("neighbor %llx added on link %d",
+              hncp_hash64(&lid->node_identifier_hash), 
+              l->iid);
     }
 
   n->last_address = *src;
@@ -303,7 +304,9 @@ handle_message(hncp_link l,
     }
 
   /* We cannot simply ignore same node identifier; it might be someone
-   * with duplicated node identifier (hash). */
+   * with duplicated node identifier (hash). If we don't react in some way,
+   * it's possible (local) node id collisions stick around forever.
+   * However, we can't add them to neighbors so we don't do _heard here. */
   if (memcmp(&lid->node_identifier_hash,
              &o->own_node->node_identifier_hash,
              HNCP_HASH_LEN) != 0)
@@ -434,18 +437,12 @@ handle_message(hncp_link l,
             ns = tlv_data(a);
             n = hncp_find_node_by_hash(o, &ns->node_identifier_hash, false);
             new_update_number = be32_to_cpu(ns->update_number);
-            bool interesting = !n || n->update_number < new_update_number;
-            if (n == o->own_node
-                && (new_update_number > n->update_number
-                    || (new_update_number == n->update_number
-                        && memcmp(&n->node_data_hash,
-                                  &ns->node_data_hash,
-                                  sizeof(n->node_data_hash)) != 0)))
-              {
-                L_DEBUG("potential conflicting node state update %d>=%d",
-                        new_update_number, n->update_number);
-                interesting = true;
-              }
+            bool interesting = !n
+              || (new_update_number > n->update_number
+                  || (new_update_number == n->update_number
+                      && memcmp(&n->node_data_hash,
+                                &ns->node_data_hash,
+                                sizeof(n->node_data_hash)) != 0));
             if (interesting)
               {
                 L_DEBUG("saw something new for %llx/%p (update number %d)",
