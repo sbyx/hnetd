@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Fri Jun 13 01:29:37 2014 mstenber
- * Edit time:     134 min
+ * Last modified: Fri Jun 13 02:55:18 2014 mstenber
+ * Edit time:     143 min
  *
  */
 
@@ -113,6 +113,8 @@ typedef struct net_sim_t {
 
   bool use_global_iids;
   int next_free_iid;
+
+  bool accept_time_errors;
 } net_sim_s, *net_sim;
 
 int pa_update_eap(net_node node, const struct prefix *prefix,
@@ -234,14 +236,16 @@ bool net_sim_is_converged(net_sim s)
                       n2->name, n->name);
               return false;
             }
-          if (abs(n2->n.own_node->origination_time -
-                  hn->origination_time) > 5000)
+          if (!s->accept_time_errors
+              && abs(n2->n.own_node->origination_time -
+                                        hn->origination_time) > 5000)
             {
-              L_DEBUG("origination time mismatch "
-                      "%lld !=~ %lld for %s @ %s [update number %d]",
+              L_DEBUG("origination time mismatch at "
+                      "%s: %lld !=~ %lld for %s [update number %d]",
+                      n->name,
                       (long long) hn->origination_time,
                       (long long) n2->n.own_node->origination_time,
-                      n2->name, n->name,
+                      n2->name, 
                       hn->update_number);
               s->not_converged_count++;
               return false;

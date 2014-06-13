@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Thu May  8 18:27:40 2014 mstenber
- * Edit time:     389 min
+ * Last modified: Fri Jun 13 02:56:17 2014 mstenber
+ * Edit time:     393 min
  *
  */
 
@@ -228,6 +228,14 @@ static void raw_bird14(net_sim s)
   (void)net_sim_find_hncp(s, nodenames[0]);
 
   handle_connections(s, &nodeconnections[0], 2); /* Two first ones are needed */
+
+  /* As the original node and the new node will wind up with exactly same
+   * update #, but potentially wildly different timestamp on other nodes,
+   * accept time errors in this case.
+   * (Shouldn't accept in general case, however.)
+   */
+
+  s->accept_time_errors = true;
 
   SIM_WHILE(s, 10000, !net_sim_is_converged(s));
 
