@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Fri Jun 13 02:16:07 2014 mstenber
- * Edit time:     257 min
+ * Last modified: Fri Jun 13 03:58:44 2014 mstenber
+ * Edit time:     264 min
  *
  */
 
@@ -265,7 +265,10 @@ void hncp_run(hncp o)
         {
           hnetd_time_t next_time;
 
-          if (!n->ping_count)
+          /* For new neighbors, send ~immediate ping */
+          if (!n->last_response && !n->ping_count)
+            next_time = n->last_heard;
+          else if (!n->ping_count)
             next_time = n->last_response + l->conf->ping_worried_t;
           else
             next_time = n->last_ping + (l->conf->ping_retry_base_t << n->ping_count);
