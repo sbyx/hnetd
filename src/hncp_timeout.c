@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Mon Jun  9 18:55:36 2014 mstenber
- * Edit time:     248 min
+ * Last modified: Fri Jun 13 02:16:07 2014 mstenber
+ * Edit time:     257 min
  *
  */
 
@@ -108,6 +108,9 @@ static void hncp_prune(hncp o)
   hnetd_time_t now = hncp_time(o);
   hnetd_time_t grace_after = now - HNCP_PRUNE_GRACE_PERIOD;
 
+  /* Logic fails if time isn't moving forward-ish */
+  assert(now != o->last_prune);
+
   L_DEBUG("hncp_prune %p", o);
   /* Prune the node graph. IOW, start at own node, flood fill, and zap
    * anything that didn't seem appropriate. */
@@ -143,9 +146,7 @@ static void hncp_prune(hncp o)
     {
       if (n->in_nodes.version == o->nodes.version)
         continue;
-      if (!n->last_reachable_prune)
-        n->last_reachable_prune = now - 1;
-      else if (n->last_reachable_prune < grace_after)
+      if (n->last_reachable_prune < grace_after)
         continue;
       next_time = TMIN(next_time,
                        n->last_reachable_prune + HNCP_PRUNE_GRACE_PERIOD + 1);
@@ -198,8 +199,7 @@ void hncp_run(hncp o)
 
       /* next_prune may be set _by_ hncp_prune, therefore redundant
        * looking check */
-      if (o->next_prune)
-        next = TMIN(next, o->next_prune);
+      next = TMIN(next, o->next_prune);
     }
 
   /* Release the flag to allow more change-triggered zero timeouts to

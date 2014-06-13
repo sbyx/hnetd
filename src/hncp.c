@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Fri Jun 13 01:15:56 2014 mstenber
- * Edit time:     695 min
+ * Last modified: Fri Jun 13 03:43:01 2014 mstenber
+ * Edit time:     716 min
  *
  */
 
@@ -48,9 +48,10 @@ void hncp_node_set(hncp_node n, uint32_t update_number,
 {
   struct tlv_attr *a_valid = a;
   bool node_hash_changed = true;
+  bool should_schedule = false;
 
-  L_DEBUG("hncp_node_set %llx/%p %p",
-          hncp_hash64(&n->node_identifier_hash), n, a);
+  L_DEBUG("hncp_node_set %s update #%d %p (@%lld (-%lld))",
+          HNCP_NODE_REPR(n), (int) update_number, a, t, hncp_time(n->hncp)-t);
 
   /* If new data is set, consider if similar, and if not,
    * handle version check  */
@@ -99,6 +100,8 @@ void hncp_node_set(hncp_node n, uint32_t update_number,
               n->version = version;
             }
         }
+      n->hncp->graph_dirty = true;
+      should_schedule = true;
     }
 
   /* Replace update number if any */
@@ -131,9 +134,11 @@ void hncp_node_set(hncp_node n, uint32_t update_number,
     {
       n->node_data_hash_dirty = true;
       n->hncp->network_hash_dirty = true;
-      n->hncp->graph_dirty = true;
-      hncp_schedule(n->hncp);
+      should_schedule = true;
     }
+
+  if (should_schedule)
+    hncp_schedule(n->hncp);
 }
 
 
@@ -157,8 +162,9 @@ static void update_node(__unused struct vlist_tree *t,
   if (n_new)
     {
       n_new->node_data_hash_dirty = true;
-      n_new->last_reachable_prune = 0;
       n_new->tlv_index_dirty = true;
+      /* By default unreachable */
+      n_new->last_reachable_prune = o->last_prune - 1;
     }
   o->network_hash_dirty = true;
   o->graph_dirty = true;
@@ -707,8 +713,6 @@ void hncp_self_flush(hncp_node n)
     }
   hncp_node_set(n, ++n->update_number, hncp_time(o),
                 a ? a : n->tlv_container);
-  L_DEBUG("hncp_self_flush: %p -> update_number = %d @ %lld",
-          n, n->update_number, (long long)n->origination_time);
 }
 
 struct tlv_attr *hncp_node_get_tlvs(hncp_node n)
