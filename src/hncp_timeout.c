@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Fri Jun 13 10:54:14 2014 mstenber
- * Edit time:     270 min
+ * Last modified: Fri Jun 13 11:30:10 2014 mstenber
+ * Edit time:     273 min
  *
  */
 
@@ -262,8 +262,8 @@ void hncp_run(hncp o)
           if (n->ping_count++== l->conf->ping_retries)
             {
               /* Zap the neighbor */
-              L_DEBUG("neighbor %llx is gone - no response to pings",
-                      hncp_hash64(&n->node_identifier_hash));
+              L_DEBUG("neighbor %llx gone on link %d",
+                      hncp_hash64(&n->node_identifier_hash), l->iid);
               vlist_delete(&l->neighbors, &n->in_neighbors);
               continue;
             }

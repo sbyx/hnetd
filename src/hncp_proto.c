@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Fri Jun 13 03:43:37 2014 mstenber
- * Edit time:     450 min
+ * Last modified: Fri Jun 13 11:30:14 2014 mstenber
+ * Edit time:     460 min
  *
  */
 
@@ -219,8 +219,9 @@ _heard(hncp_link l, hncp_t_link_id lid, struct in6_addr *src)
         return NULL;
       memcpy(n, &nc, sizeof(nc));
       vlist_add(&l->neighbors, &n->in_neighbors, n);
-      L_DEBUG("_heard %llx on link %p",
-              hncp_hash64(&lid->node_identifier_hash), l);
+      L_DEBUG("neighbor %llx added on link %d",
+              hncp_hash64(&lid->node_identifier_hash), 
+              l->iid);
     }
 
   n->last_address = *src;
@@ -303,7 +304,9 @@ handle_message(hncp_link l,
     }
 
   /* We cannot simply ignore same node identifier; it might be someone
-   * with duplicated node identifier (hash). */
+   * with duplicated node identifier (hash). If we don't react in some way,
+   * it's possible (local) node id collisions stick around forever.
+   * However, we can't add them to neighbors so we don't do _heard here. */
   if (memcmp(&lid->node_identifier_hash,
              &o->own_node->node_identifier_hash,
              HNCP_HASH_LEN) != 0)
