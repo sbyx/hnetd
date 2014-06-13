@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Fri Jun 13 02:55:18 2014 mstenber
- * Edit time:     143 min
+ * Last modified: Fri Jun 13 12:02:43 2014 mstenber
+ * Edit time:     144 min
  *
  */
 
@@ -173,9 +173,8 @@ void net_sim_init(net_sim s)
 
 bool net_sim_is_converged(net_sim s)
 {
-  net_node n, n2;
+  net_node n, n2, fn = NULL;
   bool first = true;
-  hncp_hash h = NULL;
   hncp_node hn;
 
 #if L_LEVEL >= 7
@@ -202,15 +201,16 @@ bool net_sim_is_converged(net_sim s)
         return false;
       if (first)
         {
-          h = &n->n.network_hash;
+          fn = n;
           first = false;
           continue;
         }
-      if (memcmp(h, &n->n.network_hash, sizeof(hncp_hash_s)))
+      if (memcmp(&fn->n.network_hash, &n->n.network_hash, sizeof(hncp_hash_s)))
         {
-          L_DEBUG("network hash mismatch first<>%s [%llx <> %llx]",
-                  n->name,
-                  hncp_hash64(h), hncp_hash64(&n->n.network_hash));
+          L_DEBUG("network hash mismatch %s<>%s [%llx <> %llx]",
+                  fn->name, n->name,
+                  hncp_hash64(&fn->n.network_hash),
+                  hncp_hash64(&n->n.network_hash));
           s->not_converged_count++;
           return false;
         }
