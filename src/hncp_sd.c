@@ -185,7 +185,7 @@ const char *_rewrite_ifname(const char *src, char *dst)
 #define REWRITE_IFNAME(ifname) \
   _rewrite_ifname(ifname, alloca(strlen(ifname)+1))
 
-static void _dump_link_fqdn(hncp_sd sd, hncp_link l,
+void hncp_sd_dump_link_fqdn(hncp_sd sd, hncp_link l,
                             char *buf, size_t buf_len)
 {
   const char *ifname;
@@ -221,7 +221,7 @@ static void _publish_ddz(hncp_sd sd, hncp_link l,
   if (!hncp_get_ipv6_address(sd->hncp, l->ifname,
                              (struct in6_addr *)&dh->address))
     return;
-  _dump_link_fqdn(sd, l, tbuf, sizeof(tbuf));
+  hncp_sd_dump_link_fqdn(sd, l, tbuf, sizeof(tbuf));
   int r = escaped2ll(tbuf, dh->ll, DNS_MAX_ESCAPED_LEN);
   if (r < 0)
     return;
@@ -455,7 +455,7 @@ bool hncp_sd_reconfigure_ohp(hncp_sd sd)
   vlist_for_each_element(&sd->hncp->links, l, in_links)
     {
       sprintf(tbuf, "%s=", l->ifname);
-      _dump_link_fqdn(sd, l, tbuf+strlen(tbuf), sizeof(tbuf)-strlen(tbuf));
+      hncp_sd_dump_link_fqdn(sd, l, tbuf+strlen(tbuf), sizeof(tbuf)-strlen(tbuf));
       md5_hash(tbuf, strlen(tbuf), &ctx);
       if (first)
         {

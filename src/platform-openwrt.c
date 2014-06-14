@@ -490,7 +490,13 @@ static void platform_commit(struct uloop_timeout *t)
 	L_DEBUG("	RA/DHCP/DHCPv6: %s, Zone: %s", service, zone);
 
 	if (domain_cnt && c->internal && c->linkowner) {
+		char fqdnbuf[256];
+		char *fqdn = iface_get_fqdn(c->ifname, fqdnbuf, sizeof(fqdnbuf));
+
 		l = blobmsg_open_array(&b, "domain");
+
+		if (fqdn)
+			blobmsg_add_string(&b, NULL, fqdn);
 
 		for (size_t i = 0; i < domain_cnt; ++i)
 			blobmsg_add_string(&b, NULL, domains[i]);

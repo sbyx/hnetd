@@ -45,6 +45,8 @@ static bool iface_discover_border(struct iface *c);
 static struct list_head interfaces = LIST_HEAD_INIT(interfaces);
 static struct list_head users = LIST_HEAD_INIT(users);
 static struct pa *pa_p = NULL;
+static hncp hncp_p = NULL;
+static hncp_sd hncp_sd_p = NULL;
 static struct pa_data_user pa_data_cb = {
 	.cps = iface_pa_cps,
 	.aas = iface_pa_aas,
@@ -331,7 +333,7 @@ void iface_set_unreachable_route(const struct prefix *p, bool enable)
 
 #endif /* __linux__ */
 
-int iface_init(hncp hncp, struct pa *pa, const char *pd_socket)
+int iface_init(hncp hncp, hncp_sd sd, struct pa *pa, const char *pd_socket)
 {
 #ifdef __linux__
 	rtnl_fd.fd = socket(AF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, NETLINK_ROUTE);
@@ -351,6 +353,8 @@ int iface_init(hncp hncp, struct pa *pa, const char *pd_socket)
 
 	pa_data_subscribe(&pa->data, &pa_data_cb);
 	pa_p = pa;
+	hncp_p = hncp;
+	hncp_sd_p = sd;
 	return platform_init(hncp, &pa->data, pd_socket);
 }
 
@@ -364,6 +368,17 @@ void iface_register_user(struct iface_user *user)
 void iface_unregister_user(struct iface_user *user)
 {
 	list_del(&user->head);
+}
+
+
+char* iface_get_fqdn(const char *ifname, char *buf, size_t len)
+{
+	hncp_link link = hncp_find_link_by_name(hncp_p, ifname, false);
+	if (!link)
+		return NULL;
+
+	hncp_sd_dump_link_fqdn(hncp_sd_p, link, buf, len);
+	return buf;
 }
 
 

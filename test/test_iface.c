@@ -34,6 +34,8 @@ void platform_set_dhcpv6_send(__unused struct iface *c, __unused const void *dhc
 		__unused const void *dhcp_data, __unused size_t len4) {}
 void platform_set_prefix_route(__unused const struct prefix *p, __unused bool enable) {}
 void platform_restart_dhcpv4(__unused struct iface *c) {}
+void hncp_sd_dump_link_fqdn(__unused hncp_sd sd, __unused hncp_link l, __unused char *buf, __unused size_t buf_len) {}
+hncp_link hncp_find_link_by_name(__unused hncp h, __unused const char *ifname, __unused bool create) { return NULL; }
 
 void intiface_mock(__unused struct iface_user *u, __unused const char *ifname, bool enabled)
 {

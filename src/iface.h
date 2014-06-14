@@ -9,6 +9,8 @@
 
 #include "hnetd.h"
 #include "hncp.h"
+#include "hncp_i.h"
+#include "hncp_sd.h"
 #include "prefix_utils.h"
 
 #include <libubox/list.h>
@@ -160,7 +162,7 @@ struct iface {
 #include "pa.h"
 
 // Generic initializer to be called by main()
-int iface_init(hncp hncp, struct pa *pa, const char *pd_socket);
+int iface_init(hncp hncp, hncp_sd sd, struct pa *pa, const char *pd_socket);
 
 // Get an interface by name
 struct iface* iface_get(const char *ifname);
@@ -210,6 +212,9 @@ void iface_set_link_id(struct iface *c, uint32_t linkid, uint8_t mask);
 // Add hnet address
 void iface_add_addrconf(struct iface *c, struct in6_addr *addr,
 		uint8_t mask, struct prefix *filter);
+
+// Get fqdn address
+char* iface_get_fqdn(const char *ifname, char *buf, size_t len);
 
 
 // Flush uplinks
