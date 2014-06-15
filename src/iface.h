@@ -102,6 +102,7 @@ typedef uint8_t iface_flags;
 #define IFACE_FLAG_ULA_DEFAULT	 0x10
 #define IFACE_FLAG_LOOPBACK      0x20
 #define IFACE_FLAG_HYBRID		 0x40
+#define IFACE_FLAG_EXTERNAL		 0x80
 
 struct iface {
 	struct list_head head;

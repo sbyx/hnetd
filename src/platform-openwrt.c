@@ -812,6 +812,8 @@ static void platform_update(void *data, size_t len)
 				flags |= IFACE_FLAG_HYBRID;
 			else if (!strcmp(mode, "accept_cerid"))
 				flags |= IFACE_FLAG_ACCEPT_CERID;
+			else if (!strcmp(mode, "external"))
+				flags |= IFACE_FLAG_EXTERNAL;
 			else if (strcmp(mode, "auto"))
 				L_WARN("Unknown mode '%s' for interface %s: falling back to auto", mode, ifname);
 		}
