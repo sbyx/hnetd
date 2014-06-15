@@ -173,12 +173,8 @@ int ipc_ifupdown(int argc, char *argv[])
 	char *entry;
 
 	int c, i;
-	while ((c = getopt(argc, argv, "ec:dp:l:i:m:n:uk:P:")) > 0) {
+	while ((c = getopt(argc, argv, "c:dp:l:i:m:n:uk:P:")) > 0) {
 		switch(c) {
-		case 'e':
-			external = true;
-			break;
-
 		case 'c':
 			blobmsg_add_string(&b, "mode", optarg);
 			break;
@@ -293,6 +289,8 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 					flags |= IFACE_FLAG_HYBRID;
 				else if (!strcmp(mode, "accept_cerid"))
 					flags |= IFACE_FLAG_ACCEPT_CERID;
+				else if (!strcmp(mode, "external"))
+					tb[OPT_HANDLE] = NULL;
 				else if (strcmp(mode, "auto"))
 					L_WARN("Unknown mode '%s' for interface %s: falling back to auto", mode, ifname);
 			}
