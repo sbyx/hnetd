@@ -37,14 +37,12 @@ enum ipc_option {
 	OPT_HANDLE,
 	OPT_PREFIX,
 	OPT_DNS,
-	OPT_ACCEPT_CERID,
+	OPT_MODE,
 	OPT_CERID,
-	OPT_GUEST,
 	OPT_LINK_ID,
 	OPT_IFACE_ID,
 	OPT_IP6_PLEN,
 	OPT_IP4_PLEN,
-	OPT_ADHOC,
 	OPT_DISABLE_PA,
 	OPT_PASSTHRU,
 	OPT_ULA_DEFAULT_ROUTER,
@@ -60,14 +58,12 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_HANDLE] = {"handle", BLOBMSG_TYPE_STRING},
 	[OPT_PREFIX] = {"prefix", BLOBMSG_TYPE_ARRAY},
 	[OPT_DNS] = {"dns", BLOBMSG_TYPE_ARRAY},
-	[OPT_ACCEPT_CERID] = {"accept_cerid", BLOBMSG_TYPE_BOOL},
+	[OPT_MODE] = {"mode", BLOBMSG_TYPE_STRING},
 	[OPT_CERID] = {"cerid", BLOBMSG_TYPE_STRING},
-	[OPT_GUEST] = {"guest", BLOBMSG_TYPE_BOOL},
 	[OPT_LINK_ID] = {"link_id", BLOBMSG_TYPE_STRING},
 	[OPT_IFACE_ID] = {"iface_id", BLOBMSG_TYPE_ARRAY},
 	[OPT_IP6_PLEN] = {"ip6assign", BLOBMSG_TYPE_STRING},
 	[OPT_IP4_PLEN] = {"ip4assign", BLOBMSG_TYPE_STRING},
-	[OPT_ADHOC] = {"adhoc", BLOBMSG_TYPE_BOOL},
 	[OPT_DISABLE_PA] = {"disable_pa", BLOBMSG_TYPE_BOOL},
 	[OPT_PASSTHRU] = {"passthru", BLOBMSG_TYPE_STRING},
 	[OPT_ULA_DEFAULT_ROUTER] = {"ula_default_router", BLOBMSG_TYPE_BOOL},
@@ -177,18 +173,14 @@ int ipc_ifupdown(int argc, char *argv[])
 	char *entry;
 
 	int c, i;
-	while ((c = getopt(argc, argv, "ecgadp:l:i:m:n:uk:P:")) > 0) {
+	while ((c = getopt(argc, argv, "ec:dp:l:i:m:n:uk:P:")) > 0) {
 		switch(c) {
 		case 'e':
 			external = true;
 			break;
 
 		case 'c':
-			blobmsg_add_u8(&b, "accept_cerid", 1);
-			break;
-
-		case 'g':
-			blobmsg_add_u8(&b, "guest", 1);
+			blobmsg_add_string(&b, "mode", optarg);
 			break;
 
 		case 'p':
@@ -223,10 +215,6 @@ int ipc_ifupdown(int argc, char *argv[])
 
 		case 'd':
 			blobmsg_add_u8(&b, "disable_pa", 1);
-			break;
-
-		case 'a':
-			blobmsg_add_u8(&b, "adhoc", 1);
 			break;
 
 		case 'u':
@@ -295,14 +283,19 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 		if (!strcmp(cmd, "ifup")) {
 			iface_flags flags = 0;
 
-			if (tb[OPT_ACCEPT_CERID] && blobmsg_get_bool(tb[OPT_ACCEPT_CERID]))
-				flags |= IFACE_FLAG_ACCEPT_CERID;
-
-			if (tb[OPT_GUEST] && blobmsg_get_bool(tb[OPT_GUEST]))
-				flags |= IFACE_FLAG_GUEST;
-
-			if (tb[OPT_ADHOC] && blobmsg_get_bool(tb[OPT_ADHOC]))
-				flags |= IFACE_FLAG_ADHOC;
+			if (tb[OPT_MODE]) {
+				const char *mode = blobmsg_get_string(tb[OPT_MODE]);
+				if (!strcmp(mode, "adhoc"))
+					flags |= IFACE_FLAG_ADHOC;
+				else if (!strcmp(mode, "guest"))
+					flags |= IFACE_FLAG_GUEST;
+				else if (!strcmp(mode, "hybrid"))
+					flags |= IFACE_FLAG_HYBRID;
+				else if (!strcmp(mode, "accept_cerid"))
+					flags |= IFACE_FLAG_ACCEPT_CERID;
+				else if (strcmp(mode, "auto"))
+					L_WARN("Unknown mode '%s' for interface %s: falling back to auto", mode, ifname);
+			}
 
 			if (tb[OPT_DISABLE_PA] && blobmsg_get_bool(tb[OPT_DISABLE_PA]))
 				flags |= IFACE_FLAG_DISABLE_PA;

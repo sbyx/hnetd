@@ -120,7 +120,7 @@ void iface_pa_ifs(__attribute__((unused))struct pa_data_user *user,
 				!(c->flags & IFACE_FLAG_LOOPBACK);
 		if (owner != c->linkowner) {
 			c->linkowner = owner;
-			platform_set_owner(c, owner);
+			platform_set_owner(c, owner && avl_is_empty(&c->delegated.avl) && !c->v4uplink);
 		}
 	}
 }
@@ -760,7 +760,9 @@ static bool iface_discover_border(struct iface *c)
 		return false;
 
 	// Perform border-discovery (border on DHCPv4 assignment or DHCPv6-PD)
-	bool internal = c->carrier && ((c->flags & (IFACE_FLAG_GUEST | IFACE_FLAG_LOOPBACK)) ||
+	bool internal = c->carrier && (
+			(c->flags & (IFACE_FLAG_GUEST | IFACE_FLAG_LOOPBACK | IFACE_FLAG_HYBRID)) ||
+			((c->flags & IFACE_FLAG_ACCEPT_CERID) && !IN6_IS_ADDR_UNSPECIFIED(&c->cer)) ||
 			(avl_is_empty(&c->delegated.avl) && !c->v4uplink));
 	if (c->internal != internal) {
 		L_INFO("iface: %s border discovery detected state %s",
@@ -775,8 +777,6 @@ static bool iface_discover_border(struct iface *c)
                 } else
 			iface_announce_border(&c->transition);
 
-	} else if (c->flags & IFACE_FLAG_ACCEPT_CERID) {
-		iface_announce_border(&c->transition);
 	}
 	return false;
 }

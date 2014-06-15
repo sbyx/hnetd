@@ -458,7 +458,8 @@ static void platform_commit(struct uloop_timeout *t)
 
 	k = blobmsg_open_table(&b, "data");
 
-	const char *service = (c->internal && c->linkowner && !(c->flags & IFACE_FLAG_LOOPBACK)) ? "server" : "disabled";
+	const char *service = (c->internal && c->linkowner && !(c->flags & IFACE_FLAG_LOOPBACK)
+			&& avl_is_empty(&c->delegated.avl) && !c->v4uplink) ? "server" : "disabled";
 	blobmsg_add_string(&b, "ra", service);
 	blobmsg_add_string(&b, "dhcpv4", service);
 	blobmsg_add_string(&b, "dhcpv6", service);
@@ -483,8 +484,7 @@ static void platform_commit(struct uloop_timeout *t)
 	if (c->internal && c->linkowner)
 		blobmsg_add_string(&b, "pd_manager", hnetd_pd_socket);
 
-	const char *zone = (c->internal ||
-			((c->flags & IFACE_FLAG_ACCEPT_CERID) && !IN6_IS_ADDR_UNSPECIFIED(&c->cer))) ? "lan" : "wan";
+	const char *zone = (c->internal) ? "lan" : "wan";
 	blobmsg_add_string(&b, "zone", zone);
 
 	L_DEBUG("	RA/DHCP/DHCPv6: %s, Zone: %s", service, zone);
@@ -611,15 +611,13 @@ enum {
 };
 
 enum {
-	DATA_ATTR_ACCEPT_CERID,
 	DATA_ATTR_CER,
-	DATA_ATTR_GUEST,
+	DATA_ATTR_MODE,
 	DATA_ATTR_PREFIX,
 	DATA_ATTR_LINK_ID,
 	DATA_ATTR_IFACE_ID,
 	DATA_ATTR_IP6_PLEN,
 	DATA_ATTR_IP4_PLEN,
-	DATA_ATTR_ADHOC,
 	DATA_ATTR_DISABLE_PA,
 	DATA_ATTR_PASSTHRU,
 	DATA_ATTR_ULA_DEFAULT_ROUTER,
@@ -647,15 +645,13 @@ static const struct blobmsg_policy route_attrs[ROUTE_ATTR_MAX] = {
 };
 
 static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
-	[DATA_ATTR_ACCEPT_CERID] = { .name = "accept_cerid", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_CER] = { .name = "cer", .type = BLOBMSG_TYPE_STRING },
-	[DATA_ATTR_GUEST] = { .name = "guest", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_PREFIX] = { .name = "prefix", .type = BLOBMSG_TYPE_ARRAY },
 	[DATA_ATTR_LINK_ID] = { .name = "link_id", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_IFACE_ID] = { .name = "iface_id", .type = BLOBMSG_TYPE_ARRAY },
 	[DATA_ATTR_IP6_PLEN] = { .name = "ip6assign", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_IP4_PLEN] = { .name = "ip4assign", .type = BLOBMSG_TYPE_STRING },
-	[DATA_ATTR_ADHOC] = { .name = "adhoc", .type = BLOBMSG_TYPE_BOOL },
+	[DATA_ATTR_MODE] = { .name = "mode", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_DISABLE_PA] = { .name = "disable_pa", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_PASSTHRU] = { .name = "passthru", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_ULA_DEFAULT_ROUTER] = { .name = "ula_default_router", .type = BLOBMSG_TYPE_BOOL },
@@ -806,14 +802,19 @@ static void platform_update(void *data, size_t len)
 		blobmsg_parse(data_attrs, DATA_ATTR_MAX, dtb,
 				blobmsg_data(tb[IFACE_ATTR_DATA]), blobmsg_len(tb[IFACE_ATTR_DATA]));
 
-		if (dtb[DATA_ATTR_ACCEPT_CERID] && blobmsg_get_bool(dtb[DATA_ATTR_ACCEPT_CERID]))
-			flags |= IFACE_FLAG_ACCEPT_CERID;
-
-		if (dtb[DATA_ATTR_GUEST] && blobmsg_get_bool(dtb[DATA_ATTR_GUEST]))
-			flags |= IFACE_FLAG_GUEST;
-
-		if (dtb[DATA_ATTR_ADHOC] && blobmsg_get_bool(dtb[DATA_ATTR_ADHOC]))
-			flags |= IFACE_FLAG_ADHOC;
+		if (dtb[DATA_ATTR_MODE]) {
+			const char *mode = blobmsg_get_string(dtb[DATA_ATTR_MODE]);
+			if (!strcmp(mode, "adhoc"))
+				flags |= IFACE_FLAG_ADHOC;
+			else if (!strcmp(mode, "guest"))
+				flags |= IFACE_FLAG_GUEST;
+			else if (!strcmp(mode, "hybrid"))
+				flags |= IFACE_FLAG_HYBRID;
+			else if (!strcmp(mode, "accept_cerid"))
+				flags |= IFACE_FLAG_ACCEPT_CERID;
+			else if (strcmp(mode, "auto"))
+				L_WARN("Unknown mode '%s' for interface %s: falling back to auto", mode, ifname);
+		}
 
 		if (dtb[DATA_ATTR_DISABLE_PA] && blobmsg_get_bool(dtb[DATA_ATTR_DISABLE_PA]))
 			flags |= IFACE_FLAG_DISABLE_PA;
