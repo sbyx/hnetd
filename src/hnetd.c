@@ -44,7 +44,7 @@ void hncp_iface_intaddr_callback(struct iface_user *u, const char *ifname,
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
 
-	hncp_set_ipv6_address(hiu->hncp, ifname, addr6 ? &addr6->prefix : NULL);
+	hncp_if_set_ipv6_address(hiu->hncp, ifname, addr6 ? &addr6->prefix : NULL);
 }
 
 
@@ -53,7 +53,7 @@ void hncp_iface_intiface_callback(struct iface_user *u,
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
 	struct iface *c = iface_get(ifname);
-	hncp_set_link_enabled(hiu->hncp, ifname, enabled && !(c->flags & IFACE_FLAG_GUEST));
+	hncp_if_set_enabled(hiu->hncp, ifname, enabled && !(c->flags & IFACE_FLAG_GUEST));
 }
 
 

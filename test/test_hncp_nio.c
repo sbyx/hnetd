@@ -306,7 +306,7 @@ static void hncp_rejoin_works(void)
   one_join(false);
   smock_push_int("schedule", 0);
   smock_push_int("time", t);
-  hncp_set_link_enabled(o, dummy_ifname, true);
+  hncp_if_set_enabled(o, dummy_ifname, true);
   smock_is_empty();
 
   /* make sure next timeout before HNCP_REJOIN_INTERVAL just re-schedules. */
@@ -357,7 +357,7 @@ static void hncp_ok(void)
   smock_is_empty();
   one_join(true);
   smock_push_int("schedule", 0);
-  hncp_set_link_enabled(o, dummy_ifname, true);
+  hncp_if_set_enabled(o, dummy_ifname, true);
   smock_is_empty();
 
   /* Ok. We're cooking with gas. */

@@ -359,7 +359,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			}
 
 			hncp_link_conf conf;
-			if(c && tb[OPT_PING_INTERVAL] && (conf = hncp_find_link_conf_by_name(ipchncp, c->ifname))) {
+			if(c && tb[OPT_PING_INTERVAL] && (conf = hncp_if_find_conf_by_name(ipchncp, c->ifname))) {
 				conf->ping_worried_t = (((hnetd_time_t) blobmsg_get_u32(tb[OPT_PING_INTERVAL])) * HNETD_TIME_PER_SECOND) / 1000;
 				conf->ping_retry_base_t = conf->ping_worried_t / 8;
 				if(conf->ping_retry_base_t < 100)
@@ -367,9 +367,9 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 				conf->ping_retries = 3;
 			}
 
-			if(c && tb[OPT_TRICKLE_K] && (conf = hncp_find_link_conf_by_name(ipchncp, c->ifname)))
+			if(c && tb[OPT_TRICKLE_K] && (conf = hncp_if_find_conf_by_name(ipchncp, c->ifname)))
 				conf->trickle_k = (int) blobmsg_get_u32(tb[OPT_TRICKLE_K]);
-			if(c && tb[OPT_DNSNAME] && (conf = hncp_find_link_conf_by_name(ipchncp, c->ifname)))
+			if(c && tb[OPT_DNSNAME] && (conf = hncp_if_find_conf_by_name(ipchncp, c->ifname)))
 				strncpy(conf->dnsname, blobmsg_get_string(tb[OPT_DNSNAME]), sizeof(conf->dnsname));
 
 		} else if (!strcmp(cmd, "ifdown")) {

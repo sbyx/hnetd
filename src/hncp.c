@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Fri Jun 13 11:03:02 2014 mstenber
- * Edit time:     724 min
+ * Last modified: Tue Jun 17 14:56:55 2014 mstenber
+ * Edit time:     728 min
  *
  */
 
@@ -516,7 +516,7 @@ static void hncp_link_conf_set_default(hncp_link_conf conf, const char *ifname)
 	strncpy(conf->ifname, ifname, sizeof(conf->ifname));
 }
 
-hncp_link_conf hncp_find_link_conf_by_name(hncp o, const char *ifname)
+hncp_link_conf hncp_if_find_conf_by_name(hncp o, const char *ifname)
 {
 	hncp_link_conf conf;
 	list_for_each_entry(conf, &o->link_confs, in_link_confs) {
@@ -547,7 +547,7 @@ hncp_link hncp_find_link_by_name(hncp o, const char *ifname, bool create)
       l = (hncp_link) calloc(1, sizeof(*l));
       if (!l)
         return NULL;
-      l->conf = hncp_find_link_conf_by_name(o, ifname);
+      l->conf = hncp_if_find_conf_by_name(o, ifname);
       if(!l->conf) {
     	  free(l);
     	  return NULL;
@@ -571,11 +571,11 @@ hncp_link hncp_find_link_by_id(hncp o, uint32_t link_id)
   return NULL;
 }
 
-bool hncp_set_link_enabled(hncp o, const char *ifname, bool enabled)
+bool hncp_if_set_enabled(hncp o, const char *ifname, bool enabled)
 {
   hncp_link l = hncp_find_link_by_name(o, ifname, false);
 
-  L_DEBUG("hncp_set_link_enabled %s %s",
+  L_DEBUG("hncp_if_set_enabled %s %s",
           ifname, enabled ? "enabled" : "disabled");
   if (!enabled)
     {
@@ -861,8 +861,33 @@ hncp_link_set_ipv6_address(hncp_link l, const struct in6_addr *addr)
   hncp_notify_subscribers_link_changed(l);
 }
 
+bool hncp_if_has_highest_id(hncp o, const char *ifname)
+{
+  hncp_link l = hncp_find_link_by_name(o, ifname, false);
+
+  /* Who knows if link is not enabled.. */
+  if (!l)
+    return false;
+
+  uint32_t iid = cpu_to_be32(l->iid);
+  struct tlv_attr *a;
+  hncp_t_node_data_neighbor nh;
+
+  hncp_node_for_each_tlv_with_type(o->own_node, a, HNCP_T_NODE_DATA_NEIGHBOR)
+    if ((nh = hncp_tlv_neighbor(a)))
+      {
+        if (nh->neighbor_link_id != iid)
+          continue;
+        if (memcmp(&o->own_node->node_identifier_hash,
+                   &nh->neighbor_node_identifier_hash, HNCP_HASH_LEN) < 0)
+          return false;
+      }
+  return true;
+}
+
+
 void
-hncp_set_ipv6_address(hncp o, const char *ifname, const struct in6_addr *a)
+hncp_if_set_ipv6_address(hncp o, const char *ifname, const struct in6_addr *a)
 {
   hncp_link l = hncp_find_link_by_name(o, ifname, false);
   if (l)
