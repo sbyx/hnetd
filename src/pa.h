@@ -17,6 +17,8 @@
 #include <libubox/uloop.h>
 #include <stdint.h>
 
+#include "hncp.h"
+
 #include "pa_core.h"
 #include "pa_data.h"
 #include "pa_local.h"
@@ -51,9 +53,12 @@ struct pa {
 	struct pa_store store;                /* Stable storage interface */
 	struct pa_pd pd;                      /* Prefix delegation support */
 	struct iface_user ifu;
+	hncp hncp;                            /* hncp instance */
 };
 
 #define pa_data(pa) (&(pa)->data)
+
+#define pa_set_hncp(pa, hncp_o) (pa)->hncp = hncp_o
 
 void pa_conf_set_defaults(struct pa_conf *conf);
 /* Initializes the pa structure. */

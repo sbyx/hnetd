@@ -383,8 +383,10 @@ static bool pa_core_iface_is_designated(struct pa_core *core, struct pa_iface *i
 {
 	struct pa_cpl *cpl, *best_cpl;
 	struct pa_ap *ap;
+	hncp hncp = core_pa(core)->hncp;
 
-	if(btrie_empty(&iface->aps) || iface->adhoc)
+	if((btrie_empty(&iface->aps) && (!hncp || hncp_if_has_highest_id(hncp, iface->ifname)))
+			|| iface->adhoc)
 		return true;
 
 	if(btrie_empty(&iface->cpls))

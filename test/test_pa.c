@@ -66,6 +66,8 @@ static struct iface* pa_test_iface_get(__attribute__((unused))const char *ifname
 #include "pa_local.c"
 #include "pa_data.c"
 
+bool hncp_if_has_highest_id(__unused hncp o, __unused const char *ifname) {return true;};
+
 /***************************************************** Data */
 
 static struct pa_rid rid = { .id = {0x20} };

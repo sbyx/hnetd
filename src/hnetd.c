@@ -269,6 +269,7 @@ int main(__unused int argc, char *argv[])
 
 	/* PA */
 	pd_create(&pa.pd, pd_socket_path);
+	pa_set_hncp(&pa, h);
 
 	/* Fire up the prefix assignment code. */
 	pa_start(&pa);
