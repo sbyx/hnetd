@@ -31,6 +31,8 @@
 
 #define FLOODING_DELAY 2 * HNETD_TIME_PER_SECOND
 
+int log_level = LOG_INFO;
+
 typedef struct {
 	struct iface_user iu;
 	hncp hncp;
@@ -151,12 +153,14 @@ int main(__unused int argc, char *argv[])
 	enum {
 		GOL_IPPREFIX = 1000,
 		GOL_ULAPREFIX,
+		GOL_LOGLEVEL,
 	};
 
 	struct option longopts[] = {
 			//Can use no_argument, required_argument or optional_argument
 			{ "ip4prefix",   required_argument,      NULL,           GOL_IPPREFIX },
 			{ "ulaprefix",   required_argument,      NULL,           GOL_ULAPREFIX },
+			{ "loglevel",    required_argument,      NULL,           GOL_LOGLEVEL },
 			{ NULL,          0,                      NULL,           0 }
 	};
 
@@ -194,6 +198,9 @@ int main(__unused int argc, char *argv[])
 			break;
 		case GOL_ULAPREFIX:
 			pa_ulaprefix = optarg;
+			break;
+		case GOL_LOGLEVEL:
+			log_level = atoi(optarg);
 			break;
 		case '?':
 			L_ERR("Unrecognized option");

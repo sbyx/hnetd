@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Tue Jun 10 16:30:10 2014 mstenber
+ * Last modified: Tue Jun 17 16:13:31 2014 mstenber
  * Edit time:     116 min
  *
  */
@@ -55,6 +55,7 @@ int execs;
 
 #include "hncp_sd.c"
 
+int log_level = LOG_DEBUG;
 
 int pa_update_eap(net_node node, const struct prefix *prefix,
                   const struct pa_rid *rid,

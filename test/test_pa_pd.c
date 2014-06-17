@@ -15,6 +15,8 @@
 #include "pa_pd.c"
 #include "pa.c"
 
+int log_level = LOG_DEBUG;
+
 /* Masking pa_local, pa_core, pa_store and iface dependencies */
 void pa_core_init(__unused struct pa_core *c) {}
 void pa_core_start(__unused struct pa_core *c) {}

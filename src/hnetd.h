@@ -62,34 +62,42 @@ static inline hnetd_time_t hnetd_time(void) {
 			((hnetd_time_t)ts.tv_nsec / (1000000000 / HNETD_TIME_PER_SECOND));
 }
 
+extern int log_level;
 
 // Logging macros
+
+#define L_INTERNAL(level, ...)                  \
+do {                                            \
+  if (log_level >= level)                       \
+    syslog(level, L_PREFIX __VA_ARGS__);        \
+ } while(0)
+
 #if L_LEVEL >= LOG_ERR
-#define L_ERR(...)	syslog(LOG_ERR, L_PREFIX __VA_ARGS__)
+#define L_ERR(...) L_INTERNAL(LOG_ERR, __VA_ARGS__)
 #else
 #define L_ERR(...) do {} while(0)
 #endif
 
 #if L_LEVEL >= LOG_WARNING
-#define L_WARN(...)	syslog(LOG_WARNING, L_PREFIX __VA_ARGS__)
+#define L_WARN(...) L_INTERNAL(LOG_WARNING, __VA_ARGS__)
 #else
 #define L_WARN(...) do {} while(0)
 #endif
 
 #if L_LEVEL >= LOG_NOTICE
-#define L_NOTICE(...)	syslog(LOG_NOTICE, L_PREFIX __VA_ARGS__)
+#define L_NOTICE(...) L_INTERNAL(LOG_NOTICE, __VA_ARGS__)
 #else
 #define L_NOTICE(...) do {} while(0)
 #endif
 
 #if L_LEVEL >= LOG_INFO
-#define L_INFO(...)	syslog(LOG_INFO, L_PREFIX __VA_ARGS__)
+#define L_INFO(...) L_INTERNAL(LOG_INFO, __VA_ARGS__)
 #else
 #define L_INFO(...) do {} while(0)
 #endif
 
 #if L_LEVEL >= LOG_DEBUG
-#define L_DEBUG(...)	syslog(LOG_DEBUG, L_PREFIX __VA_ARGS__)
+#define L_DEBUG(...) L_INTERNAL(LOG_DEBUG, __VA_ARGS__)
 #else
 #define L_DEBUG(...) do {} while(0)
 #endif

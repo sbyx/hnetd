@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 12:51:48 2013 mstenber
- * Last modified: Mon Dec  2 13:32:39 2013 mstenber
- * Edit time:     14 min
+ * Last modified: Tue Jun 17 16:12:48 2014 mstenber
+ * Edit time:     15 min
  *
  */
 
@@ -20,6 +20,8 @@
 #include "hnetd.h"
 #include "sput.h"
 #include "smock.h"
+
+int log_level = LOG_DEBUG;
 
 #include <stdio.h>
 

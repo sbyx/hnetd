@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Thu May  8 18:32:08 2014 mstenber
- * Edit time:     173 min
+ * Last modified: Tue Jun 17 16:13:19 2014 mstenber
+ * Edit time:     174 min
  *
  */
 
@@ -27,6 +27,8 @@ static int random_mock(void);
 #include "hncp_timeout.c"
 #include "sput.h"
 #include "smock.h"
+
+int log_level = LOG_DEBUG;
 
 /********************************************************* Mocked interfaces */
 

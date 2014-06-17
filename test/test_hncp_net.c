@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Tue Jun 17 15:01:48 2014 mstenber
+ * Last modified: Tue Jun 17 16:13:14 2014 mstenber
  * Edit time:     397 min
  *
  */
@@ -20,6 +20,8 @@
 /* Test utilities */
 #include "net_sim.h"
 #include "sput.h"
+
+int log_level = LOG_DEBUG;
 
 /********************************************************* Mocked interfaces */
 

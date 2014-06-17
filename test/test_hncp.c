@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Tue Apr 29 22:42:18 2014 mstenber
+ * Last modified: Tue Jun 17 16:12:55 2014 mstenber
  * Edit time:     77 min
  *
  */
@@ -14,6 +14,8 @@
 #include "hncp.h"
 #include "sput.h"
 #include "smock.h"
+
+int log_level = LOG_DEBUG;
 
 /* Lots of stubs here, rather not put __unused all over the place. */
 #pragma GCC diagnostic ignored "-Wunused-parameter"

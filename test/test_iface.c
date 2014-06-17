@@ -10,6 +10,8 @@
 #include "prefix_utils.c"
 #include "iface.c"
 
+int log_level = LOG_DEBUG;
+
 void pa_data_subscribe(__unused struct pa_data *data, __unused struct pa_data_user *user) {}
 struct pa_iface* pa_iface_get(__unused struct pa_data *d, __unused const char *ifname, __unused bool goc){ return NULL; }
 void pa_core_static_prefix_init(__unused struct pa_static_prefix_rule *rule, __unused const char *ifname,
