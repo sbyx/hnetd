@@ -153,6 +153,9 @@ uint8_t pa_core_default_plen(struct pa_dp *dp, bool scarcity);
 #define pa_iface_plen(iface, dp, scarcity) \
 	(iface)->custom_plen?(iface)->custom_plen(iface, dp, (iface)->custom_plen_priv, scarcity):pa_core_default_plen(dp, scarcity)
 
+//Returns whether it is allowed for a rule to create a prefix if not authoritative
+#define pa_iface_can_create_prefix(iface) ((iface)->designated || ((iface)->master && (iface)->master->designated))
+
 void pa_core_rule_init(struct pa_rule *rule, const char *name, enum pa_rule_pref best_priority, rule_try try);
 void pa_core_rule_add(struct pa_core *core, struct pa_rule *rule);
 void pa_core_rule_del(struct pa_core *core, struct pa_rule *rule);

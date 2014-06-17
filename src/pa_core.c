@@ -220,7 +220,7 @@ static int pa_rule_try_random(struct pa_core *core, struct pa_rule *rule,
 		__unused struct pa_ap *strongest_ap, __unused struct pa_cpl *current_cpl,
 		enum pa_rule_pref best_found_priority)
 {
-	if(!iface->designated)
+	if(!pa_iface_can_create_prefix(iface))
 		return -1;
 
 	uint16_t prefix_count[129] = {0}; //Used to count the number of available prefixes
@@ -333,11 +333,28 @@ static void pa_core_try_rules(struct pa_core *core, struct pa_dp *dp,
 		if(rule->best_priority >= best_priority) {
 			break;
 		}
+
+		/* Considering given interface */
 		L_DEBUG("Considering "PA_RULE_L, PA_RULE_LA(rule));
 		if(rule->try && !rule->try(core, rule, dp, iface, best_ap, current_cpl, best_priority)
 				&& (best_priority > rule->result.preference)) {
 			best_rule = rule;
 			best_priority = rule->result.preference;
+		}
+
+		/* Slave interfaces support - We try each rule for slave interfaces as well */
+		struct pa_iface *slave;
+		pa_for_each_slave_iface(slave, iface) {
+			if(rule->best_priority >= best_priority) {
+				break;
+			}
+
+			L_DEBUG("Considering "PA_RULE_L" on slave "PA_IF_L, PA_RULE_LA(rule), PA_IF_LA(slave));
+			if(rule->try && !rule->try(core, rule, dp, slave, best_ap, current_cpl, best_priority)
+					&& (best_priority > rule->result.preference)) {
+				best_rule = rule;
+				best_priority = rule->result.preference;
+			}
 		}
 	}
 	if(best_rule) {
@@ -454,7 +471,8 @@ void paa_algo_do(struct pa_core *core)
 		L_DEBUG("Considering "PA_DP_L, PA_DP_LA(dp));
 
 		pa_for_each_iface(iface, data) {
-			if(!iface->internal)
+			if(!iface->internal //External iface
+					|| iface->master) //Slave iface
 				continue;
 
 			cpl = pa_core_getcpl(dp, iface);
@@ -806,10 +824,13 @@ static void __pad_cb_ifs(struct pa_data_user *user,
 		struct pa_iface *iface, uint32_t flags)
 {
 	struct pa_core *core = container_of(user, struct pa_core, data_user);
-	if(flags & (PADF_IF_CREATED | PADF_IF_INTERNAL | PADF_IF_TODELETE | PADF_IF_ADHOC))
+	if(flags & (PADF_IF_CREATED | PADF_IF_INTERNAL |
+			PADF_IF_TODELETE | PADF_IF_ADHOC | PADF_IF_MASTER))
 		__pa_paa_schedule(core);
 
-	if((flags & PADF_IF_TODELETE) || !iface->internal) {
+	if((flags & PADF_IF_TODELETE) || //Going to be deleted
+			!iface->internal || //Not internal
+			iface->master) { //Slave interface
 		//Remove all cpls
 		struct pa_cpl *cpl, *cpl2;
 		pa_for_each_cpl_in_iface_safe(cpl, cpl2, iface) {
