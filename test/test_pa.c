@@ -9,6 +9,8 @@
 #include "iface.h"
 #include "pa.h"
 
+int log_level = LOG_DEBUG;
+
 /**************************************************** Tested structures */
 struct pa pa;
 

@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 11:53:11 2013 mstenber
- * Last modified: Wed Feb 12 22:38:00 2014 mstenber
+ * Last modified: Tue Jun 17 16:14:14 2014 mstenber
  * Edit time:     46 min
  *
  */
@@ -14,6 +14,8 @@
 #include "hnetd.h"
 #include "tlv.h"
 #include "sput.h"
+
+int log_level = LOG_DEBUG;
 
 /* Ensure that tlv stuff we add works. Note that some of the failures
  * are obvious only on valgrind (e.g. wrong accesses in tlv_iter). */

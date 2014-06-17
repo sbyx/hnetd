@@ -9,6 +9,8 @@
 #include "pa_store.h"
 #include "sput.h"
 
+int log_level = LOG_DEBUG;
+
 static struct pa pa;
 #define store (&pa.store)
 

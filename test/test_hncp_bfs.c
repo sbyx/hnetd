@@ -11,6 +11,8 @@
 #include "sput.h"
 #include "smock.h"
 
+int log_level = LOG_DEBUG;
+
 
 void pa_data_subscribe(__unused struct pa_data *d, __unused struct pa_data_user *u){}
 struct pa_iface* pa_iface_get(__unused struct pa_data *d, __unused const char *ifname, __unused bool goc){ return NULL; }

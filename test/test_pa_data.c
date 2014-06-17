@@ -14,6 +14,8 @@
 #include "pa_data.h"
 #include "prefixes_library.h"
 
+int log_level = LOG_DEBUG;
+
 static struct pa_data _data;
 #define data (&_data)
 
