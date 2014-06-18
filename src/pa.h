@@ -89,4 +89,14 @@ bool pa_ap_isvalid(struct pa *pa, struct pa_ap *ap);
 int pa_precedence_apap(struct pa_ap *ap1, struct pa_ap *ap2);
 int pa_precedence_apcp(struct pa_ap *ap, struct pa_cp *cp);
 
+/* Counts the number of available prefixes
+ * prefix_count must be an array of length 129 */
+void pa_count_available_prefixes(struct pa *pa, uint16_t *count, struct prefix *container);
+void pa_count_available_decrement(uint16_t *count, uint8_t removed_plen, uint8_t container_plen);
+
+/* Returns the smallest prefix length so that at least nmax prefixes of length plen are available.
+ * If less than nmax prefixes are available, the smallest available prefix length is returned (Or plen + 1 if no prefix is available).
+ * *nfound provides the number of available prefixes (at most nmax). */
+uint8_t pa_count_available_subset(const uint16_t *count, uint8_t plen, uint32_t *nfound, uint32_t nmax);
+
 #endif /* PA_H_ */

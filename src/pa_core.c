@@ -149,21 +149,7 @@ static int pa_rule_try_random_plen(struct pa_core *core, struct pa_rule *rule,
 
 	uint8_t min_plen;
 	uint32_t count = 0;
-	int i;
-	for(i = plen; i >=0; i--) {
-		if(prefix_count[i]) {
-			if(plen - i >= PA_CORE_FINDRAND_EXP) {
-				count = 1 << PA_CORE_FINDRAND_EXP;
-			} else {
-				count += prefix_count[i] * (1 << (plen - i));
-			}
-			min_plen = i;
-			if(count >= (1 << PA_CORE_FINDRAND_EXP)) {
-				count = 1 << PA_CORE_FINDRAND_EXP;
-				break;
-			}
-		}
-	}
+	min_plen = pa_count_available_subset(prefix_count, plen, &count, 1 << PA_CORE_FINDRAND_EXP);
 
 	if(!count) {
 		L_INFO("No more available prefix of length %d could be found in %s", plen, PREFIX_REPR(&dp->prefix));
@@ -174,7 +160,7 @@ static int pa_rule_try_random_plen(struct pa_core *core, struct pa_rule *rule,
 	/* First try the pseudo-random prefixes */
 	struct prefix tentative;
 	struct prefix *res = &rule->result.prefix;
-	i = 0;
+	int i = 0;
 	do {
 		pa_prefix_prand(iface, (uint32_t) i, &dp->prefix, &tentative, plen); //Ignoring unlikely error on purpose.
 		L_DEBUG("Trying pseudo-random prefix %s", PREFIX_REPR(&tentative));
@@ -223,15 +209,8 @@ static int pa_rule_try_random(struct pa_core *core, struct pa_rule *rule,
 	if(!pa_iface_can_create_prefix(iface))
 		return -1;
 
-	uint16_t prefix_count[129] = {0}; //Used to count the number of available prefixes
-	struct prefix p;
-
-	/* Count available prefixes of each length */
-	pa_for_each_available_prefix(core_p(core, data), &dp->prefix, &p)
-	{
-		if(prefix_count[p.plen] != UINT16_MAX)
-			prefix_count[p.plen]++;
-	}
+	uint16_t prefix_count[129];
+	pa_count_available_prefixes(core_pa(core), prefix_count, &dp->prefix);
 
 	if(!pa_rule_try_random_plen(core, rule, dp, iface, pa_iface_plen(iface,dp,  false), prefix_count)) {
 		rule->result.preference = PAR_PREF_RANDOM;
