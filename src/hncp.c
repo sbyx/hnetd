@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Jun 19 11:55:06 2014 mstenber
- * Edit time:     732 min
+ * Last modified: Thu Jun 19 17:51:41 2014 mstenber
+ * Edit time:     734 min
  *
  */
 
@@ -866,9 +866,10 @@ bool hncp_if_has_highest_id(hncp o, const char *ifname)
 {
   hncp_link l = hncp_find_link_by_name(o, ifname, false);
 
-  /* Who knows if link is not enabled.. */
+  /* Who knows if link is not enabled.. e.g. guest mode require us to
+   * return true here, though. */
   if (!l)
-    return false;
+    return true;
 
   uint32_t iid = cpu_to_be32(l->iid);
   struct tlv_attr *a;

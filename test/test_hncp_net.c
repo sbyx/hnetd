@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Tue Jun 17 16:13:14 2014 mstenber
+ * Last modified: Thu Jun 19 17:52:07 2014 mstenber
  * Edit time:     397 min
  *
  */
@@ -132,8 +132,8 @@ void hncp_two(void)
                    hncp_if_has_highest_id(n2, "eth1"),
                    "both highest");
 
-  sput_fail_unless(!hncp_if_has_highest_id(n1, "nonexistent"),
-                   "nonexistent not highest");
+  sput_fail_unless(hncp_if_has_highest_id(n1, "nonexistent"),
+                   "nonexistent highest too");
 
   net_sim_uninit(&s);
 }
