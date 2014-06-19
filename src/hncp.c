@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Jun 19 11:19:38 2014 mstenber
- * Edit time:     729 min
+ * Last modified: Thu Jun 19 11:55:06 2014 mstenber
+ * Edit time:     732 min
  *
  */
 
@@ -51,7 +51,8 @@ void hncp_node_set(hncp_node n, uint32_t update_number,
   bool should_schedule = false;
 
   L_DEBUG("hncp_node_set %s update #%d %p (@%lld (-%lld))",
-          HNCP_NODE_REPR(n), (int) update_number, a, t, hnetd_time()-t);
+          HNCP_NODE_REPR(n), (int) update_number, a,
+          (long long)t, (long long)(hnetd_time()-t));
 
   /* If new data is set, consider if similar, and if not,
    * handle version check  */
