@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Jun 17 14:56:55 2014 mstenber
- * Edit time:     728 min
+ * Last modified: Thu Jun 19 11:19:38 2014 mstenber
+ * Edit time:     729 min
  *
  */
 
@@ -876,7 +876,7 @@ bool hncp_if_has_highest_id(hncp o, const char *ifname)
   hncp_node_for_each_tlv_with_type(o->own_node, a, HNCP_T_NODE_DATA_NEIGHBOR)
     if ((nh = hncp_tlv_neighbor(a)))
       {
-        if (nh->neighbor_link_id != iid)
+        if (nh->link_id != iid)
           continue;
         if (memcmp(&o->own_node->node_identifier_hash,
                    &nh->neighbor_node_identifier_hash, HNCP_HASH_LEN) < 0)
