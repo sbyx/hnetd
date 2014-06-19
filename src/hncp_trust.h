@@ -15,6 +15,7 @@
 #include "hncp_i.h"
 #include "hncp_sign.h"
 #include "trust_graph.h"
+#include "local_trust.h"
 #include <libubox/vlist.h>
 #include <libubox/list.h>
 #include <polarssl/pk.h>

@@ -14,7 +14,6 @@ static void update_trust_graph( __unused struct vlist_tree *t, struct vlist_node
     hncp_trust_graph g = container_of(node_old, hncp_trust_graph_s, vlist_node);
     trust_graph_destroy(g);
   }
-
 };
 
 
@@ -169,17 +168,6 @@ bool hncp_trust_node_trusts_me(hncp o, hncp_hash hash){
    return trust_graph_is_trusted(node, &(o->own_node->node_identifier_hash));
 };
 
-void hncp_trust_get_friend(hncp o){
-  o->trust->want_friend = true;
-  //Add a check for trust links in the database
-  hncp_update_tlv_raw(o, HNCP_T_WANT_FRIEND, NULL, 0, true);
-}
-
-void hncp_trust_stop_getting_friend(hncp o){
-  o->trust->want_friend = false;
-  hncp_update_tlv_raw(o, HNCP_T_WANT_FRIEND, NULL, 0, false);
-}
-
 /** Callbacks */
 
 /** Two things :
@@ -189,28 +177,26 @@ void hncp_trust_update_key(hncp_subscriber s, __unused hncp_node n, struct tlv_a
   if(add){
     hncp_trust t = container_of(s, hncp_trust_s, sub);
     trust_key k = hncp_crypto_raw_key_to_trust_key(tlv->data, tlv_len(tlv), false);
-    vlist_add(&t->crypto->other_keys, &k->node, &k->key_hash);
+    vlist_add(&t->crypto->trust_keys, &k->node, &k->key_hash);
   }
 }
 
 void hncp_trust_update_trusts_links(hncp_subscriber s, hncp_node n, struct tlv_attr *tlv, bool add){
   hncp_t_trust_link ta = (hncp_t_trust_link) &tlv->data;
-
   hncp_trust t = container_of(s, hncp_trust_s, sub);
+  if(t->want_friend && HASH_EQUALS(&ta->trusted_hash, &t->hncp->own_node->node_identifier_hash)){
+    trust_key k = hncp_crypto_key_from_hash(t->hncp, &n->node_identifier_hash);
+    if(!k)
+      L_ERR("Public key for %s not found !", HEX_REPR(&n->node_identifier_hash, HNCP_HASH_LEN));
+    else{
+      k->locally_trusted = true;
+      local_trust_add_trusted_hash(t->hncp, &n->node_identifier_hash, true);
+    }
+  }
   if(add){
     hncp_trust_update_graph(t->hncp, &n->node_identifier_hash, &ta->trusted_hash, 1);
   }else
     hncp_trust_update_graph(t->hncp, &n->node_identifier_hash, NULL, 0);
-}
-
-void hncp_trust_update_friend_search(hncp_subscriber s, hncp_node n, struct tlv_attr *tlv, bool add){
-    hncp_trust t = container_of(s, hncp_trust_s, sub);
-    hncp_hash h = &n->node_identifier_hash;
-    if(add && t->want_friend){
-
-
-    }
-
 }
 
 /* The signature_tlv must be a pointer to the last element of tlvs */

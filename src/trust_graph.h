@@ -14,6 +14,7 @@ struct trust_graph_struct {
 
     struct list_head arrows;
 
+    struct list_head rev_arrows;
     /* pointer to the hncp node struct (only the field
     "trusted" is relevant for now) */
     hncp_node hncp_node;
@@ -23,6 +24,8 @@ struct trust_graph_struct {
     /* wheter I trust the node */
     bool trusted;
 
+    /* wheter it trusts me */
+    bool trusts_me;
     /* For graph exploration
      * Clearly not thread-safe ! */
     bool marked;

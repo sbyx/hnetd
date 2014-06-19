@@ -32,6 +32,8 @@ struct trust_key_struct{
    * & for the key in the key tree */
   hncp_hash_s key_hash;
 
+  /* Flag to identify reliable keys (unused for self key) */
+  bool locally_trusted;
   /* Is it a public or private key */
   bool private;
 };
@@ -40,10 +42,7 @@ typedef struct trust_key_struct trust_key_s, *trust_key;
 
 struct crypto_data{
   /* keys trusted locally */
-  struct vlist_tree local_trust_keys;
-  /* other keys. 2 vlists are not useful without key hash
-     collision support, but may be if/when added */
-  struct vlist_tree other_keys;
+  struct vlist_tree trust_keys;
 
   struct vlist_tree symmetric_keys;
   trust_key_s key;
@@ -90,9 +89,6 @@ int hncp_crypto_get_trusted_keys(hncp o, char *trusted_dir);
 
 /**  initialize the struct from the context in it */
 void hncp_crypto_init_key(trust_key t, char * file_name, bool private);
-
-/* Convert a hash to an hex string */
-char * hash2str(hncp_hash h);
 
 /** Create the internal key structure */
 trust_key hncp_crypto_raw_key_to_trust_key(char * key, size_t size, bool private);

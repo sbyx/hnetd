@@ -86,10 +86,8 @@ enum {
   HNCP_T_SHARED_KEY = 71, /* Key used for symmetric tlv encryption
                            * tuple (node receiver, assymetrically encrypted key) */
   HNCP_T_ENCRYPTED_DATA = 72, /* should contain TLVs */
-  HNCP_T_SHARED_SECRET = 73,
-  HNCP_T_WANT_FRIEND = 74, /* Currently empty */
 
-  HNCP_T_SIGNATURE = 0xFFFF /* not implemented */
+  HNCP_T_SIGNATURE = 0xFFFF
 };
 
 enum {
@@ -169,6 +167,8 @@ typedef struct __packed {
   char user_agent[];
 } hncp_t_version_s, *hncp_t_version;
 
+/* HNCP_T_READABLE_DATA - just information */
+
 /* HNCP_T_EXTERNAL_CONNECTION - just container, no own content */
 
 /* HNCP_T_DELEGATED_PREFIX */
@@ -245,12 +245,6 @@ typedef struct __packed {
   uint16_t crypt_variant;
   uint8_t encrypted_key[];
 } hncp_t_shared_key_s, *hnct_shared_key;
-
-/* HNCP_T_SHARED_SECRET */
-typedef struct __packed {
-  uint32_t secret_use;
-  uint8_t secret[];
-} hncp_t_shared_secret_s, *hncp_t_shared_secret;
 
 /* HNCP_T_ENCRYPTED_DATA */
 typedef struct __packed {

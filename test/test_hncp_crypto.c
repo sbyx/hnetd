@@ -83,15 +83,13 @@ mkdir:
     pk_context ctx;
     hncp_hash_s h;
     char buf[FILENAME_MAX];
-    char *c;
+
     pk_init(&ctx);
 
     crypto_gen_rsa_key(RSA_KEY_SIZE, & ctx);
     crypto_md5_hash_from_key(&h, &ctx, false);
-    c = hash2str(&h);
-    snprintf(buf, sizeof(buf), "%s/%s.pub", t_dir, c);
+    snprintf(buf, sizeof(buf), "%s/%s.pub", t_dir, HEX_REPR(&h, HNCP_HASH_LEN));
     crypto_write_key_file(&ctx, buf, false);
-    free(c);
     pk_free(&ctx);
   }
 

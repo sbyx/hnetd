@@ -10,6 +10,7 @@
 void trust_graph_init(hncp_trust_graph g, hncp_hash hash){
   g->hash = *hash;
   INIT_LIST_HEAD(&g->arrows);
+  INIT_LIST_HEAD(&g->rev_arrows);
   g->marked = false;
   g->trusted = false;
   g->hncp_node = NULL;
@@ -31,6 +32,13 @@ void init_explo(struct list_head* l, hncp_trust_graph g){
   add_graph_last(l, g);
 }
 
+static inline void _empty_list(struct list_head * l){
+  while(!list_empty(l)){
+    struct _trusted_list* e = list_first_entry(l, struct _trusted_list, list);
+    list_del(&e->list);
+    free(e);
+  }
+}
 
 /* Remove marking after an explo, and free the list used for that */
 static void trust_graph_to_reset(struct list_head* l){
@@ -79,12 +87,15 @@ end:
 
 void trust_graph_add_trust_link(hncp_trust_graph emitter, hncp_trust_graph trusted){
   struct _trusted_list *link = malloc(sizeof(struct _trusted_list));
+  struct _trusted_list *rev_link = malloc(sizeof(struct _trusted_list));
   if(!link){
     L_ERR("Failed to add a trust link");
     return;
   }
   link->node = trusted;
   list_add_tail(&link->list,&emitter->arrows);
+  rev_link->node = emitter;
+  list_add_tail(&rev_link->list, &trusted->rev_arrows);
 };
 
 
@@ -95,22 +106,33 @@ void trust_graph_add_trust_array(hncp_trust_graph emitter, hncp_trust_graph arra
 
 
 bool trust_graph_remove_trust_link(hncp_trust_graph emitter, hncp_trust_graph trusted){
+  bool done = false;
   struct _trusted_list* entry;
   list_for_each_entry(entry, &emitter->arrows, list){
     if(entry->node == trusted){
       list_del(&entry->list);
       free(entry);
+      done = true;
+      break;
+    }
+  }
+
+  list_for_each_entry(entry, &trusted->rev_arrows, list){
+    if(entry->node == emitter){
+      list_del(&entry->list);
+      free(entry);
+      if(!done)
+        L_ERR("Trust graph not consistent");
       return true;
     }
   }
+  if(done)
+    L_ERR("Trust graph not consistent");
   return false;
 };
 
 
 void trust_graph_remove_trust_links(hncp_trust_graph g){
-  while(!list_empty(&g->arrows)){
-    struct _trusted_list* e = list_first_entry(&g->arrows, struct _trusted_list, list);
-    list_del(&e->list);
-    free(e);
-  }
+  _empty_list(&g->arrows);
+  _empty_list(&g->rev_arrows);
 };
