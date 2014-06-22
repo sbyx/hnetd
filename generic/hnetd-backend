@@ -95,4 +95,19 @@ EOF
 	killall -SIGHUP odhcpd
 	;;
 
+newnat)
+	rule="hnet_snat_$1"
+	iptables -t nat -N "$rule"
+	iptables -t nat -I POSTROUTING -o "$1" -j "$rule"
+	iptables -t nat -A "$rule" -d "$2" -j ACCEPT
+	iptables -t nat -A "$rule" -j SNAT --to-source "$3"
+	;;
+
+delnat)
+	rule="hnet_snat_$1"
+	iptables -t nat -D POSTROUTING -o "$1" -j "$rule"
+	iptables -t nat -F "$rule"
+	iptables -t nat -X "$rule"
+	;;
+
 esac

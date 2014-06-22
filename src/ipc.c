@@ -36,6 +36,7 @@ enum ipc_option {
 	OPT_IFNAME,
 	OPT_HANDLE,
 	OPT_PREFIX,
+	OPT_IPV4SOURCE,
 	OPT_DNS,
 	OPT_MODE,
 	OPT_CERID,
@@ -57,6 +58,7 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_IFNAME] = {"ifname", BLOBMSG_TYPE_STRING},
 	[OPT_HANDLE] = {"handle", BLOBMSG_TYPE_STRING},
 	[OPT_PREFIX] = {"prefix", BLOBMSG_TYPE_ARRAY},
+	[OPT_IPV4SOURCE] = {"ipv4source", BLOBMSG_TYPE_STRING},
 	[OPT_DNS] = {"dns", BLOBMSG_TYPE_ARRAY},
 	[OPT_MODE] = {"mode", BLOBMSG_TYPE_STRING},
 	[OPT_CERID] = {"cerid", BLOBMSG_TYPE_STRING},
@@ -375,6 +377,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 		} else if (!strcmp(cmd, "ifdown")) {
 			iface_remove(c);
 		} else if (!strcmp(cmd, "enable_ipv4_uplink")) {
+			struct in_addr ipv4source = {INADDR_ANY};
 			const size_t dns_max = 4;
 			size_t dns_cnt = 0;
 			struct {
@@ -382,6 +385,9 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 				uint8_t len;
 				struct in_addr addr[dns_max];
 			} dns;
+
+			if (tb[OPT_IPV4SOURCE])
+				inet_pton(AF_INET, blobmsg_get_string(tb[OPT_IPV4SOURCE]), &ipv4source);
 
 			if (tb[OPT_DNS]) {
 				struct blob_attr *k;
@@ -403,7 +409,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 
 			iface_update_ipv4_uplink(c);
 			iface_add_dhcp_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns));
-			iface_set_ipv4_uplink(c);
+			iface_set_ipv4_uplink(c, &ipv4source);
 			iface_commit_ipv4_uplink(c);
 		} else if (!strcmp(cmd, "disable_ipv4_uplink")) {
 			iface_update_ipv4_uplink(c);
@@ -475,7 +481,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			iface_update_ipv6_uplink(c);
 			iface_commit_ipv6_uplink(c);
 
-			if (!c->v4uplink)
+			if (!c->v4_saddr.s_addr)
 				iface_remove(c);
 		}
 

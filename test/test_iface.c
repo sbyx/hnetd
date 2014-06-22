@@ -36,6 +36,7 @@ void platform_set_dhcpv6_send(__unused struct iface *c, __unused const void *dhc
 		__unused const void *dhcp_data, __unused size_t len4) {}
 void platform_set_prefix_route(__unused const struct prefix *p, __unused bool enable) {}
 void platform_restart_dhcpv4(__unused struct iface *c) {}
+void platform_set_snat(__unused struct iface *c, __unused const struct prefix *p) {}
 void hncp_sd_dump_link_fqdn(__unused hncp_sd sd, __unused hncp_link l, __unused char *buf, __unused size_t buf_len) {}
 hncp_link hncp_find_link_by_name(__unused hncp h, __unused const char *ifname, __unused bool create) { return NULL; }
 
@@ -97,13 +98,14 @@ void iface_test_new_unmanaged(void)
 
 void iface_test_new_managed(void)
 {
+	struct in_addr v4source = {INADDR_LOOPBACK};
 	iface_register_user(&user_mock);
 	struct prefix p = {IN6ADDR_LOOPBACK_INIT, 0};
 	char test[] = "test";
 
 	struct iface *iface00 = iface_create("test00", "test00", 0);
 	iface_update_ipv4_uplink(iface00);
-	iface_set_ipv4_uplink(iface00);
+	iface_set_ipv4_uplink(iface00, &v4source);
 	iface_commit_ipv4_uplink(iface00);
 	smock_pull_bool_is("test00", false);
 
@@ -126,7 +128,7 @@ void iface_test_new_managed(void)
 	smock_pull_bool_is("test0", true);
 
 	iface_update_ipv4_uplink(iface);
-	iface_set_ipv4_uplink(iface);
+	iface_set_ipv4_uplink(iface, &v4source);
 	iface_commit_ipv4_uplink(iface);
 	smock_pull_bool_is("test0", false);
 
@@ -148,7 +150,7 @@ void iface_test_new_managed(void)
 	smock_pull_int_is("dhcpv6_len", sizeof(test));
 
 	iface_update_ipv4_uplink(iface);
-	iface_set_ipv4_uplink(iface);
+	iface_set_ipv4_uplink(iface, &v4source);
 	iface_commit_ipv4_uplink(iface);
 
 	iface_update_ipv6_uplink(iface);

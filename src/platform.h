@@ -45,3 +45,6 @@ void platform_set_prefix_route(const struct prefix *p, bool enable);
 
 // Filter / unfilter prefix
 void platform_filter_prefix(struct iface *c, const struct prefix *p, bool enable);
+
+// Enable / disable NAT
+void platform_set_snat(struct iface *c, const struct prefix *p);

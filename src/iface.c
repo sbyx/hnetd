@@ -74,6 +74,8 @@ void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 					platform_restart_dhcpv4(c);
 				}
 			}
+		} else {
+			platform_set_snat(c, &dp->prefix);
 		}
 	} else if(flags & PADF_DP_TODELETE) {
 		struct iface *c;
@@ -85,6 +87,9 @@ void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 			L_DEBUG("Removing from platform "PA_DP_L, PA_DP_LA(dp));
 			platform_set_prefix_route(&dp->prefix, false);
 		} else {
+			if (dp->local)
+				platform_set_snat(c, NULL);
+
 			bool ipv4_edp = false;
 			struct pa_dp *dp;
 			pa_for_each_dp(dp, &pa_p->data)
@@ -120,7 +125,7 @@ void iface_pa_ifs(__attribute__((unused))struct pa_data_user *user,
 				!(c->flags & IFACE_FLAG_LOOPBACK);
 		if (owner != c->linkowner) {
 			c->linkowner = owner;
-			platform_set_owner(c, owner && avl_is_empty(&c->delegated.avl) && !c->v4uplink);
+			platform_set_owner(c, owner && avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr);
 		}
 	}
 }
@@ -252,8 +257,8 @@ static void iface_notify_data_state(struct iface *c, bool enabled)
 {
 	void *data = (enabled && !avl_is_empty(&c->delegated.avl)) ? (c->dhcpv6_data_in ? c->dhcpv6_data_in : (void*)1) : NULL;
 	size_t len = (enabled && !avl_is_empty(&c->delegated.avl)) ? c->dhcpv6_len_in : 0;
-	void *data4 = (enabled && c->v4uplink) ? (c->dhcp_data_in ? c->dhcp_data_in : (void*)1) : NULL;
-	size_t len4 = (enabled && c->v4uplink) ? c->dhcp_len_in : 0;
+	void *data4 = (enabled && c->v4_saddr.s_addr) ? (c->dhcp_data_in ? c->dhcp_data_in : (void*)1) : NULL;
+	size_t len4 = (enabled && c->v4_saddr.s_addr) ? c->dhcp_len_in : 0;
 
 	struct iface_user *u;
 	list_for_each_entry(u, &users, head) {
@@ -763,7 +768,7 @@ static bool iface_discover_border(struct iface *c)
 	bool internal = c->carrier && !(c->flags & IFACE_FLAG_EXTERNAL) && (
 			(c->flags & (IFACE_FLAG_GUEST | IFACE_FLAG_LOOPBACK | IFACE_FLAG_HYBRID)) ||
 			((c->flags & IFACE_FLAG_ACCEPT_CERID) && !IN6_IS_ADDR_UNSPECIFIED(&c->cer)) ||
-			(avl_is_empty(&c->delegated.avl) && !c->v4uplink));
+			(avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr));
 	if (c->internal != internal) {
 		L_INFO("iface: %s border discovery detected state %s",
 				c->ifname, (internal) ? "internal" : "external");
@@ -862,9 +867,9 @@ void iface_flush(void)
 }
 
 
-void iface_set_ipv4_uplink(struct iface *c)
+void iface_set_ipv4_uplink(struct iface *c, const struct in_addr *saddr)
 {
-	c->v4uplink = true;
+	c->v4_saddr = *saddr;
 }
 
 
@@ -902,7 +907,7 @@ void iface_add_delegated(struct iface *c,
 
 void iface_update_ipv4_uplink(struct iface *c)
 {
-	c->v4uplink = false;
+	c->v4_saddr.s_addr = INADDR_ANY;
 }
 
 
@@ -1015,7 +1020,7 @@ void iface_commit(void)
 		iface_commit_ipv6_uplink(c);
 		iface_commit_ipv4_uplink(c);
 
-		if ((!c->platform || c->unused) && !c->v4uplink && avl_is_empty(&c->delegated.avl))
+		if ((!c->platform || c->unused) && !c->v4_saddr.s_addr && avl_is_empty(&c->delegated.avl))
 			iface_remove(c);
 	}
 }

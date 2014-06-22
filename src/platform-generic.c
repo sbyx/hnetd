@@ -141,6 +141,18 @@ void platform_set_address(struct iface *c, struct iface_addr *a, bool enable)
 }
 
 
+void platform_set_snat(struct iface *c, const struct prefix *p)
+{
+	char sbuf[INET_ADDRSTRLEN], pbuf[PREFIX_MAXBUFFLEN];
+	inet_ntop(AF_INET, &c->v4_saddr, sbuf, sizeof(sbuf));
+	prefix_ntop(pbuf, sizeof(pbuf), p, true);
+
+	char *argv[] = {backend, (p) ? "newnat" : "delnat",
+			c->ifname, sbuf, pbuf, NULL};
+	platform_call(argv);
+}
+
+
 void platform_set_route(struct iface *c, struct iface_route *route, bool enable)
 {
 	char from[PREFIX_MAXBUFFLEN];
