@@ -18,6 +18,7 @@ setfilter|unsetfilter)
 		$cmd $act INPUT -i "$2" -p tcp -m conntrack --ctstate NEW,INVALID -j REJECT --reject-with tcp-reset
 		$cmd $act INPUT -i "$2" -m conntrack --ctstate NEW,INVALID -j REJECT --reject-with icmp-port-unreachable
 	done
+	iptables -t nat $act POSTROUTING -o "$2" -j MASQUERADE
 	;;
 
 newaddr|deladdr)
