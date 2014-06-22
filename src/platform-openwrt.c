@@ -559,7 +559,8 @@ static void platform_commit(struct uloop_timeout *t)
 
 	}
 
-	if ((c->flags & IFACE_FLAG_HYBRID) || ((c->flags & IFACE_FLAG_ACCEPT_CERID) && !IN6_IS_ADDR_UNSPECIFIED(&c->cer))) {
+	if (c->v4_saddr.s_addr && ((c->flags & IFACE_FLAG_HYBRID) ||
+			((c->flags & IFACE_FLAG_ACCEPT_CERID) && !IN6_IS_ADDR_UNSPECIFIED(&c->cer)))) {
 		struct pa_dp *dp;
 		pa_for_each_dp(dp, pa_data) {
 			if (!IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
