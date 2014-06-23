@@ -657,7 +657,8 @@ void iface_remove(struct iface *c)
 	// If interface was internal, let subscribers know of removal
 	if (c->internal)
 		iface_notify_internal_state(c, false);
-	else
+
+	if (!c->internal || (c->flags & IFACE_FLAG_HYBRID))
 		iface_notify_data_state(c, false);
 
 	list_del(&c->head);
@@ -727,7 +728,7 @@ void iface_update_init(struct iface *c)
 static void iface_announce_border(struct uloop_timeout *t)
 {
 	struct iface *c = container_of(t, struct iface, transition);
-	iface_notify_data_state(c, !c->internal);
+	iface_notify_data_state(c, (!c->internal || (c->flags & IFACE_FLAG_HYBRID)));
 	iface_notify_internal_state(c, c->internal);
 	platform_set_internal(c, c->internal);
 
@@ -921,8 +922,8 @@ void iface_commit_ipv4_uplink(struct iface *c)
 	c->dhcp_data_stage = NULL;
 	c->dhcp_len_stage = 0;
 
-	if (changed && !c->internal)
-		iface_notify_data_state(c, !c->internal);
+	if (changed && (!c->internal || (c->flags & IFACE_FLAG_HYBRID)))
+		iface_notify_data_state(c, (!c->internal || (c->flags & IFACE_FLAG_HYBRID)));
 }
 
 
@@ -938,8 +939,8 @@ void iface_commit_ipv6_uplink(struct iface *c)
 	c->dhcpv6_data_stage = NULL;
 	c->dhcpv6_len_stage = 0;
 
-	if (changed && !c->internal)
-		iface_notify_data_state(c, !c->internal);
+	if (changed && (!c->internal || (c->flags & IFACE_FLAG_HYBRID)))
+		iface_notify_data_state(c, (!c->internal || (c->flags & IFACE_FLAG_HYBRID)));
 }
 
 
