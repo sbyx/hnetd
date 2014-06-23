@@ -465,7 +465,8 @@ static void platform_commit(struct uloop_timeout *t)
 	k = blobmsg_open_table(&b, "data");
 
 	const char *service = (c->internal && c->linkowner && !(c->flags & IFACE_FLAG_LOOPBACK)
-			&& avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr) ? "server" : "disabled";
+			&& ((avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr) || (c->flags & IFACE_FLAG_HYBRID)))
+					? "server" : "disabled";
 	blobmsg_add_string(&b, "ra", service);
 	blobmsg_add_string(&b, "dhcpv4", service);
 	blobmsg_add_string(&b, "dhcpv6", service);
@@ -559,8 +560,7 @@ static void platform_commit(struct uloop_timeout *t)
 
 	}
 
-	if (c->v4_saddr.s_addr && ((c->flags & IFACE_FLAG_HYBRID) ||
-			((c->flags & IFACE_FLAG_ACCEPT_CERID) && !IN6_IS_ADDR_UNSPECIFIED(&c->cer)))) {
+	if (c->v4_saddr.s_addr && (c->flags & IFACE_FLAG_HYBRID)) {
 		struct pa_dp *dp;
 		pa_for_each_dp(dp, pa_data) {
 			if (!IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
@@ -872,8 +872,6 @@ static void platform_update(void *data, size_t len)
 				flags |= IFACE_FLAG_GUEST;
 			else if (!strcmp(mode, "hybrid"))
 				flags |= IFACE_FLAG_HYBRID;
-			else if (!strcmp(mode, "accept_cerid"))
-				flags |= IFACE_FLAG_ACCEPT_CERID;
 			else if (!strcmp(mode, "external"))
 				flags |= IFACE_FLAG_EXTERNAL;
 			else if (strcmp(mode, "auto"))

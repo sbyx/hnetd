@@ -289,8 +289,6 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 					flags |= IFACE_FLAG_GUEST;
 				else if (!strcmp(mode, "hybrid"))
 					flags |= IFACE_FLAG_HYBRID;
-				else if (!strcmp(mode, "accept_cerid"))
-					flags |= IFACE_FLAG_ACCEPT_CERID;
 				else if (!strcmp(mode, "external"))
 					tb[OPT_HANDLE] = NULL;
 				else if (strcmp(mode, "auto"))

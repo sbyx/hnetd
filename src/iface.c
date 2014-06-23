@@ -767,7 +767,6 @@ static bool iface_discover_border(struct iface *c)
 	// Perform border-discovery (border on DHCPv4 assignment or DHCPv6-PD)
 	bool internal = c->carrier && !(c->flags & IFACE_FLAG_EXTERNAL) && (
 			(c->flags & (IFACE_FLAG_GUEST | IFACE_FLAG_LOOPBACK | IFACE_FLAG_HYBRID)) ||
-			((c->flags & IFACE_FLAG_ACCEPT_CERID) && !IN6_IS_ADDR_UNSPECIFIED(&c->cer)) ||
 			(avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr));
 	if (c->internal != internal) {
 		L_INFO("iface: %s border discovery detected state %s",

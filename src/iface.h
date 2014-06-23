@@ -95,7 +95,6 @@ struct iface_route {
 };
 
 typedef uint8_t iface_flags;
-#define IFACE_FLAG_ACCEPT_CERID  0x01
 #define IFACE_FLAG_GUEST         0x02
 #define IFACE_FLAG_ADHOC         0x04
 #define IFACE_FLAG_DISABLE_PA    0x08
