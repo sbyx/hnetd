@@ -147,7 +147,7 @@ void platform_set_snat(struct iface *c, const struct prefix *p)
 	inet_ntop(AF_INET, &c->v4_saddr, sbuf, sizeof(sbuf));
 	prefix_ntop(pbuf, sizeof(pbuf), p, true);
 
-	char *argv[] = {backend, (p) ? "newnat" : "delnat",
+	char *argv[] = {backend, (p && c->v4_saddr.s_addr) ? "newnat" : "delnat",
 			c->ifname, sbuf, pbuf, NULL};
 	platform_call(argv);
 }

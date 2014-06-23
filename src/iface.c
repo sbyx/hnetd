@@ -75,7 +75,10 @@ void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 				}
 			}
 		} else {
-			platform_set_snat(c, &dp->prefix);
+			struct iface *c;
+			list_for_each_entry(c, &interfaces, head)
+				if (c->flags & IFACE_FLAG_HYBRID)
+					platform_set_snat(c, &dp->prefix);
 		}
 	} else if(flags & PADF_DP_TODELETE) {
 		struct iface *c;
@@ -87,8 +90,11 @@ void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 			L_DEBUG("Removing from platform "PA_DP_L, PA_DP_LA(dp));
 			platform_set_prefix_route(&dp->prefix, false);
 		} else {
-			if (dp->local)
-				platform_set_snat(c, NULL);
+			if (dp->local) {
+				list_for_each_entry(c, &interfaces, head)
+					if (c->flags & IFACE_FLAG_HYBRID)
+						platform_set_snat(c, NULL);
+			}
 
 			bool ipv4_edp = false;
 			struct pa_dp *dp;
