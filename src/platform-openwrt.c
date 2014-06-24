@@ -465,7 +465,7 @@ static void platform_commit(struct uloop_timeout *t)
 	k = blobmsg_open_table(&b, "data");
 
 	const char *service = (c->internal && c->linkowner && !(c->flags & IFACE_FLAG_LOOPBACK)
-			&& ((avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr) || (c->flags & IFACE_FLAG_HYBRID)))
+			&& (avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr))
 					? "server" : "disabled";
 	blobmsg_add_string(&b, "ra", service);
 	blobmsg_add_string(&b, "dhcpv4", service);
