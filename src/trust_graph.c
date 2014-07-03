@@ -13,6 +13,7 @@ void trust_graph_init(hncp_trust_graph g, hncp_hash hash){
   INIT_LIST_HEAD(&g->rev_arrows);
   g->marked = false;
   g->trusted = false;
+  g->trusts_me = false;
   g->hncp_node = NULL;
 }
 
@@ -26,18 +27,27 @@ hncp_trust_graph trust_graph_create(hncp_hash hash){
   return g;
 }
 
+bool trust_graph_trusts_directly(hncp_trust_graph g, hncp_hash trusted){
+  struct _trusted_list* entry;
+  list_for_each_entry(entry, &g->arrows, list){
+    if(HASH_EQUALS(&entry->node->hash, trusted))
+      return true;
+  }
+  return false;
+}
+
+bool trust_graph_is_directly_trusted(hncp_trust_graph g, hncp_hash trusts_me){
+  struct _trusted_list* entry;
+  list_for_each_entry(entry, &g->rev_arrows, list){
+    if(HASH_EQUALS(&entry->node->hash, trusts_me))
+      return true;
+  }
+  return false;
+}
 
 void init_explo(struct list_head* l, hncp_trust_graph g){
   INIT_LIST_HEAD(l);
   add_graph_last(l, g);
-}
-
-static inline void _empty_list(struct list_head * l){
-  while(!list_empty(l)){
-    struct _trusted_list* e = list_first_entry(l, struct _trusted_list, list);
-    list_del(&e->list);
-    free(e);
-  }
 }
 
 /* Remove marking after an explo, and free the list used for that */
@@ -84,7 +94,6 @@ end:
   return result;
 };
 
-
 void trust_graph_add_trust_link(hncp_trust_graph emitter, hncp_trust_graph trusted){
   struct _trusted_list *link = malloc(sizeof(struct _trusted_list));
   struct _trusted_list *rev_link = malloc(sizeof(struct _trusted_list));
@@ -116,7 +125,6 @@ bool trust_graph_remove_trust_link(hncp_trust_graph emitter, hncp_trust_graph tr
       break;
     }
   }
-
   list_for_each_entry(entry, &trusted->rev_arrows, list){
     if(entry->node == emitter){
       list_del(&entry->list);
@@ -133,6 +141,49 @@ bool trust_graph_remove_trust_link(hncp_trust_graph emitter, hncp_trust_graph tr
 
 
 void trust_graph_remove_trust_links(hncp_trust_graph g){
-  _empty_list(&g->arrows);
-  _empty_list(&g->rev_arrows);
+    while(!list_empty(&g->arrows)){
+      struct _trusted_list* e = list_first_entry(&g->arrows, struct _trusted_list, list);
+      list_del(&e->list);
+      struct _trusted_list* rev;
+
+      list_for_each_entry(rev, &e->node->rev_arrows, list){
+        if(g == rev->node){
+          list_del(&rev->list);
+          free(rev);
+           break;
+        }
+      }
+      free(e);
+  }
 };
+
+void trust_graph_destroy(hncp_trust_graph g){
+  trust_graph_remove_trust_links(g);
+      while(!list_empty(&g->rev_arrows)){
+      struct _trusted_list* e = list_first_entry(&g->rev_arrows, struct _trusted_list, list);
+      list_del(&e->list);
+      struct _trusted_list* rev;
+
+      list_for_each_entry(rev, &e->node->arrows, list){
+        if(g == rev->node){
+          list_del(&rev->list);
+          free(rev);
+           break;
+        }
+      }
+      free(e);
+  }
+  free(g);
+}
+
+
+
+
+
+
+
+
+
+
+
+

@@ -57,12 +57,18 @@ hncp_trust_graph trust_graph_create(hncp_hash hash);
 #define _for_each_trust_graph(graph, item)\
   _for_each_arrow(&graph->arrows, item)
 
+#define _for_each_rev_trust_graph(graph, item)\
+  _for_each_arrow(&graph->rev_arrows, item)
+
 /* For bfs explo of the graph */
 static inline void add_graph_last(struct list_head* l, hncp_trust_graph g){
   struct _trusted_list* e = malloc(sizeof(struct _trusted_list));
   e->node = g;
   list_add_tail(&e->list, l);
 }
+
+/** True if the trusts_me node has advertised a TRUST_LINK TLV for g */
+bool trust_graph_is_directly_trusted(hncp_trust_graph g, hncp_hash trusts_me);
 
 /** True if the element in node g trusts the node with hash hash */
 bool trust_graph_is_trusted(hncp_trust_graph g, hncp_hash hash);
@@ -78,10 +84,7 @@ void trust_graph_add_trust_array(hncp_trust_graph emitter, hncp_trust_graph arra
 /** Deletion of _all_ the trust links from the node */
 void trust_graph_remove_trust_links(hncp_trust_graph g);
 
-static inline void trust_graph_destroy(hncp_trust_graph g){
-  trust_graph_remove_trust_links(g);
-  free(g);
-}
+void trust_graph_destroy(hncp_trust_graph g);
 
 
 #endif /* _TRUST_GRAPH_H */

@@ -129,6 +129,9 @@ struct hncp_link_conf_struct {
   /* Unreachability conf */
   hnetd_time_t ping_worried_t, ping_retry_base_t;
   int ping_retries;
+
+  /* Trust */
+  bool safe_link;
 };
 
 hncp_link_conf hncp_find_link_conf_by_name(hncp o, const char *ifname);

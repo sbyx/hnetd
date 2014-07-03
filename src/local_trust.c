@@ -1,105 +1,69 @@
 /*
  * Author : Xavier Bonnetain
  *
+ * Manages the Trust Link TLVs & Local node trust graph.
+ *
  * Copyright (c) 2014 cisco Systems, Inc.
  */
 
 
 #include "local_trust.h"
 
-void add_trust_tlv(hncp o, hncp_hash h){
-  hncp_t_trust_link tlv = alloca(sizeof(hncp_t_trust_link_s));
-  if(!tlv){
-    L_ERR("malloc (%lu) failed for trust link tlv", sizeof(hncp_t_trust_link_s));
-    return;
-  }
-  tlv->trusted_hash = *h;
-  hncp_update_tlv_raw(o, HNCP_T_TRUST_LINK, tlv, sizeof(hncp_t_trust_link_s), true);
-}
+struct local_trust_struct{
+  struct vlist_node node;
+  hncp_hash_s node_hash;
+};
 
-void local_trust_update_tlv(hncp o){
+typedef struct local_trust_struct local_trust_s, *local_trust;
 
-  hncp_trust_update_graph(o, &o->own_node->node_identifier_hash, o->trust->local_trust_array, o->trust->array_size);
 
-  hncp_remove_tlvs_by_type(o, HNCP_T_TRUST_LINK);
+static void update_local_trust(struct vlist_tree *tree, struct vlist_node *node_new, struct vlist_node *node_old){
+    hncp_trust t = container_of(tree, hncp_trust_s, local_trust);
+    hncp o = t->hncp;
+    /* Get the new container if it's really new, and the old otherwise. */
+    local_trust l = node_old ? container_of(node_old, local_trust_s, node) : container_of(node_new, local_trust_s, node);
 
-  for(unsigned int i = 0; i< o->trust->array_size; i++){
-    add_trust_tlv(o, o->trust->local_trust_array + i);
-  }
-}
+    /* Take care of the TLV in cas of creation/destruction */
+    if((!node_new) ^ (!node_old)){
+        hncp_trust_update_trusts_link(o, &o->own_node->node_identifier_hash, &l->node_hash, node_new);
+        hncp_t_trust_link tlv = alloca(sizeof(hncp_t_trust_link_s));
+        tlv->trusted_hash = l->node_hash;
+        hncp_update_tlv_raw(o, HNCP_T_TRUST_LINK, tlv, sizeof(hncp_t_trust_link_s), node_new);
+      }
 
-void local_trust_add_trusted_hash(hncp o, hncp_hash h, bool update){
+    /* Supress old link, if any */
+    if(node_old){
+      free(l);
+    }
+};
+
+void local_trust_init(hncp o){
   hncp_trust t = o->trust;
-  t->array_size++;
-  t->local_trust_array = realloc(t->local_trust_array, t->array_size * sizeof(hncp_hash_s));
-  t->local_trust_array[t->array_size-1] = *h;
-  if(update)
-    local_trust_update_tlv(o);
+  vlist_init(&t->local_trust, compare_hash, update_local_trust);
+  t->local_trust.keep_old = false;
+  t->local_trust.no_delete = false;
 }
 
-
-void local_trust_add_trusted_array(hncp o, hncp_hash h, unsigned int size, bool update){
+void local_trust_add_trusted_hash(hncp o, hncp_hash h){
   hncp_trust t = o->trust;
-  unsigned int orig_size = t->array_size;
-  t->array_size+= size;
-  t->local_trust_array = realloc(t->local_trust_array, t->array_size * sizeof(hncp_hash_s));
-  memcpy(&t->local_trust_array[orig_size], h, size * sizeof(hncp_hash_s));
-  if(update)
-    local_trust_update_tlv(o);
+  local_trust l = malloc(sizeof(local_trust_s));
+  l->node_hash = *h;
+  vlist_add(&t->local_trust, &l->node, &l->node_hash);
+
 }
 
-static inline void check_free_array(hncp_trust t){
-  if(t->array_size == 0){
-    free(t->local_trust_array);
-    t->local_trust_array = NULL;
-  }
-}
-
-bool local_trust_remove_trusted_hash(hncp o, hncp_hash h, bool update){
-  unsigned int i;
+bool local_trust_remove_trusted_hash(hncp o, hncp_hash h){
   hncp_trust t = o->trust;
-  for(i = 0; i < t->array_size; i++){
-    if(HASH_EQUALS(&t->local_trust_array[i], h))
-      goto remove;
+  local_trust l;
+  l = vlist_find(&t->local_trust, h, l, node);
+  if(l){
+    vlist_delete(&t->local_trust, &l->node);
+    return true;
   }
   return false;
-remove:
-  t->array_size--;
-  memmove(&t->local_trust_array[i], &t->local_trust_array[i+1], (t->array_size-i) * sizeof(hncp_hash_s));
-  t->local_trust_array = realloc(t->local_trust_array, t->array_size * sizeof(hncp_hash_s));
-  check_free_array(t);
-  if(update)
-    local_trust_update_tlv(o);
-  return true;
 }
 
 
-bool local_trust_remove_trusted_array(hncp o, hncp_hash h, unsigned int size, bool update){
-  bool done = false;
-  for(unsigned int i = 0; i<size; i++){
-    if(local_trust_remove_trusted_hash(o, &h[i], false))
-     done = true;
-  }
-  if(update && done)
-    local_trust_update_tlv(o);
-  return done;
-}
-
-
-void _purge_trusted_array(hncp o){
-  hncp_trust t = o->trust;
-  t->array_size = 0;
-  check_free_array(t);
-}
-
-void local_trust_replace_trusted_array(hncp o, hncp_hash h, unsigned int size, bool update){
-  _purge_trusted_array(o);
-  local_trust_add_trusted_array(o, h, size, update);
-}
-
-
-void local_trust_purge_trusted_array(hncp o, bool update){
-  _purge_trusted_array(o);
-  if(update)
-    local_trust_update_tlv(o);
+void local_trust_purge_trusted_list(hncp o){
+  vlist_flush_all(&o->trust->local_trust);
 }

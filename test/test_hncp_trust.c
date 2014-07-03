@@ -35,11 +35,37 @@ hncp_hash create_hash(const uint8_t c){
   return h;
 }
 
+int list_len(struct list_head * h){
+  struct list_head * l;
+  int r = 0;
+  list_for_each(l, h)
+    r++;
+  return r;
+}
+
+bool check_graph(hncp_trust_graph g, int out, int in){
+  return list_len(&g->arrows) == out && list_len(&g->rev_arrows) == in;
+}
+
+bool graph_not_dumb(hncp_trust_graph g){
+  struct _trusted_list * entry;
+  list_for_each_entry(entry, &g->arrows, list){
+    if(entry->node == g)
+      return false;
+  }
+
+    list_for_each_entry(entry, &g->rev_arrows, list){
+    if(entry->node == g)
+      return false;
+  }
+  return true;
+}
+
 void trust_graph(void){
   hncp o = hncp_create();
   hncp_hash h = &(o->own_node->node_identifier_hash);
 
-  sput_fail_if(hncp_trust_init(o, NULL), "Init check");
+  sput_fail_if(hncp_trust_init(o, NULL, NULL), "Init check");
   hncp_trust_graph g = o->trust->my_graph;
   sput_fail_unless(trust_graph_is_trusted(g, h), "I trust myself");
 
@@ -56,7 +82,7 @@ void trust_graph(void){
   sput_fail_unless(trust_graph_is_trusted(g, h1), "Direct trust ok");
   sput_fail_unless(trust_graph_is_trusted(g, h2), "Transitive trust ok");
   sput_fail_if(g->marked || g1->marked || g2->marked, "Clean graph after search");
-
+  sput_fail_unless(check_graph(g, 1, 0) && check_graph(g1, 1, 1) && check_graph(g2, 0, 1), "Links present");
   trust_graph_add_trust_link(g2,g);
   hncp_hash h3 = create_hash(3);
   hncp_trust_graph g3 = trust_graph_create(h3);
@@ -98,37 +124,51 @@ void trust_graph(void){
 void hncp_trust_test(void){
   hncp o = hncp_create();
   hncp_hash h = &(o->own_node->node_identifier_hash);
-  sput_fail_if(hncp_trust_init(o, NULL), "Init check");
+  sput_fail_if(hncp_trust_init(o, NULL, NULL), "Init check");
   //hncp_trust_graph g = o->trust->my_graph;
   sput_fail_unless(hncp_trust_node_trusted(o, h), "I trust myself");
 
   hncp_hash h1 = create_hash(1);
   hncp_hash h2 = create_hash(2);
-  sput_fail_if(hncp_trust_node_trusted(o, h1) || hncp_trust_node_trusts_me(o, h2), "I'm alone");
-  hncp_trust_update_graph(o, h1, NULL, 0);
-  hncp_hash_s list[2] = {*h, *h1};
-  hncp_trust_update_graph(o, h2, list, 2);
-  list[0] = *h2;
-  hncp_trust_update_graph(o, h1, list, 1);
 
+  hncp_trust_graph g = o->trust->my_graph;
   hncp_trust_graph g1 = hncp_trust_get_graph_or_create_it(o, h1);
   hncp_trust_graph g2 = hncp_trust_get_graph_or_create_it(o, h2);
-  /* here : g1 <=> g2 => g */
-  sput_fail_if(g1->trusted || g2->trusted || list_first_entry(&g1->arrows, struct _trusted_list, list)->node != g2, "Consistency check");
-  sput_fail_if(hncp_trust_node_trusted(o, h1) || !hncp_trust_node_trusts_me(o, h1), "Distant link insertion ok");
 
-  local_trust_add_trusted_array(o, list, 2, true);
+  sput_fail_if(hncp_trust_node_trusted(o, h1) || hncp_trust_node_trusts_me(o, h2), "I'm alone");
+
+  hncp_trust_add_trust_link(o, h2, h);
+  hncp_trust_add_trust_link(o, h2, h1);
+  hncp_trust_add_trust_link(o, h1, h2);
+
+
+  /* here : g1 <=> g2 => g */
+  sput_fail_if(!g1->trusts_me|| !g2->trusts_me||g1->trusted || g2->trusted || list_first_entry(&g1->arrows, struct _trusted_list, list)->node != g2, "Consistency check");
+  sput_fail_if(hncp_trust_node_trusted(o, h1) || !hncp_trust_node_trusts_me(o, h1), "Distant link insertion ok");
+  sput_fail_unless(check_graph(g, 0, 1) && check_graph(g2, 2, 1) && check_graph(g1, 1, 1), "Right number of trust links");
+
+  local_trust_add_trusted_hash(o, h2);
+  local_trust_add_trusted_hash(o, h1);
+  local_trust_add_trusted_hash(o, h1);
+
   hncp_hash h3 = create_hash(3);
-  hncp_trust_update_graph(o, h3, h1, 1);
+  hncp_trust_add_trust_link(o, h3, h1);
+  hncp_trust_graph g3 = hncp_trust_get_graph_or_create_it(o, h3);
+  sput_fail_unless(graph_not_dumb(g) && graph_not_dumb(g1) && graph_not_dumb(g2) && graph_not_dumb(g3), "No autoloop");
+
+  sput_fail_unless(check_graph(g, 2, 1) && check_graph(g2, 2, 2) && check_graph(g1, 1, 3) && check_graph(g3, 1, 0), "Right number of trust links");
+
   sput_fail_unless(!hncp_trust_node_trusted(o, h3) && hncp_trust_node_trusts_me(o, h3), "Local insertion ok");
   /* here : g3 => g1 <=> g2 <=> g => g1 */
-  sput_fail_unless(local_trust_remove_trusted_hash(o, h2, true), "Local removal ok");
-  sput_fail_if(local_trust_remove_trusted_hash(o, h2, false), "Removal, bis");
-  local_trust_purge_trusted_array(o, true);
-  sput_fail_if(local_trust_remove_trusted_array(o, list, 2, true),"Empty array check");
+  sput_fail_unless(local_trust_remove_trusted_hash(o, h2), "Local removal ok");
+  sput_fail_if(local_trust_remove_trusted_hash(o, h2), "Removal, bis");
+  local_trust_purge_trusted_list(o);
+  sput_fail_if(local_trust_remove_trusted_hash(o, h1),"Empty array check");
   sput_fail_if(hncp_trust_node_trusted(o, h1) || hncp_trust_node_trusted(o, h2), "Local complete deletion ok");
-  local_trust_add_trusted_hash(o, h3, true);
-  local_trust_replace_trusted_array(o, h2, 1, true);
+  local_trust_add_trusted_hash(o, h3);
+  local_trust_purge_trusted_list(o);
+  local_trust_add_trusted_hash(o, h2);
+  local_trust_add_trusted_hash(o, h1);
   /* here : g3 => g1 <=> g2 <=> g */
   sput_fail_unless(hncp_trust_node_trusts_me(o, h3) && !hncp_trust_node_trusted(o, h3), "Inserting again ok");
   hncp_trust_destroy(o);
@@ -137,7 +177,6 @@ void hncp_trust_test(void){
   free(h2);
   free(h3);
 }
-
 
 int main(__unused int argc, __unused char **argv)
 {

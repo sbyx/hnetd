@@ -12,7 +12,6 @@
 
 #define RSA_KEY_SIZE 2048
 
-
 struct trust_key_struct{
   /* Structured key */
   pk_context ctx;
@@ -34,6 +33,7 @@ struct trust_key_struct{
 
   /* Flag to identify reliable keys (unused for self key) */
   bool locally_trusted;
+
   /* Is it a public or private key */
   bool private;
 };
@@ -51,6 +51,7 @@ struct crypto_data{
   ctr_drbg_context ctr_drbg;
   md_context_t md_ctx;
 
+  char * key_dir;
   uint16_t sign_type;
   uint16_t sign_hash;
 };
@@ -69,7 +70,7 @@ typedef struct symmetric_key_struct hncp_shared_key_s, *hncp_shared_key;
 /** 1 if key generation failed
   * 2 if key file opening failed (if file exists)
   * else 0 */
-int hncp_crypto_init(hncp o, char * private_key_file);
+int hncp_crypto_init(hncp o, char * private_key_file, char *trusted_key_dir);
 
 /** 0 on success
   * Appropriate polarssl err code on failure */
@@ -87,6 +88,11 @@ void hncp_crypto_del_data(struct crypto_data *data);
   * returns the number of keys, or -1 if the directory isn't available */
 int hncp_crypto_get_trusted_keys(hncp o, char *trusted_dir);
 
+/** Trust a key, save it in a file & advertise it */
+void hncp_crypto_set_trusted_key(hncp o, trust_key k, bool temporary);
+
+/** Stop directly trusting a key */
+void hncp_crypto_revoke_trusted_key(hncp o, trust_key k, bool was_temporary);
 /**  initialize the struct from the context in it */
 void hncp_crypto_init_key(trust_key t, char * file_name, bool private);
 

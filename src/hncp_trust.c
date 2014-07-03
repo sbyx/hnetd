@@ -16,12 +16,18 @@ static void update_trust_graph( __unused struct vlist_tree *t, struct vlist_node
   }
 };
 
+/** Hash comparison, for vlists */
+int compare_hash(const void *hash1, const void *hash2, __unused void *c){
+  return HASH_CMP(hash1, hash2);
+};
 
 static void hncp_trust_tlv_update_callback(hncp_subscriber s, hncp_node n, struct tlv_attr *tlv, bool add);
 
 static void hncp_trust_local_tlv_callback(hncp_subscriber s, struct tlv_attr *tlv, bool add);
 
 static void hncp_trust_node_change_callback(hncp_subscriber s, hncp_node n, bool add);
+
+static void hncp_trust_end_friend_search(struct uloop_timeout * t);
 
 /* Add the graph node to the graph list. */
 static inline void hncp_trust_add_node(hncp o, hncp_trust_graph g){
@@ -35,31 +41,33 @@ static inline hncp_trust_graph hncp_trust_create_graph(hncp o, const hncp_hash h
   return g;
 }
 
-int hncp_trust_init(hncp o, char * private_key_file){
+int hncp_trust_init(hncp o, char * private_key_file, char * trusted_key_dir){
   hncp_trust s = malloc(sizeof(hncp_trust_s));
   //memset(s, 0, sizeof(hncp_trust_s));
   if(!s)
     return -1;
-  s->array_size = 0;
-  s->local_trust_array = NULL;
-  s->tlv_version = 0;
 
-  vlist_init(&(s->trust_graphs), compare_hash, update_trust_graph);
+  o->trust = s;
+
+  vlist_init(&s->trust_graphs, compare_hash, update_trust_graph);
   s->trust_graphs.keep_old = false;
   s->trust_graphs.no_delete = false;
 
+  local_trust_init(o);
+
+  s->friend_search_timeout.pending = NULL;
   int r = 0;
-  o->trust = s;
   s->hncp = o;
   s->crypto_used = false;
 
   s->want_friend = false;
+  INIT_LIST_HEAD(&s->temporary_friend_key_list);
 
   /* Don't consider random adresses as functions */
   memset(&s->sub, 0, sizeof(hncp_subscriber_s));
 
   if(private_key_file){
-    r = hncp_crypto_init(o, private_key_file);
+    r = hncp_crypto_init(o, private_key_file, trusted_key_dir);
     s->sub.local_tlv_change_callback = hncp_trust_local_tlv_callback;
     s->sub.tlv_change_callback = hncp_trust_tlv_update_callback;
   }
@@ -69,6 +77,7 @@ int hncp_trust_init(hncp o, char * private_key_file){
 
   s->my_graph = hncp_trust_create_graph(o, own_hash);
   s->my_graph->trusted = true;
+  s->my_graph->trusts_me = true;
 
   hncp_subscribe(o, &s->sub);
 
@@ -77,30 +86,37 @@ int hncp_trust_init(hncp o, char * private_key_file){
 
 void hncp_trust_destroy(hncp o){
   hncp_trust t = o->trust;
+  local_trust_purge_trusted_list(o);
+
   if(t->crypto_used) hncp_crypto_del_data(t->crypto);
   t->crypto_used = false;
   hncp_unsubscribe(o, &t->sub);
   vlist_flush_all(&o->trust->trust_graphs);
-  if(t->local_trust_array)
-    free(t->local_trust_array);
+
 
   free(t);
 }
 
 hncp_trust_graph hncp_trust_get_graph_or_create_it(hncp o, hncp_hash hash){
   hncp_trust_graph g = graph_from_hash(o, hash);
-  if(!g)
+  if(!g){
     g = hncp_trust_create_graph(o, hash);
+   }
   return g;
 }
 
-void hncp_trust_flood_trust_links(hncp_trust_graph g){
+void hncp_trust_flood_trust_link(hncp_trust_graph emitter, hncp_trust_graph target){
+
   struct list_head head;
   INIT_LIST_HEAD(&head);
-  if(g->trusted){
-    add_graph_last(&head, g);
-  }
+  if(emitter->trusted){
+    add_graph_last(&head, target);
+    target->trusted = true;
+    }
+
+  hncp_trust_graph g;
   while(!list_empty(&head)){
+
     struct _trusted_list* l = list_first_entry(&head, struct _trusted_list, list);
     g = l->node;
     struct _trusted_list* t;
@@ -115,12 +131,34 @@ void hncp_trust_flood_trust_links(hncp_trust_graph g){
     list_del(&l->list);
     free(l);
   }
+
+  if(target->trusts_me){
+    add_graph_last(&head, emitter);
+    emitter->trusts_me = true;
+  }
+
+  while(!list_empty(&head)){
+    struct _trusted_list* l = list_first_entry(&head, struct _trusted_list, list);
+    g = l->node;
+    struct _trusted_list* t;
+    _for_each_rev_trust_graph(g, t){
+      if(!t->node->trusts_me){
+        t->node->trusts_me = true;
+        //if(t->node->hncp_node)
+        //  t->node->hncp_node->trusted = true;
+        add_graph_last(&head, t->node);
+      }
+    }
+    list_del(&l->list);
+    free(l);
+  }
 };
 
 void hncp_trust_recalculate_trust_links(hncp o){
   hncp_trust_graph g;
   vlist_for_each_element(&o->trust->trust_graphs, g, vlist_node){
     g->trusted = false;
+    g->trusts_me = false;
   }
 
   hncp_node n;
@@ -130,28 +168,36 @@ void hncp_trust_recalculate_trust_links(hncp o){
 
   o->own_node->trusted = true;
   o->trust->my_graph->trusted = true;
-  hncp_trust_flood_trust_links(o->trust->my_graph);
+  o->trust->my_graph->trusts_me = true;
+  hncp_trust_flood_trust_link(o->trust->my_graph, o->trust->my_graph);
 }
 
 /** Update/create the trust graph with new trust links
  * trusted : array of hashes
  * size : size of the array */
-void hncp_trust_update_graph(hncp o, hncp_hash emitter, hncp_hash trusted, int size){
+void hncp_trust_add_trust_link(hncp o, hncp_hash emitter, hncp_hash target){
   hncp_trust_graph g = hncp_trust_get_graph_or_create_it(o, emitter);
-  bool empty = list_empty(&g->arrows);
-  trust_graph_remove_trust_links(g);
+  hncp_trust_graph g_trusted = hncp_trust_get_graph_or_create_it(o, target);
+  trust_graph_add_trust_link(g, g_trusted);
 
-  for(int i = 0; i < size; i++){
-    hncp_trust_graph g_trusted = hncp_trust_get_graph_or_create_it(o, &trusted[i]);
-    trust_graph_add_trust_link(g, g_trusted);
-  };
+  if(g->trusted ||g_trusted->trusts_me)
+    hncp_trust_flood_trust_link(g, g_trusted);
+}
 
-  if(empty)
-    hncp_trust_flood_trust_links(g);
-  else
+void hncp_trust_del_trust_link(hncp o, hncp_hash emitter, hncp_hash target){
+  hncp_trust_graph g = hncp_trust_get_graph_or_create_it(o, emitter);
+  hncp_trust_graph g_trusted = hncp_trust_get_graph_or_create_it(o, target);
+  bool existed = trust_graph_remove_trust_link(g, g_trusted);
+  if(existed && (g->trusted || g_trusted->trusts_me))
     hncp_trust_recalculate_trust_links(o);
 }
 
+void hncp_trust_update_trusts_link(hncp o, hncp_hash emitter, hncp_hash target, bool add){
+  if(add)
+    hncp_trust_add_trust_link(o, emitter, target);
+  else
+    hncp_trust_del_trust_link(o, emitter, target);
+}
 
 bool hncp_trust_node_trusted(hncp o, hncp_hash hash){
   hncp_trust_graph g = graph_from_hash(o, hash);
@@ -160,13 +206,67 @@ bool hncp_trust_node_trusted(hncp o, hncp_hash hash){
   return g->trusted;
 };
 
-
 bool hncp_trust_node_trusts_me(hncp o, hncp_hash hash){
    hncp_trust_graph node = graph_from_hash(o, hash);
    if(!node)
     return false;
-   return trust_graph_is_trusted(node, &(o->own_node->node_identifier_hash));
+   return node->trusts_me;
 };
+
+static void hncp_trust_end_friend_search(struct uloop_timeout * u){
+  hncp_trust t = container_of(u, hncp_trust_s, friend_search_timeout);
+  t->want_friend = false;
+  while(!list_empty(&t->temporary_friend_key_list)){
+    struct key_list * k = list_first_entry(&t->temporary_friend_key_list, struct key_list, list);
+    list_del(&k->list);
+    hncp_crypto_revoke_trusted_key(t->hncp, k->key, true);
+    free(k);
+  }
+}
+
+void hncp_trust_begin_friend_search(hncp o, int seconds){
+  hncp_trust t = o->trust;
+
+  /* Remove an old friend search, if any */
+  if(t->want_friend)
+    uloop_timeout_cancel(&t->friend_search_timeout);
+
+  t->want_friend = true;
+  hncp_link link;
+  hncp_neighbor n;
+
+  struct key_list * list;
+
+  while(!list_empty(&t->temporary_friend_key_list)){
+    list = list_first_entry(&t->temporary_friend_key_list, struct key_list, list);
+    list_del(&list->list);
+    hncp_crypto_revoke_trusted_key(t->hncp, list->key, true);
+    free(list);
+  }
+
+  vlist_for_each_element(&o->links, link, in_links){
+    if(link->conf->safe_link){
+      vlist_for_each_element(&link->neighbors, n, in_neighbors){
+        trust_key k = hncp_crypto_key_from_hash(o, &n->node_identifier_hash);
+        if(!k)/* key unavailable */
+          continue;
+        if(k->locally_trusted) /* key already trusted */
+          continue;
+        if(!trust_graph_is_directly_trusted(o->trust->my_graph, &n->node_identifier_hash)){ /* Set temporary trust */
+          list = malloc(sizeof(struct key_list));
+          list->key = k;
+          list_add_tail(&list->list, &o->trust->temporary_friend_key_list);
+          hncp_crypto_set_trusted_key(o, k, true);
+        }else
+          hncp_crypto_set_trusted_key(o, k, false); /* Set permanent trust */
+      }
+
+    }
+
+  }
+  t->friend_search_timeout.cb = hncp_trust_end_friend_search;
+  uloop_timeout_set(&t->friend_search_timeout, seconds*1000);
+}
 
 /** Callbacks */
 
@@ -181,22 +281,32 @@ void hncp_trust_update_key(hncp_subscriber s, __unused hncp_node n, struct tlv_a
   }
 }
 
+static inline struct key_list * _hash_in_list(struct list_head* head, hncp_hash hash){
+  struct key_list * entry;
+  list_for_each_entry(entry, head, list){
+    if(HASH_EQUALS(&entry->key->key_hash, hash))
+      return entry;
+  }
+  return NULL;
+}
+
 void hncp_trust_update_trusts_links(hncp_subscriber s, hncp_node n, struct tlv_attr *tlv, bool add){
   hncp_t_trust_link ta = (hncp_t_trust_link) &tlv->data;
   hncp_trust t = container_of(s, hncp_trust_s, sub);
-  if(t->want_friend && HASH_EQUALS(&ta->trusted_hash, &t->hncp->own_node->node_identifier_hash)){
-    trust_key k = hncp_crypto_key_from_hash(t->hncp, &n->node_identifier_hash);
-    if(!k)
-      L_ERR("Public key for %s not found !", HEX_REPR(&n->node_identifier_hash, HNCP_HASH_LEN));
-    else{
-      k->locally_trusted = true;
-      local_trust_add_trusted_hash(t->hncp, &n->node_identifier_hash, true);
-    }
-  }
   if(add){
-    hncp_trust_update_graph(t->hncp, &n->node_identifier_hash, &ta->trusted_hash, 1);
+    hncp_trust_add_trust_link(t->hncp, &n->node_identifier_hash, &ta->trusted_hash);
+
+    if(t->want_friend && HASH_EQUALS(&ta->trusted_hash, &t->hncp->own_node->node_identifier_hash)){
+      struct key_list * entry = _hash_in_list(&t->temporary_friend_key_list, &n->node_identifier_hash);
+      if(entry){
+        list_del(&entry->list); /* Suppression from the temporary trust link. The link is now parmanent */
+
+        free(entry);
+      }
+    }
+
   }else
-    hncp_trust_update_graph(t->hncp, &n->node_identifier_hash, NULL, 0);
+    hncp_trust_del_trust_link(t->hncp, &n->node_identifier_hash, &ta->trusted_hash);
 }
 
 /* The signature_tlv must be a pointer to the last element of tlvs */
@@ -235,13 +345,15 @@ bool hncp_trust_message_integrity_check(hncp o, hncp_hash identifier_hash, struc
   struct tlv_attr *iter_tlv;
   unsigned int id;
   unsigned int uid = 0; /* Tlv id begins at 1 */
+  printf("%u\n", tlv_len(tlv_container));
   tlv_for_each_attr(iter_tlv, tlv_container){
     id = tlv_id(iter_tlv);
+    printf("%u\n", tlv_len(iter_tlv));
     /* Reject if the trust tlvs (key, signature, trust links) are not unique */
     if(id == uid)
       return false;
     switch(id){
-      case HNCP_T_NODE_DATA_KEY:
+      case HNCP_T_NODE_KEY:
         node_key_tlv = iter_tlv;
         goto end_unique;
       case HNCP_T_SIGNATURE:
@@ -263,7 +375,7 @@ static void hncp_trust_tlv_update_callback(hncp_subscriber s, hncp_node n, struc
   if(hncp_node_is_self(n))
     return;
   switch(tlv_id(tlv)){
-    case HNCP_T_NODE_DATA_KEY:
+    case HNCP_T_NODE_KEY:
       hncp_trust_update_key(s, n, tlv, add);
       break;
     case HNCP_T_TRUST_LINK:

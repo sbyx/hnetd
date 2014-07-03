@@ -60,14 +60,16 @@ enum {
   HNCP_T_NODE_STATE = 5,
 
   HNCP_T_NODE_DATA = 6,
-  HNCP_T_NODE_DATA_KEY = 7, /* public key payload, not implemented */
+  HNCP_T_NODE_KEY = 7, /* public key payload, not implemented */
   HNCP_T_NODE_DATA_NEIGHBOR = 8,
 
   HNCP_T_CUSTOM = 9, /* not implemented */
 
   HNCP_T_VERSION = 10,
 
-  HNCP_T_READABLE_DATA = 11, /* ni, a pure-ASCII string with human-readable info on the router */
+  HNCP_T_UPDATE_NUMBER = 11,
+
+  HNCP_T_NODE_INFO = 12, /* ni, a pure-ASCII string with human-readable info on the router */
 
   HNCP_T_EXTERNAL_CONNECTION = 41,
   HNCP_T_DELEGATED_PREFIX = 42, /* may contain TLVs */
@@ -85,7 +87,7 @@ enum {
   HNCP_T_TRUST_LINK = 70, /* Direct trust link */
   HNCP_T_SHARED_KEY = 71, /* Key used for symmetric tlv encryption
                            * tuple (node receiver, assymetrically encrypted key) */
-  HNCP_T_ENCRYPTED_DATA = 72, /* should contain TLVs */
+  HNCP_T_PRIVATE_DATA = 72, /* should contain TLVs */
 
   HNCP_T_SIGNATURE = 0xFFFF
 };

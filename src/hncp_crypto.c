@@ -36,11 +36,11 @@ trust_key hncp_crypto_key_from_hash(hncp o, hncp_hash hash){
 }
 
 void hncp_crypto_set_key_tlv(hncp o, trust_key k){
-  hncp_remove_tlvs_by_type(o, HNCP_T_NODE_DATA_KEY);
-  hncp_update_tlv_raw(o, HNCP_T_NODE_DATA_KEY, k->raw_key, k->size, true);
+  hncp_remove_tlvs_by_type(o, HNCP_T_NODE_KEY);
+  hncp_update_tlv_raw(o, HNCP_T_NODE_KEY, k->raw_key, k->size, true);
 }
 
-int hncp_crypto_init(hncp o, char * private_key_file){
+int hncp_crypto_init(hncp o, char * private_key_file, char * trusted_key_dir){
 
   o->trust->crypto = malloc(sizeof(struct crypto_data));
   hncp_crypto crypto = o->trust->crypto;
@@ -60,7 +60,7 @@ int hncp_crypto_init(hncp o, char * private_key_file){
     }
     new_key = true;
   }
-
+  crypto->key_dir = strdup(trusted_key_dir);
   hncp_crypto_init_key(&crypto->key, private_key_file, true);
   entropy_init(&crypto->entropy);
   ctr_drbg_init(&crypto->ctr_drbg, ctr_drbg_random, &crypto->entropy, (const unsigned char *) "Sign/crypto", 11);
@@ -78,10 +78,17 @@ int hncp_crypto_init(hncp o, char * private_key_file){
   crypto->sign_hash = SIGN_HASH_SHA512;
   crypto->sign_type = SIGN_TYPE_RSA_SSAPSS;
   hncp_crypto_set_key_tlv(o, &crypto->key);
+
+  if(access(trusted_key_dir, F_OK))
+    hncp_crypto_get_trusted_keys(o, trusted_key_dir);
+  else
+    mkdir(trusted_key_dir, 0700);
   return 0;
 };
 
 int hncp_crypto_get_trusted_keys(hncp o, char * trusted_dir){
+  if(!trusted_dir)
+    return -1;
   struct stat s;
   int ret = 0;
   if(stat(trusted_dir, &s)){
@@ -118,14 +125,32 @@ int hncp_crypto_get_trusted_keys(hncp o, char * trusted_dir){
     c->locally_trusted = true;
     crypto_md5_hash_from_raw(&c->key_hash, c->raw_key, c->size);
     vlist_add(&o->trust->crypto->trust_keys, &c->node, &c->key_hash);
-    local_trust_add_trusted_hash(o, &c->key_hash, false);
+    local_trust_add_trusted_hash(o, &c->key_hash);
     ret++;
   }
   closedir(dir);
-  local_trust_update_tlv(o);
   return ret;
 }
 
+void hncp_crypto_set_trusted_key(hncp o, trust_key k, bool temporary){
+  k->locally_trusted = true;
+  if(!temporary)
+    hncp_crypto_write_trusted_key(o, k, o->trust->crypto->key_dir);
+  local_trust_add_trusted_hash(o, &k->key_hash);
+}
+
+
+void hncp_crypto_revoke_trusted_key(hncp o, trust_key k, bool was_temporary){
+  if(!k->locally_trusted){
+    L_WARN("Can't revoke a not trusted key");
+    return;
+  }
+  k->locally_trusted = false;
+  int r = remove(k->key_file);
+  if(!was_temporary && r)
+    L_ERR("Couldn't remove the key file of %s.", HEX_REPR(&k->key_hash, HNCP_HASH_LEN));
+  local_trust_remove_trusted_hash(o, &k->key_hash);
+}
 
 void hncp_crypto_del_key(trust_key c){
   pk_free(&c->ctx);
@@ -136,6 +161,7 @@ void hncp_crypto_del_key(trust_key c){
 void hncp_crypto_del_data(struct crypto_data *data){
   vlist_flush_all(&data->trust_keys);
   hncp_crypto_del_key(&data->key);
+  free(data->key_dir);
   free(data);
 }
 
@@ -201,7 +227,6 @@ int hncp_crypto_sign_tlvs(hncp o, uint16_t sign_type, uint16_t hash_type){
   return r;
 }
 
-
 int hncp_crypto_pk_encrypt_data(hncp o, trust_key k, char * data, size_t size, char ** encrypted_data, size_t* len, uint16_t crypt_type, uint16_t crypt_variant){
   size_t esize = crypto_pk_encrypt_max_out_size(&k->ctx, crypt_type);
   *encrypted_data = malloc(esize);
@@ -212,10 +237,6 @@ int hncp_crypto_pk_decrypt_data(hncp o, char * data, size_t size, char ** decryp
   size_t esize = crypto_pk_encrypt_max_size(&o->trust->crypto->key.ctx, crypt_type, crypt_variant);
   *decrypted_data = malloc(esize);
   return crypto_pk_decrypt_data(&o->trust->crypto->ctr_drbg, &o->trust->crypto->key.ctx, data, size, (unsigned char *) *decrypted_data, len, esize, crypt_type, crypt_variant);
-}
-
-void hncp_crypto_new_friend_callback(hncp_subscriber s, hncp_node n, struct tlv_attr *tlv, bool add){
-
 }
 
 void hncp_crypto_local_update_callback(hncp_subscriber s, struct tlv_attr *tlv, __unused bool add){

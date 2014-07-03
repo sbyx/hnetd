@@ -116,7 +116,7 @@ void test_self_rsa(void){
   #ifdef FORCE_RSA_GEN
   remove(TRUST_PRIVATE_KEY_FILE);
   #endif // FORCE_RSA_GEN
-  sput_fail_if(hncp_trust_init(o, TRUST_PRIVATE_KEY_FILE), "Init ok");
+  sput_fail_if(hncp_trust_init(o, TRUST_PRIVATE_KEY_FILE, ""), "Init ok");
   hncp_hash_s h;
   crypto_md5_hash_from_key(&h, &o->trust->crypto->key.ctx, false);
   sput_fail_unless(HASH_EQUALS(&h, &o->own_node->node_identifier_hash), "Hash derived from key");
@@ -148,7 +148,7 @@ void test_public_key(void){
     system(buf);
   #endif // FORCE_RSA_PUB_GEN
   hncp o = hncp_create();
-  hncp_trust_init(o, TRUST_PRIVATE_KEY_FILE);
+  hncp_trust_init(o, TRUST_PRIVATE_KEY_FILE, PUBKEY_DIR);
   populate_pubkey_dir(PUBKEY_DIR, RSA_PUB_KEY_NUM);
   hncp_crypto_get_trusted_keys(o, PUBKEY_DIR);
 

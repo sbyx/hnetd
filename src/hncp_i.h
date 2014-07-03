@@ -228,8 +228,6 @@ struct hncp_node_struct {
 
   uint32_t version;
 
-  /* trust link version, to limit packet replay impact */
-  uint32_t trust_link_version;
   /* whether the node is trusted */
   bool trusted;
 
