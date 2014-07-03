@@ -36,15 +36,14 @@ enum ipc_option {
 	OPT_IFNAME,
 	OPT_HANDLE,
 	OPT_PREFIX,
+	OPT_IPV4SOURCE,
 	OPT_DNS,
-	OPT_ACCEPT_CERID,
+	OPT_MODE,
 	OPT_CERID,
-	OPT_GUEST,
 	OPT_LINK_ID,
 	OPT_IFACE_ID,
 	OPT_IP6_PLEN,
 	OPT_IP4_PLEN,
-	OPT_ADHOC,
 	OPT_DISABLE_PA,
 	OPT_PASSTHRU,
 	OPT_ULA_DEFAULT_ROUTER,
@@ -59,15 +58,14 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_IFNAME] = {"ifname", BLOBMSG_TYPE_STRING},
 	[OPT_HANDLE] = {"handle", BLOBMSG_TYPE_STRING},
 	[OPT_PREFIX] = {"prefix", BLOBMSG_TYPE_ARRAY},
+	[OPT_IPV4SOURCE] = {"ipv4source", BLOBMSG_TYPE_STRING},
 	[OPT_DNS] = {"dns", BLOBMSG_TYPE_ARRAY},
-	[OPT_ACCEPT_CERID] = {"accept_cerid", BLOBMSG_TYPE_BOOL},
+	[OPT_MODE] = {"mode", BLOBMSG_TYPE_STRING},
 	[OPT_CERID] = {"cerid", BLOBMSG_TYPE_STRING},
-	[OPT_GUEST] = {"guest", BLOBMSG_TYPE_BOOL},
 	[OPT_LINK_ID] = {"link_id", BLOBMSG_TYPE_STRING},
 	[OPT_IFACE_ID] = {"iface_id", BLOBMSG_TYPE_ARRAY},
 	[OPT_IP6_PLEN] = {"ip6assign", BLOBMSG_TYPE_STRING},
 	[OPT_IP4_PLEN] = {"ip4assign", BLOBMSG_TYPE_STRING},
-	[OPT_ADHOC] = {"adhoc", BLOBMSG_TYPE_BOOL},
 	[OPT_DISABLE_PA] = {"disable_pa", BLOBMSG_TYPE_BOOL},
 	[OPT_PASSTHRU] = {"passthru", BLOBMSG_TYPE_STRING},
 	[OPT_ULA_DEFAULT_ROUTER] = {"ula_default_router", BLOBMSG_TYPE_BOOL},
@@ -177,18 +175,10 @@ int ipc_ifupdown(int argc, char *argv[])
 	char *entry;
 
 	int c, i;
-	while ((c = getopt(argc, argv, "ecgadp:l:i:m:n:uk:P:")) > 0) {
+	while ((c = getopt(argc, argv, "c:dp:l:i:m:n:uk:P:")) > 0) {
 		switch(c) {
-		case 'e':
-			external = true;
-			break;
-
 		case 'c':
-			blobmsg_add_u8(&b, "accept_cerid", 1);
-			break;
-
-		case 'g':
-			blobmsg_add_u8(&b, "guest", 1);
+			blobmsg_add_string(&b, "mode", optarg);
 			break;
 
 		case 'p':
@@ -223,10 +213,6 @@ int ipc_ifupdown(int argc, char *argv[])
 
 		case 'd':
 			blobmsg_add_u8(&b, "disable_pa", 1);
-			break;
-
-		case 'a':
-			blobmsg_add_u8(&b, "adhoc", 1);
 			break;
 
 		case 'u':
@@ -295,14 +281,19 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 		if (!strcmp(cmd, "ifup")) {
 			iface_flags flags = 0;
 
-			if (tb[OPT_ACCEPT_CERID] && blobmsg_get_bool(tb[OPT_ACCEPT_CERID]))
-				flags |= IFACE_FLAG_ACCEPT_CERID;
-
-			if (tb[OPT_GUEST] && blobmsg_get_bool(tb[OPT_GUEST]))
-				flags |= IFACE_FLAG_GUEST;
-
-			if (tb[OPT_ADHOC] && blobmsg_get_bool(tb[OPT_ADHOC]))
-				flags |= IFACE_FLAG_ADHOC;
+			if (tb[OPT_MODE]) {
+				const char *mode = blobmsg_get_string(tb[OPT_MODE]);
+				if (!strcmp(mode, "adhoc"))
+					flags |= IFACE_FLAG_ADHOC;
+				else if (!strcmp(mode, "guest"))
+					flags |= IFACE_FLAG_GUEST;
+				else if (!strcmp(mode, "hybrid"))
+					flags |= IFACE_FLAG_HYBRID;
+				else if (!strcmp(mode, "external"))
+					tb[OPT_HANDLE] = NULL;
+				else if (strcmp(mode, "auto"))
+					L_WARN("Unknown mode '%s' for interface %s: falling back to auto", mode, ifname);
+			}
 
 			if (tb[OPT_DISABLE_PA] && blobmsg_get_bool(tb[OPT_DISABLE_PA]))
 				flags |= IFACE_FLAG_DISABLE_PA;
@@ -368,7 +359,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			}
 
 			hncp_link_conf conf;
-			if(c && tb[OPT_PING_INTERVAL] && (conf = hncp_find_link_conf_by_name(ipchncp, c->ifname))) {
+			if(c && tb[OPT_PING_INTERVAL] && (conf = hncp_if_find_conf_by_name(ipchncp, c->ifname))) {
 				conf->ping_worried_t = (((hnetd_time_t) blobmsg_get_u32(tb[OPT_PING_INTERVAL])) * HNETD_TIME_PER_SECOND) / 1000;
 				conf->ping_retry_base_t = conf->ping_worried_t / 8;
 				if(conf->ping_retry_base_t < 100)
@@ -376,14 +367,15 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 				conf->ping_retries = 3;
 			}
 
-			if(c && tb[OPT_TRICKLE_K] && (conf = hncp_find_link_conf_by_name(ipchncp, c->ifname)))
+			if(c && tb[OPT_TRICKLE_K] && (conf = hncp_if_find_conf_by_name(ipchncp, c->ifname)))
 				conf->trickle_k = (int) blobmsg_get_u32(tb[OPT_TRICKLE_K]);
-			if(c && tb[OPT_DNSNAME] && (conf = hncp_find_link_conf_by_name(ipchncp, c->ifname)))
+			if(c && tb[OPT_DNSNAME] && (conf = hncp_if_find_conf_by_name(ipchncp, c->ifname)))
 				strncpy(conf->dnsname, blobmsg_get_string(tb[OPT_DNSNAME]), sizeof(conf->dnsname));
 
 		} else if (!strcmp(cmd, "ifdown")) {
 			iface_remove(c);
 		} else if (!strcmp(cmd, "enable_ipv4_uplink")) {
+			struct in_addr ipv4source = {INADDR_ANY};
 			const size_t dns_max = 4;
 			size_t dns_cnt = 0;
 			struct {
@@ -391,6 +383,9 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 				uint8_t len;
 				struct in_addr addr[dns_max];
 			} dns;
+
+			if (tb[OPT_IPV4SOURCE])
+				inet_pton(AF_INET, blobmsg_get_string(tb[OPT_IPV4SOURCE]), &ipv4source);
 
 			if (tb[OPT_DNS]) {
 				struct blob_attr *k;
@@ -412,7 +407,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 
 			iface_update_ipv4_uplink(c);
 			iface_add_dhcp_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns));
-			iface_set_ipv4_uplink(c);
+			iface_set_ipv4_uplink(c, &ipv4source);
 			iface_commit_ipv4_uplink(c);
 		} else if (!strcmp(cmd, "disable_ipv4_uplink")) {
 			iface_update_ipv4_uplink(c);
@@ -484,7 +479,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			iface_update_ipv6_uplink(c);
 			iface_commit_ipv6_uplink(c);
 
-			if (!c->v4uplink)
+			if (!c->v4_saddr.s_addr)
 				iface_remove(c);
 		}
 

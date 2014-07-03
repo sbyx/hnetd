@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Tue Apr 29 22:42:18 2014 mstenber
+ * Last modified: Tue Jun 17 16:12:55 2014 mstenber
  * Edit time:     77 min
  *
  */
@@ -14,6 +14,8 @@
 #include "hncp.h"
 #include "sput.h"
 #include "smock.h"
+
+int log_level = LOG_DEBUG;
 
 /* Lots of stubs here, rather not put __unused all over the place. */
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -76,24 +78,24 @@ void hncp_ext(void)
   sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs consistent");
 
   /* Should be able to enable it on a link. */
-  r = hncp_set_link_enabled(o, "eth0", true);
-  sput_fail_unless(r, "hncp_set_link_enabled eth0");
+  r = hncp_if_set_enabled(o, "eth0", true);
+  sput_fail_unless(r, "hncp_if_set_enabled eth0");
 
-  r = hncp_set_link_enabled(o, "eth1", true);
-  sput_fail_unless(r, "hncp_set_link_enabled eth1");
+  r = hncp_if_set_enabled(o, "eth1", true);
+  sput_fail_unless(r, "hncp_if_set_enabled eth1");
 
-  r = hncp_set_link_enabled(o, "eth1", true);
-  sput_fail_unless(!r, "hncp_set_link_enabled eth1 (2nd true)");
+  r = hncp_if_set_enabled(o, "eth1", true);
+  sput_fail_unless(!r, "hncp_if_set_enabled eth1 (2nd true)");
 
   hncp_self_flush(n);
   t = hncp_node_get_tlvs(n);
   sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs should be same");
 
-  r = hncp_set_link_enabled(o, "eth1", false);
-  sput_fail_unless(r, "hncp_set_link_enabled eth1 (false)");
+  r = hncp_if_set_enabled(o, "eth1", false);
+  sput_fail_unless(r, "hncp_if_set_enabled eth1 (false)");
 
-  r = hncp_set_link_enabled(o, "eth1", false);
-  sput_fail_unless(!r, "hncp_set_link_enabled eth1 (2nd false)");
+  r = hncp_if_set_enabled(o, "eth1", false);
+  sput_fail_unless(!r, "hncp_if_set_enabled eth1 (2nd false)");
 
   hncp_self_flush(n);
   t = hncp_node_get_tlvs(n);

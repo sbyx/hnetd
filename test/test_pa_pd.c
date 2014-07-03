@@ -15,6 +15,8 @@
 #include "pa_pd.c"
 #include "pa.c"
 
+int log_level = LOG_DEBUG;
+
 /* Masking pa_local, pa_core, pa_store and iface dependencies */
 void pa_core_init(__unused struct pa_core *c) {}
 void pa_core_start(__unused struct pa_core *c) {}
@@ -88,6 +90,7 @@ void test_1()
 	struct prefix p1 = PL_P1;
 	struct prefix p1_01 = PL_P1_01;
 	struct prefix p1_04 = PL_P1_04;
+	struct prefix p1_08 = PL_P1_08;
 	struct prefix p1_10 = PL_P1_10;
 	struct prefix p2 = PL_P2;
 	struct prefix p2_01 = PL_P2_01;
@@ -183,13 +186,14 @@ void test_1()
 	sput_fail_unless(pd->timer.t.pending, "pd algo is pending");
 	sput_fail_unless(uloop_timeout_remaining(&pd->timer.t) == PA_PD_UPDATE_DELAY, "Correct timeout value");
 	fr_md5_push(&p1_01); //Will be used when trying to get a md5 for the lease: That will make a collision and p1_08 should be used
+	fr_md5_push(&p1_08);
 	fu_loop(1);
 	sput_fail_unless(btrie_empty(&tl2.lease.dp_reqs), "No requests in lease");
 	sput_fail_unless(list_empty(&ldp1->dp.lease_reqs), "No requests in dp");
 	sput_fail_unless(!btrie_empty(&tl2.lease.cpds), "There is a cpd");
 	cpd = btrie_first_down_entry(cpd, &tl2.lease.cpds, NULL, 0, lease_be);
 	sput_fail_unless(cpd->cp.dp == &ldp1->dp, "Correct associated dp");
-	delegated = p1_04;
+	delegated = p1_08;
 	delegated.plen = 63;
 	sput_fail_unless(!prefix_cmp(&delegated, &cpd->cp.prefix), "Correct delegated prefix");
 
@@ -242,6 +246,7 @@ void test_1()
 	sput_fail_unless(!btrie_empty(&tl1.lease.dp_reqs), "There is a request in lease");
 	sput_fail_unless(!list_empty(&ldp1->dp.lease_reqs), "There is a request in lease");
 	fr_md5_push(&p1_01);
+	fr_md5_push(&p1_04);
 	fu_loop(1); //Execute algorithm. p1_01 should not be used. And p1_04 should be used instead.
 	sput_fail_unless(btrie_empty(&tl1.lease.dp_reqs), "No requests in lease");
 	sput_fail_unless(list_empty(&ldp1->dp.lease_reqs), "No requests in dp");

@@ -31,6 +31,8 @@
 
 #define FLOODING_DELAY 2 * HNETD_TIME_PER_SECOND
 
+int log_level = LOG_INFO;
+
 typedef struct {
 	struct iface_user iu;
 	hncp hncp;
@@ -44,7 +46,7 @@ void hncp_iface_intaddr_callback(struct iface_user *u, const char *ifname,
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
 
-	hncp_set_ipv6_address(hiu->hncp, ifname, addr6 ? &addr6->prefix : NULL);
+	hncp_if_set_ipv6_address(hiu->hncp, ifname, addr6 ? &addr6->prefix : NULL);
 }
 
 
@@ -53,7 +55,7 @@ void hncp_iface_intiface_callback(struct iface_user *u,
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
 	struct iface *c = iface_get(ifname);
-	hncp_set_link_enabled(hiu->hncp, ifname, enabled && !(c->flags & IFACE_FLAG_GUEST));
+	hncp_if_set_enabled(hiu->hncp, ifname, enabled && !(c->flags & IFACE_FLAG_GUEST));
 }
 
 
@@ -151,12 +153,14 @@ int main(__unused int argc, char *argv[])
 	enum {
 		GOL_IPPREFIX = 1000,
 		GOL_ULAPREFIX,
+		GOL_LOGLEVEL,
 	};
 
 	struct option longopts[] = {
 			//Can use no_argument, required_argument or optional_argument
 			{ "ip4prefix",   required_argument,      NULL,           GOL_IPPREFIX },
 			{ "ulaprefix",   required_argument,      NULL,           GOL_ULAPREFIX },
+			{ "loglevel",    required_argument,      NULL,           GOL_LOGLEVEL },
 			{ NULL,          0,                      NULL,           0 }
 	};
 
@@ -194,6 +198,9 @@ int main(__unused int argc, char *argv[])
 			break;
 		case GOL_ULAPREFIX:
 			pa_ulaprefix = optarg;
+			break;
+		case GOL_LOGLEVEL:
+			log_level = atoi(optarg);
 			break;
 		case '?':
 			L_ERR("Unrecognized option");
@@ -245,7 +252,8 @@ int main(__unused int argc, char *argv[])
 		return 17;
 	}
 
-	if (!hncp_sd_create(h, &sd_params)) {
+	hncp_sd sd = hncp_sd_create(h, &sd_params);
+	if (!sd) {
 		L_ERR("unable to initialize sd, exiting");
 		return 71;
 	}
@@ -254,13 +262,14 @@ int main(__unused int argc, char *argv[])
 		hncp_routing_create(h, routing_script);
 
 	/* Init ipc */
-	iface_init(h, &pa, pd_socket_path);
+	iface_init(h, sd, &pa, pd_socket_path);
 
 	/* Glue together HNCP, PA-glue and and iface */
 	hncp_iface_glue(&hiu, h, hg);
 
 	/* PA */
 	pd_create(&pa.pd, pd_socket_path);
+	pa_set_hncp(&pa, h);
 
 	/* Fire up the prefix assignment code. */
 	pa_start(&pa);

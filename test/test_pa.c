@@ -9,6 +9,8 @@
 #include "iface.h"
 #include "pa.h"
 
+int log_level = LOG_DEBUG;
+
 /**************************************************** Tested structures */
 struct pa pa;
 
@@ -63,6 +65,8 @@ static struct iface* pa_test_iface_get(__attribute__((unused))const char *ifname
 #include "pa_core.c"
 #include "pa_local.c"
 #include "pa_data.c"
+
+bool hncp_if_has_highest_id(__unused hncp o, __unused const char *ifname) {return true;};
 
 /***************************************************** Data */
 

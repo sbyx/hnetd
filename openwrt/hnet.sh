@@ -8,15 +8,13 @@ init_proto "$@"
 proto_hnet_init_config() {
     proto_config_add_string 'dhcpv4_clientid'
     proto_config_add_string 'dhcpv6_clientid'
-    proto_config_add_string 'guest'
-    proto_config_add_string 'accept_cerid'
+    proto_config_add_string 'mode'
     proto_config_add_string 'reqaddress'
     proto_config_add_string 'prefix'
     proto_config_add_string 'link_id'
     proto_config_add_string 'iface_id'
     proto_config_add_string 'ip6assign'
     proto_config_add_string 'ip4assign'
-    proto_config_add_string 'adhoc'
     proto_config_add_string 'disable_pa'
     proto_config_add_string 'ula_default_router'
     proto_config_add_string 'dnsname'
@@ -28,8 +26,8 @@ proto_hnet_setup() {
     local interface="$1"
     local device="$2"
 
-    local dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id ip6assign ip4assign adhoc disable_pa ula_default_router ping_interval trickle_k dnsname
-    json_get_vars dhcpv4_clientid dhcpv6_clientid guest accept_cerid reqaddress prefix link_id iface_id ip6assign ip4assign adhoc disable_pa ula_default_router ping_interval trickle_k dnsname
+    local dhcpv4_clientid dhcpv6_clientid reqaddress prefix link_id iface_id ip6assign ip4assign disable_pa ula_default_router ping_interval trickle_k dnsname mode
+    json_get_vars dhcpv4_clientid dhcpv6_clientid reqaddress prefix link_id iface_id ip6assign ip4assign disable_pa ula_default_router ping_interval trickle_k dnsname mode
 
     logger -t proto-hnet "proto_hnet_setup $device/$interface"
 
@@ -43,9 +41,7 @@ proto_hnet_setup() {
     proto_init_update "*" 1
 
     proto_add_data
-    [ "$guest" = "1" ] && json_add_boolean guest 1
-    [ "$accept_cerid" = "1" ] && json_add_boolean accept_cerid 1
-    [ "$adhoc" = "1" ] && json_add_boolean adhoc 1
+	[ -n "$mode" ] && json_add_string mode $mode
     [ "$disable_pa" = "1" ] && json_add_boolean disable_pa 1
     [ "$ula_default_router" = "1" ] && json_add_boolean ula_default_router 1
     [ -n "$ping_interval" ] && json_add_int ping_interval $ping_interval
@@ -129,6 +125,8 @@ proto_hnet_teardown() {
 
     proto_init_update "*" 0
     proto_send_update "$interface"
+    ifdown "${interface}_4"
+    ifdown "${interface}_6"
 }
 
 add_protocol hnet

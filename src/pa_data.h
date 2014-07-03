@@ -96,11 +96,20 @@ struct pa_iface {
 	uint8_t (*custom_plen)(struct pa_iface *, struct pa_dp *dp, void *priv, bool scarcity);
 	void *custom_plen_priv;
 
+
+	/* Multiple interfaces can be connected to the same link.
+	 * When it happens, one iface is considered as master.
+	 * When master is null, the list element is the head.
+	 * When master is not null, the list element is inserted in some master's list. */
+	struct pa_iface *master;
+	struct list_head slaves; /* Ifaces on the same link */
+
 #define PADF_IF_CREATED  PADF_ALL_CREATED
 #define PADF_IF_TODELETE PADF_ALL_TODELETE
 #define PADF_IF_INTERNAL 0x0100
 #define PADF_IF_DODHCP   0x0200
 #define PADF_IF_ADHOC    0x0400
+#define PADF_IF_MASTER   0x0800 /* Event when the master/slave state of an iface changes */
 	uint32_t __flags;
 
 #define PA_IFNAME_L  "%s"
@@ -434,6 +443,15 @@ void pa_iface_set_adhoc(struct pa_iface *iface, bool adhoc);
 void pa_iface_set_dodhcp(struct pa_iface *, bool dodhcp);
 #define pa_iface_todelete(iface) (iface)->__flags |= PADF_IF_TODELETE
 void pa_iface_notify(struct pa_data *, struct pa_iface *);
+
+#define pa_for_each_slave_iface(pa_iface, master) list_for_each_entry(pa_iface, &(master)->slaves, slaves)
+/* Sets an iface as some master's slave. If master is null, the iface becomes master.
+ * A slave can always become a master.
+ * A master cannot become slave if it has slave interfaces (They must all be moved before).
+ * The provided master structure must be a master before given to the function.
+ * If already master or already slave of the given master, nothing is done.
+ * The PADF_IF_MASTER flag is set otherwise. */
+int pa_iface_set_slave(struct pa_iface *iface, struct pa_iface *master);
 
 
 #define pa_for_each_dp(pa_dp, pa_data) btrie_for_each_down_entry(pa_dp, &(pa_data)->dps, NULL, 0, be)

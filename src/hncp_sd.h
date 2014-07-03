@@ -15,6 +15,7 @@
 #define HNCP_SD_H
 
 #include "hncp.h"
+#include "hncp_i.h"
 
 typedef struct hncp_sd_struct hncp_sd_s, *hncp_sd;
 
@@ -43,6 +44,9 @@ typedef struct hncp_sd_params_struct
 } hncp_sd_params_s, *hncp_sd_params;
 
 hncp_sd hncp_sd_create(hncp h, hncp_sd_params p);
+
+void hncp_sd_dump_link_fqdn(hncp_sd sd, hncp_link l,
+                            char *buf, size_t buf_len);
 
 void hncp_sd_destroy(hncp_sd sd);
 

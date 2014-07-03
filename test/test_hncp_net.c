@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Fri Jun 13 02:56:17 2014 mstenber
- * Edit time:     393 min
+ * Last modified: Thu Jun 19 17:52:07 2014 mstenber
+ * Edit time:     397 min
  *
  */
 
@@ -20,6 +20,8 @@
 /* Test utilities */
 #include "net_sim.h"
 #include "sput.h"
+
+int log_level = LOG_DEBUG;
 
 /********************************************************* Mocked interfaces */
 
@@ -106,6 +108,10 @@ void hncp_two(void)
   SIM_WHILE(&s, 1000,
             node2->updated_eap != 2);
 
+  sput_fail_unless(hncp_if_has_highest_id(n1, "eth0") !=
+                   hncp_if_has_highest_id(n2, "eth1"),
+                   "someone is highest");
+
   /* disconnect on one side (=> unidirectional traffic) => should at
    * some point disappear. */
   net_sim_set_connected(l1, l2, false);
@@ -121,6 +127,13 @@ void hncp_two(void)
   /* Should also have done the necessary purging of nodes due to lack
    * of reachability.. */
   sput_fail_unless(n2->nodes.avl.count == 1, "n2 nodes == 1");
+
+  sput_fail_unless(hncp_if_has_highest_id(n1, "eth0") &&
+                   hncp_if_has_highest_id(n2, "eth1"),
+                   "both highest");
+
+  sput_fail_unless(hncp_if_has_highest_id(n1, "nonexistent"),
+                   "nonexistent highest too");
 
   net_sim_uninit(&s);
 }

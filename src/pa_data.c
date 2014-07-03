@@ -816,6 +816,8 @@ struct pa_iface *pa_iface_get(struct pa_data *data, const char *ifname, bool goc
 	iface->__flags = PADF_IF_CREATED;
 	iface->sp_count = 0;
 	iface->custom_plen = NULL;
+	INIT_LIST_HEAD(&iface->slaves);
+	iface->master = NULL;
 	L_INFO("Created "PA_IF_L, PA_IF_LA(iface));
 	return iface;
 }
@@ -833,6 +835,31 @@ void pa_iface_set_dodhcp(struct pa_iface *iface, bool dodhcp)
 void pa_iface_set_adhoc(struct pa_iface *iface, bool adhoc)
 {
 	PA_SET_SCALAR(iface->adhoc, adhoc, iface->__flags, PADF_IF_ADHOC);
+}
+
+int pa_iface_set_slave(struct pa_iface *iface, struct pa_iface *master)
+{
+	if(iface->master == master) //Nothing to do
+		return 0;
+
+	if(master) {
+		if(master->master || //master is not a master
+				(!iface->master && !list_empty(&iface->slaves))) //iface has slaves
+			return -1;
+
+		if(iface->master)
+			list_del(&iface->slaves);
+
+		/* Become slave */
+		iface->master = master;
+		list_add(&iface->slaves, &master->slaves);
+	} else {
+		list_del(&iface->slaves);
+		iface->master = NULL;
+		INIT_LIST_HEAD(&iface->slaves);
+	}
+	iface->__flags |= PADF_IF_MASTER;
+	return 0;
 }
 
 void pa_iface_destroy(struct pa_data *data, struct pa_iface *iface)

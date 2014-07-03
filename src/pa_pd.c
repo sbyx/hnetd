@@ -16,6 +16,9 @@
 #define PA_PD_DFLT_MIN_LEN 62
 #define PA_PD_DFLT_RATIO_EXP 3
 
+#define PA_PD_FINDRAND_N 256
+#define PA_PD_PSEUDORAND_TENTATIVES 10
+
 #define PA_PD_PREFIX_SEARCH_MAX_ROUNDS 64 //Done for each tested prefix length
 
 #define PA_PD_LEASE_CB_DELAY 100
@@ -23,8 +26,8 @@
 #define PA_PD_UPDATE_RATE_DELAY 1500 //Limit DP-wide update
 #define PA_PD_UPDATE_TOLERANCE  1000 //Do multiple things at the same uloop call if possible
 
-#define pd_pa(pd) (container_of(pd, struct pa, pd))
-#define pd_p(pd, field) (&(pd_pa(pd)->field))
+#define pd_pa(_pd) (container_of(_pd, struct pa, pd))
+#define pd_p(_pd, field) (&(pd_pa(_pd)->field))
 
 #define pa_pd_for_each_lease_safe(lease, l2, pa_pd) list_for_each_entry_safe(lease, l2, &(pa_pd)->leases, le)
 
@@ -116,83 +119,82 @@ static int pa_pd_create_cpd(struct pa_pd_dp_req *req, struct prefix *p)
 	return 0;
 }
 
-static int pa_pd_find_prefix_plen(struct pa_pd_dp_req *req, const struct prefix *seed,
-		struct prefix *dst)
-{
-	struct pa_dp *dp = req->dp;
-	struct pa_pd *pd = req->lease->pd;
-
-	pa_for_each_available_prefix_first(pd_p(pd, data), seed, dp->prefix.plen, dst) {
-		if(dst->plen <= seed->plen) {
-			if(prefix_contains(dst, seed)) { //Only possible at first iteration
-				prefix_cpy(dst, seed);
-			} else {
-				prefix_canonical(dst, dst);
-				dst->plen = seed->plen;
-			}
-			return 0;
-		}
-	}
-	return -1;
-}
-
 static int pa_pd_find_prefix(struct pa_pd_dp_req *req, struct prefix *dst,
-		uint8_t min_len_override)
+		uint16_t *prefix_count)
 {
-	struct prefix seed;
-	struct prefix try_prefix;
-	struct pa_pd_lease *lease = req->lease;
+	int i;
 	uint8_t min_len = req->min_len;
 	uint8_t max_len = req->max_len;
 
-	if(min_len < min_len_override) {
-			min_len = min_len_override;
-			if(min_len > max_len)
-				return -1;
-	}
-
-	uint8_t try_len = min_len;
-	uint8_t new_len;
-	bool best_found = false;
-
-	if(lease->lease_id) {
-		if(prefix_prandom(lease->lease_id, strlen(lease->lease_id), 0, &req->dp->prefix, &seed, max_len))
-			goto err;
-	} else {
-		if(prefix_random(&req->dp->prefix, &seed, max_len))
-			goto err;
-	}
-
-	L_DEBUG("Trying to find a pd in "PA_DP_L" len(%d:%d) seed(%s)",
-			PA_DP_LA(req->dp), (int) min_len, (int) max_len, ADDR_REPR(&seed.prefix));
-
-	/* todo: Maybe the dichotomy is not that good afterall. At least when we do all
-	 * requests from a given dp. Maybe using both approach may be good. */
-	while(true) {
-		seed.plen = try_len;
-		if(!pa_pd_find_prefix_plen(req, &seed, &try_prefix)) {
-			if(!best_found || try_prefix.plen < dst->plen) {
-				best_found = true;
-				prefix_cpy(dst, &try_prefix);
-			}
-			new_len = try_len - (try_len + 1 - min_len)/2;
-			max_len = try_len;
-		} else {
-			new_len = try_len + (max_len + 1 - try_len)/2;
-			min_len = try_len;
-		}
-
-		if(new_len == try_len)
+	/* Let's see if we can give a big enough pd */
+	uint8_t plen = 254;
+	for(i = 0; i <= max_len; i++) {
+		if(prefix_count[i]) {
+			plen = i;
 			break;
-
-		try_len = new_len;
+		}
 	}
 
-	return (best_found)?0:-1;
+	if(plen > max_len)
+		return -1;
 
-err:
-	L_ERR("Critical error in random prefix search");
-	return -1;
+	if(plen < min_len) //Not gonna give to much
+		plen = min_len;
+
+	/* Let's now select the best prefixes to give-away */
+	uint32_t count;
+	min_len = pa_count_available_subset(prefix_count, plen, &count, PA_PD_FINDRAND_N);
+
+
+	if(!count) {
+		L_INFO("No more available prefix of length %d could be found in %s", plen, PREFIX_REPR(&req->dp->prefix));
+		return -1;
+	}
+	L_DEBUG("At least %d available prefixes of length %d have been found in %s", (int)count, plen, PREFIX_REPR(&req->dp->prefix));
+
+	/* First try the pseudo-random prefixes */
+	struct prefix tentative;
+	i = 0;
+	do {
+		prefix_prandom(req->lease->lease_id, strlen(req->lease->lease_id), (uint32_t) i, &req->dp->prefix, &tentative, plen);
+		L_DEBUG("Trying pseudo-random prefix %s", PREFIX_REPR(&tentative));
+		pa_for_each_available_prefix_first(pd_p(req->lease->pd, data), &tentative, req->dp->prefix.plen, dst) {
+			//todo: No need for a loop here, should use first result call.
+			if(dst->plen <= plen && dst->plen >= min_len && prefix_contains(dst, &tentative)) {
+				pa_count_available_decrement(prefix_count, tentative.plen, dst->plen);
+				prefix_cpy(dst, &tentative);
+				goto chosen;
+			}
+			break;
+		}
+		L_DEBUG("This prefix is not available");
+	} while(++i < PA_PD_PSEUDORAND_TENTATIVES);
+
+	i = random() % count;
+	L_DEBUG("Choosing a random prefix (%dth available prefix)", (int) (i+1));
+	/* Go through available prefixes starting by the chosen one */
+	pa_for_each_available_prefix(pd_p(req->lease->pd, data), &req->dp->prefix, dst) {
+		if(dst->plen <= plen && dst->plen >= min_len) {
+			if((plen - dst->plen >= 32)
+					|| i < (1 << (plen - dst->plen))) {
+				//We choose the i'th prefix in there
+				uint8_t id_len = plen - dst->plen;
+				prefix_canonical(dst, dst);
+				pa_count_available_decrement(prefix_count, plen, dst->plen);
+				if(id_len) {
+					dst->plen = plen;
+					prefix_number(dst, dst, (uint32_t) i, id_len);
+				}
+				goto chosen;
+			}
+			i -= (1 << (plen - dst->plen));
+		}
+	}
+	L_ERR("Prefix random selection error (Program should not execute this line !)");
+	return -1; //Should never come here
+	chosen:
+	L_DEBUG("Prefix %s is available", PREFIX_REPR(dst));
+	return 0;
 }
 
 static void pa_pd_lease_schedule(struct pa_pd_lease *lease)
@@ -384,8 +386,11 @@ static void pa_pd_update_cb(struct pa_timer *t)
 						dp->compute_leases_last + PA_PD_UPDATE_RATE_DELAY <= now) {
 			//We do when the dp is new, or when a minimum delay elapsed
 
+			uint16_t prefix_count[129];
+			pa_count_available_prefixes(pd_pa(pd), prefix_count, &dp->prefix);
+
 			/* Try to satisfy unsatisfied */
-			uint8_t min_len = 0;
+			//uint8_t min_len = 0;
 			pa_for_each_req_in_dp_safe(req, req2, dp) {
 				if(req->lease->just_created) //That will be done later
 					continue;
@@ -404,14 +409,8 @@ static void pa_pd_update_cb(struct pa_timer *t)
 					continue;
 
 				struct prefix p;
-				if(!pa_pd_find_prefix(req, &p, min_len)) {
-					if(p.plen != req->min_len && p.plen > min_len)
-						min_len = p.plen; /* Could not fulfill desire, so let's remember it*/
-					pa_pd_create_cpd(req, &p); //That will delete the req as well (and schedule
-				} else {
-					if(req->max_len > min_len)
-						min_len = req->max_len; // Remember it failed up to max_len
-				}
+				if(!pa_pd_find_prefix(req, &p, prefix_count))
+					pa_pd_create_cpd(req, &p);
 
 			}
 			dp->compute_leases_last = now;
@@ -422,10 +421,15 @@ static void pa_pd_update_cb(struct pa_timer *t)
 	pa_pd_for_each_lease(lease, pd) {
 		if(lease->just_created) {
 			pa_for_each_req_in_lease_safe(req, req2, lease) {
+				if(req->dp->ignore)
+					continue;
+
+				uint16_t prefix_count[129];
+				pa_count_available_prefixes(pd_pa(pd), prefix_count, &req->dp->prefix);
+
 				struct prefix p;
-				if(!req->dp->ignore && !pa_pd_find_prefix(req, &p, 0)) {
+				if(!pa_pd_find_prefix(req, &p, prefix_count))
 					pa_pd_create_cpd(req, &p);
-				}
 			}
 
 			/* If all failed, better tell the requester (or it could wait forever... ) */

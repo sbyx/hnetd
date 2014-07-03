@@ -56,7 +56,7 @@ setup_interface () {
 		fi
 	done
 
-	hnet-call "{\"command\": \"enable_ipv4_uplink\", \"ifname\": \"$interface\", \"dns\": [$dnspart]}"
+	hnet-call "{\"command\": \"enable_ipv4_uplink\", \"ifname\": \"$interface\", \"dns\": [$dnspart], \"ipv4source\": \"$ip\"}"
 }
 
 deconfig_interface() {

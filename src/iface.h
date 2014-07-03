@@ -9,6 +9,8 @@
 
 #include "hnetd.h"
 #include "hncp.h"
+#include "hncp_i.h"
+#include "hncp_sd.h"
 #include "prefix_utils.h"
 
 #include <libubox/list.h>
@@ -93,12 +95,13 @@ struct iface_route {
 };
 
 typedef uint8_t iface_flags;
-#define IFACE_FLAG_ACCEPT_CERID  0x01
 #define IFACE_FLAG_GUEST         0x02
 #define IFACE_FLAG_ADHOC         0x04
 #define IFACE_FLAG_DISABLE_PA    0x08
 #define IFACE_FLAG_ULA_DEFAULT	 0x10
 #define IFACE_FLAG_LOOPBACK      0x20
+#define IFACE_FLAG_HYBRID		 0x40
+#define IFACE_FLAG_EXTERNAL		 0x80
 
 struct iface {
 	struct list_head head;
@@ -110,7 +113,6 @@ struct iface {
 	bool unused;
 	bool linkowner;
 	bool internal;
-	bool v4uplink;
 	bool carrier;
 	bool designatedv4;
 
@@ -120,6 +122,7 @@ struct iface {
 	// LL-address
 	struct in6_addr eui64_addr;
 	struct in6_addr cer;
+	struct in_addr v4_saddr;
 
 	// Config
 	uint8_t ip6_plen; //Fixed IPv6 assignment prefix length or 0
@@ -160,7 +163,7 @@ struct iface {
 #include "pa.h"
 
 // Generic initializer to be called by main()
-int iface_init(hncp hncp, struct pa *pa, const char *pd_socket);
+int iface_init(hncp hncp, hncp_sd sd, struct pa *pa, const char *pd_socket);
 
 // Get an interface by name
 struct iface* iface_get(const char *ifname);
@@ -188,7 +191,7 @@ void iface_commit_ipv4_uplink(struct iface *c);
 
 
 // Set DHCPv4 uplink
-void iface_set_ipv4_uplink(struct iface *c);
+void iface_set_ipv4_uplink(struct iface *c, const struct in_addr *saddr);
 
 
 // Set DHCPv4 leased flag and rerun border discovery
@@ -210,6 +213,9 @@ void iface_set_link_id(struct iface *c, uint32_t linkid, uint8_t mask);
 // Add hnet address
 void iface_add_addrconf(struct iface *c, struct in6_addr *addr,
 		uint8_t mask, struct prefix *filter);
+
+// Get fqdn address
+char* iface_get_fqdn(const char *ifname, char *buf, size_t len);
 
 
 // Flush uplinks

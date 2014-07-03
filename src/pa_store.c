@@ -360,7 +360,7 @@ static int pa_rule_try_storage(struct pa_core *core, struct pa_rule *rule,
 	struct pa_sp *sp;
 	uint8_t plen, plen_scarcity;
 
-	if(!iface->designated)
+	if(!pa_iface_can_create_prefix(iface))
 		return -1;
 
 	plen = pa_iface_plen(iface, dp, false);

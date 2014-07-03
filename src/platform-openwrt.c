@@ -206,6 +206,12 @@ void platform_filter_prefix(struct iface *c,
 }
 
 
+void platform_set_snat(struct iface *c, __unused const struct prefix *p)
+{
+	platform_set_internal(c, false);
+}
+
+
 void platform_set_prefix_route(const struct prefix *p, bool enable)
 {
 	iface_set_unreachable_route(p, enable);
@@ -458,7 +464,9 @@ static void platform_commit(struct uloop_timeout *t)
 
 	k = blobmsg_open_table(&b, "data");
 
-	const char *service = (c->internal && c->linkowner && !(c->flags & IFACE_FLAG_LOOPBACK)) ? "server" : "disabled";
+	const char *service = (c->internal && c->linkowner && !(c->flags & IFACE_FLAG_LOOPBACK)
+			&& (avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr))
+					? "server" : "disabled";
 	blobmsg_add_string(&b, "ra", service);
 	blobmsg_add_string(&b, "dhcpv4", service);
 	blobmsg_add_string(&b, "dhcpv6", service);
@@ -483,14 +491,19 @@ static void platform_commit(struct uloop_timeout *t)
 	if (c->internal && c->linkowner)
 		blobmsg_add_string(&b, "pd_manager", hnetd_pd_socket);
 
-	const char *zone = (c->internal ||
-			((c->flags & IFACE_FLAG_ACCEPT_CERID) && !IN6_IS_ADDR_UNSPECIFIED(&c->cer))) ? "lan" : "wan";
+	const char *zone = (c->internal) ? "lan" : "wan";
 	blobmsg_add_string(&b, "zone", zone);
 
 	L_DEBUG("	RA/DHCP/DHCPv6: %s, Zone: %s", service, zone);
 
 	if (domain_cnt && c->internal && c->linkowner) {
+		char fqdnbuf[256];
+		char *fqdn = iface_get_fqdn(c->ifname, fqdnbuf, sizeof(fqdnbuf));
+
 		l = blobmsg_open_array(&b, "domain");
+
+		if (fqdn)
+			blobmsg_add_string(&b, NULL, fqdn);
 
 		for (size_t i = 0; i < domain_cnt; ++i)
 			blobmsg_add_string(&b, NULL, domains[i]);
@@ -518,8 +531,10 @@ static void platform_commit(struct uloop_timeout *t)
 
 			blobmsg_close_array(&b, l);
 		}
+	}
 
-		l = blobmsg_open_array(&b, "firewall");
+	l = blobmsg_open_array(&b, "firewall");
+	if (c->flags & IFACE_FLAG_GUEST) {
 		struct pa_dp *dp;
 		pa_for_each_dp(dp, pa_data) {
 			for (int i = 0; i <= 1; ++i) {
@@ -542,8 +557,39 @@ static void platform_commit(struct uloop_timeout *t)
 				blobmsg_close_table(&b, m);
 			}
 		}
-		blobmsg_close_array(&b, l);
+
 	}
+
+	if (c->v4_saddr.s_addr && (c->flags & IFACE_FLAG_HYBRID)) {
+		struct pa_dp *dp;
+		pa_for_each_dp(dp, pa_data) {
+			if (!IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
+				continue;
+
+			m = blobmsg_open_table(&b, NULL);
+
+			blobmsg_add_string(&b, "type", "nat");
+			blobmsg_add_string(&b, "family", "inet");
+			blobmsg_add_string(&b, "target", "ACCEPT");
+			char *buf = blobmsg_alloc_string_buffer(&b, "dest_ip", PREFIX_MAXBUFFLEN);
+			prefix_ntop(buf, PREFIX_MAXBUFFLEN, &dp->prefix, true);
+			blobmsg_add_string_buffer(&b);
+
+			blobmsg_close_table(&b, m);
+		}
+
+		m = blobmsg_open_table(&b, NULL);
+
+		blobmsg_add_string(&b, "type", "nat");
+		blobmsg_add_string(&b, "family", "inet");
+		blobmsg_add_string(&b, "target", "SNAT");
+		char *buf = blobmsg_alloc_string_buffer(&b, "snat_ip", INET_ADDRSTRLEN);
+		inet_ntop(AF_INET, &c->v4_saddr, buf, INET_ADDRSTRLEN);
+		blobmsg_add_string_buffer(&b);
+
+		blobmsg_close_table(&b, m);
+	}
+	blobmsg_close_array(&b, l);
 
 	blobmsg_close_table(&b, k);
 
@@ -595,6 +641,7 @@ enum {
 	IFACE_ATTR_DNS,
 	IFACE_ATTR_UP,
 	IFACE_ATTR_DATA,
+	IFACE_ATTR_IPV4,
 	IFACE_ATTR_MAX,
 };
 
@@ -605,15 +652,13 @@ enum {
 };
 
 enum {
-	DATA_ATTR_ACCEPT_CERID,
 	DATA_ATTR_CER,
-	DATA_ATTR_GUEST,
+	DATA_ATTR_MODE,
 	DATA_ATTR_PREFIX,
 	DATA_ATTR_LINK_ID,
 	DATA_ATTR_IFACE_ID,
 	DATA_ATTR_IP6_PLEN,
 	DATA_ATTR_IP4_PLEN,
-	DATA_ATTR_ADHOC,
 	DATA_ATTR_DISABLE_PA,
 	DATA_ATTR_PASSTHRU,
 	DATA_ATTR_ULA_DEFAULT_ROUTER,
@@ -633,6 +678,7 @@ static const struct blobmsg_policy iface_attrs[IFACE_ATTR_MAX] = {
 	[IFACE_ATTR_DNS] = { .name = "dns-server", .type = BLOBMSG_TYPE_ARRAY },
 	[IFACE_ATTR_UP] = { .name = "up", .type = BLOBMSG_TYPE_BOOL },
 	[IFACE_ATTR_DATA] = { .name = "data", .type = BLOBMSG_TYPE_TABLE },
+	[IFACE_ATTR_IPV4] = { .name = "ipv4-address", .type = BLOBMSG_TYPE_ARRAY },
 };
 
 static const struct blobmsg_policy route_attrs[ROUTE_ATTR_MAX] = {
@@ -641,15 +687,13 @@ static const struct blobmsg_policy route_attrs[ROUTE_ATTR_MAX] = {
 };
 
 static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
-	[DATA_ATTR_ACCEPT_CERID] = { .name = "accept_cerid", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_CER] = { .name = "cer", .type = BLOBMSG_TYPE_STRING },
-	[DATA_ATTR_GUEST] = { .name = "guest", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_PREFIX] = { .name = "prefix", .type = BLOBMSG_TYPE_ARRAY },
 	[DATA_ATTR_LINK_ID] = { .name = "link_id", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_IFACE_ID] = { .name = "iface_id", .type = BLOBMSG_TYPE_ARRAY },
 	[DATA_ATTR_IP6_PLEN] = { .name = "ip6assign", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_IP4_PLEN] = { .name = "ip4assign", .type = BLOBMSG_TYPE_STRING },
-	[DATA_ATTR_ADHOC] = { .name = "adhoc", .type = BLOBMSG_TYPE_BOOL },
+	[DATA_ATTR_MODE] = { .name = "mode", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_DISABLE_PA] = { .name = "disable_pa", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_PASSTHRU] = { .name = "passthru", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_ULA_DEFAULT_ROUTER] = { .name = "ula_default_router", .type = BLOBMSG_TYPE_BOOL },
@@ -748,13 +792,33 @@ static void update_interface(struct iface *c,
 	}
 
 	if (v4uplink) {
+		struct in_addr ipv4source = {INADDR_ANY};
+
+		struct blob_attr *entry;
+		unsigned rem;
+		blobmsg_for_each_attr(entry, tb[IFACE_ATTR_IPV4], rem) {
+			struct blob_attr *addr;
+			unsigned arem;
+
+			if (ipv4source.s_addr)
+				break;
+
+			blobmsg_for_each_attr(addr, entry, arem) {
+				if (strcmp(blobmsg_name(addr), "address") || blobmsg_type(addr) != BLOBMSG_TYPE_STRING)
+					continue;
+
+				if (inet_pton(AF_INET, blobmsg_get_string(addr), &ipv4source) == 1)
+					break;
+			}
+		}
+
 		if (dns4_cnt) {
 			dns4.type = DHCPV4_OPT_DNSSERVER;
 			dns4.len = dns4_cnt * sizeof(struct in_addr);
 			iface_add_dhcp_received(c, &dns4, ((uint8_t*)&dns4.addr[dns4_cnt]) - ((uint8_t*)&dns4));
 		}
 
-		iface_set_ipv4_uplink(c);
+		iface_set_ipv4_uplink(c, &ipv4source);
 	}
 }
 
@@ -800,14 +864,19 @@ static void platform_update(void *data, size_t len)
 		blobmsg_parse(data_attrs, DATA_ATTR_MAX, dtb,
 				blobmsg_data(tb[IFACE_ATTR_DATA]), blobmsg_len(tb[IFACE_ATTR_DATA]));
 
-		if (dtb[DATA_ATTR_ACCEPT_CERID] && blobmsg_get_bool(dtb[DATA_ATTR_ACCEPT_CERID]))
-			flags |= IFACE_FLAG_ACCEPT_CERID;
-
-		if (dtb[DATA_ATTR_GUEST] && blobmsg_get_bool(dtb[DATA_ATTR_GUEST]))
-			flags |= IFACE_FLAG_GUEST;
-
-		if (dtb[DATA_ATTR_ADHOC] && blobmsg_get_bool(dtb[DATA_ATTR_ADHOC]))
-			flags |= IFACE_FLAG_ADHOC;
+		if (dtb[DATA_ATTR_MODE]) {
+			const char *mode = blobmsg_get_string(dtb[DATA_ATTR_MODE]);
+			if (!strcmp(mode, "adhoc"))
+				flags |= IFACE_FLAG_ADHOC;
+			else if (!strcmp(mode, "guest"))
+				flags |= IFACE_FLAG_GUEST;
+			else if (!strcmp(mode, "hybrid"))
+				flags |= IFACE_FLAG_HYBRID;
+			else if (!strcmp(mode, "external"))
+				flags |= IFACE_FLAG_EXTERNAL;
+			else if (strcmp(mode, "auto"))
+				L_WARN("Unknown mode '%s' for interface %s: falling back to auto", mode, ifname);
+		}
 
 		if (dtb[DATA_ATTR_DISABLE_PA] && blobmsg_get_bool(dtb[DATA_ATTR_DISABLE_PA]))
 			flags |= IFACE_FLAG_DISABLE_PA;
@@ -887,7 +956,7 @@ static void platform_update(void *data, size_t len)
 		}
 
 		hncp_link_conf conf;
-		if(c && dtb[DATA_ATTR_PING_INTERVAL] && (conf = hncp_find_link_conf_by_name(p_hncp, c->ifname))) {
+		if(c && dtb[DATA_ATTR_PING_INTERVAL] && (conf = hncp_if_find_conf_by_name(p_hncp, c->ifname))) {
 			conf->ping_worried_t = (((hnetd_time_t) blobmsg_get_u32(dtb[DATA_ATTR_PING_INTERVAL])) * HNETD_TIME_PER_SECOND) / 1000;
 			conf->ping_retry_base_t = conf->ping_worried_t / 8;
 			if(conf->ping_retry_base_t < 100)
@@ -895,10 +964,10 @@ static void platform_update(void *data, size_t len)
 			conf->ping_retries = 3;
 		}
 
-		if(c && dtb[DATA_ATTR_TRICKLE_K] && (conf = hncp_find_link_conf_by_name(p_hncp, c->ifname)))
+		if(c && dtb[DATA_ATTR_TRICKLE_K] && (conf = hncp_if_find_conf_by_name(p_hncp, c->ifname)))
 			conf->trickle_k = (int) blobmsg_get_u32(dtb[DATA_ATTR_TRICKLE_K]);
 
-		if(c && dtb[DATA_ATTR_DNSNAME] && (conf = hncp_find_link_conf_by_name(p_hncp, c->ifname)))
+		if(c && dtb[DATA_ATTR_DNSNAME] && (conf = hncp_if_find_conf_by_name(p_hncp, c->ifname)))
 			strncpy(conf->dnsname, blobmsg_get_string(dtb[DATA_ATTR_DNSNAME]), sizeof(conf->dnsname));;
 
 	}

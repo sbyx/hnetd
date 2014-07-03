@@ -18,6 +18,7 @@ setfilter|unsetfilter)
 		$cmd $act INPUT -i "$2" -p tcp -m conntrack --ctstate NEW,INVALID -j REJECT --reject-with tcp-reset
 		$cmd $act INPUT -i "$2" -m conntrack --ctstate NEW,INVALID -j REJECT --reject-with icmp-port-unreachable
 	done
+	iptables -t nat $act POSTROUTING -o "$2" -j MASQUERADE
 	;;
 
 newaddr|deladdr)
@@ -93,6 +94,21 @@ setdhcpv6)
 	commit dhcp
 EOF
 	killall -SIGHUP odhcpd
+	;;
+
+newnat)
+	rule="hnet_snat_$1"
+	iptables -t nat -N "$rule"
+	iptables -t nat -I POSTROUTING -o "$1" -j "$rule"
+	iptables -t nat -A "$rule" -d "$2" -j ACCEPT
+	iptables -t nat -A "$rule" -j SNAT --to-source "$3"
+	;;
+
+delnat)
+	rule="hnet_snat_$1"
+	iptables -t nat -D POSTROUTING -o "$1" -j "$rule"
+	iptables -t nat -F "$rule"
+	iptables -t nat -X "$rule"
 	;;
 
 esac

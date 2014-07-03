@@ -85,9 +85,6 @@ void platform_iface_free(struct iface *c)
 
 void platform_set_internal(struct iface *c, bool internal)
 {
-	if (!internal && (c->flags & IFACE_FLAG_ACCEPT_CERID) && !IN6_IS_ADDR_UNSPECIFIED(&c->cer))
-		internal = true;
-
 	char *argv[] = {backend, (internal) ? "setfilter" : "unsetfilter",
 			c->ifname, NULL};
 	platform_call(argv);
@@ -140,6 +137,18 @@ void platform_set_address(struct iface *c, struct iface_addr *a, bool enable)
 
 	char *argv[] = {backend, (enable) ? "newaddr" : "deladdr",
 			c->ifname, abuf, pbuf, vbuf, cbuf, NULL};
+	platform_call(argv);
+}
+
+
+void platform_set_snat(struct iface *c, const struct prefix *p)
+{
+	char sbuf[INET_ADDRSTRLEN], pbuf[PREFIX_MAXBUFFLEN];
+	inet_ntop(AF_INET, &c->v4_saddr, sbuf, sizeof(sbuf));
+	prefix_ntop(pbuf, sizeof(pbuf), p, true);
+
+	char *argv[] = {backend, (p && c->v4_saddr.s_addr) ? "newnat" : "delnat",
+			c->ifname, sbuf, pbuf, NULL};
 	platform_call(argv);
 }
 
@@ -213,8 +222,8 @@ void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t l
 	const size_t domainbuf_size = 8 + dns_max * 256;
 	char domainbuf[domainbuf_size];
 	strcpy(domainbuf, "SEARCH=");
+	iface_get_fqdn(c->ifname, domainbuf + strlen(domainbuf), 256);
 	size_t domainbuf_len = strlen(domainbuf);
-	bool have_domain = false;
 
 	// Add per interface DHCPv6 options
 	uint8_t *oend = ((uint8_t*)dhcpv6_data) + len, *odata;
@@ -230,21 +239,17 @@ void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t l
 		} else if (otype == DHCPV6_OPT_DNS_DOMAIN) {
 			uint8_t *oend = &odata[olen];
 			while (odata < oend) {
+				domainbuf[domainbuf_len++] = ' ';
 				int l = dn_expand(odata, oend, odata, &domainbuf[domainbuf_len],
 						domainbuf_size - domainbuf_len);
 				if (l > 0) {
 					domainbuf_len = strlen(domainbuf);
-					domainbuf[domainbuf_len++] = ' ';
-					have_domain = true;
 				} else {
 					break;
 				}
 			}
 		}
 	}
-
-	if (have_domain)
-		domainbuf[domainbuf_len - 1] = '\0';
 
 	// DNS options
 	size_t dns4_cnt = 0;

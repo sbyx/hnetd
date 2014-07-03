@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Tue Jun 10 16:02:02 2014 mstenber
- * Edit time:     114 min
+ * Last modified: Tue Jun 17 14:51:27 2014 mstenber
+ * Edit time:     121 min
  *
  */
 
@@ -114,7 +114,9 @@ struct hncp_subscriber_struct {
   void (*link_change_callback)(hncp_subscriber s);
 };
 
-/************************************************ API for configuration */
+/********************************************* API for handling single links */
+
+/* (hncp_link itself is implementation detail) */
 
 typedef struct hncp_link_conf_struct hncp_link_conf_s, *hncp_link_conf;
 struct hncp_link_conf_struct {
@@ -134,7 +136,27 @@ struct hncp_link_conf_struct {
   bool safe_link;
 };
 
-hncp_link_conf hncp_find_link_conf_by_name(hncp o, const char *ifname);
+/**
+ * Find or create new hncp_link_conf_s that matches the interface.
+ */
+hncp_link_conf hncp_if_find_conf_by_name(hncp o, const char *ifname);
+
+/**
+ * Does the current HNCP instance have highest ID on the given interface?
+ */
+bool hncp_if_has_highest_id(hncp o, const char *ifname);
+
+/**
+ * Enable/disable HNCP protocol on an interface.
+ */
+bool hncp_if_set_enabled(hncp o, const char *ifname, bool enabled);
+
+/**
+ * Set IPv6 address for given interface.
+ */
+void hncp_if_set_ipv6_address(hncp o,
+                              const char *ifname, const struct in6_addr *a);
+
 
 /************************************************ API for whole hncp instance */
 
@@ -184,11 +206,6 @@ struct tlv_attr *hncp_update_tlv_raw(hncp o,
 int hncp_remove_tlvs_by_type(hncp o, int type);
 
 /**
- * Enable/disable on an interface.
- */
-bool hncp_set_link_enabled(hncp o, const char *ifname, bool enabled);
-
-/**
  * Subscribe to HNCP state change events.
  *
  * This call will register the caller as subscriber to HNCP state
@@ -218,12 +235,6 @@ void hncp_run(hncp o);
  */
 void hncp_poll(hncp o);
 
-
-/**
- * Set IPv6 address for given interface.
- */
-void hncp_set_ipv6_address(hncp o,
-                           const char *ifname, const struct in6_addr *a);
 
 /************************************************************** Per-node API */
 

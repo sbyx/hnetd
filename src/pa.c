@@ -50,6 +50,7 @@ void pa_init(struct pa *pa, const struct pa_conf *conf)
 	pa_core_init(&pa->core);
 	pa_local_init(&pa->local, conf?&conf->local_conf:NULL);
 	pa_pd_init(&pa->pd, conf?&conf->pd_conf:NULL);
+	pa->hncp = NULL;
 
 	memset(&pa->ifu, 0, sizeof(struct iface_user));
 	pa->ifu.cb_intiface = __pa_ifu_intiface;
@@ -312,3 +313,45 @@ bool pa_cp_isvalid(struct pa *pa, struct pa_cp *cp)
 	}
 	return true;
 }
+
+void pa_count_available_prefixes(struct pa *pa, uint16_t *count, struct prefix *container)
+{
+	struct prefix p;
+	int i;
+
+	for(i=0; i<129; i++)
+		count[i] = 0;
+
+	/* Count available prefixes of each length */
+	pa_for_each_available_prefix(&pa->data, container, &p)
+		if(count[p.plen] != UINT16_MAX)
+			count[p.plen]++;
+}
+
+void pa_count_available_decrement(uint16_t *count, uint8_t removed_plen, uint8_t container_plen)
+{
+	int i;
+	count[container_plen]--;
+	for (i = container_plen - 1; i >= removed_plen; i--)
+		count[i]++;
+}
+
+uint8_t pa_count_available_subset(const uint16_t *count, uint8_t plen, uint32_t *nfound, uint32_t nmax)
+{
+	uint8_t min_plen = plen + 1;
+	int i;
+	uint64_t c = 0;
+	for(i = plen; i >= 0; i--) {
+		if(count[i]) {
+			if(plen - i >= 32 || ((c += count[i] * ((uint64_t)(1 << (plen - i)))) > nmax)) {
+				min_plen = i;
+				c = nmax;
+				break;
+			}
+			min_plen = i;
+		}
+	}
+	*nfound = (uint32_t) c;
+	return min_plen;
+}
+

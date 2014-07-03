@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Thu May  8 18:32:08 2014 mstenber
- * Edit time:     173 min
+ * Last modified: Tue Jun 17 16:13:19 2014 mstenber
+ * Edit time:     174 min
  *
  */
 
@@ -27,6 +27,8 @@ static int random_mock(void);
 #include "hncp_timeout.c"
 #include "sput.h"
 #include "smock.h"
+
+int log_level = LOG_DEBUG;
 
 /********************************************************* Mocked interfaces */
 
@@ -306,7 +308,7 @@ static void hncp_rejoin_works(void)
   one_join(false);
   smock_push_int("schedule", 0);
   smock_push_int("time", t);
-  hncp_set_link_enabled(o, dummy_ifname, true);
+  hncp_if_set_enabled(o, dummy_ifname, true);
   smock_is_empty();
 
   /* make sure next timeout before HNCP_REJOIN_INTERVAL just re-schedules. */
@@ -357,7 +359,7 @@ static void hncp_ok(void)
   smock_is_empty();
   one_join(true);
   smock_push_int("schedule", 0);
-  hncp_set_link_enabled(o, dummy_ifname, true);
+  hncp_if_set_enabled(o, dummy_ifname, true);
   smock_is_empty();
 
   /* Ok. We're cooking with gas. */
