@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Thu Jun 19 17:52:07 2014 mstenber
- * Edit time:     397 min
+ * Last modified: Wed Jul 16 14:00:49 2014 mstenber
+ * Edit time:     483 min
  *
  */
 
@@ -346,6 +346,208 @@ void hncp_tube_beyond_multicast_unique(void)
   raw_hncp_tube(&s, 60);
 }
 
+/* Note: As we play with bitmasks,
+   NUM_MONKEY_ROUTERS * NUM_MONKEY_PORTS^2 <= 31
+*/
+#define NUM_MONKEY_ROUTERS 7
+#define NUM_MONKEY_PORTS 2
+#define NUM_MONKEY_ITERATIONS 10000
+
+hncp net_sim_find_hncp_n(net_sim s, int i)
+{
+  char n[3];
+  sprintf(n, "n%d", i);
+  return net_sim_find_hncp(s, n);
+}
+
+hncp_link net_sim_hncp_find_link_n(hncp o, int i)
+{
+  char n[3];
+  sprintf(n, "l%d", i);
+  return net_sim_hncp_find_link_by_name(o, n);
+}
+
+#define MONKEY_MASK(p1,r2,p2) \
+  (1 << (r2 + (p1 + p2 * NUM_MONKEY_PORTS) * NUM_MONKEY_ROUTERS))
+
+#define MONKEY_CONNECTED(ma,r1,p1,r2,p2)        \
+  (ma[r1] & MONKEY_MASK(p1, r2, p2))
+
+#define MONKEY_SET_CONNECTED(ma,r1,p1,r2,p2)    \
+  ma[r1] |= MONKEY_MASK(p1, r2, p2)
+
+#define MONKEY_CLEAR_CONNECTED(ma,r1,p1,r2,p2)  \
+  ma[r1] &= ~MONKEY_MASK(p1, r2, p2)
+
+
+bool monkey_ok(int *ma,
+               hncp n1, hncp_link l1, hncp n2, hncp_link l2,
+               int i, int p1, int j, int p2)
+{
+  bool should_be_connected =
+    MONKEY_CONNECTED(ma, i, p1, j, p2) &&
+    MONKEY_CONNECTED(ma, j, p2, i, p1) && i != j;
+
+  /* Look at the _published_ state only. */
+  bool found = false;
+  struct tlv_attr *a;
+  hncp_t_node_data_neighbor nh;
+
+  hncp_node_for_each_tlv_with_type(n1->own_node, a,
+                                   HNCP_T_NODE_DATA_NEIGHBOR)
+    if ((nh = hncp_tlv_neighbor(a)))
+      {
+        if (nh->link_id != cpu_to_be32(l1->iid))
+          continue;
+        if (nh->neighbor_link_id != cpu_to_be32(l2->iid))
+          continue;
+        if (memcmp(&nh->neighbor_node_identifier_hash,
+                   &n2->own_node->node_identifier_hash,
+                   sizeof(n2->own_node->node_identifier_hash)))
+          continue;
+        if (hncp_node_find_neigh_bidir(n1->own_node, nh))
+          {
+            found = true;
+            break;
+          }
+      }
+  if (!found != !should_be_connected)
+    {
+      L_DEBUG("monkey_converged %d/%d <=> %d/%d %sconnected?!?",
+              i, p1, j, p2,
+              should_be_connected ? "dis" : "");
+      return false;
+    }
+  return true;
+}
+
+bool monkey_converged(net_sim s, int *ma, int *broken)
+{
+  int i, j, p1, p2;
+  net_node n;
+
+  /* First off, cheap checks. */
+  list_for_each_entry(n, &s->nodes, h)
+    {
+      if (n->n.network_hash_dirty)
+        return false;
+    }
+
+  if (broken[0] >= 0)
+    {
+      i = broken[0];
+      p1 = broken[1];
+      j = broken[2];
+      p2 = broken[3];
+      hncp n1 = net_sim_find_hncp_n(s, i);
+      hncp n2 = net_sim_find_hncp_n(s, j);
+      hncp_link l1 = net_sim_hncp_find_link_n(n1, p1);
+      hncp_link l2 = net_sim_hncp_find_link_n(n2, p2);
+      if (!monkey_ok(ma, n1, l1, n2, l2, i, p1, j, p2))
+        return false;
+    }
+  for (i = 0 ; i < NUM_MONKEY_ROUTERS ; i++)
+    {
+      hncp n1 = net_sim_find_hncp_n(s, i);
+      for (j = 0 ; j < NUM_MONKEY_ROUTERS ; j++)
+        {
+          hncp n2 = net_sim_find_hncp_n(s, j);
+
+          for (p1 = 0 ; p1 < NUM_MONKEY_PORTS ; p1++)
+            {
+              hncp_link l1 = net_sim_hncp_find_link_n(n1, p1);
+
+              for (p2 = 0 ; p2 < NUM_MONKEY_PORTS ; p2++)
+                {
+                  hncp_link l2 = net_sim_hncp_find_link_n(n2, p2);
+                  if (!monkey_ok(ma, n1, l1, n2, l2, i, p1, j, p2))
+                    {
+                      broken[0] = i;
+                      broken[1] = p1;
+                      broken[2] = j;
+                      broken[3] = p2;
+                      return false;
+                    }
+                }
+            }
+        }
+    }
+  broken[0] = -1;
+  return true;
+}
+
+void monkey_debug_print(int *ma)
+{
+  int r1, r2, p1, p2;
+  for (r1 = 0 ; r1 < NUM_MONKEY_ROUTERS ; r1++)
+    for (p1 = 0 ; p1 < NUM_MONKEY_PORTS ; p1++)
+      for (r2 = r1+1 ; r2 < NUM_MONKEY_ROUTERS ; r2++)
+        for (p2 = 0 ; p2 < NUM_MONKEY_PORTS ; p2++)
+          {
+            L_DEBUG("%d/%d %s-%s %d/%d",
+                    r1, p1,
+                    MONKEY_CONNECTED(ma, r2, p2, r1, p1) ? "<" : " ",
+                    MONKEY_CONNECTED(ma, r1, p1, r2, p2) ? ">" : " ",
+                    r2, p2);
+          }
+}
+
+void hncp_random_monkey(void)
+{
+  /* This is a sanity checker for the neighbor graph of HNCP.
+   * Notably, it involves bunch of monkeys that do random connections.
+   *
+   * Eventually, the state should always converge in something sane. */
+  net_sim_s s;
+  int ma[NUM_MONKEY_ROUTERS];
+  int broken[4] = {-1, 0, 0, 0};
+  int i;
+
+  memset(ma, 0, sizeof(ma));
+  net_sim_init(&s);
+  s.disable_sd = true; /* we don't care about sd */
+  for (i = 0 ; i < NUM_MONKEY_ITERATIONS ; i++)
+    {
+      /* Do random connect/disconnect */
+      int r1 = random() % NUM_MONKEY_ROUTERS;
+      hncp n1 = net_sim_find_hncp_n(&s, r1);
+      int p1 = random() % NUM_MONKEY_PORTS;
+      hncp_link l1 = net_sim_hncp_find_link_n(n1, p1);
+
+      int r2 = random() % NUM_MONKEY_ROUTERS;
+      hncp n2 = net_sim_find_hncp_n(&s, r2);
+      int p2 = random() % NUM_MONKEY_PORTS;
+      hncp_link l2 = net_sim_hncp_find_link_n(n2, p2);
+      bool is_connect = random() % 2;
+
+      if (is_connect)
+          MONKEY_SET_CONNECTED(ma, r1, p1, r2, p2);
+      else
+          MONKEY_CLEAR_CONNECTED(ma, r1, p1, r2, p2);
+      net_sim_set_connected(l1, l2, is_connect);
+
+      L_DEBUG("hncp_random_monkey iteration #%d: %d/%d->%d/%d %s",
+              i, r1, p1, r2, p2, is_connect ? "connected" : "disconnected");
+      hnetd_time_t t = hnetd_time();
+
+      /* Wait a second between topology changes. */
+      SIM_WHILE(&s, 1000, hnetd_time() < (t + 1000));
+
+      if (!monkey_converged(&s, ma, broken))
+        {
+          SIM_WHILE(&s, 100000, !monkey_converged(&s, ma, broken));
+          if (!monkey_converged(&s, ma, broken))
+            {
+              /* Print out the connections */
+              monkey_debug_print(ma);
+              break;
+            }
+        }
+    }
+  net_sim_uninit(&s);
+
+}
+
 #define test_setup() srandom(seed)
 #define maybe_run_test(fun) sput_maybe_run_test(fun, test_setup())
 
@@ -384,6 +586,7 @@ int main(__unused int argc, __unused char **argv)
   maybe_run_test(hncp_tube_small);
   maybe_run_test(hncp_tube_beyond_multicast);
   maybe_run_test(hncp_tube_beyond_multicast_unique);
+  maybe_run_test(hncp_random_monkey);
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();
