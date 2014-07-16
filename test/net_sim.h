@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Wed Jul 16 13:35:48 2014 mstenber
- * Edit time:     148 min
+ * Last modified: Wed Jul 16 19:34:21 2014 mstenber
+ * Edit time:     151 min
  *
  */
 
@@ -298,7 +298,7 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
   sput_fail_unless(r, "hncp_init");
   if (!r)
     return NULL;
-  list_add(&n->h, &s->nodes);
+  list_add_tail(&n->h, &s->nodes);
   INIT_LIST_HEAD(&n->messages);
 #ifndef DISABLE_HNCP_PA
   memset(&n->pa_data_user, 0, sizeof(struct pa_data_user));
