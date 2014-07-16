@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Fri Jun 13 11:30:10 2014 mstenber
- * Edit time:     273 min
+ * Last modified: Wed Jul 16 12:55:17 2014 mstenber
+ * Edit time:     283 min
  *
  */
 
@@ -270,7 +270,8 @@ void hncp_run(hncp o)
 
           n->last_ping = hncp_time(o);
           /* Send a ping */
-          L_DEBUG("pinging neighbor %llx", hncp_hash64(&n->node_identifier_hash));
+          L_DEBUG("pinging neighbor %llx on link %d",
+                  hncp_hash64(&n->node_identifier_hash), l->iid);
           hncp_link_send_req_network_state(l, &n->last_address);
         }
     }
