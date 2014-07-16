@@ -85,7 +85,7 @@ static void pd_handle_update(struct pa_pd_lease *lease)
 				preferred = 60;
 			}
 
-			ustream_printf(&c->fd.stream, "%s,%"PRId64",%u"PRId64"\n",
+			ustream_printf(&c->fd.stream, "%s,%"PRId64",%"PRId64"\n",
 					prefix_ntop(buf, sizeof(buf), &cpd->cp.prefix, false),
 					preferred, valid);
 
