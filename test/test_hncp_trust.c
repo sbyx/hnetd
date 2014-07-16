@@ -10,6 +10,8 @@
 
 #include "local_trust.h"
 
+int log_level = LOG_DEBUG;
+
 /* Fake structures to keep pa's default config happy. */
 void *iface_register_user;
 void *iface_unregister_user;

@@ -216,6 +216,8 @@ struct hncp_node_struct {
   /* hncp->nodes entry */
   struct vlist_node in_nodes;
 
+
+  struct vlist_node in_trusted_nodes;
   /* backpointer to hncp */
   hncp hncp;
 
@@ -229,7 +231,7 @@ struct hncp_node_struct {
   uint32_t version;
 
   /* whether the node is trusted */
-  bool trusted;
+  bool in_trusted_nodes_set;
 
   /* When was the last prune during which this node was reachable */
   hnetd_time_t last_reachable_prune;
@@ -327,6 +329,10 @@ void hncp_notify_subscribers_local_tlv_changed(hncp o,
                                                struct tlv_attr *a,
                                                bool add);
 void hncp_notify_subscribers_link_changed(hncp_link l);
+void hncp_notify_subscribers_node_trust_changed(hncp_node n, bool add);
+void hncp_notify_subscribers_trusted_tlvs_changed(hncp_node n,
+                                          struct tlv_attr *a_old,
+                                          struct tlv_attr *a_new);
 
 /* Low-level interface module stuff. */
 

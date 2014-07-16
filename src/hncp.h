@@ -104,6 +104,29 @@ struct hncp_subscriber_struct {
   void (*node_change_callback)(hncp_subscriber s, hncp_node n, bool add);
 
   /**
+   * Node trust change notification.
+   *
+   * This is called whenever a node is being added or removed in the trusted node set of
+   * HNCP.
+   *
+   * @param n The node which is being trusted or revoked;
+   * @param add Flag which indicates whether the node is trusted or revoked.
+   */
+  void (*node_trust_change_callback)(hncp_subscriber s, hncp_node n, bool add);
+
+  /**
+   * Trusted TLV change notification.
+   *
+   * This is called whenever one TLV within one node of the trusted node set
+   * changes. Also called when the node trust state changes.
+   *
+   * @param n The node for which change notification occurs.
+   * @param tlv The TLV that is being added or removed (there is no 'update').
+   * @param add Flag which indicates whether the operation was add or remove.
+   */
+  void (*trusted_tlv_change_callback)(hncp_subscriber s,
+                              hncp_node n, struct tlv_attr *tlv, bool add);
+  /**
    * Some link-specific information changed.
    *
    * This is called whenever a link's preferred address changes, or

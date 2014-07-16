@@ -30,6 +30,8 @@ struct hncp_trust_struct{
   /* list of nodes in the graph, indexed by node hash */
   struct vlist_tree trust_graphs;
 
+  struct vlist_tree trusted_nodes;
+
   hncp_subscriber_s sub;
 
   /* Friend search :
@@ -54,9 +56,9 @@ struct hncp_trust_struct{
 
   bool want_friend;
 
+  bool shared_key_emitter;
   /* whether the PKI is used (disabling for some unit testing) */
   bool crypto_used;
-
 
 };
 
@@ -83,7 +85,7 @@ int hncp_trust_init(hncp o, char * priv_key_file, char * trusted_key_dir);
   * The node identifier hash is the md5 hash of the key
   * The signature is valid
   * There is only one hash, one key, one trust array, one signature */
-bool hncp_trust_message_integrity_check(hncp o, hncp_hash node_identifier_hash, struct tlv_attr *node_data_tlv);
+bool hncp_trust_message_integrity_check(hncp o, hncp_hash node_identifier_hash, uint32_t sequence_number, struct tlv_attr *node_data_tlv);
 
 /** Checks if the node hash is trusted */
 bool hncp_trust_node_trusted(hncp o, hncp_hash hash);

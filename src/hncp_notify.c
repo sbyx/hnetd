@@ -187,6 +187,8 @@ void hncp_notify_subscribers_tlvs_changed(hncp_node n,
           np = tlv_next(np);
         }
     }
+      if(n->in_trusted_nodes_set)
+        hncp_notify_subscribers_trusted_tlvs_changed(n, a_old, a_new);
 }
 
 void hncp_notify_subscribers_local_tlv_changed(hncp o,
@@ -226,4 +228,125 @@ void hncp_notify_subscribers_link_changed(hncp_link l)
   list_for_each_entry(s, &l->hncp->subscribers, lh)
     if (s->link_change_callback)
       s->link_change_callback(s);
+}
+
+void hncp_notify_subscribers_node_trust_changed(hncp_node n, bool add)
+{
+  hncp_subscriber s;
+
+  list_for_each_entry(s, &n->hncp->subscribers, lh)
+    if(s->node_trust_change_callback)
+      s->node_trust_change_callback(s, n, add);
+  if(add)
+    hncp_notify_subscribers_trusted_tlvs_changed(n, NULL, n->tlv_container);
+  else
+    hncp_notify_subscribers_trusted_tlvs_changed(n, n->tlv_container, NULL);
+}
+
+/*Dumb copy of hncp_notify_subscribers_tlvs_changed */
+void hncp_notify_subscribers_trusted_tlvs_changed(hncp_node n,
+                                          struct tlv_attr *a_old,
+                                          struct tlv_attr *a_new)
+{
+  hncp_subscriber s;
+  void *old_end = (void *)a_old + (a_old ? tlv_pad_len(a_old) : 0);
+  void *new_end = (void *)a_new + (a_new ? tlv_pad_len(a_new) : 0);
+  int r;
+
+  /* There are two distinct steps here: First we remove missing, and
+   * then we add new ones. Otherwise, there may be confusion if we get
+   * first new + then remove, and the underlying TLV has same
+   * key.. :-p */
+  list_for_each_entry(s, &n->hncp->subscribers, lh)
+    {
+      struct tlv_attr *op = a_old ? tlv_data(a_old) : NULL;
+      struct tlv_attr *np = a_new ? tlv_data(a_new) : NULL;
+
+      /* If subscriber isn't interested, just skip. */
+      if (!s->trusted_tlv_change_callback)
+        continue;
+
+      /* Keep two pointers, one for old, one for new. */
+
+      /* While there's data in both, and it looks valid, we drain each
+       * 0-1 at the time. */
+      while (op && np)
+        {
+          ENSURE_VALID(op, old_end);
+          ENSURE_VALID(np, new_end);
+          /* Ok, op and np both point at valid structs. */
+          r = tlv_attr_cmp(op, np);
+          /* If they're equal, we can skip both, no sense giving notification */
+          if (!r)
+            {
+              op = tlv_next(op);
+              np = tlv_next(np);
+            }
+          else if (r < 0)
+            {
+              /* op < np => op deleted */
+              s->trusted_tlv_change_callback(s, n, op, false);
+              op = tlv_next(op);
+            }
+          else
+            {
+              /* op > np => np added */
+              /* in part 2 */
+              np = tlv_next(np);
+            }
+        }
+      /* Anything left in op was deleted. */
+      while (op)
+        {
+          ENSURE_VALID(op, old_end);
+          s->trusted_tlv_change_callback(s, n, op, false);
+          op = tlv_next(op);
+        }
+    }
+  list_for_each_entry(s, &n->hncp->subscribers, lh)
+    {
+      struct tlv_attr *op = a_old ? tlv_data(a_old) : NULL;
+      struct tlv_attr *np = a_new ? tlv_data(a_new) : NULL;
+
+      /* If subscriber isn't interested, just skip. */
+      if (!s->trusted_tlv_change_callback)
+        continue;
+
+      /* Keep two pointers, one for old, one for new. */
+
+      /* While there's data in both, and it looks valid, we drain each
+       * 0-1 at the time. */
+      while (op && np)
+        {
+          ENSURE_VALID(op, old_end);
+          ENSURE_VALID(np, new_end);
+          /* Ok, op and np both point at valid structs. */
+          r = tlv_attr_cmp(op, np);
+          /* If they're equal, we can skip both, no sense giving notification */
+          if (!r)
+            {
+              op = tlv_next(op);
+              np = tlv_next(np);
+            }
+          else if (r < 0)
+            {
+              /* op < np => op deleted */
+              /* we did this in part 1 */
+              op = tlv_next(op);
+            }
+          else
+            {
+              /* op > np => np added */
+              s->trusted_tlv_change_callback(s, n, np, true);
+              np = tlv_next(np);
+            }
+        }
+      /* Anything left in np was added. */
+      while (np)
+        {
+          ENSURE_VALID(np, new_end);
+          s->trusted_tlv_change_callback(s, n, np, true);
+          np = tlv_next(np);
+        }
+    }
 }

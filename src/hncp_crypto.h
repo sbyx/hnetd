@@ -31,14 +31,31 @@ struct trust_key_struct{
    * & for the key in the key tree */
   hncp_hash_s key_hash;
 
+  uint16_t encryption_type;
   /* Flag to identify reliable keys (unused for self key) */
   bool locally_trusted;
+
+  bool want_to_be_friend;
 
   /* Is it a public or private key */
   bool private;
 };
 
 typedef struct trust_key_struct trust_key_s, *trust_key;
+
+struct key_id{
+  hncp_hash_s emitter;
+  uint32_t id;
+};
+
+struct symmetric_key_struct{
+  cipher_context_t ctx;
+  struct vlist_node node;
+  struct key_id identifier;
+  uint16_t key_type;
+};
+
+typedef struct symmetric_key_struct hncp_shared_key_s, *hncp_shared_key;
 
 struct crypto_data{
   /* keys trusted locally */
@@ -47,25 +64,24 @@ struct crypto_data{
   struct vlist_tree symmetric_keys;
   trust_key_s key;
 
+  hncp_shared_key_s used_symmetric_key;
+
+  char * own_symmetric_key;
+  bool symmetric_key_emitter;
+
+
+
   entropy_context entropy;
   ctr_drbg_context ctr_drbg;
   md_context_t md_ctx;
 
   char * key_dir;
   uint16_t sign_type;
-  uint16_t sign_hash;
 };
 
 typedef struct crypto_data hncp_crypto_s, *hncp_crypto;
 
-struct symmetric_key_struct{
-  cipher_context_t ctx;
-  struct vlist_node node;
-  hncp_hash_s key_emitter;
-  hncp_hash_s key_hash;
-};
 
-typedef struct symmetric_key_struct hncp_shared_key_s, *hncp_shared_key;
 
 /** 1 if key generation failed
   * 2 if key file opening failed (if file exists)
@@ -92,7 +108,7 @@ int hncp_crypto_get_trusted_keys(hncp o, char *trusted_dir);
 void hncp_crypto_set_trusted_key(hncp o, trust_key k, bool temporary);
 
 /** Stop directly trusting a key */
-void hncp_crypto_revoke_trusted_key(hncp o, trust_key k, bool was_temporary);
+void hncp_crypto_mistrust_trusted_key(hncp o, trust_key k, bool was_temporary);
 /**  initialize the struct from the context in it */
 void hncp_crypto_init_key(trust_key t, char * file_name, bool private);
 
@@ -102,8 +118,22 @@ trust_key hncp_crypto_raw_key_to_trust_key(char * key, size_t size, bool private
 /** Get a registered key from the hash (or NULL if not found) */
 trust_key hncp_crypto_key_from_hash(hncp o, hncp_hash hash);
 
-int hncp_crypto_pk_encrypt_data(hncp o, trust_key k, char * data, size_t size, char ** encrypted_data, size_t* len, uint16_t crypt_type, uint16_t crypt_variant);
-int hncp_crypto_pk_decrypt_data(hncp o, char * data, size_t size, char ** decrypted_data, size_t* len, uint16_t crypt_type, uint16_t crypt_variant);
+/** Private data handling */
+void hncp_crypto_make_own_shared_key(hncp o, uint16_t key_type);
+
+void hncp_crypto_set_shared_key(hncp o, const char *key, struct key_id * id, uint16_t key_type);
+
+void hncp_crypto_set_shared_key_tlv(hncp o, hncp_hash target);
+
+/** Asymmetric encryption */
+int hncp_crypto_pk_encrypt_data(hncp o, trust_key k, char * data, size_t size, char ** encrypted_data, size_t* len);
+int hncp_crypto_pk_decrypt_data(hncp o, char * data, size_t size, char ** decrypted_data, size_t* len);
+
+/** Symmetric encryption
+  * returns 0 if everything went fine, the output is set in *(en|de)crypted_data, and its length in *len */
+int hncp_crypto_cipher_encrypt(hncp o, char * data, size_t size, char ** encrypted_data, size_t * len, char *iv, size_t iv_len);
+int hncp_crypto_cipher_decrypt(hncp o, struct key_id* key_id,  char * data, size_t size, char ** decrypted_data, size_t * len, char *iv, size_t iv_len);
+
 
 
 /** Callback for sign update in case of tlv change */

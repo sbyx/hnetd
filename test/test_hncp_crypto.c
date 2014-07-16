@@ -19,7 +19,7 @@
 
 /* Force to regen rsa private key. Comment to fasten.
  * (Notable difference when using valgrind) */
-//#define FORCE_RSA_GEN
+#define FORCE_RSA_GEN
 /* Force to regen rsa key pool */
 //#define FORCE_RSA_PUB_GEN
 
@@ -27,6 +27,9 @@
 #define PUBKEY_DIR "pub_cache"
 #define CACHE_FILE "cache.key"
 #define TRUST_PRIVATE_KEY_FILE "priv.key"
+
+int log_level = LOG_DEBUG;
+
 
 /* Fake structures to keep pa's default config happy. */
 void *iface_register_user;
@@ -133,6 +136,7 @@ void test_self_rsa(void){
   pk_init(&ctx);
   sput_fail_if(crypto_write_key_file(&o->trust->crypto->key.ctx, CACHE_FILE, false), "Public key written to file");
   sput_fail_if(pk_parse_public_keyfile(&ctx, CACHE_FILE), "File parsing ok");
+  hncp_run(o);
   sput_fail_unless(rsa_pub_equal(pk_rsa(o->trust->crypto->key.ctx), pk_rsa(ctx)), "Valid public key");
   remove(CACHE_FILE);
   pk_free(&ctx);
@@ -158,11 +162,43 @@ void test_public_key(void){
     sprintf(buf, "Node %i trusted", i);
     char * c = buf;
     sput_fail_unless(hncp_trust_node_trusted(o, h), c);
+    trust_key k = hncp_crypto_key_from_hash(o, h);
+    hncp_crypto_mistrust_trusted_key(o, k, true);
+    sprintf(buf, "Node %i mistrusted", i);
+    sput_fail_if(hncp_trust_node_trusted(o, h), c);
+    hncp_crypto_set_trusted_key(o, k, true);
+    sprintf(buf, "Node %i trusted again", i);
+    sput_fail_unless(hncp_trust_node_trusted(o, h), c);
     free(h);
   }
   sput_fail_unless(smock_empty(), "Right number of hashes");
   hncp_run(o);
-  sput_fail_unless(hncp_trust_message_integrity_check(o, &o->own_node->node_identifier_hash, o->own_node->tlv_container), "Valid published tlvs");
+  sput_fail_unless(hncp_trust_message_integrity_check(o, &o->own_node->node_identifier_hash, htonl(o->own_node->update_number), o->own_node->tlv_container), "Valid published tlvs");
+
+  trust_key k = hncp_crypto_raw_key_to_trust_key((char *)o->trust->crypto->key.raw_key, o->trust->crypto->key.size, false);
+  vlist_add(&o->trust->crypto->trust_keys, &k->node, &k->key_hash);
+  hncp_crypto_make_own_shared_key(o, SYMMETRIC_CRYPT_TYPE_AES_CBC_256);
+  hncp_crypto_set_shared_key_tlv(o, &o->own_node->node_identifier_hash);
+
+  hncp_tlv tlv_it;
+  bool found = false;
+  vlist_for_each_element(&o->tlvs, tlv_it, in_tlvs){
+    if(tlv_id(&tlv_it->tlv) != HNCP_T_SHARED_KEY)
+      continue;
+    found = true;
+    break;
+  }
+  sput_fail_unless(found, "Shared key advertised");
+  hncp_t_shared_key sk = (hncp_t_shared_key) &tlv_it->tlv.data;
+  char * decrypted;
+  size_t len = 42;
+  int r = hncp_crypto_pk_decrypt_data(o, (char *)sk->encrypted_key, tlv_len(&tlv_it->tlv)-sizeof(hncp_t_shared_key_s), &decrypted, &len);
+  print_polarssl_err(r);
+  sput_fail_unless(len == crypto_symmetric_key_length(o->trust->crypto->used_symmetric_key.key_type), "Encrypted key length ok");
+  sput_fail_unless(o->trust->crypto->used_symmetric_key.key_type == be16toh(sk->crypt_type), "Encrypted key type ok");
+
+  sput_fail_unless(memcmp(decrypted, o->trust->crypto->own_symmetric_key, len) == 0, "same key decoded");
+  free(decrypted);
   hncp_trust_destroy(o);
   hncp_destroy(o);
 }
@@ -173,6 +209,8 @@ int main(__unused int argc, __unused char **argv)
   sput_start_testing();
   sput_enter_suite("rsa"); /* graph structure & links */
   sput_run_test(test_self_rsa);
+  sput_leave_suite();
+  sput_enter_suite("pk");
   sput_run_test(test_public_key);
   sput_leave_suite(); /* optional */
   sput_finish_testing();

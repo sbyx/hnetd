@@ -92,29 +92,19 @@ enum {
   HNCP_T_SIGNATURE = 0xFFFF
 };
 
+
 enum {
-  SIGN_HASH_SHA1 = 1,
-  SIGN_HASH_SHA224 = 2,
-  SIGN_HASH_SHA256 = 3,
-  SIGN_HASH_SHA384 = 4,
-  SIGN_HASH_SHA512 = 5
+  SIGN_TYPE_RSA_PKCS15_SHA512 = 1,
+  SIGN_TYPE_RSA_SSAPSS_SHA512 = 2
 };
 
 enum {
-  SIGN_TYPE_RSA_PKCS15 = 1,
-  SIGN_TYPE_RSA_SSAPSS = 2
+  PK_CRYPT_TYPE_RSAAES_PKCS15 = 1,
+  PK_CRYPT_TYPE_RSAAES_OAEP_SHA512 = 2
 };
 
 enum {
-  CRYPT_TYPE_RSAAES_PKCS15 = 1,
-  CRYPT_TYPE_RSAAES_OAEP = 2
-};
-
-enum {
-  SYMMETRIC_CRYPT_AES = 1,
-  SYMMETRIC_CRYPT_CAMELLIA = 2,
-  SYMMETRIC_CRYPT_BLOWFISH = 3,
-  SYMMETRIC_CRYPT_3DES = 4
+  SYMMETRIC_CRYPT_TYPE_AES_CBC_256 = 1,
 };
 
 #define TLV_SIZE sizeof(struct tlv_attr)
@@ -232,21 +222,13 @@ typedef struct __packed {
   hncp_hash_s trusted_hash;
 } hncp_t_trust_link_s, *hncp_t_trust_link;
 
-/* HNCP_T_SIGNATURE */
-typedef struct __packed {
-  uint16_t sign_type;
-  uint16_t hash_type;
-  uint8_t signature[];
-} hncp_t_signature_s, *hncp_t_signature;
-
 /* HNCP_T_SHARED_KEY */
 typedef struct __packed {
   uint32_t key_id;
   hncp_hash_s target;
   uint16_t crypt_type;
-  uint16_t crypt_variant;
   uint8_t encrypted_key[];
-} hncp_t_shared_key_s, *hnct_shared_key;
+} hncp_t_shared_key_s, *hncp_t_shared_key;
 
 /* HNCP_T_ENCRYPTED_DATA */
 typedef struct __packed {
@@ -255,6 +237,11 @@ typedef struct __packed {
   uint8_t data[];
 } hncp_t_encrypted_data_s, *hncp_t_encrypted_data;
 
+/* HNCP_T_SIGNATURE */
+typedef struct __packed {
+  uint16_t sign_type;
+  uint8_t signature[];
+} hncp_t_signature_s, *hncp_t_signature;
 /**************************************************************** Addressing */
 
 #define HNCP_PORT 8808
