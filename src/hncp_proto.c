@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Jul 16 18:46:01 2014 mstenber
- * Edit time:     504 min
+ * Last modified: Wed Jul 16 19:38:42 2014 mstenber
+ * Edit time:     515 min
  *
  */
 
@@ -421,13 +421,12 @@ handle_message(hncp_link l,
           return;
         }
 
-      if (ne)
-        ne->in_sync = false;
-
-      /* Don't reset trickle until we provably are bidirectionally
-       * reachable. */
-      if (!ne || !ne->last_response)
-        return;
+      if (ne && ne->in_sync)
+        {
+          /* may cause us to get worried sooner */
+          hncp_schedule(o);
+          ne->in_sync = false;
+        }
 
       if (multicast)
         {
