@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Wed Jul 16 19:34:21 2014 mstenber
- * Edit time:     151 min
+ * Last modified: Wed Jul 16 23:42:51 2014 mstenber
+ * Edit time:     152 min
  *
  */
 
@@ -654,7 +654,7 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
   net_neigh n;
 
   if (!l)
-    return - 1;
+    return -1;
 
   sanity_check_buf(buf, len);
   if (is_multicast)
@@ -678,7 +678,7 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
   /* Loop at self too, just for fun. */
   if (is_multicast)
     _sendto(s, buf, len, l, l, dst);
-  return -1;
+  return 1;
 }
 
 hnetd_time_t hncp_io_time(hncp o)
