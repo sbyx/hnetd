@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Jul 16 14:00:49 2014 mstenber
- * Edit time:     483 min
+ * Last modified: Wed Jul 16 18:50:30 2014 mstenber
+ * Edit time:     487 min
  *
  */
 
@@ -577,7 +577,7 @@ int main(__unused int argc, __unused char **argv)
   setbuf(stdout, NULL); /* so that it's in sync with stderr when redirected */
   openlog("test_hncp_net", LOG_CONS | LOG_PERROR, LOG_DAEMON);
 
-  L_INFO("starting with random seed %d", seed);
+  fprintf(stderr, "Starting with random seed %d\n", seed);
   sput_start_testing();
   sput_enter_suite("hncp_net"); /* optional */
   maybe_run_test(hncp_two);
