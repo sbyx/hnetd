@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Fri Jun 13 12:02:43 2014 mstenber
- * Edit time:     144 min
+ * Last modified: Wed Jul 16 13:35:48 2014 mstenber
+ * Edit time:     148 min
  *
  */
 
@@ -374,6 +374,11 @@ void net_sim_set_connected(hncp_link l1, hncp_link l2, bool enabled)
           l1, l1->iid, l2, l2->iid, enabled ? "on" : "off");
   if (enabled)
     {
+      /* Make sure it's not there already */
+      list_for_each_entry(n, &s->neighs, h)
+        if (n->src == l1 && n->dst == l2)
+          return;
+
       /* Add node */
       n = calloc(1, sizeof(*n));
 
@@ -556,7 +561,7 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
       list_del(&m->h);
       free(m->buf);
       free(m);
-      L_DEBUG("%s: hncp_io_recvfrom %d bytes", node->name, s);
+      L_DEBUG("%s/%s: hncp_io_recvfrom %d bytes", node->name, ifname, s);
       return s;
     }
   return - 1;
