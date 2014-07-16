@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Jul 16 18:44:11 2014 mstenber
+ * Last modified: Wed Jul 16 23:15:53 2014 mstenber
  * Edit time:     242 min
  *
  */
@@ -165,6 +165,10 @@ struct hncp_link_struct {
   hnetd_time_t trickle_send_time; /* when do we send if c < k*/
   hnetd_time_t trickle_interval_end_time; /* when does current interval end */
   int trickle_c; /* counter */
+
+  /* Statistics about Trickle (mostly for debugging) */
+  int num_trickle_sent;
+  int num_trickle_skipped;
 
   /* 'Best' address (if any) */
   bool has_ipv6_address;
@@ -370,6 +374,13 @@ static inline hnetd_time_t hncp_time(hncp o)
 #define TMIN(x,y) ((x) == 0 ? (y) : (y) == 0 ? (x) : (x) < (y) ? (x) : (y))
 
 #define HNCP_NODE_REPR(n) HEX_REPR(&n->node_identifier_hash, HNCP_HASH_LEN)
+
+#define HNCP_NEIGH_F "neighbor %llx/#%d"
+#define HNCP_NEIGH_D(n) hncp_hash64(&n->node_identifier_hash),n->iid
+
+#define HNCP_LINK_F "link %s[#%d]"
+#define HNCP_LINK_D(l) l->ifname,l->iid
+
 
 static inline struct tlv_attr *
 hncp_node_get_tlv_with_type(hncp_node n, uint16_t type, bool first)

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Jul 16 19:38:42 2014 mstenber
- * Edit time:     515 min
+ * Last modified: Wed Jul 16 23:42:44 2014 mstenber
+ * Edit time:     539 min
  *
  */
 
@@ -111,9 +111,10 @@ bool hncp_link_send_network_state(hncp_link l,
     }
   if (maximum_size && tlv_len(tb.head) > maximum_size)
     goto err;
+  L_DEBUG("hncp_link_send_network_state -> %s%%" HNCP_LINK_F,
+          ADDR_REPR(dst), HNCP_LINK_D(l));
   int rc = hncp_io_sendto(o, tlv_data(tb.head), tlv_len(tb.head),
                           l->ifname, dst);
-  L_DEBUG("hncp_link_send_network_state %p", l);
   r = rc > 0;
  err:
   tlv_buf_free(&tb);
@@ -137,13 +138,14 @@ bool hncp_link_send_node_data(hncp_link l,
       && _push_node_state_tlv(&tb, n)
       && _push_node_data_tlv(&tb, n))
     {
+      L_DEBUG("hncp_link_send_node_state %s -> %s%%" HNCP_LINK_F,
+              HNCP_NODE_REPR(n), ADDR_REPR(dst), HNCP_LINK_D(l));
       int rc = hncp_io_sendto(l->hncp,
                               tlv_data(tb.head),
                               tlv_len(tb.head),
                               l->ifname,
                               dst);
       r = rc > 0;
-      L_DEBUG("hncp_link_send_node_state %p", l);
     }
   tlv_buf_free(&tb);
   return r;
@@ -160,13 +162,14 @@ bool hncp_link_send_req_network_state(hncp_link l,
   if (_push_link_id_tlv(&tb, l)
       && tlv_new(&tb, HNCP_T_REQ_NET_HASH, 0))
     {
+      L_DEBUG("hncp_link_send_req_network_state -> %s%%" HNCP_LINK_F,
+              ADDR_REPR(dst), HNCP_LINK_D(l));
       int rc = hncp_io_sendto(l->hncp,
                               tlv_data(tb.head),
                               tlv_len(tb.head),
                               l->ifname,
                               dst);
       r = rc > 0;
-      L_DEBUG("hncp_link_send_req_network_state %p", l);
     }
   tlv_buf_free(&tb);
   return r;
@@ -185,6 +188,8 @@ bool hncp_link_send_req_node_data(hncp_link l,
   if (_push_link_id_tlv(&tb, l)
       && (a = tlv_new(&tb, HNCP_T_REQ_NODE_DATA, HNCP_HASH_LEN)))
     {
+      L_DEBUG("hncp_link_send_req_node_state -> %s%%" HNCP_LINK_F,
+              ADDR_REPR(dst), HNCP_LINK_D(l));
       memcpy(tlv_data(a), &ns->node_identifier_hash, HNCP_HASH_LEN);
       int rc = hncp_io_sendto(l->hncp,
                               tlv_data(tb.head),
@@ -192,7 +197,6 @@ bool hncp_link_send_req_node_data(hncp_link l,
                               l->ifname,
                               dst);
       r = rc > 0;
-      L_DEBUG("hncp_link_send_req_node_state %p", l);
     }
   tlv_buf_free(&tb);
   return r;
@@ -217,15 +221,16 @@ _heard(hncp_link l, hncp_t_link_id lid, struct in6_addr *src)
       n = malloc(sizeof(nc));
       if (!n)
         return NULL;
-      memcpy(n, &nc, sizeof(nc));
+      *n = nc;
       vlist_add(&l->neighbors, &n->in_neighbors, n);
-      L_DEBUG("neighbor %llx added on link %d",
-              hncp_hash64(&lid->node_identifier_hash),
-              l->iid);
+      L_DEBUG(HNCP_NEIGH_F " added on " HNCP_LINK_F,
+              HNCP_NEIGH_D(n), HNCP_LINK_D(l));
     }
 
   n->last_address = *src;
   n->last_heard = hncp_time(o);
+  if (n->in_sync)
+    n->ping_count = 0;
   return n;
 }
 
@@ -345,7 +350,7 @@ handle_message(hncp_link l,
               L_INFO("ignoring req-net-hash in multicast");
               return;
             }
-          (void)hncp_link_send_network_state(l, src, 0);
+          hncp_link_send_network_state(l, src, 0);
           return;
         case HNCP_T_REQ_NODE_DATA:
           /* Ignore if in multicast. */
@@ -391,8 +396,8 @@ handle_message(hncp_link l,
           o->links_dirty = true;
           hncp_schedule(o);
         }
-      L_DEBUG("unicast received from neighbor %llx on link %d",
-              hncp_hash64(&ne->node_identifier_hash), l->iid);
+      L_DEBUG("unicast received from " HNCP_NEIGH_F " on " HNCP_LINK_F,
+              HNCP_NEIGH_D(ne), HNCP_LINK_D(l));
       ne->last_response = hncp_time(o);
       ne->ping_count = 0;
     }

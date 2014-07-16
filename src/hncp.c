@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Jun 19 17:51:41 2014 mstenber
- * Edit time:     734 min
+ * Last modified: Wed Jul 16 20:35:50 2014 mstenber
+ * Edit time:     740 min
  *
  */
 
@@ -268,15 +268,15 @@ static void update_neighbor(struct vlist_tree *t,
   hncp_neighbor t_old = container_of(node_old, hncp_neighbor_s, in_neighbors);
   hncp_neighbor t_new = container_of(node_new, hncp_neighbor_s, in_neighbors);
 
-  if (t_old)
-    free(t_old);
-  else if (t_new)
+  /* New doesn't mean anything, before it has last_response set. */
+  if (t_new)
     return;
-  /* Only immediate topology difference is _delete_. Add is delayed,
-   * as we don't advertise nodes we're not sure are reachable
-   * (=> we have to wait for unicast reachability check). */
-  o->links_dirty = true;
-  hncp_schedule(o);
+  if (t_old->last_response)
+    {
+      o->links_dirty = true;
+      hncp_schedule(o);
+    }
+  free(t_old);
 }
 
 void hncp_calculate_hash(const void *buf, int len, hncp_hash dest)

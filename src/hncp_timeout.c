@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Jul 16 17:50:58 2014 mstenber
- * Edit time:     290 min
+ * Last modified: Wed Jul 16 23:36:03 2014 mstenber
+ * Edit time:     315 min
  *
  */
 
@@ -17,28 +17,36 @@ static void trickle_set_i(hncp_link l, int i)
 {
   hnetd_time_t now = hncp_time(l->hncp);
 
+  i = i < l->conf->trickle_imin ? l->conf->trickle_imin
+    : i > l->conf->trickle_imax ? l->conf->trickle_imax : i;
   l->trickle_i = i;
-  l->trickle_send_time = now + i * (1000 + random() % 1000) / 2000;
+  int j = i * (1000 + random() % 1000) / 2000;
+  l->trickle_send_time = now + j;
   l->trickle_interval_end_time = now + i;
   l->trickle_c = 0;
+  L_DEBUG(HNCP_LINK_F " trickle set to %d/%d", HNCP_LINK_D(l), j, i);
 }
 
 static void trickle_upgrade(hncp_link l)
 {
-  int i = l->trickle_i * 2;
-
-  i = i < l->conf->trickle_imin ? l->conf->trickle_imin
-    : i > l->conf->trickle_imax ? l->conf->trickle_imax : i;
-  trickle_set_i(l, i);
+  trickle_set_i(l, l->trickle_i * 2);
 }
 
 static void trickle_send(hncp_link l)
 {
   if (l->trickle_c < l->conf->trickle_k)
     {
-      if (!hncp_link_send_network_state(l, &l->hncp->multicast_address,
-                                        HNCP_MAXIMUM_MULTICAST_SIZE))
-        return;
+      l->num_trickle_sent++;
+      L_DEBUG(HNCP_LINK_F " trickle not enough responses -> sending",
+              HNCP_LINK_D(l));
+      hncp_link_send_network_state(l, &l->hncp->multicast_address,
+                                   HNCP_MAXIMUM_MULTICAST_SIZE);
+    }
+  else
+    {
+      l->num_trickle_skipped++;
+      L_DEBUG(HNCP_LINK_F " trickle already has c=%d >= k=%d, not sending",
+              HNCP_LINK_D(l), l->trickle_c, l->conf->trickle_k);
     }
   l->trickle_send_time = 0;
 }
@@ -268,16 +276,16 @@ void hncp_run(hncp o)
           if (n->ping_count++== l->conf->ping_retries)
             {
               /* Zap the neighbor */
-              L_DEBUG("neighbor %llx gone on link %d",
-                      hncp_hash64(&n->node_identifier_hash), l->iid);
+              L_DEBUG(HNCP_NEIGH_F " gone on " HNCP_LINK_F,
+                      HNCP_NEIGH_D(n), HNCP_LINK_D(l));
               vlist_delete(&l->neighbors, &n->in_neighbors);
               continue;
             }
 
           n->last_ping = hncp_time(o);
           /* Send a ping */
-          L_DEBUG("pinging neighbor %llx on link %d",
-                  hncp_hash64(&n->node_identifier_hash), l->iid);
+          L_DEBUG("pinging " HNCP_NEIGH_F "  on " HNCP_LINK_F,
+                  HNCP_NEIGH_D(n), HNCP_LINK_D(l));
           hncp_link_send_req_network_state(l, &n->last_address);
         }
     }
