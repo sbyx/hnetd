@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Jul 16 12:55:17 2014 mstenber
- * Edit time:     283 min
+ * Last modified: Wed Jul 16 17:50:58 2014 mstenber
+ * Edit time:     290 min
  *
  */
 
@@ -244,11 +244,17 @@ void hncp_run(hncp o)
         {
           hnetd_time_t next_time;
 
-          /* For new neighbors, send ~immediate ping */
-          if (!n->last_response && !n->ping_count)
-            next_time = n->last_heard;
-          else if (!n->ping_count)
-            next_time = n->last_response + l->conf->ping_worried_t;
+          if (!n->ping_count)
+            {
+              /* For new neighbors, send ~immediate ping */
+              if (!n->last_response)
+                next_time = now;
+              /* if they're in sync with me, we can just use last_heard */
+              else if (n->last_heard > n->last_response && n->in_sync)
+                next_time = n->last_heard + l->conf->ping_worried_t;
+              else
+                next_time = n->last_response + l->conf->ping_worried_t;
+            }
           else
             next_time = n->last_ping + (l->conf->ping_retry_base_t << n->ping_count);
 

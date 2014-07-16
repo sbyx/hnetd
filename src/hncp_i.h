@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Fri Jun 13 10:58:29 2014 mstenber
- * Edit time:     235 min
+ * Last modified: Wed Jul 16 18:44:11 2014 mstenber
+ * Edit time:     242 min
  *
  */
 
@@ -188,6 +188,10 @@ struct hncp_neighbor_struct {
 
   /* When did they last respond to our message? */
   hnetd_time_t last_response;
+
+  /* Was the node in sync with us or not the last time we received
+   * network state from it */
+  bool in_sync;
 
   /* How many pings we have sent that haven't been responded to. */
   int ping_count;
@@ -456,10 +460,10 @@ hncp_node_find_neigh_bidir(hncp_node n, hncp_t_node_data_neighbor ne)
   hncp_node n2 = hncp_find_node_by_hash(n->hncp, oh, false);
   if (!n2)
     return NULL;
-  struct tlv_attr *a, *tlvs = hncp_node_get_tlvs(n2);
+  struct tlv_attr *a;
   hncp_t_node_data_neighbor ne2;
 
-  tlv_for_each_attr(a, tlvs)
+  hncp_node_for_each_tlv_with_type(n2, a, HNCP_T_NODE_DATA_NEIGHBOR)
     if ((ne2 = hncp_tlv_neighbor(a)))
       {
         if (ne->link_id == ne2->neighbor_link_id

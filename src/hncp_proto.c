@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Jul 16 13:46:45 2014 mstenber
- * Edit time:     483 min
+ * Last modified: Wed Jul 16 18:46:01 2014 mstenber
+ * Edit time:     504 min
  *
  */
 
@@ -328,6 +328,11 @@ handle_message(hncp_link l,
               L_DEBUG("got invalid network hash length: %d", tlv_len(a));
               return;
             }
+          if (nethash)
+            {
+              L_DEBUG("ignoring message with multiple network hashes");
+              return;
+            }
           nethash = tlv_data(a);
           break;
         case HNCP_T_NODE_STATE:
@@ -407,11 +412,24 @@ handle_message(hncp_link l,
           /* Increment Trickle count _if and only if_ it's not by us,
            * is someone who is proven reachable (at some point at
            * least), and is multicast. */
-          if (multicast && ne && ne->last_response)
-            l->trickle_c++;
+          if (ne)
+            {
+              ne->in_sync = true;
+              if (multicast && ne->last_response)
+                l->trickle_c++;
+            }
           return;
         }
-      else if (multicast)
+
+      if (ne)
+        ne->in_sync = false;
+
+      /* Don't reset trickle until we provably are bidirectionally
+       * reachable. */
+      if (!ne || !ne->last_response)
+        return;
+
+      if (multicast)
         {
           /* Reset trickle on the link */
           L_DEBUG("received inconsistent multicast network state %s != %s",
