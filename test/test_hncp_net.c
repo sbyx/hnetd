@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Jul 16 18:50:30 2014 mstenber
- * Edit time:     487 min
+ * Last modified: Wed Jul 16 18:55:28 2014 mstenber
+ * Edit time:     489 min
  *
  */
 
@@ -351,7 +351,7 @@ void hncp_tube_beyond_multicast_unique(void)
 */
 #define NUM_MONKEY_ROUTERS 7
 #define NUM_MONKEY_PORTS 2
-#define NUM_MONKEY_ITERATIONS 10000
+#define NUM_MONKEY_ITERATIONS 1000
 
 hncp net_sim_find_hncp_n(net_sim s, int i)
 {
