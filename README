@@ -6,7 +6,7 @@ hnetd - a home network configuration daemon
 hnetd is a networking daemon to automatically manage address assignment,
 routing, DNS, SD and border firewalling in home networks running it.
 It implements the Home Networking Control protocol as specified in
-http://tools.ietf.org/html/draft-stenberg-homenet-hncp
+http://tools.ietf.org/html/draft-ietf-homenet-hncp
 
 hnetd is designed to run on generic Linux-based routers.
 
@@ -74,7 +74,7 @@ config interface lan
 	option ifname eth0
 	option proto hnet
 
-
+or select the protocol "Automatic Homenet (HNCP)" in the web interface.
 
 ** Generic Firmware Integration **
 
