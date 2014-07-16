@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Fri Jun 13 12:07:36 2014 mstenber
- * Edit time:     464 min
+ * Last modified: Wed Jul 16 13:46:45 2014 mstenber
+ * Edit time:     483 min
  *
  */
 
@@ -220,7 +220,7 @@ _heard(hncp_link l, hncp_t_link_id lid, struct in6_addr *src)
       memcpy(n, &nc, sizeof(nc));
       vlist_add(&l->neighbors, &n->in_neighbors, n);
       L_DEBUG("neighbor %llx added on link %d",
-              hncp_hash64(&lid->node_identifier_hash), 
+              hncp_hash64(&lid->node_identifier_hash),
               l->iid);
     }
 
@@ -362,7 +362,7 @@ handle_message(hncp_link l,
                       L_DEBUG("prune pending, ignoring node data request");
                       return;
                     }
-                  
+
                   if (n->last_reachable_prune != o->last_prune)
                     {
                       L_DEBUG("not reachable request, ignoring");
@@ -386,6 +386,8 @@ handle_message(hncp_link l,
           o->links_dirty = true;
           hncp_schedule(o);
         }
+      L_DEBUG("unicast received from neighbor %llx on link %d",
+              hncp_hash64(&ne->node_identifier_hash), l->iid);
       ne->last_response = hncp_time(o);
       ne->ping_count = 0;
     }
@@ -401,7 +403,11 @@ handle_message(hncp_link l,
       if (memcmp(nethash, &o->network_hash, HNCP_HASH_LEN) == 0)
         {
           L_DEBUG("received network state which is consistent");
-          if (multicast)
+
+          /* Increment Trickle count _if and only if_ it's not by us,
+           * is someone who is proven reachable (at some point at
+           * least), and is multicast. */
+          if (multicast && ne && ne->last_response)
             l->trickle_c++;
           return;
         }
