@@ -12,14 +12,16 @@
 #ifndef HNCP_TRUST_H
 #define HNCP_TRUST_H
 
-#include "hncp_i.h"
-#include "hncp_sign.h"
-#include "trust_graph.h"
-#include "local_trust.h"
 #include <libubox/vlist.h>
 #include <libubox/list.h>
 #include <polarssl/pk.h>
+#include <libubox/uloop.h>
+
+#include "trust_graph.h"
+#include "local_trust.h"
 #include "hncp_crypto.h"
+
+#include "hncp_i.h"
 
 struct key_list{
   struct list_head list;
@@ -78,7 +80,7 @@ int compare_hash(const void *hash1, const void *hash2, __unused void *c);
 
 /** Creates an empty web of trust
   *  -1 if the crypto init failed, else 0 */
-int hncp_trust_init(hncp o, char * priv_key_file, char * trusted_key_dir);
+bool hncp_trust_init(hncp o, char * priv_key_file, char * trusted_key_dir);
 
 /** Checks if the tlv set (assumed to be ordered) is valid :
   * The key is valid
@@ -100,8 +102,10 @@ void hncp_trust_add_trust_link(hncp o, hncp_hash emitter, hncp_hash target);
 void hncp_trust_del_trust_link(hncp o, hncp_hash emitter, hncp_hash target);
 
 /** Wrapper for the two preceding functions */
-void hncp_trust_update_trusts_link(hncp o, hncp_hash emitter, hncp_hash target, bool add);
+void hncp_trust_update_trust_link(hncp o, hncp_hash emitter, hncp_hash target, bool add);
 
+/** Floods all the changes */
+void hncp_trust_recalculate_trust_links(hncp o);
 /** Destroys everything, frees all memory */
 void hncp_trust_destroy(hncp o);
 
@@ -109,4 +113,9 @@ void hncp_trust_destroy(hncp o);
  * Fetch it otherwise */
 hncp_trust_graph hncp_trust_get_graph_or_create_it(hncp o, hncp_hash hash);
 
+/** Generate and push the signature */
+void hncp_trust_make_signature(hncp o);
+
+/** Sets temporary trust TLVs, to allow simple trust establishment */
+void hncp_trust_begin_friend_search(hncp o, int seconds);
 #endif /* HNCP_TRUST_H */

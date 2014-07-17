@@ -165,7 +165,7 @@ static void dummy_tlv_cb(hncp_subscriber s,
   sput_fail_unless(tlv, "tlv set");
   L_NOTICE("tlv callback %s/%s %s",
            HNCP_NODE_REPR(n), TLV_REPR(tlv), add ? "add" : "remove");
-  if (tlv_id(tlv) == HNCP_T_VERSION) return;
+  if (tlv_id(tlv) == HNCP_T_VERSION || tlv_id(tlv) == HNCP_T_NODE_KEY || tlv_id(tlv) == HNCP_T_SIGNATURE) return;
   int exp_v = (add ? 1 : -1) * tlv_id(tlv);
   smock_pull_int_is("tlv_callback", exp_v);
 }
@@ -178,7 +178,7 @@ static void dummy_local_tlv_cb(hncp_subscriber s,
                    "tlv cb set");
   sput_fail_unless(tlv, "tlv set");
   L_NOTICE("local tlv callback %s %s", TLV_REPR(tlv), add ? "add" : "remove");
-  if (tlv_id(tlv) == HNCP_T_VERSION) return;
+  if (tlv_id(tlv) == HNCP_T_VERSION || tlv_id(tlv) == HNCP_T_NODE_KEY || tlv_id(tlv) == HNCP_T_SIGNATURE) return;
   int exp_v = (add ? 1 : -1) * tlv_id(tlv);
   smock_pull_int_is("local_tlv_callback", exp_v);
 }
@@ -344,18 +344,20 @@ static void hncp_rejoin_works(void)
 
 static void hncp_ok(void)
 {
+
   hncp o = create_hncp();
   int t = 123000;
   int i;
-
+  printf("pouet\n");
   /* Pushing in a new subscriber should result in us being called. */
   smock_is_empty();
   smock_push_bool("node_callback", true);
   hncp_subscribe(o, &dummy_subscriber_1);
+  printf("Ouane\n");
   hncp_subscribe(o, &dummy_subscriber_2);
   hncp_subscribe(o, &dummy_subscriber_3);
   hncp_subscribe(o, &dummy_subscriber_4);
-
+  printf("toto\n");
   smock_is_empty();
   one_join(true);
   smock_push_int("schedule", 0);
@@ -543,9 +545,11 @@ int main(int argc, char **argv)
   sput_enter_suite("hncp_nio"); /* optional */
   argc -= 1;
   argv += 1;
-
+  printf("1\n");
   maybe_run_test(hncp_init_no_hwaddr);
+  printf("1\n");
   maybe_run_test(hncp_init_iofail);
+  printf("1\n");
   maybe_run_test(hncp_ok_minimal);
   maybe_run_test(hncp_rejoin_works);
   maybe_run_test(hncp_ok);

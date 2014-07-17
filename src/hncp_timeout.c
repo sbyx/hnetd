@@ -181,6 +181,7 @@ void hncp_run(hncp o)
       next = TMIN(next, o->next_prune);
     }
 
+
   /* Release the flag to allow more change-triggered zero timeouts to
    * be scheduled. (We don't want to do this before we're done with
    * our mutations of state that can be addressed by the ordering of

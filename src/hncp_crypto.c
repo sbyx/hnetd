@@ -12,6 +12,7 @@
 #include <polarssl/error.h>
 #include "hncp_crypto.h"
 #include "local_trust.h"
+#include <errno.h>
 
 static void  update_trust_key(__unused struct vlist_tree *t, struct vlist_node *node_new, struct vlist_node *node_old){
   if(node_old && !node_new){
@@ -57,7 +58,7 @@ void hncp_crypto_set_key_tlv(hncp o, trust_key k){
 }
 
 int hncp_crypto_init(hncp o, char * private_key_file, char * trusted_key_dir){
-
+  int r;
   o->trust->crypto = malloc(sizeof(struct crypto_data));
   hncp_crypto crypto = o->trust->crypto;
   pk_context* ctx = &crypto->key.ctx;
@@ -65,25 +66,33 @@ int hncp_crypto_init(hncp o, char * private_key_file, char * trusted_key_dir){
   bool new_key = false;
 
   if(access(private_key_file, F_OK) == 0){
-    if(pk_parse_keyfile(ctx, private_key_file, NULL)){
+    r = pk_parse_keyfile(ctx, private_key_file, NULL);
+    if(r){
       L_ERR("Failed to parse key file");
-      return 2;
+      return r;
     }
   }else{
     /* No file yet */
-    if(crypto_gen_rsa_key(RSA_KEY_SIZE, ctx)){
-      return 1;
+    r = crypto_gen_rsa_key(RSA_KEY_SIZE, ctx);
+    if(r){
+      L_ERR("Failed to generate a key");
+      return r;
     }
+
     new_key = true;
   }
-  crypto->key_dir = strdup(trusted_key_dir);
+
+  crypto->key_dir = trusted_key_dir ? strdup(trusted_key_dir) : NULL;
   hncp_crypto_init_key(&crypto->key, private_key_file, true);
   entropy_init(&crypto->entropy);
   ctr_drbg_init(&crypto->ctr_drbg, ctr_drbg_random, &crypto->entropy, (const unsigned char *) "Sign/crypto", 11);
 
   if (new_key)
-    hncp_crypto_write_trusted_key(o, &crypto->key, ".");
-  hncp_set_own_hash(o, &crypto->key.key_hash);
+    r = hncp_crypto_write_trusted_key(o, &crypto->key, ".");
+  if(r)
+    return r;
+
+  r = !hncp_set_own_hash(o, &crypto->key.key_hash);
 
   vlist_init(&crypto->trust_keys, compare_hash, update_trust_key);
   crypto->trust_keys.keep_old = false;
@@ -96,21 +105,23 @@ int hncp_crypto_init(hncp o, char * private_key_file, char * trusted_key_dir){
 
   crypto->sign_type = SIGN_TYPE_RSA_SSAPSS_SHA512;
 
-
   crypto->own_symmetric_key = NULL;
   crypto->symmetric_key_emitter = false;
 
   hncp_crypto_set_key_tlv(o, &crypto->key);
 
-  if(access(trusted_key_dir, F_OK))
-    hncp_crypto_get_trusted_keys(o, trusted_key_dir);
+  o->trust->my_graph = hncp_trust_get_graph_or_create_it(o, &o->own_node->node_identifier_hash);
+  hncp_trust_recalculate_trust_links(o);
+
+  if(hncp_crypto_get_trusted_keys(o, trusted_key_dir))
+    crypto->temporary_only = true;
   else
-    mkdir(trusted_key_dir, 0700);
+    crypto->temporary_only = false;
 
   crypto->own_symmetric_key = NULL;
   crypto->symmetric_key_emitter = false;
   crypto_init_empty_cipher(&crypto->used_symmetric_key.ctx);
-  return 0;
+  return r;
 };
 
 int hncp_crypto_get_trusted_keys(hncp o, char * trusted_dir){
@@ -119,13 +130,13 @@ int hncp_crypto_get_trusted_keys(hncp o, char * trusted_dir){
   struct stat s;
   int ret = 0;
   if(stat(trusted_dir, &s)){
-    L_ERR("No trusted key : %s doesn't exists", trusted_dir);
-    return -1;
+    if(mkdir(trusted_dir, 0700))
+      goto fail_dir;
   }
   if(!S_ISDIR(s.st_mode)){
-    L_ERR("No trusted key : %s is not a directory", trusted_dir);
-    return -1;
+    goto fail_dir;
   }
+
   struct dirent *ent;
   DIR *dir = opendir(trusted_dir);
   trust_key c;
@@ -152,18 +163,23 @@ int hncp_crypto_get_trusted_keys(hncp o, char * trusted_dir){
     c->locally_trusted = true;
     c->encryption_type = crypto_crypt_type_from_ctx(&c->ctx);
     crypto_md5_hash_from_raw(&c->key_hash, c->raw_key, c->size);
+    printf("Found key hash %s\n", HEX_REPR(&c->key_hash, HNCP_HASH_LEN));
     vlist_add(&o->trust->crypto->trust_keys, &c->node, &c->key_hash);
     local_trust_add_trusted_hash(o, &c->key_hash);
     ret++;
   }
   closedir(dir);
   return ret;
+fail_dir:
+  L_ERR("failed to create directory %s. Trust will be temporary.", trusted_dir);
+  return 2;
+
 }
 
 
 void hncp_crypto_set_trusted_key(hncp o, trust_key k, bool temporary){
   k->locally_trusted = true;
-  if(!temporary)
+  if(!temporary && !o->trust->crypto->temporary_only)
     hncp_crypto_write_trusted_key(o, k, o->trust->crypto->key_dir);
   local_trust_add_trusted_hash(o, &k->key_hash);
 }
@@ -175,7 +191,7 @@ void hncp_crypto_mistrust_trusted_key(hncp o, trust_key k, bool was_temporary){
     return;
   }
   k->locally_trusted = false;
-  if(!was_temporary){
+  if(!was_temporary && !o->trust->crypto->temporary_only){
     int r = remove(k->key_file);
     if(r)
       L_ERR("Couldn't remove the key file of %s.", HEX_REPR(&k->key_hash, HNCP_HASH_LEN));
@@ -329,19 +345,4 @@ int hncp_crypto_cipher_decrypt(hncp o, struct key_id* key_id,  char * data, size
   return crypto_cipher_decrypt(&sk->ctx, sk->key_type, decrypted_data, len, data, size, iv, iv_len);
 }
 
-void hncp_crypto_local_update_callback(hncp_subscriber s, struct tlv_attr *tlv, __unused bool add){
-  hncp_trust t = container_of(s, hncp_trust_s, sub);
-  uint32_t sequence_number = htonl(t->hncp->own_node->update_number+1);
-  if(t->crypto_used){
-    hncp o = t->hncp;
-    if(tlv_id(tlv) != HNCP_T_SIGNATURE){
-      if(hncp_crypto_sign_tlvs(o, sequence_number, t->crypto->sign_type))
-        L_ERR("Failed to update signature");
-    }
-  }
-}
 
-
-/*
-bool hncp_crypto_valid_signature()
-*/

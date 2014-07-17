@@ -9,9 +9,8 @@
 #include <polarssl/md.h>
 #include <polarssl/rsa.h>
 #include <polarssl/cipher.h>
-#include "trust_graph.h"
 #include "crypto.h"
-
+#include "trust_graph.h"
 
 int crypto_gen_rsa_key(int key_size, pk_context * ctx){
   int ret;

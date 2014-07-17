@@ -112,7 +112,7 @@ struct hncp_subscriber_struct {
    * @param n The node which is being trusted or revoked;
    * @param add Flag which indicates whether the node is trusted or revoked.
    */
-  void (*node_trust_change_callback)(hncp_subscriber s, hncp_node n, bool add);
+  void (*trusted_node_change_callback)(hncp_subscriber s, hncp_node n, bool add);
 
   /**
    * Trusted TLV change notification.

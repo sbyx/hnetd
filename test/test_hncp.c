@@ -11,7 +11,7 @@
  *
  */
 
-#include "hncp.h"
+#include "hncp_i.h"
 #include "sput.h"
 #include "smock.h"
 
@@ -62,19 +62,35 @@ void hncp_ext(void)
   hncp_self_flush(n);
   sput_fail_unless(hncp_node_get_tlvs(n), "should have tlvs");
 
+  int i = 0;
   tlv_for_each_attr(v, hncp_node_get_tlvs(n))
-    break;
+    if(i++)
+      break;
   sput_fail_unless(v && tlv_id(v) == HNCP_T_VERSION, "no version tlv");
 
-  tlv_put(&tb, HNCP_T_VERSION, tlv_data(v), tlv_len(v));
-  t_data = tlv_put(&tb, 123, NULL, 0);
+  tlv_for_each_attr(v, hncp_node_get_tlvs(n)){
+    if(tlv_id(v)>=123)
+      break;
+    tlv_put(&tb, tlv_id(v), tlv_data(v), tlv_len(v));
+  }
 
+  t_data = malloc(TLV_SIZE);
+  memcpy(t_data, tlv_put(&tb, 123, NULL, 0), TLV_SIZE);
   /* Put the 123 type length = 0 TLV as TLV to hncp. */
   r = hncp_add_tlv(o, t_data);
+
   sput_fail_unless(r, "hncp_add_tlv ok (should work)");
 
   hncp_self_flush(n);
+
   t = hncp_node_get_tlvs(n);
+  tlv_for_each_attr(v, t){
+    if(tlv_id(v)<=123)
+      continue;
+    tlv_put(&tb, tlv_id(v), tlv_data(v), tlv_len(v));
+  }
+
+
   sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs consistent");
 
   /* Should be able to enable it on a link. */
@@ -107,6 +123,7 @@ void hncp_ext(void)
   /* Similarly, poll should also be nop (socket should be non-blocking). */
   hncp_poll(o);
 
+
   r = hncp_remove_tlv(o, t_data);
   sput_fail_unless(r, "hncp_remove_tlv should work");
 
@@ -119,6 +136,7 @@ void hncp_ext(void)
   hncp_destroy(o);
 
   tlv_buf_free(&tb);
+  free(t_data);
 }
 
 #include "hncp_i.h"
@@ -129,13 +147,13 @@ void hncp_int(void)
    * do it here. */
   hncp_s s;
   hncp o = &s;
-  unsigned char hwbuf[] = "foo";
+  char hwbuf[] = "foo";
   hncp_node n;
   hncp_link l;
   struct tlv_buf tb;
   struct tlv_attr *t1, *t2;
 
-  hncp_init(o, hwbuf, strlen((char *)hwbuf));
+  hncp_init(o, hwbuf, strlen((char *)hwbuf), true);
 
   /* Make sure network hash is dirty. */
   sput_fail_unless(o->network_hash_dirty, "network hash should be dirty");
@@ -192,7 +210,7 @@ void hncp_int(void)
   hncp_remove_tlv(o, t2);
   hncp_run(o);
   sput_fail_unless(o->own_node->update_number == 2, "update number ok");
-  
+
   hncp_uninit(o);
   tlv_buf_free(&tb);
 }

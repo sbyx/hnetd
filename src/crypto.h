@@ -5,11 +5,13 @@
  */
 
 #pragma once
-#include "hncp_i.h"
+
 #include <polarssl/pk.h>
 #include <polarssl/ctr_drbg.h>
 #include <polarssl/entropy.h>
 #include <polarssl/cipher.h>
+#include "hncp.h"
+#include <stdbool.h>
 
 /** Keys */
 

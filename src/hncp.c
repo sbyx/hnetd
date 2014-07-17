@@ -15,6 +15,7 @@
 #include <libubox/md5.h>
 #include <net/ethernet.h>
 #include <arpa/inet.h>
+#include "hncp_trust.h"
 
 int hncp_node_cmp(hncp_node n1, hncp_node n2)
 {
@@ -288,7 +289,6 @@ void hncp_calculate_hash(const void *buf, int len, hncp_hash dest)
   md5_end(dest, &ctx);
 }
 
-
 hncp_node hncp_find_node_by_hash(hncp o, hncp_hash h, bool create)
 {
   hncp_node ch = container_of(h, hncp_node_s, node_identifier_hash);
@@ -308,9 +308,17 @@ hncp_node hncp_find_node_by_hash(hncp o, hncp_hash h, bool create)
   return n;
 }
 
-bool hncp_init(hncp o, const void *node_identifier, int len)
+bool hncp_init(hncp o, const char *name, __unused int len, bool no_trust_key_dir)
 {
-  hncp_hash_s h;
+  //dummy, makes test_hncp_nio happy
+  char bufkey[256];
+  char bufdir[256];
+  strncpy(bufkey, name, 200);
+  strcat(bufkey, ".key");
+  strncpy(bufdir, name, 200);
+  strcat(bufdir, "-trust");
+
+  char *real_key_dir = no_trust_key_dir ? NULL : bufdir;
 
   memset(o, 0, sizeof(*o));
   INIT_LIST_HEAD(&o->subscribers);
@@ -319,7 +327,9 @@ bool hncp_init(hncp o, const void *node_identifier, int len)
   vlist_init(&o->tlvs, compare_tlvs, update_tlv);
   vlist_init(&o->links, compare_links, update_link);
   INIT_LIST_HEAD(&o->link_confs);
-  hncp_calculate_hash(node_identifier, len, &h);
+
+  //Hash is the public key one.
+  //hncp_calculate_hash(node_identifier, len, &h);
   if (inet_pton(AF_INET6, HNCP_MCAST_GROUP, &o->multicast_address) < 1) {
     L_ERR("unable to inet_pton multicast group address");
     return false;
@@ -327,7 +337,7 @@ bool hncp_init(hncp o, const void *node_identifier, int len)
   o->first_free_iid = 1;
   o->last_prune = 1;
   /* this way new nodes with last_prune=0 won't be reachable */
-  return hncp_set_own_hash(o, &h);
+  return hncp_trust_init(o, bufkey, real_key_dir);
 }
 
 bool hncp_set_own_hash(hncp o, hncp_hash h)
@@ -353,6 +363,7 @@ bool hncp_set_own_hash(hncp o, hncp_hash h)
 hncp hncp_create(void)
 {
   hncp o;
+  //Dummy, makes unit testing happy
   unsigned char buf[ETHER_ADDR_LEN * 2], *c = buf;
 
   /* hncp_init does memset 0 -> we can just malloc here. */
@@ -364,7 +375,9 @@ hncp hncp_create(void)
     L_ERR("no hardware address available, fatal error");
     goto err;
   }
-  if (!hncp_init(o, buf, c-buf))
+
+  char name[6] = "hnetd";
+  if (!hncp_init(o, name, 0, false))
     goto err;
   if (!hncp_io_init(o))
     goto err2;
@@ -393,6 +406,7 @@ void hncp_uninit(hncp o)
 {
   o->io_init_done = false; /* cannot schedule anything anymore after this. */
 
+  hncp_trust_destroy(o);
   /* TLVs should be freed first; they're local phenomenom, but may be
    * reflected on links/nodes. */
   vlist_flush_all(&o->tlvs);
@@ -705,7 +719,7 @@ void hncp_self_flush(hncp_node n)
 
   L_DEBUG("hncp_self_flush: notify about to republish tlvs");
   hncp_notify_subscribers_about_to_republish_tlvs(n);
-
+  hncp_trust_make_signature(o);
   o->republish_tlvs = false;
   a2 = _produce_new_tlvs(n);
   if (a2)

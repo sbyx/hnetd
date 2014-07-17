@@ -22,6 +22,7 @@
 
 #include <libubox/uloop.h>
 
+
 /* Rough approximation - should think of real figure. */
 #define HNCP_MAXIMUM_PAYLOAD_SIZE 65536
 
@@ -277,7 +278,7 @@ struct hncp_tlv_struct {
 
 /* Internal or testing-only way to initialize hp struct _without_
  * dynamic allocations (and some of the steps omitted too). */
-bool hncp_init(hncp o, const void *node_identifier, int len);
+bool hncp_init(hncp o, const char *name, int len, bool no_trust_key_dir);
 void hncp_uninit(hncp o);
 
 /* Utility to change local node identifier - use with care */

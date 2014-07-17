@@ -67,7 +67,6 @@ void trust_graph(void){
   hncp o = hncp_create();
   hncp_hash h = &(o->own_node->node_identifier_hash);
 
-  sput_fail_if(hncp_trust_init(o, NULL, NULL), "Init check");
   hncp_trust_graph g = o->trust->my_graph;
   sput_fail_unless(trust_graph_is_trusted(g, h), "I trust myself");
 
@@ -113,7 +112,6 @@ void trust_graph(void){
                   && !trust_graph_is_trusted(g, h3), "Graph seems to stay consistent");
   sput_fail_if(g->marked || g1->marked || g2->marked || g3->marked, "Clean graph after search");
 
-  hncp_trust_destroy(o);
   hncp_destroy(o);
   trust_graph_destroy(g1);
   trust_graph_destroy(g2);
@@ -126,7 +124,6 @@ void trust_graph(void){
 void hncp_trust_test(void){
   hncp o = hncp_create();
   hncp_hash h = &(o->own_node->node_identifier_hash);
-  sput_fail_if(hncp_trust_init(o, NULL, NULL), "Init check");
   //hncp_trust_graph g = o->trust->my_graph;
   sput_fail_unless(hncp_trust_node_trusted(o, h), "I trust myself");
 
@@ -173,7 +170,6 @@ void hncp_trust_test(void){
   local_trust_add_trusted_hash(o, h1);
   /* here : g3 => g1 <=> g2 <=> g */
   sput_fail_unless(hncp_trust_node_trusts_me(o, h3) && !hncp_trust_node_trusted(o, h3), "Inserting again ok");
-  hncp_trust_destroy(o);
   hncp_destroy(o);
   free(h1);
   free(h2);

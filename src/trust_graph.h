@@ -1,7 +1,7 @@
 #ifndef _TRUST_GRAPH_H
 #define _TRUST_GRAPH_H
 
-#include "hncp_i.h"
+#include "hncp.h"
 #include <libubox/vlist.h>
 #include <libubox/list.h>
 #include <stdio.h>

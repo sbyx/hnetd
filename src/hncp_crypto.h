@@ -5,10 +5,10 @@
  */
 
 #pragma once
-#include "hncp_i.h"
-#include "hncp_proto.h"
-#include "crypto.h"
 #include <libubox/vlist.h>
+#include "hncp.h"
+#include "crypto.h"
+
 
 #define RSA_KEY_SIZE 2048
 
@@ -77,6 +77,8 @@ struct crypto_data{
 
   char * key_dir;
   uint16_t sign_type;
+
+  bool temporary_only;
 };
 
 typedef struct crypto_data hncp_crypto_s, *hncp_crypto;
@@ -103,6 +105,9 @@ void hncp_crypto_del_data(struct crypto_data *data);
   * file is in the directory
   * returns the number of keys, or -1 if the directory isn't available */
 int hncp_crypto_get_trusted_keys(hncp o, char *trusted_dir);
+
+/** Sign the tlvs */
+int hncp_crypto_sign_tlvs(hncp o, uint32_t sequence_number, uint16_t sign_type);
 
 /** Trust a key, save it in a file & advertise it */
 void hncp_crypto_set_trusted_key(hncp o, trust_key k, bool temporary);

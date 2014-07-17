@@ -234,9 +234,11 @@ void hncp_notify_subscribers_node_trust_changed(hncp_node n, bool add)
 {
   hncp_subscriber s;
 
-  list_for_each_entry(s, &n->hncp->subscribers, lh)
-    if(s->node_trust_change_callback)
-      s->node_trust_change_callback(s, n, add);
+  list_for_each_entry(s, &n->hncp->subscribers, lh){
+    if(s->trusted_node_change_callback)
+      s->trusted_node_change_callback(s, n, add);
+  }
+
   if(add)
     hncp_notify_subscribers_trusted_tlvs_changed(n, NULL, n->tlv_container);
   else
