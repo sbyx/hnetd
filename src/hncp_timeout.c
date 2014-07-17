@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Jul 16 23:36:03 2014 mstenber
- * Edit time:     315 min
+ * Last modified: Thu Jul 17 09:28:37 2014 mstenber
+ * Edit time:     330 min
  *
  */
 
@@ -16,15 +16,33 @@
 static void trickle_set_i(hncp_link l, int i)
 {
   hnetd_time_t now = hncp_time(l->hncp);
+  int imin = l->conf->trickle_imin;
+  if (!imin) imin = HNCP_TRICKLE_IMIN;
+  int imax = l->conf->trickle_imax;
+  if (!imax) imax = HNCP_TRICKLE_IMAX;
 
-  i = i < l->conf->trickle_imin ? l->conf->trickle_imin
-    : i > l->conf->trickle_imax ? l->conf->trickle_imax : i;
+  i = i < imin ? imin : i > imax ? imax : i;
   l->trickle_i = i;
-  int j = i * (1000 + random() % 1000) / 2000;
-  l->trickle_send_time = now + j;
+#if 0
+
+  /* !!! XXX document this change somewhere; normal Trickle
+   * does t=[I/2,I). We do t=[Imin/2,I) to ensure we are never
+   * send starved even if someone else operates at Imin all the time.
+   *
+   * Note that as this doesn't change trickle interval end time,
+   * unless this causes conflicts, it will _not_ cause extra traffic
+   * in stable state.
+  */
+  /* (HNCP_TRICKLE_MAXIMUM_SEND_INTERVAL takes care of this. Which is
+   * better solution should be studied.) */
+  int t = imin / 2 + random() % (i - imin / 2); /* our variant */
+#else
+  int t = i / 2 + random() % (i / 2);
+#endif /* 0 */
+  l->trickle_send_time = now + t;
   l->trickle_interval_end_time = now + i;
   l->trickle_c = 0;
-  L_DEBUG(HNCP_LINK_F " trickle set to %d/%d", HNCP_LINK_D(l), j, i);
+  L_DEBUG(HNCP_LINK_F " trickle set to %d/%d", HNCP_LINK_D(l), t, i);
 }
 
 static void trickle_upgrade(hncp_link l)
@@ -34,11 +52,12 @@ static void trickle_upgrade(hncp_link l)
 
 static void trickle_send(hncp_link l)
 {
-  if (l->trickle_c < l->conf->trickle_k)
+  if (l->trickle_c < l->conf->trickle_k
+      || (HNCP_TRICKLE_MAXIMUM_SEND_INTERVAL &&
+          (l->last_trickle_sent + HNCP_TRICKLE_MAXIMUM_SEND_INTERVAL) <= hncp_time(l->hncp)))
     {
       l->num_trickle_sent++;
-      L_DEBUG(HNCP_LINK_F " trickle not enough responses -> sending",
-              HNCP_LINK_D(l));
+      l->last_trickle_sent = hncp_time(l->hncp);
       hncp_link_send_network_state(l, &l->hncp->multicast_address,
                                    HNCP_MAXIMUM_MULTICAST_SIZE);
     }
@@ -230,21 +249,12 @@ void hncp_run(hncp o)
         }
 
       if (l->trickle_interval_end_time <= now)
-        {
-          trickle_upgrade(l);
-          next = TMIN(next, l->trickle_send_time);
-        }
-      else
-        {
-          next = TMIN(next, l->trickle_interval_end_time);
-          if (l->trickle_send_time)
-            {
-              if (l->trickle_send_time > now)
-                next = TMIN(next, l->trickle_send_time);
-              else
-                trickle_send(l);
-            }
-        }
+        trickle_upgrade(l);
+      else if (l->trickle_send_time && l->trickle_send_time <= now)
+        trickle_send(l);
+
+      next = TMIN(next, l->trickle_interval_end_time);
+      next = TMIN(next, l->trickle_send_time);
 
       /* Look at neighbors we should be worried about.. */
       /* vlist_for_each_element(&l->neighbors, n, in_neighbors) */

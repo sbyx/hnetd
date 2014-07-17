@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Jul 17 08:53:59 2014 mstenber
- * Edit time:     243 min
+ * Last modified: Thu Jul 17 09:22:54 2014 mstenber
+ * Edit time:     244 min
  *
  */
 
@@ -165,6 +165,7 @@ struct hncp_link_struct {
   hnetd_time_t trickle_send_time; /* when do we send if c < k*/
   hnetd_time_t trickle_interval_end_time; /* when does current interval end */
   int trickle_c; /* counter */
+  hnetd_time_t last_trickle_sent;
 
   /* Statistics about Trickle (mostly for debugging) */
   int num_trickle_sent;
