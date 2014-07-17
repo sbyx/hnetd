@@ -54,6 +54,7 @@ else(${BACKEND} MATCHES "openwrt")
   install(CODE "execute_process(COMMAND ln -sf hnetd \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/sbin/hnet-ifdown)")
   install(CODE "execute_process(COMMAND ln -sf hnetd \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/sbin/hnet-dump)")
   install(CODE "execute_process(COMMAND ln -sf hnetd \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/sbin/hnet-call)")
+  install(CODE "execute_process(COMMAND ln -sf hnetd \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/sbin/hnet-ifresolve)")
 endif(${BACKEND} MATCHES "openwrt")
 
 # hnetd and it's various pieces

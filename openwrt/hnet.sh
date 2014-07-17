@@ -79,6 +79,7 @@ proto_hnet_setup() {
 	    json_add_string proto dhcp
 	    [ -n "$dhcpv4_clientid" ] && json_add_string clientid "$dhcpv4_clientid"
 	    json_add_string iface6rd "${interface}_6rd"
+	    json_add_int metric $((1000 + $(hnet-ifresolve $device)))
 
 	    # Don't delegate 6rd
 	    json_add_boolean delegate 0
