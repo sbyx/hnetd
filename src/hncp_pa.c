@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Tue Jun 10 11:55:39 2014 mstenber
- * Edit time:     482 min
+ * Last modified: Thu Jul 17 10:13:28 2014 mstenber
+ * Edit time:     489 min
  *
  */
 
@@ -402,8 +402,11 @@ static void _tlv_cb(hncp_subscriber s,
            n == g->hncp->own_node ? "local" : HNCP_NODE_REPR(n),
            TLV_REPR(tlv));
 
-  /* Ignore our own TLV changes (otherwise bad things might happen) */
-  if (hncp_node_is_self(n))
+  /* Local TLV changes should be mostly handled by PA code already.
+   * The exception is HNCP_T_NODE_DATA_NEIGHBOR which may cause local
+   * or remote connectivity changes.
+  */
+  if (hncp_node_is_self(n) && tlv_id(tlv) != HNCP_T_NODE_DATA_NEIGHBOR)
     {
       return;
     }
@@ -451,10 +454,7 @@ static void _tlv_cb(hncp_subscriber s,
       break;
     case HNCP_T_NODE_DATA_NEIGHBOR:
       {
-        /* Should do it every now and then even if already busy. So if
-         * already queued, ignore this extra change. */
-        if (!g->ap_if_update_timeout.pending)
-          uloop_timeout_set(&g->ap_if_update_timeout, HNCP_PA_AP_LINK_UPDATE_MS);
+        uloop_timeout_set(&g->ap_if_update_timeout, HNCP_PA_AP_LINK_UPDATE_MS);
       }
       break;
     default:
