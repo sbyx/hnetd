@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Jul 16 23:15:53 2014 mstenber
- * Edit time:     242 min
+ * Last modified: Thu Jul 17 08:53:59 2014 mstenber
+ * Edit time:     243 min
  *
  */
 
@@ -312,10 +312,10 @@ static inline unsigned long long hncp_hash64(hncp_hash h)
 }
 
 /* Utility functions to send frames. */
-bool hncp_link_send_network_state(hncp_link l,
+void hncp_link_send_network_state(hncp_link l,
                                   struct in6_addr *dst,
                                   size_t maximum_size);
-bool hncp_link_send_req_network_state(hncp_link l, struct in6_addr *dst);
+void hncp_link_send_req_network_state(hncp_link l, struct in6_addr *dst);
 void hncp_link_set_ipv6_address(hncp_link l, const struct in6_addr *addr);
 
 /* Subscription stuff (hncp_notify.c) */

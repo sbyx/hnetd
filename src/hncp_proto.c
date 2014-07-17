@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Jul 16 23:42:44 2014 mstenber
- * Edit time:     539 min
+ * Last modified: Thu Jul 17 08:54:07 2014 mstenber
+ * Edit time:     542 min
  *
  */
 
@@ -79,23 +79,22 @@ static bool _push_link_id_tlv(struct tlv_buf *tb, hncp_link l)
 
 /****************************************** Actual payload sending utilities */
 
-bool hncp_link_send_network_state(hncp_link l,
+void hncp_link_send_network_state(hncp_link l,
                                   struct in6_addr *dst,
                                   size_t maximum_size)
 {
   struct tlv_buf tb;
   hncp o = l->hncp;
-  bool r = false;
   int nn = 0;
   hncp_node n;
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
   if (!_push_link_id_tlv(&tb, l))
-    goto err;
+    goto done;
   hncp_calculate_network_hash(o);
   if (!_push_network_state_tlv(&tb, o))
-    goto err;
+    goto done;
   hncp_for_each_node(o, n)
     if (!o->graph_dirty || n == o->own_node)
       nn++;
@@ -106,22 +105,20 @@ bool hncp_link_send_network_state(hncp_link l,
         {
           if (!o->graph_dirty || n == o->own_node)
             if (!_push_node_state_tlv(&tb, n))
-              goto err;
+              goto done;
         }
     }
   if (maximum_size && tlv_len(tb.head) > maximum_size)
-    goto err;
+    goto done;
   L_DEBUG("hncp_link_send_network_state -> %s%%" HNCP_LINK_F,
           ADDR_REPR(dst), HNCP_LINK_D(l));
-  int rc = hncp_io_sendto(o, tlv_data(tb.head), tlv_len(tb.head),
-                          l->ifname, dst);
-  r = rc > 0;
- err:
+  hncp_io_sendto(o, tlv_data(tb.head), tlv_len(tb.head),
+                 l->ifname, dst);
+ done:
   tlv_buf_free(&tb);
-  return r;
 }
 
-bool hncp_link_send_node_data(hncp_link l,
+void hncp_link_send_node_data(hncp_link l,
                               struct in6_addr *dst,
                               hncp_node n)
 {
@@ -130,7 +127,6 @@ bool hncp_link_send_node_data(hncp_link l,
      - node data tlv
   */
   struct tlv_buf tb;
-  bool r = false;
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
@@ -140,22 +136,16 @@ bool hncp_link_send_node_data(hncp_link l,
     {
       L_DEBUG("hncp_link_send_node_state %s -> %s%%" HNCP_LINK_F,
               HNCP_NODE_REPR(n), ADDR_REPR(dst), HNCP_LINK_D(l));
-      int rc = hncp_io_sendto(l->hncp,
-                              tlv_data(tb.head),
-                              tlv_len(tb.head),
-                              l->ifname,
-                              dst);
-      r = rc > 0;
+      hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head),
+                     l->ifname, dst);
     }
   tlv_buf_free(&tb);
-  return r;
 }
 
-bool hncp_link_send_req_network_state(hncp_link l,
+void hncp_link_send_req_network_state(hncp_link l,
                                       struct in6_addr *dst)
 {
   struct tlv_buf tb;
-  bool r = false;
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
@@ -164,23 +154,17 @@ bool hncp_link_send_req_network_state(hncp_link l,
     {
       L_DEBUG("hncp_link_send_req_network_state -> %s%%" HNCP_LINK_F,
               ADDR_REPR(dst), HNCP_LINK_D(l));
-      int rc = hncp_io_sendto(l->hncp,
-                              tlv_data(tb.head),
-                              tlv_len(tb.head),
-                              l->ifname,
-                              dst);
-      r = rc > 0;
+      hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head),
+                     l->ifname, dst);
     }
   tlv_buf_free(&tb);
-  return r;
 }
 
-bool hncp_link_send_req_node_data(hncp_link l,
+void hncp_link_send_req_node_data(hncp_link l,
                                   struct in6_addr *dst,
                                   hncp_t_node_state ns)
 {
   struct tlv_buf tb;
-  bool r = false;
   struct tlv_attr *a;
 
   memset(&tb, 0, sizeof(tb));
@@ -191,15 +175,10 @@ bool hncp_link_send_req_node_data(hncp_link l,
       L_DEBUG("hncp_link_send_req_node_state -> %s%%" HNCP_LINK_F,
               ADDR_REPR(dst), HNCP_LINK_D(l));
       memcpy(tlv_data(a), &ns->node_identifier_hash, HNCP_HASH_LEN);
-      int rc = hncp_io_sendto(l->hncp,
-                              tlv_data(tb.head),
-                              tlv_len(tb.head),
-                              l->ifname,
-                              dst);
-      r = rc > 0;
+      hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head),
+                     l->ifname, dst);
     }
   tlv_buf_free(&tb);
-  return r;
 }
 
 /************************************************************ Input handling */
@@ -379,7 +358,7 @@ handle_message(hncp_link l,
                       return;
                     }
                 }
-              (void)hncp_link_send_node_data(l, src, n);
+              hncp_link_send_node_data(l, src, n);
             }
           return;
         }
@@ -446,7 +425,7 @@ handle_message(hncp_link l,
       if (!nodestates)
         {
           if (multicast)
-            (void)hncp_link_send_req_network_state(l, src);
+            hncp_link_send_req_network_state(l, src);
           else
             L_INFO("unicast short form network status received - ignoring");
           return;
