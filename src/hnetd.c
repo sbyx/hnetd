@@ -107,8 +107,20 @@ int main(__unused int argc, char *argv[])
 	hncp_sd_params_s sd_params;
 
 	memset(&sd_params, 0, sizeof(sd_params));
+	if (strstr(argv[0], "hnet-ifresolve")) {
+		if (!argv[1])
+			return 1;
+
+		int ifindex = if_nametoindex(argv[1]);
+		if (ifindex) {
+			printf("%i\n", ifindex);
+			return 0;
+		} else {
+			return 2;
+		}
+	}
 #ifdef WITH_IPC
-	if (strstr(argv[0], "hnet-call")) {
+	else if (strstr(argv[0], "hnet-call")) {
 		if(argc < 2)
 			return 3;
 		return ipc_client(argv[1]);

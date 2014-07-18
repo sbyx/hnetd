@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Fri Jun 13 11:30:10 2014 mstenber
- * Edit time:     273 min
+ * Last modified: Thu Jul 17 09:28:37 2014 mstenber
+ * Edit time:     330 min
  *
  */
 
@@ -16,29 +16,56 @@
 static void trickle_set_i(hncp_link l, int i)
 {
   hnetd_time_t now = hncp_time(l->hncp);
+  int imin = l->conf->trickle_imin;
+  if (!imin) imin = HNCP_TRICKLE_IMIN;
+  int imax = l->conf->trickle_imax;
+  if (!imax) imax = HNCP_TRICKLE_IMAX;
 
+  i = i < imin ? imin : i > imax ? imax : i;
   l->trickle_i = i;
-  l->trickle_send_time = now + i * (1000 + random() % 1000) / 2000;
+#if 0
+
+  /* !!! XXX document this change somewhere; normal Trickle
+   * does t=[I/2,I). We do t=[Imin/2,I) to ensure we are never
+   * send starved even if someone else operates at Imin all the time.
+   *
+   * Note that as this doesn't change trickle interval end time,
+   * unless this causes conflicts, it will _not_ cause extra traffic
+   * in stable state.
+  */
+  /* (HNCP_TRICKLE_MAXIMUM_SEND_INTERVAL takes care of this. Which is
+   * better solution should be studied.) */
+  int t = imin / 2 + random() % (i - imin / 2); /* our variant */
+#else
+  int t = i / 2 + random() % (i / 2);
+#endif /* 0 */
+  l->trickle_send_time = now + t;
   l->trickle_interval_end_time = now + i;
   l->trickle_c = 0;
+  L_DEBUG(HNCP_LINK_F " trickle set to %d/%d", HNCP_LINK_D(l), t, i);
 }
 
 static void trickle_upgrade(hncp_link l)
 {
-  int i = l->trickle_i * 2;
-
-  i = i < l->conf->trickle_imin ? l->conf->trickle_imin
-    : i > l->conf->trickle_imax ? l->conf->trickle_imax : i;
-  trickle_set_i(l, i);
+  trickle_set_i(l, l->trickle_i * 2);
 }
 
 static void trickle_send(hncp_link l)
 {
-  if (l->trickle_c < l->conf->trickle_k)
+  if (l->trickle_c < l->conf->trickle_k
+      || (HNCP_TRICKLE_MAXIMUM_SEND_INTERVAL &&
+          (l->last_trickle_sent + HNCP_TRICKLE_MAXIMUM_SEND_INTERVAL) <= hncp_time(l->hncp)))
     {
-      if (!hncp_link_send_network_state(l, &l->hncp->multicast_address,
-                                        HNCP_MAXIMUM_MULTICAST_SIZE))
-        return;
+      l->num_trickle_sent++;
+      l->last_trickle_sent = hncp_time(l->hncp);
+      hncp_link_send_network_state(l, &l->hncp->multicast_address,
+                                   HNCP_MAXIMUM_MULTICAST_SIZE);
+    }
+  else
+    {
+      l->num_trickle_skipped++;
+      L_DEBUG(HNCP_LINK_F " trickle already has c=%d >= k=%d, not sending",
+              HNCP_LINK_D(l), l->trickle_c, l->conf->trickle_k);
     }
   l->trickle_send_time = 0;
 }
@@ -223,21 +250,12 @@ void hncp_run(hncp o)
         }
 
       if (l->trickle_interval_end_time <= now)
-        {
-          trickle_upgrade(l);
-          next = TMIN(next, l->trickle_send_time);
-        }
-      else
-        {
-          next = TMIN(next, l->trickle_interval_end_time);
-          if (l->trickle_send_time)
-            {
-              if (l->trickle_send_time > now)
-                next = TMIN(next, l->trickle_send_time);
-              else
-                trickle_send(l);
-            }
-        }
+        trickle_upgrade(l);
+      else if (l->trickle_send_time && l->trickle_send_time <= now)
+        trickle_send(l);
+
+      next = TMIN(next, l->trickle_interval_end_time);
+      next = TMIN(next, l->trickle_send_time);
 
       /* Look at neighbors we should be worried about.. */
       /* vlist_for_each_element(&l->neighbors, n, in_neighbors) */
@@ -245,11 +263,17 @@ void hncp_run(hncp o)
         {
           hnetd_time_t next_time;
 
-          /* For new neighbors, send ~immediate ping */
-          if (!n->last_response && !n->ping_count)
-            next_time = n->last_heard;
-          else if (!n->ping_count)
-            next_time = n->last_response + l->conf->ping_worried_t;
+          if (!n->ping_count)
+            {
+              /* For new neighbors, send ~immediate ping */
+              if (!n->last_response)
+                next_time = now;
+              /* if they're in sync with me, we can just use last_heard */
+              else if (n->last_heard > n->last_response && n->in_sync)
+                next_time = n->last_heard + l->conf->ping_worried_t;
+              else
+                next_time = n->last_response + l->conf->ping_worried_t;
+            }
           else
             next_time = n->last_ping + (l->conf->ping_retry_base_t << n->ping_count);
 
@@ -263,15 +287,16 @@ void hncp_run(hncp o)
           if (n->ping_count++== l->conf->ping_retries)
             {
               /* Zap the neighbor */
-              L_DEBUG("neighbor %llx gone on link %d",
-                      hncp_hash64(&n->node_identifier_hash), l->iid);
+              L_DEBUG(HNCP_NEIGH_F " gone on " HNCP_LINK_F,
+                      HNCP_NEIGH_D(n), HNCP_LINK_D(l));
               vlist_delete(&l->neighbors, &n->in_neighbors);
               continue;
             }
 
           n->last_ping = hncp_time(o);
           /* Send a ping */
-          L_DEBUG("pinging neighbor %llx", hncp_hash64(&n->node_identifier_hash));
+          L_DEBUG("pinging " HNCP_NEIGH_F "  on " HNCP_LINK_F,
+                  HNCP_NEIGH_D(n), HNCP_LINK_D(l));
           hncp_link_send_req_network_state(l, &n->last_address);
         }
     }

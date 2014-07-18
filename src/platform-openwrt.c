@@ -1055,6 +1055,7 @@ void platform_restart_dhcpv4(struct iface *c)
 	blobmsg_add_string(&b, "zone6rd", "wan");
 
 	blobmsg_add_u8(&b, "defaultroute", c->designatedv4);
+	blobmsg_add_u32(&b, "metric", 1000 + if_nametoindex(c->ifname));
 
 	uint32_t ubus_network = 0;
 	ubus_lookup_id(ubus, "network", &ubus_network);

@@ -192,11 +192,14 @@ void platform_restart_dhcpv4(struct iface *c)
 {
 	struct platform_iface *iface = c->platform;
 	if (iface) {
+		char metricbuf[16];
+		snprintf(metricbuf, sizeof(metricbuf), "%i", 1000 + if_nametoindex(c->ifname));
+
 		if (iface->dhcpv4 > 0)
 			kill(iface->dhcpv4, SIGTERM);
 
 		char *argv_dhcpv4[] = {backend, "dhcpv4client", c->ifname,
-				(c->designatedv4) ? "0" : "1", NULL};
+				(c->designatedv4) ? "0" : "1", metricbuf, NULL};
 
 		iface->dhcpv4 = platform_run(argv_dhcpv4);
 	}

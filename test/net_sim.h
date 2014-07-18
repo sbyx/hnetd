@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Fri Jun 13 12:02:43 2014 mstenber
- * Edit time:     144 min
+ * Last modified: Wed Jul 16 23:42:51 2014 mstenber
+ * Edit time:     152 min
  *
  */
 
@@ -297,7 +297,7 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
   sput_fail_unless(r, "hncp_init");
   if (!r)
     return NULL;
-  list_add(&n->h, &s->nodes);
+  list_add_tail(&n->h, &s->nodes);
   INIT_LIST_HEAD(&n->messages);
 #ifndef DISABLE_HNCP_PA
   memset(&n->pa_data_user, 0, sizeof(struct pa_data_user));
@@ -373,6 +373,11 @@ void net_sim_set_connected(hncp_link l1, hncp_link l2, bool enabled)
           l1, l1->iid, l2, l2->iid, enabled ? "on" : "off");
   if (enabled)
     {
+      /* Make sure it's not there already */
+      list_for_each_entry(n, &s->neighs, h)
+        if (n->src == l1 && n->dst == l2)
+          return;
+
       /* Add node */
       n = calloc(1, sizeof(*n));
 
@@ -555,7 +560,7 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
       list_del(&m->h);
       free(m->buf);
       free(m);
-      L_DEBUG("%s: hncp_io_recvfrom %d bytes", node->name, s);
+      L_DEBUG("%s/%s: hncp_io_recvfrom %d bytes", node->name, ifname, s);
       return s;
     }
   return - 1;
@@ -648,7 +653,7 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
   net_neigh n;
 
   if (!l)
-    return - 1;
+    return -1;
 
   sanity_check_buf(buf, len);
   if (is_multicast)
@@ -672,7 +677,7 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
   /* Loop at self too, just for fun. */
   if (is_multicast)
     _sendto(s, buf, len, l, l, dst);
-  return -1;
+  return 1;
 }
 
 hnetd_time_t hncp_io_time(hncp o)

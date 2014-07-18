@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Fri Jun 13 10:58:29 2014 mstenber
- * Edit time:     235 min
+ * Last modified: Thu Jul 17 09:22:54 2014 mstenber
+ * Edit time:     244 min
  *
  */
 
@@ -169,6 +169,11 @@ struct hncp_link_struct {
   hnetd_time_t trickle_send_time; /* when do we send if c < k*/
   hnetd_time_t trickle_interval_end_time; /* when does current interval end */
   int trickle_c; /* counter */
+  hnetd_time_t last_trickle_sent;
+
+  /* Statistics about Trickle (mostly for debugging) */
+  int num_trickle_sent;
+  int num_trickle_skipped;
 
   /* 'Best' address (if any) */
   bool has_ipv6_address;
@@ -192,6 +197,10 @@ struct hncp_neighbor_struct {
 
   /* When did they last respond to our message? */
   hnetd_time_t last_response;
+
+  /* Was the node in sync with us or not the last time we received
+   * network state from it */
+  bool in_sync;
 
   /* How many pings we have sent that haven't been responded to. */
   int ping_count;
@@ -314,10 +323,10 @@ static inline unsigned long long hncp_hash64(hncp_hash h)
 }
 
 /* Utility functions to send frames. */
-bool hncp_link_send_network_state(hncp_link l,
+void hncp_link_send_network_state(hncp_link l,
                                   struct in6_addr *dst,
                                   size_t maximum_size);
-bool hncp_link_send_req_network_state(hncp_link l, struct in6_addr *dst);
+void hncp_link_send_req_network_state(hncp_link l, struct in6_addr *dst);
 void hncp_link_set_ipv6_address(hncp_link l, const struct in6_addr *addr);
 
 /* Subscription stuff (hncp_notify.c) */
@@ -380,6 +389,13 @@ static inline hnetd_time_t hncp_time(hncp o)
 #define TMIN(x,y) ((x) == 0 ? (y) : (y) == 0 ? (x) : (x) < (y) ? (x) : (y))
 
 #define HNCP_NODE_REPR(n) HEX_REPR(&n->node_identifier_hash, HNCP_HASH_LEN)
+
+#define HNCP_NEIGH_F "neighbor %llx/#%d"
+#define HNCP_NEIGH_D(n) hncp_hash64(&n->node_identifier_hash),n->iid
+
+#define HNCP_LINK_F "link %s[#%d]"
+#define HNCP_LINK_D(l) l->ifname,l->iid
+
 
 static inline struct tlv_attr *
 hncp_node_get_tlv_with_type(hncp_node n, uint16_t type, bool first)
@@ -470,10 +486,10 @@ hncp_node_find_neigh_bidir(hncp_node n, hncp_t_node_data_neighbor ne)
   hncp_node n2 = hncp_find_node_by_hash(n->hncp, oh, false);
   if (!n2)
     return NULL;
-  struct tlv_attr *a, *tlvs = hncp_node_get_tlvs(n2);
+  struct tlv_attr *a;
   hncp_t_node_data_neighbor ne2;
 
-  tlv_for_each_attr(a, tlvs)
+  hncp_node_for_each_tlv_with_type(n2, a, HNCP_T_NODE_DATA_NEIGHBOR)
     if ((ne2 = hncp_tlv_neighbor(a)))
       {
         if (ne->link_id == ne2->neighbor_link_id

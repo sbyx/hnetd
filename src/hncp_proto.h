@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Mon May  5 14:46:15 2014 mstenber
- * Edit time:     70 min
+ * Last modified: Thu Jul 17 09:30:58 2014 mstenber
+ * Edit time:     75 min
  *
  */
 
@@ -261,6 +261,24 @@ typedef struct __packed {
  * don't know why RFC does that.. We don't want to ever need do
  * exponentiation in any case in code. 64 seconds for the time being.. */
 #define HNCP_TRICKLE_IMAX (64 * HNETD_TIME_PER_SECOND)
+
+/* Maximum allowed interval _not_ to send Trickled multicast.  This is
+ * relevant to provide forced upper guarantee if and when someone else
+ * is operating at Imin, and we're at Imax; without it, if IMIN and
+ * IMAX are orders of magnitude apart, it may lead to
+ * (probabilistically speaking) low chance of us ever sending _any_
+ * packets. This provides a guarantee that one packet is sent by every
+ * node at least at some interval. This will cause e.g. new
+ * connections to be noticed at some point.
+ *
+ * Another option would be to adapt to Trickle interval of other
+ * senders. XXX - This needs some study. This can be set to 0 to
+ * disable, but it's probably good idea to keep.
+ *
+ * Why is this needed at all? Non-transitively connected links lead to
+ * cases where Trickle i values will not be in sync by default.
+ */
+#define HNCP_TRICKLE_MAXIMUM_SEND_INTERVAL (600 * HNETD_TIME_PER_SECOND)
 
 /* Redundancy constant. */
 #define HNCP_TRICKLE_K 1
