@@ -40,7 +40,7 @@ static void update_symmetric_key(__unused struct vlist_tree *t, __unused struct 
 void print_polarssl_err(int err){
     char buf[512];
     polarssl_strerror(err, buf, sizeof(buf));
-    printf("%s\n", buf);
+    L_ERR("%s", buf);
     return;
 }
 
@@ -150,7 +150,7 @@ int hncp_crypto_get_trusted_keys(hncp o, char * trusted_dir){
     pk_init(&c->ctx);
     int r = pk_parse_public_keyfile(&c->ctx, buf);
     if(r){
-      printf("On file %s :\n", buf);
+      L_ERR("On file %s :", buf);
       print_polarssl_err(r);
       pk_free(&c->ctx);
       free(buf);
@@ -163,7 +163,6 @@ int hncp_crypto_get_trusted_keys(hncp o, char * trusted_dir){
     c->locally_trusted = true;
     c->encryption_type = crypto_crypt_type_from_ctx(&c->ctx);
     crypto_md5_hash_from_raw(&c->key_hash, c->raw_key, c->size);
-    printf("Found key hash %s\n", HEX_REPR(&c->key_hash, HNCP_HASH_LEN));
     vlist_add(&o->trust->crypto->trust_keys, &c->node, &c->key_hash);
     local_trust_add_trusted_hash(o, &c->key_hash);
     ret++;
@@ -178,6 +177,10 @@ fail_dir:
 
 
 void hncp_crypto_set_trusted_key(hncp o, trust_key k, bool temporary){
+  if(!k){
+    L_ERR("Public key not found");
+    return;
+  }
   k->locally_trusted = true;
   if(!temporary && !o->trust->crypto->temporary_only)
     hncp_crypto_write_trusted_key(o, k, o->trust->crypto->key_dir);
@@ -187,7 +190,7 @@ void hncp_crypto_set_trusted_key(hncp o, trust_key k, bool temporary){
 
 void hncp_crypto_mistrust_trusted_key(hncp o, trust_key k, bool was_temporary){
   if(!k->locally_trusted){
-    L_WARN("Can't revoke a not trusted key");
+    L_WARN("Can't revoke a key not trusted");
     return;
   }
   k->locally_trusted = false;

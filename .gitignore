@@ -17,6 +17,8 @@ Makefile
 cmake_install.cmake
 install_manifest.txt
 *.deb
+*.key
+/*-trust/
 *~
 *.orig
 /hnetd

@@ -24,7 +24,7 @@ static void update_local_trust(struct vlist_tree *tree, struct vlist_node *node_
     local_trust l = node_old ? container_of(node_old, local_trust_s, node) : container_of(node_new, local_trust_s, node);
     /* Take care of the TLV in cas of creation/destruction */
     if((!node_new) ^ (!node_old)){
-        hncp_trust_update_trust_link(o, &o->own_node->node_identifier_hash, &l->node_hash, node_new);
+        hncp_trust_update_trust_link(o, &o->own_node->node_identifier_hash, &l->node_hash, !!node_new);
         hncp_t_trust_link tlv = alloca(sizeof(hncp_t_trust_link_s));
         tlv->trusted_hash = l->node_hash;
         hncp_update_tlv_raw(o, HNCP_T_TRUST_LINK, tlv, sizeof(hncp_t_trust_link_s), node_new);

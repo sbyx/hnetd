@@ -16,6 +16,7 @@
  */
 
 #include <unistd.h>
+#include "hncp_trust.h"
 
 /* Test utilities */
 #include "net_sim.h"
@@ -85,17 +86,21 @@ void hncp_two(void)
   net_sim_set_connected(l2, l1, true);
   SIM_WHILE(&s, 100, !net_sim_is_converged(&s));
 
+  hncp_trust_begin_friend_search(n1, 0);
+  hncp_trust_begin_friend_search(n2, 0);
+
   sput_fail_unless(n1->nodes.avl.count == 2, "n1 nodes == 2");
   sput_fail_unless(n2->nodes.avl.count == 2, "n2 nodes == 2");
-
 
   /* Play with the prefix API. Feed in stuff! */
   node1 = container_of(n1, net_node_s, n);
   node2 = container_of(n2, net_node_s, n);
 
+
   /* First, fake delegated prefixes */
   pa_update_ldp(&node1->pa_data, &p1, "eth0", hnetd_time() + 123, hnetd_time() + 1, NULL, 0);
   pa_update_ldp(&node1->pa_data, &p2, NULL, hnetd_time() + 123, hnetd_time() + 1, NULL, 0);
+
 
   SIM_WHILE(&s, 1000,
             node2->updated_edp != 2);

@@ -279,7 +279,6 @@ void hncp_trust_begin_friend_search(hncp o, int seconds){
   }
 
   vlist_for_each_element(&o->links, link, in_links){
-    if(link->conf->safe_link){
       vlist_for_each_element(&link->neighbors, n, in_neighbors){
         trust_key k = hncp_crypto_key_from_hash(o, &n->node_identifier_hash);
         if(!k)/* key unavailable */
@@ -296,10 +295,9 @@ void hncp_trust_begin_friend_search(hncp o, int seconds){
       }
 
     }
-
-  }
   t->friend_search_timeout.cb = hncp_trust_end_friend_search;
-  uloop_timeout_set(&t->friend_search_timeout, seconds*1000);
+  if(seconds)
+    uloop_timeout_set(&t->friend_search_timeout, seconds*1000);
 }
 
 /** Callbacks */
@@ -352,7 +350,6 @@ static bool _hncp_trust_integrity_check(hncp o, unsigned char *tlvs, hncp_hash h
   size_t key_size = tlv_len(node_key_tlv);
 
   if(! crypto_hash_derived_from_raw(h, raw_key, key_size)){
-    printf("Invalid hash\n");
     return false;
   }
   trust_key t = hncp_crypto_key_from_hash(o, h);
@@ -361,7 +358,6 @@ static bool _hncp_trust_integrity_check(hncp o, unsigned char *tlvs, hncp_hash h
     ctx = alloca(sizeof(pk_context));
   if(crypto_key_from_raw(ctx, raw_key, key_size, false)){
     pk_free(ctx);
-    printf("malformed Node Key TLV\n");
     return false;
     }
   }else
