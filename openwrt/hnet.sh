@@ -124,10 +124,10 @@ proto_hnet_teardown() {
     # nop? this? hmm
     logger -t proto-hnet "proto_hnet_teardown $device/$interface"
 
-    proto_init_update "*" 0
-    proto_send_update "$interface"
     ifdown "${interface}_4"
     ifdown "${interface}_6"
+    proto_init_update "*" 0
+    proto_send_update "$interface"
 }
 
 add_protocol hnet
