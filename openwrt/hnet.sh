@@ -65,7 +65,7 @@ proto_hnet_setup() {
 
     proto_send_update "$interface"
 
-	if [ "$guest" != "1" -a "$device" != "lo" -a "$device" != "lo0" ]; then
+	if [ "$mode" != "guest" -a "$device" != "lo" -a "$device" != "lo0" ]; then
 	    # add sub-protocols for DHCPv4 + DHCPv6
 	    json_init
 	    json_add_string name "${interface}_4"
