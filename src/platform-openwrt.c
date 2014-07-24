@@ -217,6 +217,15 @@ void platform_set_prefix_route(const struct prefix *p, bool enable)
 	iface_set_unreachable_route(p, enable);
 }
 
+
+// Handle netifd ubus event for interfaces updates
+static void handle_complete(struct ubus_request *req, int ret)
+{
+	struct platform_iface *iface = container_of(req, struct platform_iface, req);
+	L_INFO("platform: async notify_proto for %s: %s", iface->handle, ubus_strerror(ret));
+}
+
+
 // Commit platform changes to netifd
 static void platform_commit(struct uloop_timeout *t)
 {
@@ -587,10 +596,14 @@ static void platform_commit(struct uloop_timeout *t)
 	L_DEBUG("platform: *** end interface update %s (%s)", iface->handle, c->ifname);
 
 	int ret;
-	if (!(ret = ubus_invoke(ubus, ubus_network_interface, "notify_proto", b.head, NULL, NULL, 1000)))
-		L_INFO("platform: notify_proto for %s (%s): success", iface->handle, c->ifname);
-	else
-		L_WARN("platform: notify_proto for %s (%s) failed: %s", iface->handle, c->ifname, ubus_strerror(ret));
+	ubus_abort_request(ubus, &iface->req);
+	if (!(ret = ubus_invoke_async(ubus, ubus_network_interface, "notify_proto", b.head, &iface->req))) {
+		iface->req.complete_cb = handle_complete;
+		ubus_complete_request_async(ubus, &iface->req);
+	} else {
+		L_INFO("platform: async notify_proto for %s (%s) failed: %s", iface->handle, c->ifname, ubus_strerror(ret));
+		platform_set_internal(c, false);
+	}
 
 	blob_buf_free(&b);
 }
