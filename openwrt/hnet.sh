@@ -66,8 +66,8 @@ proto_hnet_setup() {
     proto_send_update "$interface"
 
     # work around some more races
-    ubus call network del_dynamic "{\"name\": \"${INTERFACE}_4\"}"
-    ubus call network del_dynamic "{\"name\": \"${INTERFACE}_6\"}"
+    ubus call network del_dynamic "{\"name\": \"${interface}_4\"}"
+    ubus call network del_dynamic "{\"name\": \"${interface}_6\"}"
     sleep 1
 
 	if [ "$mode" != "guest" -a "$device" != "lo" -a "$device" != "lo0" ]; then
