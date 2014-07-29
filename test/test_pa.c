@@ -174,9 +174,11 @@ void test_pa_initial()
 void test_pa_ipv4()
 {
 	struct pa_ldp *ldp;
+	struct pa_edp *edp;
 	struct pa_cp *cp;
 	hnetd_time_t when;
 	int res;
+	struct prefix otherv4 = PL_PV4b;
 
 	fr_mask_md5 = true;
 
@@ -256,10 +258,36 @@ void test_pa_ipv4()
 	res = to_run(2);
 	sput_fail_unless(!res, "Apply cp and laa");
 
+	/* Testing changing uplink */
+	fr_mask_md5 = false;
 	iface.user->cb_ext4data(iface.user, PL_IFNAME2, NULL, 0);
-	res = to_run(2);
-	sput_fail_unless(!res && !to_getfirst(), "Remove IPv4 connectivity");
+	edp = pa_edp_get(&pa.data, &otherv4, &rid_higher, true); //another router advertises a different v4 prefix
+	pa_dp_notify(&pa.data, &edp->dp);
+	res = to_run(2); //Run PA and AA
 
+
+	//Add a local connectivity again, shouldn' do anything
+	iface.user->cb_ext4data(iface.user, PL_IFNAME2, PL_DHCP_DATA, PL_DHCP_LEN);
+
+	//Destroy edp
+	pa_dp_todelete(&edp->dp);
+	pa_dp_notify(&pa.data, &edp->dp);
+	to_run(5);
+
+	ldp = pa_ldp_get(&pa.data, &pa.local.conf.v4_prefix, false);
+	sput_fail_unless(ldp, "Found ldp");
+	sput_fail_unless(!strcmp(ldp->iface->ifname, PL_IFNAME2), "Correct uplink");
+
+	iface.user->cb_ext4data(iface.user, PL_IFNAME3, PL_DHCP_DATA, PL_DHCP_LEN);
+	iface.user->cb_ext4data(iface.user, PL_IFNAME2, NULL, 0);
+	to_run(5);
+
+	ldp = pa_ldp_get(&pa.data, &pa.local.conf.v4_prefix, false);
+	sput_fail_unless(ldp, "Found ldp");
+	sput_fail_unless(!strcmp(ldp->iface->ifname, PL_IFNAME3), "Correct uplink");
+
+	iface.user->cb_ext4data(iface.user, PL_IFNAME3, NULL, 0);
+	res = to_run(6);
 	pa_stop(&pa);
 	pa_term(&pa);
 	sput_fail_unless(list_empty(&timeouts), "No more timeout");
@@ -283,6 +311,8 @@ void test_pa_network()
 	struct pa_ap *ap;
 	hnetd_time_t valid, preferred;
 	int res;
+
+	fr_mask_md5 = true;
 
 	/* This test looks for collisions */
 	uloop_init();
