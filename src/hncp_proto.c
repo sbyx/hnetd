@@ -564,6 +564,7 @@ handle_message(hncp_link l,
     if(o->using_trust)
       {
         if(!hncp_trust_message_integrity_check(o, &ns->node_identifier_hash, ns->update_number, tb.head)){
+          L_INFO("(trust) rejected malformed node data");
           tlv_buf_free(&tb);
           return;
         }

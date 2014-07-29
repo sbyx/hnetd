@@ -1034,13 +1034,7 @@ void platform_restart_dhcpv4(struct iface *c)
 	struct blob_buf b = {NULL, NULL, 0, NULL};
 
 	blob_buf_init(&b, 0);
-	char *buf = blobmsg_alloc_string_buffer(&b, "interface", 32);
-	snprintf(buf, 32, "%s_4", iface->handle);
-	blobmsg_add_string_buffer(&b);
-	ubus_invoke(ubus, ubus_network_interface, "down", b.head, NULL, NULL, 1000);
-
-	blob_buf_init(&b, 0);
-	buf = blobmsg_alloc_string_buffer(&b, "name", 32);
+	char *buf = blobmsg_alloc_string_buffer(&b, "name", 32);
 	snprintf(buf, 32, "%s_4", iface->handle);
 	blobmsg_add_string_buffer(&b);
 	buf = blobmsg_alloc_string_buffer(&b, "ifname", 32);

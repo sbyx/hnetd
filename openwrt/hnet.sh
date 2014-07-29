@@ -65,7 +65,12 @@ proto_hnet_setup() {
 
     proto_send_update "$interface"
 
-	if [ "$guest" != "1" -a "$device" != "lo" -a "$device" != "lo0" ]; then
+    # work around some more races
+    ubus call network del_dynamic "{\"name\": \"${INTERFACE}_4\"}"
+    ubus call network del_dynamic "{\"name\": \"${INTERFACE}_6\"}"
+    sleep 1
+
+	if [ "$mode" != "guest" -a "$device" != "lo" -a "$device" != "lo0" ]; then
 	    # add sub-protocols for DHCPv4 + DHCPv6
 	    json_init
 	    json_add_string name "${interface}_4"
@@ -123,11 +128,6 @@ proto_hnet_teardown() {
 
     # nop? this? hmm
     logger -t proto-hnet "proto_hnet_teardown $device/$interface"
-
-    proto_init_update "*" 0
-    proto_send_update "$interface"
-    ifdown "${interface}_4"
-    ifdown "${interface}_6"
 }
 
 add_protocol hnet
