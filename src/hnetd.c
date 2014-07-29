@@ -18,6 +18,7 @@
 #include <stdbool.h>
 #include <syslog.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 
 #include <libubox/uloop.h>
 
@@ -252,6 +253,17 @@ int main(__unused int argc, char *argv[])
 			L_INFO("Setting %s as ULA prefix", PREFIX_REPR(&pa.local.conf.ula_prefix));
 		}
 	}
+
+  if(chdir("/etc")){
+    L_ERR("Unable to change directory");
+    return 22;
+  }
+
+  mkdir("hnetd",0755);
+  if(chdir("hnetd")){
+    L_ERR("Unable to change directory");
+    return 22;
+  }
 
 	h = hncp_create(true);
 	if (!h) {
