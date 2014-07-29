@@ -66,7 +66,7 @@ bool hncp_trust_init(hncp o, char * private_key_file, char * trusted_key_dir){
     return -1;
 
   o->trust = s;
-
+  o->using_trust = true;
   vlist_init(&s->trust_graphs, compare_hash, update_trust_graph);
   s->trust_graphs.keep_old = false;
   s->trust_graphs.no_delete = false;
@@ -264,6 +264,11 @@ void hncp_trust_begin_friend_search(hncp o, int seconds){
   /* Remove an old friend search, if any */
   if(t->want_friend)
     uloop_timeout_cancel(&t->friend_search_timeout);
+
+  if(seconds)
+    L_INFO("Begin friend search, for %i seconds.", seconds);
+  else
+    L_INFO("Setting neighbors as trusted");
 
   t->want_friend = true;
   hncp_link link;

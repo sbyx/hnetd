@@ -308,17 +308,15 @@ hncp_node hncp_find_node_by_hash(hncp o, hncp_hash h, bool create)
   return n;
 }
 
-bool hncp_init(hncp o, const char *name, __unused int len, bool no_trust_key_dir)
+bool hncp_init(hncp o, const char *name, int len, bool security)
 {
-  //dummy, makes test_hncp_nio happy
   char bufkey[256];
   char bufdir[256];
+  hncp_hash_s h;
   strncpy(bufkey, name, 200);
   strcat(bufkey, ".key");
   strncpy(bufdir, name, 200);
   strcat(bufdir, "-trust");
-
-  char *real_key_dir = no_trust_key_dir ? NULL : bufdir;
 
   memset(o, 0, sizeof(*o));
   INIT_LIST_HEAD(&o->subscribers);
@@ -337,7 +335,10 @@ bool hncp_init(hncp o, const char *name, __unused int len, bool no_trust_key_dir
   o->first_free_iid = 1;
   o->last_prune = 1;
   /* this way new nodes with last_prune=0 won't be reachable */
-  return hncp_trust_init(o, bufkey, real_key_dir);
+  if(security)
+    return hncp_trust_init(o, bufkey, bufdir);
+  hncp_calculate_hash(name, len, &h);
+  return hncp_set_own_hash(o, &h);
 }
 
 bool hncp_set_own_hash(hncp o, hncp_hash h)
@@ -360,7 +361,7 @@ bool hncp_set_own_hash(hncp o, hncp_hash h)
   return true;
 }
 
-hncp hncp_create(void)
+hncp hncp_create(bool security)
 {
   hncp o;
   //Dummy, makes unit testing happy
@@ -377,7 +378,7 @@ hncp hncp_create(void)
   }
 
   char name[6] = "hnetd";
-  if (!hncp_init(o, name, 0, false))
+  if (!hncp_init(o, name, 0, security))
     goto err;
   if (!hncp_io_init(o))
     goto err2;
@@ -406,7 +407,8 @@ void hncp_uninit(hncp o)
 {
   o->io_init_done = false; /* cannot schedule anything anymore after this. */
 
-  hncp_trust_destroy(o);
+  if(o->using_trust)
+    hncp_trust_destroy(o);
   /* TLVs should be freed first; they're local phenomenom, but may be
    * reflected on links/nodes. */
   vlist_flush_all(&o->tlvs);
@@ -719,7 +721,8 @@ void hncp_self_flush(hncp_node n)
 
   L_DEBUG("hncp_self_flush: notify about to republish tlvs");
   hncp_notify_subscribers_about_to_republish_tlvs(n);
-  hncp_trust_make_signature(o);
+  if(o->using_trust)
+    hncp_trust_make_signature(o);
   o->republish_tlvs = false;
   a2 = _produce_new_tlvs(n);
   if (a2)

@@ -187,7 +187,7 @@ void hncp_notify_subscribers_tlvs_changed(hncp_node n,
           np = tlv_next(np);
         }
     }
-      if(n->in_trusted_nodes_set)
+      if(n->hncp->using_trust && n->in_trusted_nodes_set)
         hncp_notify_subscribers_trusted_tlvs_changed(n, a_old, a_new);
 }
 

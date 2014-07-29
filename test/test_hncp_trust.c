@@ -64,7 +64,7 @@ bool graph_not_dumb(hncp_trust_graph g){
 }
 
 void trust_graph(void){
-  hncp o = hncp_create();
+  hncp o = hncp_create(true);
   hncp_hash h = &(o->own_node->node_identifier_hash);
 
   hncp_trust_graph g = o->trust->my_graph;
@@ -122,7 +122,7 @@ void trust_graph(void){
 }
 
 void hncp_trust_test(void){
-  hncp o = hncp_create();
+  hncp o = hncp_create(true);
   hncp_hash h = &(o->own_node->node_identifier_hash);
   //hncp_trust_graph g = o->trust->my_graph;
   sput_fail_unless(hncp_trust_node_trusted(o, h), "I trust myself");

@@ -138,6 +138,9 @@ struct hncp_struct {
   /* Number of TLV indexes we have. That is, the # of non-empty slots
    * in the tlv_type_to_index. */
   int num_tlv_indexes;
+
+  /** See if we use trust system */
+  bool using_trust;
 };
 
 typedef struct hncp_link_struct hncp_link_s, *hncp_link;
@@ -287,7 +290,7 @@ struct hncp_tlv_struct {
 
 /* Internal or testing-only way to initialize hp struct _without_
  * dynamic allocations (and some of the steps omitted too). */
-bool hncp_init(hncp o, const char *name, int len, bool no_trust_key_dir);
+bool hncp_init(hncp o, const char *name, int len, bool security);
 void hncp_uninit(hncp o);
 
 /* Utility to change local node identifier - use with care */

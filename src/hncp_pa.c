@@ -798,7 +798,10 @@ hncp_glue hncp_pa_glue_create(hncp o, struct pa_data *pa_data)
 
   INIT_LIST_HEAD(&g->external_links);
   vlist_init(&g->dps, compare_dps, update_dp);
-  g->subscriber.trusted_tlv_change_callback = _tlv_cb;
+  if(o->using_trust)
+    g->subscriber.trusted_tlv_change_callback = _tlv_cb;
+  else
+    g->subscriber.tlv_change_callback = _tlv_cb;
   /* g->subscriber.node_change_callback = _node_cb; */
   g->subscriber.republish_callback = _republish_cb;
   g->pa_data = pa_data;

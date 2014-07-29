@@ -253,7 +253,7 @@ int main(__unused int argc, char *argv[])
 		}
 	}
 
-	h = hncp_create();
+	h = hncp_create(true);
 	if (!h) {
 		L_ERR("Unable to initialize HNCP");
 		return 42;

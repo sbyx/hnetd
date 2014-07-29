@@ -186,8 +186,10 @@ void hncp_if_set_ipv6_address(hncp o,
  *
  * This call will create the hncp object, and register it to uloop. In
  * case of error, NULL is returned.
+ *
+ * @param security Flag to activate the trust mechanisms.
  */
-hncp hncp_create(void);
+hncp hncp_create(bool security);
 
 /**
  * Destroy HNCP instance

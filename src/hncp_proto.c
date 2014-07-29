@@ -12,6 +12,7 @@
  */
 
 #include "hncp_i.h"
+#include "hncp_trust.h"
 
 /*
  * This module contains the logic to handle receiving and sending of
@@ -552,12 +553,22 @@ handle_message(hncp_link l,
       hncp_schedule(o);
       return;
     }
+
   /* Ok. nd contains more recent TLV data than what we have
    * already. Woot. */
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
   if (tlv_put_raw(&tb, nd_data, nd_len))
     {
+
+    if(o->using_trust)
+      {
+        if(!hncp_trust_message_integrity_check(o, &ns->node_identifier_hash, ns->update_number, tb.head)){
+          tlv_buf_free(&tb);
+          return;
+        }
+      }
+
       hncp_node_set(n, new_update_number,
                     hncp_time(o) - be32_to_cpu(ns->ms_since_origination),
                     tb.head);

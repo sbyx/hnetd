@@ -292,7 +292,7 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
   sput_fail_unless(n, "calloc net_node");
   sput_fail_unless(n->name, "strdup name");
   n->s = s;
-  r = hncp_init(&n->n, name, strlen(name), true);
+  r = hncp_init(&n->n, name, strlen(name), false);
   n->n.io_init_done = true; /* our IO doesn't really need init.. */
   sput_fail_unless(r, "hncp_init");
   if (!r)

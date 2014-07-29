@@ -227,7 +227,7 @@ static void hncp_init_no_hwaddr(void)
   smock_push("get_hwaddrs_buf", NULL);
   smock_push_int("get_hwaddrs_len", 0);
 
-  hncp o = hncp_create();
+  hncp o = hncp_create(false);
   sput_fail_unless(!o, "hncp_create -> !hncp");
   smock_is_empty();
 }
@@ -243,7 +243,7 @@ static void hncp_init_iofail(void)
   /* io init succeeds */
   smock_push_bool("init_result", false);
 
-  hncp o = hncp_create();
+  hncp o = hncp_create(false);
   sput_fail_unless(!o, "hncp_create -> !hncp");
   smock_is_empty();
 }
@@ -262,7 +262,7 @@ static hncp create_hncp(void)
   /* schedule happens _once_ */
   smock_push("schedule", NULL);
 
-  hncp o = hncp_create();
+  hncp o = hncp_create(false);
   sput_fail_unless(o, "hncp_create -> hncp");
   smock_is_empty();
 

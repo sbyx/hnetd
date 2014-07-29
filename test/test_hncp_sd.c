@@ -17,7 +17,6 @@
 #define L_LEVEL 7
 #define DISABLE_HNCP_PA
 
-#include "hncp_trust.h"
 #include "net_sim.h"
 #include "sput.h"
 #include "smock.h"
@@ -185,9 +184,6 @@ void test_hncp_sd(void)
   hncp_tlv_ap_update(n2, &p, "eth2", false, 0, true);
 
   SIM_WHILE(&s, 100, !net_sim_is_converged(&s));
-  hncp_trust_begin_friend_search(n1, 0);
-  hncp_trust_begin_friend_search(n2, 0);
-  SIM_WHILE(&s, 100, !net_sim_is_converged(&s)|| net_sim_is_busy(&s));
   sput_fail_unless(strcmp(node1->sd->router_name, node2->sd->router_name),
                    "router names different");
   smock_is_empty();
@@ -284,9 +280,6 @@ void test_hncp_sd(void)
   l3 = net_sim_hncp_find_link_by_name(n3, "eth0");
   net_sim_set_connected(l2, l3, true);
   net_sim_set_connected(l3, l2, true);
-  SIM_WHILE(&s, 100, net_sim_is_busy(&s) || !net_sim_is_converged(&s));
-  hncp_trust_begin_friend_search(n2, 0);
-  hncp_trust_begin_friend_search(n3, 0);
   SIM_WHILE(&s, 1000, net_sim_is_busy(&s) || !net_sim_is_converged(&s));
 
   memset(&node1->sd->dnsmasq_state, 0, HNCP_HASH_LEN);

@@ -115,7 +115,7 @@ mkdir:
 }
 
 void test_self_rsa(void){
-  hncp o = hncp_create();
+  hncp o = hncp_create(true);
   #ifdef FORCE_RSA_GEN
   remove(TRUST_PRIVATE_KEY_FILE);
   #endif // FORCE_RSA_GEN
@@ -152,7 +152,7 @@ void test_public_key(void){
   populate_pubkey_dir(PUBKEY_DIR, RSA_PUB_KEY_NUM);
   hncp_s s;
   hncp o = &s;
-  hncp_init(o, "hncp-pki", 0, false);
+  hncp_init(o, "hncp-pki", 0, true);
 
   for(int i = 0; i < RSA_PUB_KEY_NUM; i++){
     hncp_hash h = (hncp_hash) smock_pull("hash");

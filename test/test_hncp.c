@@ -44,7 +44,7 @@ void iface_all_set_dhcp_send(const void *dhcpv6_data, size_t dhcpv6_len,
 
 void hncp_ext(void)
 {
-  hncp o = hncp_create();
+  hncp o = hncp_create(false);
   hncp_node n;
   bool r;
   struct tlv_buf tb;
@@ -62,9 +62,7 @@ void hncp_ext(void)
   hncp_self_flush(n);
   sput_fail_unless(hncp_node_get_tlvs(n), "should have tlvs");
 
-  int i = 0;
   tlv_for_each_attr(v, hncp_node_get_tlvs(n))
-    if(i++)
       break;
   sput_fail_unless(v && tlv_id(v) == HNCP_T_VERSION, "no version tlv");
 
@@ -153,7 +151,7 @@ void hncp_int(void)
   struct tlv_buf tb;
   struct tlv_attr *t1, *t2;
 
-  hncp_init(o, hwbuf, strlen((char *)hwbuf), true);
+  hncp_init(o, hwbuf, strlen((char *)hwbuf), false);
 
   /* Make sure network hash is dirty. */
   sput_fail_unless(o->network_hash_dirty, "network hash should be dirty");

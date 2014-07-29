@@ -240,13 +240,23 @@ void hncp_crypto_init_key(trust_key t, char * file_name, bool private){
 }
 
 int hncp_crypto_write_trusted_key(__unused hncp o, trust_key c, char * trust_dir){
+  int r;
   if(!c->key_file){
     const char *strh = HEX_REPR(&c->key_hash, HNCP_HASH_LEN);
     char *buf = malloc(strlen(trust_dir) + strlen(strh)+6);
     sprintf(buf, "%s/%s.pub", trust_dir, strh);
     c->key_file = buf;
   }
-  return crypto_write_key_file(&c->ctx, c->key_file, c->private);
+  r = crypto_write_key_file(&c->ctx, c->key_file, c->private);
+
+  if(!r && c->private){
+    char * buf = alloca(strlen(c->key_file)+8);
+    sprintf(buf,"public-%s", c->key_file);
+    r = crypto_write_key_file(&c->ctx, buf, false);
+  }
+    return r;
+
+
 }
 
 int hncp_crypto_sign_tlvs(hncp o, uint32_t sequence_number, uint16_t sign_type){

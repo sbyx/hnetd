@@ -116,6 +116,6 @@ hncp_trust_graph hncp_trust_get_graph_or_create_it(hncp o, hncp_hash hash);
 /** Generate and push the signature */
 void hncp_trust_make_signature(hncp o);
 
-/** Sets temporary trust TLVs, to allow simple trust establishment */
+/** Sets temporary trust TLVs, to allow simple trust establishment, to all the neighbors of an interface */
 void hncp_trust_begin_friend_search(hncp o, int seconds);
 #endif /* HNCP_TRUST_H */

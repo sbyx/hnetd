@@ -86,9 +86,6 @@ void hncp_two(void)
   net_sim_set_connected(l2, l1, true);
   SIM_WHILE(&s, 100, !net_sim_is_converged(&s));
 
-  hncp_trust_begin_friend_search(n1, 0);
-  hncp_trust_begin_friend_search(n2, 0);
-
   sput_fail_unless(n1->nodes.avl.count == 2, "n1 nodes == 2");
   sput_fail_unless(n2->nodes.avl.count == 2, "n2 nodes == 2");
 

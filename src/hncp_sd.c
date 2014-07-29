@@ -879,7 +879,10 @@ hncp_sd hncp_sd_create(hncp h, hncp_sd_params p)
 
   /* Set up the hncp subscriber */
   sd->subscriber.local_tlv_change_callback = _local_tlv_cb;
-  sd->subscriber.trusted_tlv_change_callback = _tlv_cb;
+  if(h->using_trust)
+    sd->subscriber.trusted_tlv_change_callback = _tlv_cb;
+  else
+    sd->subscriber.tlv_change_callback = _tlv_cb;
   sd->subscriber.republish_callback = _republish_cb;
   sd->subscriber.link_change_callback = _force_republish_cb;
   hncp_subscribe(h, &sd->subscriber);

@@ -43,7 +43,7 @@ void hncp_sd_dump_link_fqdn(__unused hncp_sd sd, __unused hncp_link l, __unused 
 
 void hncp_bfs_one(void)
 {
-	hncp hncp = hncp_create();
+	hncp hncp = hncp_create(false);
 
 	/* Get rid of version, as synthesizing versions for other
 	 * routers is a bore */
