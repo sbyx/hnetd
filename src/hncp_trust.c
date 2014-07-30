@@ -350,7 +350,6 @@ void hncp_trust_update_trust_links(hncp_subscriber s, hncp_node n, struct tlv_at
 static bool _hncp_trust_integrity_check(hncp o, unsigned char *tlvs, hncp_hash h, uint32_t sequence_number, struct tlv_attr *node_key_tlv,
                                                   struct tlv_attr *signature_tlv){
 
-  printf("Internal check\n");
   unsigned char * raw_key = (unsigned char *) node_key_tlv->data;
   size_t key_size = tlv_len(node_key_tlv);
 
@@ -377,6 +376,9 @@ static bool _hncp_trust_integrity_check(hncp o, unsigned char *tlvs, hncp_hash h
 }
 
 bool hncp_trust_message_integrity_check(hncp o, hncp_hash identifier_hash, uint32_t sequence_number, struct tlv_attr *tlv_container){
+  if(!tlv_container)
+    return true;
+
   struct tlv_attr *node_key_tlv = NULL;
   struct tlv_attr *signature_tlv = NULL;
 
