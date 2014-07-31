@@ -250,32 +250,15 @@ void iface_pa_aas(__attribute__((unused))struct pa_data_user *user,
 	}
 }
 
-static void iface_notify_internal_state(struct iface *c, bool enabled)
+static void iface_notify_internal_state(struct iface *c)
 {
 	struct iface_user *u;
 	list_for_each_entry(u, &users, head)
 		if (u->cb_intiface)
-			u->cb_intiface(u, c->ifname, enabled);
+			u->cb_intiface(u, c->ifname, c->internal);
+	platform_set_internal(c, c->internal);
 }
 
-
-static void iface_notify_data_state(struct iface *c, bool enabled)
-{
-	void *data = (enabled && !avl_is_empty(&c->delegated.avl)) ? (c->dhcpv6_data_in ? c->dhcpv6_data_in : (void*)1) : NULL;
-	size_t len = (enabled && !avl_is_empty(&c->delegated.avl)) ? c->dhcpv6_len_in : 0;
-	void *data4 = (enabled && c->v4_saddr.s_addr) ? (c->dhcp_data_in ? c->dhcp_data_in : (void*)1) : NULL;
-	size_t len4 = (enabled && c->v4_saddr.s_addr) ? c->dhcp_len_in : 0;
-
-	struct iface_user *u;
-	list_for_each_entry(u, &users, head) {
-		if (u->cb_extdata)
-			u->cb_extdata(u, c->ifname, data, len);
-		if (u->cb_ext4data)
-			u->cb_ext4data(u, c->ifname, data4, len4);
-	}
-
-
-}
 
 #ifdef __linux__
 
@@ -660,16 +643,19 @@ void iface_remove(struct iface *c)
 	if (!c)
 		return;
 
-	// If interface was internal, let subscribers know of removal
-	if (c->internal)
-		iface_notify_internal_state(c, false);
+	iface_update_ipv6_uplink(c);
+	iface_update_ipv4_uplink(c);
+	iface_commit_ipv6_uplink(c);
+	iface_commit_ipv4_uplink(c);
 
-	if (!c->internal || (c->flags & IFACE_FLAG_HYBRID))
-		iface_notify_data_state(c, false);
+	// If interface was internal, let subscribers know of removal
+	if (c->internal) {
+		c->internal = false;
+		iface_notify_internal_state(c);
+	}
 
 	list_del(&c->head);
 	vlist_flush_all(&c->assigned);
-	vlist_flush_all(&c->delegated);
 	vlist_flush_all(&c->routes);
 
 	while (!list_empty(&c->chosen)) {
@@ -734,9 +720,7 @@ void iface_update_init(struct iface *c)
 static void iface_announce_border(struct uloop_timeout *t)
 {
 	struct iface *c = container_of(t, struct iface, transition);
-	iface_notify_data_state(c, (!c->internal || (c->flags & IFACE_FLAG_HYBRID)));
-	iface_notify_internal_state(c, c->internal);
-	platform_set_internal(c, c->internal);
+	iface_notify_internal_state(c);
 
 	if (!c->internal)
 		uloop_timeout_set(&c->preferred, 100);
@@ -785,9 +769,9 @@ static bool iface_discover_border(struct iface *c)
 		if (internal) {
 			uloop_timeout_set(&c->transition, 5000);
 			return true;
-                } else
-			iface_announce_border(&c->transition);
-
+		} else {
+			c->transition.cb(&c->transition);
+		}
 	}
 	return false;
 }
@@ -858,7 +842,7 @@ struct iface* iface_create(const char *ifname, const char *handle, iface_flags f
 
 	if (!c->platform && handle) {
 		platform_iface_new(c, handle);
-		iface_announce_border(&c->transition);
+		c->transition.cb(&c->transition);
 		iface_discover_border(c);
 	}
 
@@ -889,6 +873,7 @@ void iface_add_dhcp_received(struct iface *c, const void *data, size_t len)
 
 void iface_update_ipv6_uplink(struct iface *c)
 {
+	c->had_ipv6_uplink = !avl_is_empty(&c->delegated.avl);
 	vlist_update(&c->delegated);
 	memset(&c->cer, 0, sizeof(c->cer));
 }
@@ -913,14 +898,18 @@ void iface_add_delegated(struct iface *c,
 
 void iface_update_ipv4_uplink(struct iface *c)
 {
+	c->had_ipv4_uplink = !!c->v4_saddr.s_addr;
 	c->v4_saddr.s_addr = INADDR_ANY;
 }
 
 
 void iface_commit_ipv4_uplink(struct iface *c)
 {
-	bool changed = !iface_discover_border(c) && (c->dhcp_len_in != c->dhcp_len_stage ||
-					memcmp(c->dhcp_data_in, c->dhcp_data_stage, c->dhcp_len_in));
+	iface_discover_border(c);
+	bool has_ipv4_uplink = !!c->v4_saddr.s_addr;
+	bool changed = c->had_ipv4_uplink != has_ipv4_uplink ||
+			(has_ipv4_uplink && ((c->dhcp_len_in != c->dhcp_len_stage ||
+					memcmp(c->dhcp_data_in, c->dhcp_data_stage, c->dhcp_len_in))));
 
 	free(c->dhcp_data_in);
 	c->dhcp_data_in = c->dhcp_data_stage;
@@ -928,16 +917,27 @@ void iface_commit_ipv4_uplink(struct iface *c)
 	c->dhcp_data_stage = NULL;
 	c->dhcp_len_stage = 0;
 
-	if (changed && (!c->internal || (c->flags & IFACE_FLAG_HYBRID)))
-		iface_notify_data_state(c, (!c->internal || (c->flags & IFACE_FLAG_HYBRID)));
+	if (changed) {
+		bool enabled = !c->internal || (c->flags & IFACE_FLAG_HYBRID);
+		void *data4 = (enabled && c->v4_saddr.s_addr) ? (c->dhcp_data_in ? c->dhcp_data_in : (void*)1) : NULL;
+		size_t len4 = (enabled && c->v4_saddr.s_addr) ? c->dhcp_len_in : 0;
+
+		struct iface_user *u;
+		list_for_each_entry(u, &users, head)
+			if (u->cb_ext4data)
+				u->cb_ext4data(u, c->ifname, data4, len4);
+	}
 }
 
 
 void iface_commit_ipv6_uplink(struct iface *c)
 {
 	vlist_flush(&c->delegated);
-	bool changed = !iface_discover_border(c) && (c->dhcpv6_len_in != c->dhcpv6_len_stage ||
-					memcmp(c->dhcpv6_data_in, c->dhcpv6_data_stage, c->dhcpv6_len_in));
+	iface_discover_border(c);
+	bool has_ipv6_uplink = !avl_is_empty(&c->delegated.avl);
+	bool changed = c->had_ipv6_uplink != has_ipv6_uplink || (
+			has_ipv6_uplink && (c->dhcpv6_len_in != c->dhcpv6_len_stage ||
+					memcmp(c->dhcpv6_data_in, c->dhcpv6_data_stage, c->dhcpv6_len_in)));
 
 	free(c->dhcpv6_data_in);
 	c->dhcpv6_data_in = c->dhcpv6_data_stage;
@@ -945,8 +945,16 @@ void iface_commit_ipv6_uplink(struct iface *c)
 	c->dhcpv6_data_stage = NULL;
 	c->dhcpv6_len_stage = 0;
 
-	if (changed && (!c->internal || (c->flags & IFACE_FLAG_HYBRID)))
-		iface_notify_data_state(c, (!c->internal || (c->flags & IFACE_FLAG_HYBRID)));
+	if (changed) {
+		bool enabled = !c->internal || (c->flags & IFACE_FLAG_HYBRID);
+		void *data = (enabled && !avl_is_empty(&c->delegated.avl)) ? (c->dhcpv6_data_in ? c->dhcpv6_data_in : (void*)1) : NULL;
+		size_t len = (enabled && !avl_is_empty(&c->delegated.avl)) ? c->dhcpv6_len_in : 0;
+
+		struct iface_user *u;
+		list_for_each_entry(u, &users, head)
+			if (u->cb_extdata)
+				u->cb_extdata(u, c->ifname, data, len);
+	}
 }
 
 

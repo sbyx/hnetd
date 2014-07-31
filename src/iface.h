@@ -115,6 +115,8 @@ struct iface {
 	bool internal;
 	bool carrier;
 	bool designatedv4;
+	bool had_ipv4_uplink;
+	bool had_ipv6_uplink;
 
 	// Flags
 	iface_flags flags;
