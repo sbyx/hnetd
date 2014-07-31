@@ -875,7 +875,6 @@ void iface_update_ipv6_uplink(struct iface *c)
 {
 	c->had_ipv6_uplink = !avl_is_empty(&c->delegated.avl);
 	vlist_update(&c->delegated);
-	memset(&c->cer, 0, sizeof(c->cer));
 }
 
 

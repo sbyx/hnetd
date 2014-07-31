@@ -39,7 +39,6 @@ enum ipc_option {
 	OPT_IPV4SOURCE,
 	OPT_DNS,
 	OPT_MODE,
-	OPT_CERID,
 	OPT_LINK_ID,
 	OPT_IFACE_ID,
 	OPT_IP6_PLEN,
@@ -61,7 +60,6 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_IPV4SOURCE] = {"ipv4source", BLOBMSG_TYPE_STRING},
 	[OPT_DNS] = {"dns", BLOBMSG_TYPE_ARRAY},
 	[OPT_MODE] = {"mode", BLOBMSG_TYPE_STRING},
-	[OPT_CERID] = {"cerid", BLOBMSG_TYPE_STRING},
 	[OPT_LINK_ID] = {"link_id", BLOBMSG_TYPE_STRING},
 	[OPT_IFACE_ID] = {"iface_id", BLOBMSG_TYPE_ARRAY},
 	[OPT_IP6_PLEN] = {"ip6assign", BLOBMSG_TYPE_STRING},
@@ -470,9 +468,6 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 					free(buf);
 				}
 			}
-
-			if (tb[OPT_CERID])
-				inet_pton(AF_INET6, blobmsg_get_string(tb[OPT_CERID]), &c->cer);
 
 			iface_commit_ipv6_uplink(c);
 		} else if (!strcmp(cmd, "disable_ipv6_uplink")) {

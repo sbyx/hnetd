@@ -652,7 +652,6 @@ enum {
 };
 
 enum {
-	DATA_ATTR_CER,
 	DATA_ATTR_MODE,
 	DATA_ATTR_PREFIX,
 	DATA_ATTR_LINK_ID,
@@ -687,7 +686,6 @@ static const struct blobmsg_policy route_attrs[ROUTE_ATTR_MAX] = {
 };
 
 static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
-	[DATA_ATTR_CER] = { .name = "cer", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_PREFIX] = { .name = "prefix", .type = BLOBMSG_TYPE_ARRAY },
 	[DATA_ATTR_LINK_ID] = { .name = "link_id", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_IFACE_ID] = { .name = "iface_id", .type = BLOBMSG_TYPE_ARRAY },
@@ -856,7 +854,6 @@ static void platform_update(void *data, size_t len)
 	}
 
 	iface_flags flags = 0;
-	struct in6_addr cer = IN6ADDR_ANY_INIT;
 
 	struct blob_attr *dtb[DATA_ATTR_MAX];
 	memset(dtb, 0, sizeof(dtb));
@@ -883,9 +880,6 @@ static void platform_update(void *data, size_t len)
 
 		if (dtb[DATA_ATTR_ULA_DEFAULT_ROUTER] && blobmsg_get_bool(dtb[DATA_ATTR_ULA_DEFAULT_ROUTER]))
 			flags |= IFACE_FLAG_ULA_DEFAULT;
-
-		if (dtb[DATA_ATTR_CER])
-			inet_pton(AF_INET6, blobmsg_get_string(dtb[DATA_ATTR_CER]), &cer);
 	}
 
 	const char *proto = "";
@@ -971,9 +965,6 @@ static void platform_update(void *data, size_t len)
 			strncpy(conf->dnsname, blobmsg_get_string(dtb[DATA_ATTR_DNSNAME]), sizeof(conf->dnsname));;
 
 	}
-
-	if (c)
-		c->cer = cer;
 
 	L_INFO("platform: interface update for %s detected", ifname);
 

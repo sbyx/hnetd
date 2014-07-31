@@ -123,7 +123,6 @@ struct iface {
 
 	// LL-address
 	struct in6_addr eui64_addr;
-	struct in6_addr cer;
 	struct in_addr v4_saddr;
 
 	// Config
