@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Thu Jul 17 09:30:58 2014 mstenber
+ * Last modified: Mon Sep  1 10:41:10 2014 mstenber
  * Edit time:     75 min
  *
  */
@@ -178,6 +178,8 @@ typedef struct __packed {
 
 #define HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE 1
 #define HNCP_T_DNS_DELEGATED_ZONE_FLAG_SEARCH 2
+#define HNCP_T_DNS_DELEGATED_ZONE_FLAG_LEGACY_BROWSE 4
+/* TBD: insert legacy browse to draft */
 
 /* HNCP_T_DNS_DOMAIN_NAME has just DNS label sequence */
 

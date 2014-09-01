@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Tue Jun 10 16:27:55 2014 mstenber
- * Edit time:     555 min
+ * Last modified: Mon Sep  1 10:40:09 2014 mstenber
+ * Edit time:     562 min
  *
  */
 
@@ -216,6 +216,7 @@ static void _publish_ddz(hncp_sd sd, hncp_link l,
                     DNS_MAX_ESCAPED_LEN];
   char tbuf[DNS_MAX_ESCAPED_LEN];
 
+  /* Forward DDZ handling (note: duplication doesn't matter) */
   dh = (void *)buf;
   memset(dh, 0, sizeof(*dh));
   if (!hncp_get_ipv6_address(sd->hncp, l->ifname,
@@ -229,6 +230,8 @@ static void _publish_ddz(hncp_sd sd, hncp_link l,
   dh->flags = flags_forward;
   hncp_add_tlv_raw(sd->hncp, HNCP_T_DNS_DELEGATED_ZONE, dh, flen);
 
+  /* Reverse DDZ handling */
+  /* (.ip6.arpa. or .in-addr.arpa.). */
   if (assigned_prefix)
     {
       r = _push_reverse_ll(assigned_prefix, dh->ll, DNS_MAX_ESCAPED_LEN);
@@ -257,7 +260,6 @@ static void _publish_ddzs(hncp_sd sd)
       a = &t->tlv;
       if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX)
         {
-          /* Forward DDZ handling (note: duplication doesn't matter here yet) */
           if (!(ah = hncp_tlv_ap(a)))
             {
               L_ERR("invalid ap _published by us: %s", TLV_REPR(a));
@@ -273,13 +275,12 @@ static void _publish_ddzs(hncp_sd sd)
               continue;
             }
 
-          /* Reverse DDZ handling */
-          /* (no BROWSE flag, .ip6.arpa. or .in-addr.arpa.). */
           struct prefix p;
           p.plen = ah->prefix_length_bits;
           memcpy(&p.prefix, ah->prefix_data, ROUND_BITS_TO_BYTES(p.plen));
 
-          _publish_ddz(sd, l, HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE, &p);
+          _publish_ddz(sd, l, HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE
+                       | HNCP_T_DNS_DELEGATED_ZONE_FLAG_LEGACY_BROWSE, &p);
         }
     }
 
@@ -331,6 +332,8 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
    *
    * (These are all in DNS Delegated Zone TLVs)
    * - b._dns-sd._udp.<domain> => browseable domain
+   * - lb._dns-sd._udp.<domain> => (legacy) browseable domain
+   *
    * <subdomain>'s ~NS (remote, real IP)
    * <subdomain>'s ~NS (local, LOCAL_OHP_ADDRESS)
    */
@@ -377,10 +380,11 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
           md5_hash(a, tlv_raw_len(a), &ctx);
 
           if (dh->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE)
-            {
               fprintf(f, "ptr-record=b._dns-sd._udp.%s,%s\n",
                       sd->hncp->domain, buf);
-            }
+          if (dh->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_LEGACY_BROWSE)
+              fprintf(f, "ptr-record=lb._dns-sd._udp.%s,%s\n",
+                      sd->hncp->domain, buf);
           if (hncp_node_is_self(n))
             {
               server = LOCAL_OHP_ADDRESS;
