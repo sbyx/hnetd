@@ -10,6 +10,7 @@ proto_hnet_init_config() {
     proto_config_add_string 'dhcpv6_clientid'
     proto_config_add_string 'mode'
     proto_config_add_string 'reqaddress'
+    proto_config_add_string 'reqprefix'
     proto_config_add_string 'prefix'
     proto_config_add_string 'link_id'
     proto_config_add_string 'iface_id'
@@ -26,8 +27,8 @@ proto_hnet_setup() {
     local interface="$1"
     local device="$2"
 
-    local dhcpv4_clientid dhcpv6_clientid reqaddress prefix link_id iface_id ip6assign ip4assign disable_pa ula_default_router ping_interval trickle_k dnsname mode
-    json_get_vars dhcpv4_clientid dhcpv6_clientid reqaddress prefix link_id iface_id ip6assign ip4assign disable_pa ula_default_router ping_interval trickle_k dnsname mode
+    local dhcpv4_clientid dhcpv6_clientid reqaddress reqprefix prefix link_id iface_id ip6assign ip4assign disable_pa ula_default_router ping_interval trickle_k dnsname mode
+    json_get_vars dhcpv4_clientid dhcpv6_clientid reqaddress reqprefix prefix link_id iface_id ip6assign ip4assign disable_pa ula_default_router ping_interval trickle_k dnsname mode
 
     logger -t proto-hnet "proto_hnet_setup $device/$interface"
 
@@ -98,6 +99,7 @@ proto_hnet_setup() {
 	    json_add_string ifname "@${interface}"
 	    json_add_string proto dhcpv6
             [ -n "$reqaddress" ] && json_add_string reqaddress "$reqaddress"
+            [ -n "$reqprefix" ] && json_add_string reqprefix "$reqprefix"
 	    [ -n "$dhcpv6_clientid" ] && json_add_string clientid "$dhcpv6_clientid"
 	    json_add_string iface_dslite "${interface}_dslite"
 	    json_add_string zone_dslite wan
