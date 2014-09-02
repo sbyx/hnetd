@@ -33,7 +33,8 @@ struct pa;
 #define PA_PRIORITY_AUTHORITY_MIN    4
 #define PA_PRIORITY_AUTO_MIN         6
 #define PA_PRIORITY_DEFAULT          8
-#define PA_PRIORITY_PD               9
+#define PA_PRIORITY_SCARCITY         9
+#define PA_PRIORITY_PD               10
 #define PA_PRIORITY_AUTO_MAX         10
 #define PA_PRIORITY_AUTHORITY_MAX    12
 #define PA_PRIORITY_MAX              15
@@ -86,6 +87,8 @@ bool pa_cp_isvalid(struct pa *pa, struct pa_cp *cp);
  * Local cps are not checked. */
 bool pa_ap_isvalid(struct pa *pa, struct pa_ap *ap);
 
+int pa_precedence(bool auth1, uint8_t prio1, struct pa_rid *rid1,
+		bool auth2, uint8_t prio2, struct pa_rid *rid2);
 int pa_precedence_apap(struct pa_ap *ap1, struct pa_ap *ap2);
 int pa_precedence_apcp(struct pa_ap *ap, struct pa_cp *cp);
 

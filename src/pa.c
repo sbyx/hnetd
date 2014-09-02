@@ -259,7 +259,7 @@ bool pa_addr_available(struct pa *pa, struct pa_iface *iface, const struct in6_a
 	return true;
 }
 
-static int pa_precedence(bool auth1, uint8_t prio1, struct pa_rid *rid1,
+int pa_precedence(bool auth1, uint8_t prio1, struct pa_rid *rid1,
 		bool auth2, uint8_t prio2, struct pa_rid *rid2) {
 	if(auth1 > auth2)
 		return 1;

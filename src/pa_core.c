@@ -140,6 +140,36 @@ uint8_t pa_core_default_plen(struct pa_dp *dp, bool scarcity)
 	}
 }
 
+/* This rule intends to allow a router to override another assignment when there are no
+ * other alternative.
+ */
+static int pa_rule_try_take_over(struct pa_core *core, struct pa_rule *rule,
+		struct pa_dp *dp, struct pa_iface *iface,
+		__unused struct pa_ap *strongest_ap, __unused struct pa_cpl *current_cpl,
+		__unused enum pa_rule_pref best_found_priority)
+{
+	if(!pa_iface_can_create_prefix(iface))
+		return -1;
+
+	uint8_t plen = pa_iface_plen(iface, dp,  true);
+	if(plen < 4) //Unlikely to happen, but safety first !
+		return -1;
+
+	struct pa_ap *lowest_ap = NULL, *ap;
+	pa_for_each_ap(ap, core_p(core, data)) {
+		if(ap->prefix.plen <= (plen - 4) && (!lowest_ap || pa_precedence_apap(lowest_ap, ap) > 0)) {
+			lowest_ap = ap;
+		}
+	}
+	if(!lowest_ap || pa_precedence(lowest_ap->authoritative, lowest_ap->priority, &lowest_ap->rid, rule->result.authoritative, rule->result.priority, &core_p(core, data)->flood.rid) > 0)
+		return -1;
+
+	if(pa_prefix_prand(iface, 0, &lowest_ap->prefix,  &rule->result.prefix, plen))
+		return -1;
+
+	return 0;
+}
+
 static int pa_rule_try_random_plen(struct pa_core *core, struct pa_rule *rule,
 		struct pa_dp *dp, struct pa_iface *iface,
 		uint8_t plen, const uint16_t *prefix_count)
@@ -723,6 +753,7 @@ void pa_core_rule_init(struct pa_rule *rule, const char *name, enum pa_rule_pref
 void pa_core_rule_add(struct pa_core *core, struct pa_rule *rule)
 {
 	struct pa_rule *r2;
+	L_DEBUG("Adding "PA_RULE_L, PA_RULE_LA(rule));
 
 	list_for_each_entry(r2, &core->rules, le) {
 		if(rule->best_priority < r2->best_priority) {
@@ -1013,9 +1044,13 @@ void pa_core_init(struct pa_core *core)
 	pa_core_rule_init(&core->random_rule, "Randomly generated", PAR_PREF_RANDOM, pa_rule_try_random);
 	core->random_rule.result.priority = PA_PRIORITY_DEFAULT;
 
+	pa_core_rule_init(&core->takeover_rule, "Take over existing prefix", PAR_PREF_TAKEOVER, pa_rule_try_take_over);
+	core->takeover_rule.result.priority = PA_PRIORITY_SCARCITY;
+
 	pa_core_rule_add(core, &core->keep_rule);
 	pa_core_rule_add(core, &core->accept_rule);
 	pa_core_rule_add(core, &core->random_rule);
+	pa_core_rule_add(core, &core->takeover_rule);
 
 	INIT_LIST_HEAD(&core->iface_addrs);
 
@@ -1058,6 +1093,7 @@ void pa_core_term(struct pa_core *core)
 	L_INFO("Terminating pa core structure");
 	pa_core_stop(core);
 
+	pa_core_rule_del(core, &core->takeover_rule);
 	pa_core_rule_del(core, &core->keep_rule);
 	pa_core_rule_del(core, &core->accept_rule);
 	pa_core_rule_del(core, &core->random_rule);

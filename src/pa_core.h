@@ -29,6 +29,7 @@ enum pa_rule_pref {
 	PAR_PREF_RANDOM,    //Pick random prefix of random length
 	PAR_PREF_STORAGE_S, //Use stored prefix of scarcity length
 	PAR_PREF_RANDOM_S,  //Pick random prefix of scarcity length
+	PAR_PREF_TAKEOVER,  //Take over someone else's assignment
 	PAR_PREF_MAX,
 };
 
@@ -140,6 +141,7 @@ struct pa_core {
 	struct pa_rule keep_rule;
 	struct pa_rule accept_rule;
 	struct pa_rule random_rule;
+	struct pa_rule takeover_rule;
 	struct list_head iface_addrs;
 };
 

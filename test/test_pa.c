@@ -898,6 +898,47 @@ void test_pa_plen()
 	iface.iface.ip4_plen = 0;
 }
 
+void test_pa_takeover()
+{
+	struct pa_cp *cp;
+	struct pa_ap *ap;
+
+	fr_mask_md5 = true;
+	fr_mask_random = false;
+
+	//INIT
+	uloop_init();
+	pa_init(&pa, NULL);
+	pa.local.conf.use_ipv4 = false;
+	pa.local.conf.use_ula = false;
+
+	pa_flood_set_flooddelays(&pa.data, PA_TEST_FLOOD, PA_TEST_FLOOD_LL);
+	pa_flood_set_rid(&pa.data, &rid);
+	pa_flood_notify(&pa.data);
+	pa_start(&pa);
+
+	iface.user->cb_intiface(iface.user, PL_IFNAME1, true);
+
+	//Let's add a /64 that is used by somebody else
+	ap = pa_ap_get(&pa.data, &p1_1, &rid_higher, true);
+	pa_ap_set_priority(ap, PA_PRIORITY_DEFAULT);
+	pa_ap_notify(&pa.data, ap);
+	iface.user->cb_prefix(iface.user, PL_IFNAME1, &p1_1, NULL, now_time + 100000 , now_time + 50000, NULL, 0);
+	fr_md5_push_prefix(&p1_1);
+	fr_md5_push_prefix(&p1_1_addr);
+	to_run(6); //Do everything
+
+	cp = btrie_first_down_entry(cp, &pa.data.cps, NULL, 0, be);
+	sput_fail_unless(cp, "CP created");
+	struct prefix p = PL_P1_01;
+	p.plen = 96;
+	sput_fail_if(prefix_cmp(&p, &cp->prefix), "Correct prefix");
+
+	//TERM
+	pa_stop(&pa);
+	pa_term(&pa);
+}
+
 int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 {
 	openlog("hnetd_test_pa", LOG_PERROR | LOG_PID, LOG_DAEMON);
@@ -912,6 +953,7 @@ int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
 	sput_run_test(test_pa_link_id);
 	sput_run_test(test_pa_iface_addr);
 	sput_run_test(test_pa_plen);
+	sput_run_test(test_pa_takeover);
 	sput_leave_suite(); /* optional */
 	sput_finish_testing();
 	return sput_get_return_value();
