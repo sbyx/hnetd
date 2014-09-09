@@ -150,8 +150,8 @@ void platform_iface_new(struct iface *c, const char *handle)
 	// reqiest
 	INIT_LIST_HEAD(&iface->req.list);
 
-	if (!c->designatedv4 && (c->flags & IFACE_FLAG_INTERNAL) &&
-			(c->flags & IFACE_FLAG_HYBRID) != IFACE_FLAG_HYBRID)
+	if (!c->designatedv4 && (!(c->flags & IFACE_FLAG_INTERNAL) ||
+			(c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID))
 		platform_restart_dhcpv4(c);
 }
 
