@@ -63,7 +63,8 @@ void platform_iface_new(struct iface *c, __unused const char *handle)
 	assert(c->platform == NULL);
 
 	struct platform_iface *iface = calloc(1, sizeof(*iface));
-	if (!(c->flags & IFACE_FLAG_INTERNAL) || (c->flags & IFACE_FLAG_HYBRID)) {
+	if (!(c->flags & IFACE_FLAG_INTERNAL) ||
+			(c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID) {
 		iface->dhcpv4 = platform_run(argv_dhcpv4);
 		iface->dhcpv6 = platform_run(argv_dhcpv6);
 	}

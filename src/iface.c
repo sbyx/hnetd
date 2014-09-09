@@ -60,7 +60,7 @@ void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 	if(flags & PADF_DP_CREATED) {
 		struct iface *c;
 		list_for_each_entry(c, &interfaces, head)
-			if (c->flags & IFACE_FLAG_GUEST)
+			if ((c->flags & IFACE_FLAG_GUEST) == IFACE_FLAG_GUEST)
 				platform_filter_prefix(c, &dp->prefix, true);
 
 		if(!prefix_is_ipv4(&dp->prefix)) {
@@ -77,13 +77,13 @@ void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 		} else {
 			struct iface *c;
 			list_for_each_entry(c, &interfaces, head)
-				if (c->flags & IFACE_FLAG_HYBRID)
+				if ((c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID)
 					platform_set_snat(c, &dp->prefix);
 		}
 	} else if(flags & PADF_DP_TODELETE) {
 		struct iface *c;
 		list_for_each_entry(c, &interfaces, head)
-			if (c->flags & IFACE_FLAG_GUEST)
+			if ((c->flags & IFACE_FLAG_GUEST) == IFACE_FLAG_GUEST)
 				platform_filter_prefix(c, &dp->prefix, false);
 
 		if(!prefix_is_ipv4(&dp->prefix)) {
@@ -92,11 +92,12 @@ void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 		} else {
 			if (dp->local) {
 				list_for_each_entry(c, &interfaces, head)
-					if (c->flags & IFACE_FLAG_HYBRID)
+					if ((c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID)
 						platform_set_snat(c, NULL);
 			}
 
-			bool ipv4_edp = (c->flags & IFACE_FLAG_INTERNAL) && !(c->flags & IFACE_FLAG_HYBRID);
+			bool ipv4_edp = (c->flags & IFACE_FLAG_INTERNAL) &&
+					(c->flags & IFACE_FLAG_HYBRID) != IFACE_FLAG_HYBRID;
 			struct pa_dp *dp;
 			pa_for_each_dp(dp, &pa_p->data)
 				if (!dp->local && IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
@@ -680,7 +681,7 @@ void iface_remove(struct iface *c)
 	}
 
 	if (c->platform) {
-		if (c->flags & IFACE_FLAG_GUEST) {
+		if ((c->flags & IFACE_FLAG_GUEST) == IFACE_FLAG_GUEST) {
 			struct pa_dp *dp;
 			pa_for_each_dp(dp, &pa_p->data)
 				platform_filter_prefix(c, &dp->prefix, false);
@@ -817,7 +818,8 @@ struct iface* iface_create(const char *ifname, const char *handle, iface_flags f
 		c->transition.cb = iface_announce_border;
 		c->preferred.cb = iface_announce_preferred;
 
-		c->designatedv4 = !(flags & IFACE_FLAG_INTERNAL) || (flags & IFACE_FLAG_HYBRID);
+		c->designatedv4 = !(flags & IFACE_FLAG_INTERNAL) ||
+				(flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID;
 		struct pa_dp *dp;
 		if(pa_p) { //This is just for test cases
 			pa_for_each_dp(dp, &pa_p->data)
@@ -918,7 +920,7 @@ void iface_commit_ipv4_uplink(struct iface *c)
 	c->dhcp_len_stage = 0;
 
 	if (changed) {
-		bool enabled = !c->internal || (c->flags & IFACE_FLAG_HYBRID);
+		bool enabled = !c->internal || (c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID;
 		void *data4 = (enabled && c->v4_saddr.s_addr) ? (c->dhcp_data_in ? c->dhcp_data_in : (void*)1) : NULL;
 		size_t len4 = (enabled && c->v4_saddr.s_addr) ? c->dhcp_len_in : 0;
 
@@ -946,7 +948,7 @@ void iface_commit_ipv6_uplink(struct iface *c)
 	c->dhcpv6_len_stage = 0;
 
 	if (changed) {
-		bool enabled = !c->internal || (c->flags & IFACE_FLAG_HYBRID);
+		bool enabled = !c->internal || (c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID;
 		void *data = (enabled && !avl_is_empty(&c->delegated.avl)) ? (c->dhcpv6_data_in ? c->dhcpv6_data_in : (void*)1) : NULL;
 		size_t len = (enabled && !avl_is_empty(&c->delegated.avl)) ? c->dhcpv6_len_in : 0;
 

@@ -134,7 +134,7 @@ static void __pa_ifu_intiface(struct iface_user *u, const char *ifname, bool ena
 		return;
 
 	pa_iface_set_internal(iface, enabled);
-	pa_iface_set_adhoc(iface, !!(i->flags & IFACE_FLAG_ADHOC));
+	pa_iface_set_adhoc(iface, (i->flags & IFACE_FLAG_ADHOC) == IFACE_FLAG_ADHOC);
 
 	if(!enabled || !(i->ip6_plen || i->ip4_plen)) {
 		iface->custom_plen = NULL;

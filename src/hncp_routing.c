@@ -324,7 +324,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 				hncp_link link = hncp_find_link_by_name(hncp, c->bfs.ifname, false);
 				struct iface *ifo = link ? iface_get(c->bfs.ifname) : NULL;
 				// Skip routes for prefixes on connected links
-				if (link && ifo && !(ifo->flags & IFACE_FLAG_ADHOC) && c->bfs.hopcount == 1) {
+				if (link && ifo && (ifo->flags & IFACE_FLAG_ADHOC) != IFACE_FLAG_ADHOC && c->bfs.hopcount == 1) {
 					hncp_neighbor_s query = {
 						.node_identifier_hash = c->node_identifier_hash,
 						.iid = be32_to_cpu(ap->link_id)

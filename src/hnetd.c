@@ -55,7 +55,8 @@ void hncp_iface_intiface_callback(struct iface_user *u,
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
 	struct iface *c = iface_get(ifname);
-	hncp_if_set_enabled(hiu->hncp, ifname, enabled && !(c->flags & IFACE_FLAG_LEAF));
+	hncp_if_set_enabled(hiu->hncp, ifname, enabled &&
+			(c->flags & IFACE_FLAG_LEAF) != IFACE_FLAG_LEAF);
 }
 
 

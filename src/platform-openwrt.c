@@ -511,7 +511,7 @@ static void platform_commit(struct uloop_timeout *t)
 		blobmsg_close_array(&b, l);
 	}
 
-	if (c->flags & IFACE_FLAG_GUEST) {
+	if ((c->flags & IFACE_FLAG_GUEST) == IFACE_FLAG_GUEST) {
 		if (dns_cnt || dns4_cnt) {
 			l = blobmsg_open_array(&b, "dns");
 
@@ -534,7 +534,7 @@ static void platform_commit(struct uloop_timeout *t)
 	}
 
 	l = blobmsg_open_array(&b, "firewall");
-	if (c->flags & IFACE_FLAG_GUEST) {
+	if ((c->flags & IFACE_FLAG_GUEST) == IFACE_FLAG_GUEST) {
 		struct pa_dp *dp;
 		pa_for_each_dp(dp, pa_data) {
 			for (int i = 0; i <= 1; ++i) {
@@ -560,7 +560,7 @@ static void platform_commit(struct uloop_timeout *t)
 
 	}
 
-	if (c->v4_saddr.s_addr && (c->flags & IFACE_FLAG_HYBRID)) {
+	if (c->v4_saddr.s_addr && (c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID) {
 		struct pa_dp *dp;
 		pa_for_each_dp(dp, pa_data) {
 			if (!IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
