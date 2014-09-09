@@ -89,6 +89,7 @@ proto_hnet_setup() {
 
 	    # Don't delegate 6rd
 	    json_add_boolean delegate 0
+	    json_add_boolean defaultroute 1
 	    json_add_string zone6rd wan
 
 	    json_close_object

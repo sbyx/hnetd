@@ -98,9 +98,9 @@ void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 
 			bool ipv4_edp = (c->flags & IFACE_FLAG_INTERNAL) &&
 					(c->flags & IFACE_FLAG_HYBRID) != IFACE_FLAG_HYBRID;
-			struct pa_dp *dp;
-			pa_for_each_dp(dp, &pa_p->data)
-				if (!dp->local && IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
+			struct pa_dp *dpc;
+			pa_for_each_dp(dpc, &pa_p->data)
+				if (dpc != dp && !dpc->local && IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
 					ipv4_edp = true;
 
 
