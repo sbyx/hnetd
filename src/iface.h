@@ -95,12 +95,14 @@ struct iface_route {
 };
 
 typedef uint8_t iface_flags;
-#define IFACE_FLAG_GUEST         0x02
-#define IFACE_FLAG_ADHOC         0x04
+
+#define IFACE_FLAG_INTERNAL		 0x01
+#define IFACE_FLAG_LEAF          (0x02 | IFACE_FLAG_INTERNAL)
+#define IFACE_FLAG_ADHOC         (0x04 | IFACE_FLAG_INTERNAL)
 #define IFACE_FLAG_DISABLE_PA    0x08
 #define IFACE_FLAG_ULA_DEFAULT	 0x10
-#define IFACE_FLAG_LOOPBACK      0x20
-#define IFACE_FLAG_HYBRID		 0x40
+#define IFACE_FLAG_GUEST         (0x20 | IFACE_FLAG_LEAF)
+#define IFACE_FLAG_HYBRID		 (0x40 | IFACE_FLAG_INTERNAL)
 #define IFACE_FLAG_EXTERNAL		 0x80
 
 struct iface {

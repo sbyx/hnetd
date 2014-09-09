@@ -63,8 +63,10 @@ void platform_iface_new(struct iface *c, __unused const char *handle)
 	assert(c->platform == NULL);
 
 	struct platform_iface *iface = calloc(1, sizeof(*iface));
-	iface->dhcpv4 = platform_run(argv_dhcpv4);
-	iface->dhcpv6 = platform_run(argv_dhcpv6);
+	if (!(c->flags & IFACE_FLAG_INTERNAL) || (c->flags & IFACE_FLAG_HYBRID)) {
+		iface->dhcpv4 = platform_run(argv_dhcpv4);
+		iface->dhcpv6 = platform_run(argv_dhcpv6);
+	}
 
 	c->platform = iface;
 }
@@ -74,8 +76,11 @@ void platform_iface_free(struct iface *c)
 {
 	struct platform_iface *iface = c->platform;
 	if (iface) {
-		kill(iface->dhcpv4, SIGTERM);
-		kill(iface->dhcpv6, SIGTERM);
+		if (iface->dhcpv4)
+			kill(iface->dhcpv4, SIGTERM);
+
+		if (iface->dhcpv6)
+			kill(iface->dhcpv6, SIGTERM);
 
 		free(iface);
 		c->platform = NULL;
@@ -195,7 +200,7 @@ void platform_restart_dhcpv4(struct iface *c)
 		char metricbuf[16];
 		snprintf(metricbuf, sizeof(metricbuf), "%i", 1000 + if_nametoindex(c->ifname));
 
-		if (iface->dhcpv4 > 0)
+		if (iface->dhcpv4)
 			kill(iface->dhcpv4, SIGTERM);
 
 		char *argv_dhcpv4[] = {backend, "dhcpv4client", c->ifname,

@@ -464,7 +464,7 @@ static void platform_commit(struct uloop_timeout *t)
 
 	k = blobmsg_open_table(&b, "data");
 
-	const char *service = (c->internal && c->linkowner && !(c->flags & IFACE_FLAG_LOOPBACK)
+	const char *service = (c->internal && c->linkowner && strncmp(c->ifname, "lo", 2)
 			&& (avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr))
 					? "server" : "disabled";
 	blobmsg_add_string(&b, "ra", service);
@@ -871,6 +871,8 @@ static void platform_update(void *data, size_t len)
 				flags |= IFACE_FLAG_HYBRID;
 			else if (!strcmp(mode, "external"))
 				flags |= IFACE_FLAG_EXTERNAL;
+			else if (!strcmp(mode, "leaf"))
+				flags |= IFACE_FLAG_LEAF;
 			else if (strcmp(mode, "auto"))
 				L_WARN("Unknown mode '%s' for interface %s: falling back to auto", mode, ifname);
 		}

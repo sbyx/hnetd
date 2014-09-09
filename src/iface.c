@@ -96,11 +96,12 @@ void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 						platform_set_snat(c, NULL);
 			}
 
-			bool ipv4_edp = false;
+			bool ipv4_edp = (c->flags & IFACE_FLAG_INTERNAL) && !(c->flags & IFACE_FLAG_HYBRID);
 			struct pa_dp *dp;
 			pa_for_each_dp(dp, &pa_p->data)
 				if (!dp->local && IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
 					ipv4_edp = true;
+
 
 			struct iface *c;
 			list_for_each_entry(c, &interfaces, head) {
@@ -128,7 +129,7 @@ void iface_pa_ifs(__attribute__((unused))struct pa_data_user *user,
 		assert(c->platform != NULL);
 
 		bool owner = ((flags & PADF_IF_TODELETE)?false:iface->do_dhcp) &&
-				!(c->flags & IFACE_FLAG_LOOPBACK);
+				strncmp(c->ifname, "lo", 2);
 		if (owner != c->linkowner) {
 			c->linkowner = owner;
 			platform_set_owner(c, owner && avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr);
@@ -757,7 +758,7 @@ static bool iface_discover_border(struct iface *c)
 
 	// Perform border-discovery (border on DHCPv4 assignment or DHCPv6-PD)
 	bool internal = c->carrier && !(c->flags & IFACE_FLAG_EXTERNAL) && (
-			(c->flags & (IFACE_FLAG_GUEST | IFACE_FLAG_LOOPBACK | IFACE_FLAG_HYBRID)) ||
+			(c->flags & IFACE_FLAG_INTERNAL) ||
 			(avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr));
 	if (c->internal != internal) {
 		L_INFO("iface: %s border discovery detected state %s",
@@ -786,7 +787,7 @@ struct iface* iface_create(const char *ifname, const char *handle, iface_flags f
 		memcpy(c->ifname, ifname, namelen);
 
 		if (!strcmp(ifname, "lo") || !strcmp(ifname, "lo0")) {
-			c->flags = IFACE_FLAG_LOOPBACK;
+			c->flags = IFACE_FLAG_INTERNAL;
 			c->ip6_plen = 128;
 		}
 
@@ -816,7 +817,7 @@ struct iface* iface_create(const char *ifname, const char *handle, iface_flags f
 		c->transition.cb = iface_announce_border;
 		c->preferred.cb = iface_announce_preferred;
 
-		c->designatedv4 = true;
+		c->designatedv4 = !(flags & IFACE_FLAG_INTERNAL) || (flags & IFACE_FLAG_HYBRID);
 		struct pa_dp *dp;
 		if(pa_p) { //This is just for test cases
 			pa_for_each_dp(dp, &pa_p->data)
