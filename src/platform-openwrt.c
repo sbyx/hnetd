@@ -468,7 +468,6 @@ static void platform_commit(struct uloop_timeout *t)
 	}
 
 	k = blobmsg_open_table(&b, "data");
-	blobmsg_add_u8(&b, "added", false);
 
 	const char *service = (c->internal && c->linkowner && strncmp(c->ifname, "lo", 2)
 			&& (avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr))
@@ -671,7 +670,6 @@ enum {
 	DATA_ATTR_PING_INTERVAL,
 	DATA_ATTR_TRICKLE_K,
 	DATA_ATTR_DNSNAME,
-	DATA_ATTR_ADDED,
 	DATA_ATTR_MAX
 };
 
@@ -707,7 +705,6 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_PING_INTERVAL] = { .name = "ping_interval", .type = BLOBMSG_TYPE_INT32 },
 	[DATA_ATTR_TRICKLE_K] = { .name = "trickle_k", .type = BLOBMSG_TYPE_INT32 },
 	[DATA_ATTR_DNSNAME] = { .name = "dnsname", .type = BLOBMSG_TYPE_STRING },
-	[DATA_ATTR_ADDED] = { .name = "added", .type = BLOBMSG_TYPE_BOOL },
 };
 
 
@@ -914,7 +911,7 @@ static void platform_update(void *data, size_t len)
 	if ((a = tb[IFACE_ATTR_PROTO]))
 		proto = blobmsg_get_string(a);
 
-	if (c && (a = dtb[DATA_ATTR_ADDED]) && blobmsg_get_bool(a)) {
+	if (c && dtb[DATA_ATTR_DNSNAME]) {
 		// We missed the interface-down event and there was a reload / reconfigure
 		iface_remove(c);
 		c = NULL;

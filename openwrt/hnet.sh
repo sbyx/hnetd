@@ -42,7 +42,6 @@ proto_hnet_setup() {
     proto_init_update "*" 1
 
     proto_add_data
-    json_add_boolean added 1
 	[ -n "$mode" ] && json_add_string mode $mode
     [ "$disable_pa" = "1" ] && json_add_boolean disable_pa 1
     [ "$ula_default_router" = "1" ] && json_add_boolean ula_default_router 1
