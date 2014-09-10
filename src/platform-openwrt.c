@@ -910,7 +910,7 @@ static void platform_update(void *data, size_t len)
 	if ((a = tb[IFACE_ATTR_PROTO]))
 		proto = blobmsg_get_string(a);
 
-	if (!c && up && !strcmp(proto, "hnet") && (a = tb[IFACE_ATTR_HANDLE])) {
+	if (!c && up && !strcmp(proto, "hnet") && (a = tb[IFACE_ATTR_HANDLE]) && dtb[DATA_ATTR_DNSNAME]) {
 		c = iface_create(ifname, blobmsg_get_string(a), flags);
 
 		if (c && dtb[DATA_ATTR_PREFIX]) {
