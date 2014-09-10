@@ -859,7 +859,7 @@ static void platform_update(void *data, size_t len)
 			v4uplink = true;
 	}
 
-	if (!c->designatedv4 && (a = tb[IFACE_ATTR_INACTIVE])) {
+	if (c && !c->designatedv4 && (a = tb[IFACE_ATTR_INACTIVE])) {
 		struct blob_attr *ctb[IFACE_ATTR_MAX];
 		blobmsg_parse(iface_attrs, IFACE_ATTR_MAX, ctb, blobmsg_data(a), blobmsg_data_len(a));
 
