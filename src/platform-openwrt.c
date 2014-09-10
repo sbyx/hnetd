@@ -646,6 +646,7 @@ enum {
 	IFACE_ATTR_UP,
 	IFACE_ATTR_DATA,
 	IFACE_ATTR_IPV4,
+	IFACE_ATTR_INACTIVE,
 	IFACE_ATTR_MAX,
 };
 
@@ -682,6 +683,7 @@ static const struct blobmsg_policy iface_attrs[IFACE_ATTR_MAX] = {
 	[IFACE_ATTR_UP] = { .name = "up", .type = BLOBMSG_TYPE_BOOL },
 	[IFACE_ATTR_DATA] = { .name = "data", .type = BLOBMSG_TYPE_TABLE },
 	[IFACE_ATTR_IPV4] = { .name = "ipv4-address", .type = BLOBMSG_TYPE_ARRAY },
+	[IFACE_ATTR_INACTIVE] = { .name = "inactive", .type = BLOBMSG_TYPE_TABLE },
 };
 
 static const struct blobmsg_policy route_attrs[ROUTE_ATTR_MAX] = {
@@ -855,6 +857,22 @@ static void platform_update(void *data, size_t len)
 			v6uplink = true;
 		else if (target && !strcmp(target, "0.0.0.0"))
 			v4uplink = true;
+	}
+
+	if (!c->designatedv4 && (a = tb[IFACE_ATTR_INACTIVE])) {
+		struct blob_attr *ctb[IFACE_ATTR_MAX];
+		blobmsg_parse(iface_attrs, IFACE_ATTR_MAX, ctb, blobmsg_data(a), blobmsg_data_len(a));
+
+		blobmsg_for_each_attr(route, ctb[IFACE_ATTR_ROUTE], rem) {
+			struct blob_attr *rtb[ROUTE_ATTR_MAX];
+			blobmsg_parse(route_attrs, ROUTE_ATTR_MAX, rtb, blobmsg_data(route), blobmsg_len(route));
+			if (!rtb[ROUTE_ATTR_MASK] || blobmsg_get_u32(rtb[ROUTE_ATTR_MASK]))
+				continue;
+
+			const char *target = (rtb[ROUTE_ATTR_TARGET]) ? blobmsg_get_string(rtb[ROUTE_ATTR_TARGET]) : NULL;
+			if (target && !strcmp(target, "0.0.0.0"))
+				v4uplink = true;
+		}
 	}
 
 	iface_flags flags = 0;

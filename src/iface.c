@@ -908,7 +908,7 @@ void iface_update_ipv4_uplink(struct iface *c)
 void iface_commit_ipv4_uplink(struct iface *c)
 {
 	iface_discover_border(c);
-	bool has_ipv4_uplink = !!c->v4_saddr.s_addr;
+	bool has_ipv4_uplink = c->designatedv4 && c->v4_saddr.s_addr;
 	bool changed = c->had_ipv4_uplink != has_ipv4_uplink ||
 			(has_ipv4_uplink && ((c->dhcp_len_in != c->dhcp_len_stage ||
 					memcmp(c->dhcp_data_in, c->dhcp_data_stage, c->dhcp_len_in))));
