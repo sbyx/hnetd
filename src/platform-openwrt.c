@@ -141,6 +141,7 @@ void platform_iface_new(struct iface *c, const char *handle)
 	memcpy(iface->handle, handle, handlenamelen);
 	iface->iface = c;
 	iface->update.cb = platform_commit;
+	uloop_timeout_set(&iface->update, 0);
 
 	c->platform = iface;
 
@@ -910,6 +911,12 @@ static void platform_update(void *data, size_t len)
 	if ((a = tb[IFACE_ATTR_PROTO]))
 		proto = blobmsg_get_string(a);
 
+	if (c && dtb[DATA_ATTR_DNSNAME]) {
+		// We missed the interface-down event and there was a reload / reconfigure
+		iface_remove(c);
+		c = NULL;
+	}
+
 	if (!c && up && !strcmp(proto, "hnet") && (a = tb[IFACE_ATTR_HANDLE])) {
 		c = iface_create(ifname, blobmsg_get_string(a), flags);
 
@@ -1026,14 +1033,13 @@ static void platform_update(void *data, size_t len)
 
 // Handle netifd ubus event for interfaces updates
 static int handle_update(__unused struct ubus_context *ctx, __unused struct ubus_object *obj,
-		__unused struct ubus_request_data *req, __unused const char *method,
-		struct blob_attr *msg)
+		__unused struct ubus_request_data *req, const char *method, struct blob_attr *msg)
 {
 	struct blob_attr *tb[IFACE_ATTR_MAX];
 	blobmsg_parse(iface_attrs, IFACE_ATTR_MAX, tb, blob_data(msg), blob_len(msg));
 
 	if (!tb[IFACE_ATTR_PROTO] || strcmp(blobmsg_get_string(tb[IFACE_ATTR_PROTO]), "hnet") ||
-			!tb[IFACE_ATTR_IFNAME] || !iface_get(blobmsg_get_string(tb[IFACE_ATTR_IFNAME])))
+			!strcmp(method, "interface.down") || !tb[IFACE_ATTR_IFNAME] || !iface_get(blobmsg_get_string(tb[IFACE_ATTR_IFNAME])))
 		sync_netifd(false);
 
 	return 0;
