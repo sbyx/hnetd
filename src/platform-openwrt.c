@@ -467,6 +467,7 @@ static void platform_commit(struct uloop_timeout *t)
 	}
 
 	k = blobmsg_open_table(&b, "data");
+	blobmsg_add_u8(&b, "created", 0);
 
 	const char *service = (c->internal && c->linkowner && strncmp(c->ifname, "lo", 2)
 			&& (avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr))
@@ -669,6 +670,7 @@ enum {
 	DATA_ATTR_PING_INTERVAL,
 	DATA_ATTR_TRICKLE_K,
 	DATA_ATTR_DNSNAME,
+	DATA_ATTR_CREATED,
 	DATA_ATTR_MAX
 };
 
@@ -704,6 +706,7 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_PING_INTERVAL] = { .name = "ping_interval", .type = BLOBMSG_TYPE_INT32 },
 	[DATA_ATTR_TRICKLE_K] = { .name = "trickle_k", .type = BLOBMSG_TYPE_INT32 },
 	[DATA_ATTR_DNSNAME] = { .name = "dnsname", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_CREATED] = { .name = "created", .type = BLOBMSG_TYPE_BOOL },
 };
 
 
@@ -910,7 +913,9 @@ static void platform_update(void *data, size_t len)
 	if ((a = tb[IFACE_ATTR_PROTO]))
 		proto = blobmsg_get_string(a);
 
-	if (!c && up && !strcmp(proto, "hnet") && (a = tb[IFACE_ATTR_HANDLE]) && dtb[DATA_ATTR_DNSNAME]) {
+	bool created = dtb[DATA_ATTR_CREATED] && blobmsg_get_bool(dtb[DATA_ATTR_CREATED]);
+
+	if (!c && up && !strcmp(proto, "hnet") && created && (a = tb[IFACE_ATTR_HANDLE])) {
 		c = iface_create(ifname, blobmsg_get_string(a), flags);
 
 		if (c && dtb[DATA_ATTR_PREFIX]) {
