@@ -1000,7 +1000,7 @@ static void platform_update(void *data, size_t len)
 		} else {
 			update_interface(c, tb, v4uplink, v6uplink);
 		}
-	} else {
+	} else if (strcmp(proto, "hnet")) {
 		// We have only unmanaged interfaces at this point
 		// If netifd delegates this prefix, ignore it
 		if ((a = tb[IFACE_ATTR_DELEGATION]) && blobmsg_get_bool(a)) {
@@ -1031,13 +1031,17 @@ static int handle_update(__unused struct ubus_context *ctx, __unused struct ubus
 	struct blob_attr *tb[IFACE_ATTR_MAX];
 	blobmsg_parse(iface_attrs, IFACE_ATTR_MAX, tb, blob_data(msg), blob_len(msg));
 
+	bool is_down = !strcmp(method, "interface.down");
 	bool is_hnet = tb[IFACE_ATTR_PROTO] && !strcmp(blobmsg_get_string(tb[IFACE_ATTR_PROTO]), "hnet");
 	struct iface *c = tb[IFACE_ATTR_IFNAME] ? iface_get(blobmsg_get_string(tb[IFACE_ATTR_IFNAME])) : NULL;
 
-	if (c && is_hnet && !strcmp(method, "interface.down"))
+	if (c && is_hnet && is_down)
 		iface_remove(c);
 
-	if (!c || !is_hnet)
+	if (!c && is_hnet && !is_down)
+		platform_update(blob_data(msg), blob_len(msg));
+
+	if (!is_hnet)
 		sync_netifd(false);
 
 	return 0;
