@@ -648,6 +648,7 @@ enum {
 	IFACE_ATTR_DATA,
 	IFACE_ATTR_IPV4,
 	IFACE_ATTR_INACTIVE,
+	IFACE_ATTR_DEVICE,
 	IFACE_ATTR_MAX,
 };
 
@@ -686,6 +687,7 @@ static const struct blobmsg_policy iface_attrs[IFACE_ATTR_MAX] = {
 	[IFACE_ATTR_DATA] = { .name = "data", .type = BLOBMSG_TYPE_TABLE },
 	[IFACE_ATTR_IPV4] = { .name = "ipv4-address", .type = BLOBMSG_TYPE_ARRAY },
 	[IFACE_ATTR_INACTIVE] = { .name = "inactive", .type = BLOBMSG_TYPE_TABLE },
+	[IFACE_ATTR_DEVICE] = { .name = "device", .type = BLOBMSG_TYPE_STRING },
 };
 
 static const struct blobmsg_policy route_attrs[ROUTE_ATTR_MAX] = {
@@ -1038,7 +1040,8 @@ static int handle_update(__unused struct ubus_context *ctx, __unused struct ubus
 
 	bool is_down = !strcmp(method, "interface.down");
 	bool is_hnet = tb[IFACE_ATTR_PROTO] && !strcmp(blobmsg_get_string(tb[IFACE_ATTR_PROTO]), "hnet");
-	struct iface *c = tb[IFACE_ATTR_IFNAME] ? iface_get(blobmsg_get_string(tb[IFACE_ATTR_IFNAME])) : NULL;
+	const char *ifname = tb[IFACE_ATTR_DEVICE] ? blobmsg_get_string(tb[IFACE_ATTR_DEVICE]) : "";
+	struct iface *c = iface_get(ifname);
 
 	if (c && is_hnet && is_down)
 		iface_remove(c);
