@@ -407,7 +407,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 
 			iface_update_ipv4_uplink(c);
 			iface_add_dhcp_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns));
-			iface_set_ipv4_uplink(c, &ipv4source);
+			iface_set_ipv4_uplink(c, &ipv4source, 24);
 			iface_commit_ipv4_uplink(c);
 		} else if (!strcmp(cmd, "disable_ipv4_uplink")) {
 			iface_update_ipv4_uplink(c);

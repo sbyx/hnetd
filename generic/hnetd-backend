@@ -101,8 +101,12 @@ newnat)
 	rule="hnet_snat_$1"
 	iptables -t nat -N "$rule"
 	iptables -t nat -I POSTROUTING -o "$1" -j "$rule"
-	iptables -t nat -A "$rule" -d "$2" -j ACCEPT
-	iptables -t nat -A "$rule" -j SNAT --to-source "$3"
+	if [ -z "$4" ]; then
+		iptables -t nat -A "$rule" -d "$2" -j ACCEPT
+		iptables -t nat -A "$rule" -j SNAT --to-source "$3"
+	else
+		iptables -t nat -A "$rule" -d "$3/$4" -j SNAT --to-source "$3"
+	fi
 	;;
 
 delnat)

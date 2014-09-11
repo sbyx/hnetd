@@ -149,12 +149,15 @@ void platform_set_address(struct iface *c, struct iface_addr *a, bool enable)
 
 void platform_set_snat(struct iface *c, const struct prefix *p)
 {
-	char sbuf[INET_ADDRSTRLEN], pbuf[PREFIX_MAXBUFFLEN];
+	char sbuf[INET_ADDRSTRLEN], pbuf[PREFIX_MAXBUFFLEN], prefix[3] = {0};
 	inet_ntop(AF_INET, &c->v4_saddr, sbuf, sizeof(sbuf));
 	prefix_ntop(pbuf, sizeof(pbuf), p, true);
 
+	if (!c->designatedv4)
+		snprintf(prefix, sizeof(prefix), "%d", c->v4_prefix);
+
 	char *argv[] = {backend, (p && c->v4_saddr.s_addr) ? "newnat" : "delnat",
-			c->ifname, sbuf, pbuf, NULL};
+			c->ifname, sbuf, pbuf, prefix, NULL};
 	platform_call(argv);
 }
 

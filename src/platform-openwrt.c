@@ -565,22 +565,24 @@ static void platform_commit(struct uloop_timeout *t)
 
 	}
 
-	if (c->v4_saddr.s_addr && (c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID) {
-		struct pa_dp *dp;
-		pa_for_each_dp(dp, pa_data) {
-			if (!IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
-				continue;
+	if ((c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID && c->v4_saddr.s_addr) {
+		if (c->designatedv4) {
+			struct pa_dp *dp;
+			pa_for_each_dp(dp, pa_data) {
+				if (!IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
+					continue;
 
-			m = blobmsg_open_table(&b, NULL);
+				m = blobmsg_open_table(&b, NULL);
 
-			blobmsg_add_string(&b, "type", "nat");
-			blobmsg_add_string(&b, "family", "inet");
-			blobmsg_add_string(&b, "target", "ACCEPT");
-			char *buf = blobmsg_alloc_string_buffer(&b, "dest_ip", PREFIX_MAXBUFFLEN);
-			prefix_ntop(buf, PREFIX_MAXBUFFLEN, &dp->prefix, true);
-			blobmsg_add_string_buffer(&b);
+				blobmsg_add_string(&b, "type", "nat");
+				blobmsg_add_string(&b, "family", "inet");
+				blobmsg_add_string(&b, "target", "ACCEPT");
+				char *buf = blobmsg_alloc_string_buffer(&b, "dest_ip", PREFIX_MAXBUFFLEN);
+				prefix_ntop(buf, PREFIX_MAXBUFFLEN, &dp->prefix, true);
+				blobmsg_add_string_buffer(&b);
 
-			blobmsg_close_table(&b, m);
+				blobmsg_close_table(&b, m);
+			}
 		}
 
 		m = blobmsg_open_table(&b, NULL);
@@ -588,6 +590,14 @@ static void platform_commit(struct uloop_timeout *t)
 		blobmsg_add_string(&b, "type", "nat");
 		blobmsg_add_string(&b, "family", "inet");
 		blobmsg_add_string(&b, "target", "SNAT");
+
+		if (!c->designatedv4) {
+			char *buf = blobmsg_alloc_string_buffer(&b, "dest_ip", INET_ADDRSTRLEN + 3);
+			inet_ntop(AF_INET, &c->v4_saddr, buf, INET_ADDRSTRLEN);
+			snprintf(buf + strlen(buf), 4, "/%d", c->v4_prefix);
+			blobmsg_add_string_buffer(&b);
+		}
+
 		char *buf = blobmsg_alloc_string_buffer(&b, "snat_ip", INET_ADDRSTRLEN);
 		inet_ntop(AF_INET, &c->v4_saddr, buf, INET_ADDRSTRLEN);
 		blobmsg_add_string_buffer(&b);
@@ -802,6 +812,7 @@ static void update_interface(struct iface *c,
 
 	if (v4uplink) {
 		struct in_addr ipv4source = {INADDR_ANY};
+		int ipv4mask = 0;
 
 		struct blob_attr *entry;
 		unsigned rem;
@@ -809,15 +820,15 @@ static void update_interface(struct iface *c,
 			struct blob_attr *addr;
 			unsigned arem;
 
-			if (ipv4source.s_addr)
+			if (ipv4source.s_addr && ipv4mask)
 				break;
 
 			blobmsg_for_each_attr(addr, entry, arem) {
-				if (strcmp(blobmsg_name(addr), "address") || blobmsg_type(addr) != BLOBMSG_TYPE_STRING)
-					continue;
+				if (!strcmp(blobmsg_name(addr), "address") && blobmsg_type(addr) == BLOBMSG_TYPE_STRING)
+					inet_pton(AF_INET, blobmsg_get_string(addr), &ipv4source);
 
-				if (inet_pton(AF_INET, blobmsg_get_string(addr), &ipv4source) == 1)
-					break;
+				if (!strcmp(blobmsg_name(addr), "mask") && blobmsg_type(addr) == BLOBMSG_TYPE_INT32)
+					ipv4mask = blobmsg_get_u32(addr);
 			}
 		}
 
@@ -827,7 +838,7 @@ static void update_interface(struct iface *c,
 			iface_add_dhcp_received(c, &dns4, ((uint8_t*)&dns4.addr[dns4_cnt]) - ((uint8_t*)&dns4));
 		}
 
-		iface_set_ipv4_uplink(c, &ipv4source);
+		iface_set_ipv4_uplink(c, &ipv4source, ipv4mask);
 	}
 }
 

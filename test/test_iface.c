@@ -105,7 +105,7 @@ void iface_test_new_managed(void)
 
 	struct iface *iface00 = iface_create("test00", "test00", 0);
 	iface_update_ipv4_uplink(iface00);
-	iface_set_ipv4_uplink(iface00, &v4source);
+	iface_set_ipv4_uplink(iface00, &v4source, 24);
 	iface_commit_ipv4_uplink(iface00);
 	smock_pull_bool_is("test00", false);
 
@@ -128,7 +128,7 @@ void iface_test_new_managed(void)
 	smock_pull_bool_is("test0", true);
 
 	iface_update_ipv4_uplink(iface);
-	iface_set_ipv4_uplink(iface, &v4source);
+	iface_set_ipv4_uplink(iface, &v4source, 24);
 	iface_commit_ipv4_uplink(iface);
 	smock_pull_bool_is("test0", false);
 
@@ -150,7 +150,7 @@ void iface_test_new_managed(void)
 	smock_pull_int_is("dhcpv6_len", sizeof(test));
 
 	iface_update_ipv4_uplink(iface);
-	iface_set_ipv4_uplink(iface, &v4source);
+	iface_set_ipv4_uplink(iface, &v4source, 24);
 	iface_commit_ipv4_uplink(iface);
 
 	iface_update_ipv6_uplink(iface);

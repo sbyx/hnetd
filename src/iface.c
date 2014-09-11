@@ -860,9 +860,10 @@ void iface_flush(void)
 }
 
 
-void iface_set_ipv4_uplink(struct iface *c, const struct in_addr *saddr)
+void iface_set_ipv4_uplink(struct iface *c, const struct in_addr *saddr, int prefix)
 {
 	c->v4_saddr = *saddr;
+	c->v4_prefix = prefix;
 }
 
 
@@ -902,6 +903,7 @@ void iface_update_ipv4_uplink(struct iface *c)
 {
 	c->had_ipv4_uplink = !!c->v4_saddr.s_addr;
 	c->v4_saddr.s_addr = INADDR_ANY;
+	c->v4_prefix = 0;
 }
 
 

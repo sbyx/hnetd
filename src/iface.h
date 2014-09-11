@@ -126,6 +126,7 @@ struct iface {
 	// LL-address
 	struct in6_addr eui64_addr;
 	struct in_addr v4_saddr;
+	int v4_prefix;
 
 	// Config
 	uint8_t ip6_plen; //Fixed IPv6 assignment prefix length or 0
@@ -194,7 +195,7 @@ void iface_commit_ipv4_uplink(struct iface *c);
 
 
 // Set DHCPv4 uplink
-void iface_set_ipv4_uplink(struct iface *c, const struct in_addr *saddr);
+void iface_set_ipv4_uplink(struct iface *c, const struct in_addr *saddr, int prefix);
 
 
 // Set DHCPv4 leased flag and rerun border discovery
