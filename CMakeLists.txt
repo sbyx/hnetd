@@ -47,7 +47,7 @@ else(${BACKEND} MATCHES "openwrt")
   set(BACKEND_SOURCE src/platform-generic.c src/ipc.c)
   set(BACKEND_LINK "")
   add_definitions(-DWITH_IPC=1)
-  install(PROGRAMS generic/dhcp.script generic/dhcpv6.script DESTINATION share/hnetd/)
+  install(PROGRAMS generic/dhcp.script generic/dhcpv6.script generic/ohp.script generic/pcp.script DESTINATION share/hnetd/)
   install(PROGRAMS generic/hnetd-backend DESTINATION sbin/)
   # Symlinks for different hnetd aliases
   install(CODE "execute_process(COMMAND ln -sf hnetd \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/sbin/hnet-ifup)")
