@@ -416,9 +416,6 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 		} else if (!strcmp(cmd, "disable_ipv4_uplink")) {
 			iface_update_ipv4_uplink(c);
 			iface_commit_ipv4_uplink(c);
-
-			if (avl_is_empty(&c->delegated.avl))
-				iface_remove(c);
 		} else if (!strcmp(cmd, "enable_ipv6_uplink")) {
 			hnetd_time_t now = hnetd_time();
 			iface_update_ipv6_uplink(c);
@@ -479,9 +476,6 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 		} else if (!strcmp(cmd, "disable_ipv6_uplink")) {
 			iface_update_ipv6_uplink(c);
 			iface_commit_ipv6_uplink(c);
-
-			if (!c->v4_saddr.s_addr)
-				iface_remove(c);
 		}
 
 		//Send an empty response
