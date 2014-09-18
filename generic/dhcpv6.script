@@ -11,7 +11,12 @@ update_resolv() {
 		for c in $dns; do
 			echo "nameserver $c #odhcp6c:$device:" >> /tmp/resolv.conf.tmp
 		done
-		mv /tmp/resolv.conf.tmp /etc/resolv.conf
+                if [ -d /run/resolvconf ]
+                then
+                    resolvconf -a ${device}.dhcpv6 < /tmp/resolv.conf.tmp
+                else
+		    mv /tmp/resolv.conf.tmp /etc/resolv.conf
+                fi
 	) 9>/tmp/resolv.conf.lock
 	rm -f /tmp/resolv.conf.lock /tmp/resolv.conf.tmp
 }
