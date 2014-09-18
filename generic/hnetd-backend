@@ -1,10 +1,12 @@
 #!/bin/sh
 
+#echo "[hnetd-backend] $*"
+
 case "$1" in
 dhcpv4client)
 	[ "$2" = 1 ] && export NODEFAULT=1
 	[ -n "$3" ] && export METRIC=$3
-	exec udhcpc -f -t 0 -i "$2" -H "$(hostname)" -x "0x4d:07484f4d454e4554" -s /usr/share/hnetd/dhcp.script
+	exec udhcpc -f -t 0 -i "$2" -x "hostname:$(hostname)" -x "0x4d:07484f4d454e4554" -s /usr/share/hnetd/dhcp.script
 	;;
 	
 dhcpv6client)
@@ -14,10 +16,18 @@ dhcpv6client)
 setfilter|unsetfilter)
 	[ "$1" = "setfilter" ] && act="-A" || act="-D"
 	for cmd in iptables ip6tables; do
+		case "$cmd" in
+			iptables)
+				reject="icmp-port-unreachable"
+		                ;;
+			ip6tables)
+				reject="icmp6-port-unreachable"
+				;;
+	        esac
 		$cmd $act FORWARD -i "$2" -p tcp -m conntrack --ctstate NEW,INVALID -j REJECT --reject-with tcp-reset
-		$cmd $act FORWARD -i "$2" -m conntrack --ctstate NEW,INVALID -j REJECT --reject-with icmp-port-unreachable
+		$cmd $act FORWARD -i "$2" -m conntrack --ctstate NEW,INVALID -j REJECT --reject-with "$reject"
 		$cmd $act INPUT -i "$2" -p tcp -m conntrack --ctstate NEW,INVALID -j REJECT --reject-with tcp-reset
-		$cmd $act INPUT -i "$2" -m conntrack --ctstate NEW,INVALID -j REJECT --reject-with icmp-port-unreachable
+		$cmd $act INPUT -i "$2" -m conntrack --ctstate NEW,INVALID -j REJECT --reject-with "$reject"
 	done
 	iptables -t nat $act POSTROUTING -o "$2" -j MASQUERADE
 	;;
