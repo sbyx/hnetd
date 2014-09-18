@@ -276,6 +276,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 
 		const char *ifname = blobmsg_get_string(tb[OPT_IFNAME]);
 		struct iface *c = iface_get(ifname);
+		L_DEBUG("ipc_handle cmd:%s ifname:%s iface:%p", cmd, ifname, c);
 		if (!strcmp(cmd, "ifup")) {
 			iface_flags flags = 0;
 
@@ -372,6 +373,9 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			if(c && tb[OPT_DNSNAME] && (conf = hncp_if_find_conf_by_name(ipchncp, c->ifname)))
 				strncpy(conf->dnsname, blobmsg_get_string(tb[OPT_DNSNAME]), sizeof(conf->dnsname));
 
+		} else if (!c) {
+			L_ERR("invalid interface - command:%s ifname:%s",
+			      cmd, ifname);
 		} else if (!strcmp(cmd, "ifdown")) {
 			iface_remove(c);
 		} else if (!strcmp(cmd, "enable_ipv4_uplink")) {
