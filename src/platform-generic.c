@@ -91,7 +91,7 @@ void platform_iface_free(struct iface *c)
 
 void platform_set_internal(struct iface *c, bool internal)
 {
-	char *argv[] = {backend, (internal) ? "setfilter" : "unsetfilter",
+	char *argv[] = {backend, !internal ? "setfilter" : "unsetfilter",
 			c->ifname, NULL};
 	platform_call(argv);
 }
@@ -110,7 +110,7 @@ void platform_filter_prefix(struct iface *c, const struct prefix *p, bool enable
 void platform_set_address(struct iface *c, struct iface_addr *a, bool enable)
 {
 	hnetd_time_t now = hnetd_time();
-	char abuf[PREFIX_MAXBUFFLEN], pbuf[10], vbuf[10], cbuf[10] = "";
+	char abuf[PREFIX_MAXBUFFLEN], pbuf[10] = "", vbuf[10] = "", cbuf[10] = "";
 	prefix_ntop(abuf, sizeof(abuf), &a->prefix, false);
 
 	if (!IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix)) {
@@ -254,11 +254,10 @@ void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t l
 				domainbuf[domainbuf_len++] = ' ';
 				int l = dn_expand(odata, oend, odata, &domainbuf[domainbuf_len],
 						domainbuf_size - domainbuf_len);
-				if (l > 0) {
-					domainbuf_len = strlen(domainbuf);
-				} else {
+				if (l <= 0)
 					break;
-				}
+				domainbuf_len = strlen(domainbuf);
+				odata += l;
 			}
 		}
 	}
