@@ -928,7 +928,7 @@ static void platform_update(void *data, size_t len)
 
 	bool created = dtb[DATA_ATTR_CREATED] && blobmsg_get_bool(dtb[DATA_ATTR_CREATED]);
 
-	if (!c && up && !strcmp(proto, "hnet") && created && (a = tb[IFACE_ATTR_HANDLE])) {
+	if ((!c || !c->platform) && up && !strcmp(proto, "hnet") && (c || created) && (a = tb[IFACE_ATTR_HANDLE])) {
 		c = iface_create(ifname, blobmsg_get_string(a), flags);
 
 		if (c && dtb[DATA_ATTR_PREFIX]) {
@@ -1060,7 +1060,7 @@ static int handle_update(__unused struct ubus_context *ctx, __unused struct ubus
 	if (!c && is_hnet && !is_down)
 		platform_update(blob_data(msg), blob_len(msg));
 
-	if (!is_hnet)
+	if (!c || !is_hnet)
 		sync_netifd(false);
 
 	return 0;
