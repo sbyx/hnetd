@@ -39,38 +39,10 @@ proto_hnet_setup() {
         return
     fi
 
-    proto_init_update "*" 1
-
-    proto_add_data
-    json_add_boolean created 1
-	[ -n "$mode" ] && json_add_string mode $mode
-    [ "$disable_pa" = "1" ] && json_add_boolean disable_pa 1
-    [ "$ula_default_router" = "1" ] && json_add_boolean ula_default_router 1
-    [ -n "$ping_interval" ] && json_add_int ping_interval $ping_interval
-    [ -n "$trickle_k" ] && json_add_int trickle_k $trickle_k
-    [ -n "$ip6assign" ] && json_add_string ip6assign "$ip6assign"
-    [ -n "$ip4assign" ] && json_add_string ip4assign "$ip4assign"
-
-    json_add_string dnsname "${dnsname:-$interface}"
-    json_add_array prefix
-    for p in $prefix; do
-    	json_add_string "" "$p"
-    done
-    json_close_array
-    json_add_string link_id "$link_id"
-    json_add_array iface_id
-    for p in $iface_id; do
-    	json_add_string "" "$p"
-    done
-    json_close_array
-    proto_close_data
-
-    proto_send_update "$interface"
-
     # work around some more races
     ubus call network del_dynamic "{\"name\": \"${interface}_4\"}"
     ubus call network del_dynamic "{\"name\": \"${interface}_6\"}"
-    sleep 1
+    sleep 2
 
 	if [ "$mode" != "guest" -a "$mode" != "leaf" -a "$mode" != "adhoc" -a "$device" != "lo" -a "$device" != "lo0" ]; then
 	    # add sub-protocols for DHCPv4 + DHCPv6
@@ -124,6 +96,37 @@ proto_hnet_setup() {
 	    json_close_object
 	    ubus call network add_dynamic "$(json_dump)"
 	fi
+
+
+    proto_init_update "*" 1
+
+    proto_add_data
+    json_add_boolean created 1
+	[ -n "$mode" ] && json_add_string mode $mode
+    [ "$disable_pa" = "1" ] && json_add_boolean disable_pa 1
+    [ "$ula_default_router" = "1" ] && json_add_boolean ula_default_router 1
+    [ -n "$ping_interval" ] && json_add_int ping_interval $ping_interval
+    [ -n "$trickle_k" ] && json_add_int trickle_k $trickle_k
+    [ -n "$ip6assign" ] && json_add_string ip6assign "$ip6assign"
+    [ -n "$ip4assign" ] && json_add_string ip4assign "$ip4assign"
+
+    json_add_string dnsname "${dnsname:-$interface}"
+    json_add_array prefix
+    for p in $prefix; do
+    	json_add_string "" "$p"
+    done
+    json_close_array
+    json_add_string link_id "$link_id"
+    json_add_array iface_id
+    for p in $iface_id; do
+    	json_add_string "" "$p"
+    done
+    json_close_array
+    proto_close_data
+
+    proto_send_update "$interface"
+
+
 }
 
 proto_hnet_teardown() {
