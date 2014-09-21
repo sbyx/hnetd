@@ -42,7 +42,7 @@ proto_hnet_setup() {
     # work around some more races
     ubus call network del_dynamic "{\"name\": \"${interface}_4\"}"
     ubus call network del_dynamic "{\"name\": \"${interface}_6\"}"
-    sleep 2
+    sleep 1.5
 
 	if [ "$mode" != "guest" -a "$mode" != "leaf" -a "$mode" != "adhoc" -a "$device" != "lo" -a "$device" != "lo0" ]; then
 	    # add sub-protocols for DHCPv4 + DHCPv6
