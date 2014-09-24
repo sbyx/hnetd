@@ -29,8 +29,8 @@ static hnetd_time_t hd_now; //time hncp_dump is called
 
 static int hd_push_dn(struct blob_buf *b, const char *name, uint8_t *ll, size_t ll_len)
 {
-	char zone[301];
-	hd_a(ll2escaped(ll, ll_len, zone, 300) >= 0, return -1);
+	char zone[DNS_MAX_ESCAPED_LEN];
+	hd_a(ll2escaped(ll, ll_len, zone, sizeof(zone)) >= 0, return -1);
 	hd_a(!blobmsg_add_string(b, name, zone), return -1);
 	return 0;
 }
