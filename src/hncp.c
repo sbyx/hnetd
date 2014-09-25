@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Wed Jul 16 20:35:50 2014 mstenber
- * Edit time:     740 min
+ * Last modified: Thu Sep 25 12:17:55 2014 mstenber
+ * Edit time:     741 min
  *
  */
 
@@ -844,7 +844,7 @@ hncp_link_set_ipv6_address(hncp_link l, const struct in6_addr *addr)
   bool has_addr = addr != NULL;
 
   if (l->has_ipv6_address == has_addr &&
-      (!has_addr || memcmp(&l->ipv6_address, addr, sizeof(*addr) == 0)))
+      (!has_addr || memcmp(&l->ipv6_address, addr, sizeof(*addr)) == 0))
     {
       return;
     }
