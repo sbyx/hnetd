@@ -285,7 +285,7 @@ static int pa_rule_try_keep(struct pa_core *core, struct pa_rule *rule,
 
 static void pa_core_apply_rule(struct pa_core *core, struct pa_rule *rule,
 		__attribute__((unused))struct pa_dp *dp,
-		__attribute__((unused))struct pa_iface *iface,
+		struct pa_iface *iface,
 		struct pa_ap *best_ap, struct pa_cpl *current_cpl)
 {
 	if(current_cpl && prefix_cmp(&current_cpl->cp.prefix, &rule->result.prefix)) {
@@ -293,8 +293,16 @@ static void pa_core_apply_rule(struct pa_core *core, struct pa_rule *rule,
 		current_cpl = NULL;
 	}
 
+getcpl:
 	if(!current_cpl)
 		current_cpl = _pa_cpl(pa_cp_get(core_p(core, data), &rule->result.prefix, PA_CPT_L, true));
+
+	if(current_cpl && current_cpl->iface && (current_cpl->iface != iface)) {
+		//We don't want to deal with changing cpl's iface
+		pa_core_destroy_cp(core, &current_cpl->cp);
+		current_cpl = NULL;
+		goto getcpl;
+	}
 
 	if(!current_cpl) {
 		L_WARN("Can't create cpl with prefix %s", PREFIX_REPR(&rule->result.prefix));

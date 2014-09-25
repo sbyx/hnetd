@@ -215,8 +215,8 @@ void iface_pa_cps(__attribute__((unused))struct pa_data_user *user,
 		flags |= PADF_CP_APPLIED;
 		applied = false;
 	}
-	//todo: What to do if iface is set to NULL ? We don't remember the old one...
-	//Maybe a cp should never change iface... (which is true for now)
+
+	//A cpl never changes iface
 	if(flags & (PADF_CP_APPLIED | PADF_CP_DP)) {
 		/* Changed application */
 		if(applied) {
