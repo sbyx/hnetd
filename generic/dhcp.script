@@ -29,6 +29,7 @@ update_resolv() {
                 if [ -d /run/resolvconf ]
                 then
                     resolvconf -a ${interface}.dhcp < $FILE
+                    rm -f $FILE
                 else
                     chmod a+r $FILE
 		    mv $FILE /etc/resolv.conf
