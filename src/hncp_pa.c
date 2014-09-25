@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Thu Jul 17 10:13:28 2014 mstenber
- * Edit time:     489 min
+ * Last modified: Thu Sep 25 16:23:35 2014 mstenber
+ * Edit time:     491 min
  *
  */
 
@@ -367,6 +367,9 @@ static void _update_a_local_links(hncp_glue g)
   L_DEBUG("_update_a_local_links");
   hncp_for_each_node(o, n)
     {
+      /* apparently own node's AP is called something else, so skip */
+      if (n == o->own_node)
+        continue;
       hncp_node_for_each_tlv_with_type(n, a, HNCP_T_ASSIGNED_PREFIX)
         {
           if (!(ah = hncp_tlv_ap(a)))
