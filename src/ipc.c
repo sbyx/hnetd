@@ -382,7 +382,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			struct in_addr ipv4source = {INADDR_ANY};
 			const size_t dns_max = 4;
 			size_t dns_cnt = 0;
-			struct {
+			struct __packed {
 				uint8_t type;
 				uint8_t len;
 				struct in_addr addr[dns_max];
