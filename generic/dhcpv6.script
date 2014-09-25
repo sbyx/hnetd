@@ -1,4 +1,5 @@
 #!/bin/sh
+echo "[dhcpv6.script] $*"
 [ -z "$2" ] && echo "Error: should be run by odhcpc6c" && exit 1
 PROTO=72
 update_resolv() {
@@ -7,18 +8,23 @@ update_resolv() {
 	
 	(
 		flock -n 9
-		grep -v "#odhcp6c:$device:" /etc/resolv.conf > /tmp/resolv.conf.tmp
+                FILE=`tempfile`
+                if [ ! -d /run/resolvconf ]
+                then
+		    grep -v "#odhcp6c:$device:" /etc/resolv.conf > $FILE
+                fi
 		for c in $dns; do
-			echo "nameserver $c #odhcp6c:$device:" >> /tmp/resolv.conf.tmp
+			echo "nameserver $c #odhcp6c:$device:" >> $FILE
 		done
                 if [ -d /run/resolvconf ]
                 then
-                    resolvconf -a ${device}.dhcpv6 < /tmp/resolv.conf.tmp
+                    resolvconf -a ${device}.dhcpv6 < $FILE
                 else
-		    mv /tmp/resolv.conf.tmp /etc/resolv.conf
+                    chmod a+r $FILE
+		    mv $FILE /etc/resolv.conf
                 fi
 	) 9>/tmp/resolv.conf.lock
-	rm -f /tmp/resolv.conf.lock /tmp/resolv.conf.tmp
+	rm -f /tmp/resolv.conf.lock $FILE
 }
 
 setup_interface () {

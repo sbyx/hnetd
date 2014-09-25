@@ -1,4 +1,5 @@
 #!/bin/sh
+echo "[dhcp.script] $*"
 [ -z "$1" ] && echo "Error: should be run by udhcpc" && exit 1
 
 set_classless_routes() {
@@ -17,18 +18,23 @@ update_resolv() {
 
 	(
 		flock -n 9
-		grep -v "#udhcpc:$interface:" /etc/resolv.conf > /tmp/resolv.conf.tmp
+                FILE=`tempfile`
+                if [ ! -d /run/resolvconf ]
+                then
+		    grep -v "#udhcpc:$interface:" /etc/resolv.conf > $FILE
+                fi
 		for c in $dns; do
-			echo "nameserver $c #udhcpc:$interface:" >> /tmp/resolv.conf.tmp
+			echo "nameserver $c #udhcpc:$interface:" >> $FILE
 		done
                 if [ -d /run/resolvconf ]
                 then
-                    resolvconf -a ${interface}.dhcp < /tmp/resolv.conf.tmp
+                    resolvconf -a ${interface}.dhcp < $FILE
                 else
-		    mv /tmp/resolv.conf.tmp /etc/resolv.conf
+                    chmod a+r $FILE
+		    mv $FILE /etc/resolv.conf
                 fi
 	) 9>/tmp/resolv.conf.lock
-	rm -f /tmp/resolv.conf.lock /tmp/resolv.conf.tmp
+	rm -f /tmp/resolv.conf.lock $FILE
 }
 
 
