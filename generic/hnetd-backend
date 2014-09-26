@@ -87,6 +87,7 @@ startdhcp)
 	set dhcp.$2.dhcpv4=server
 	set dhcp.$2.ra=server
 	set dhcp.$2.pd_manager=$3
+	set dhcp.$2.filter_class=HOMENET
 	commit dhcp
 EOF
 	pidof odhcpd || odhcpd &
