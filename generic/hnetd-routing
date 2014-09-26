@@ -13,12 +13,15 @@ BABEL_ARGS="-D -I $BABEL_PID "\
 "-C redistribute ip 0.0.0.0/0 eq 0 metric 128 "\
 "-C redistribute ip ::/0 eq 0 metric 128 "\
 "-C redistribute eq 64 "
+ISIS_INIT=/usr/sbin/autoisis
 
 case "$action" in
 	enumerate)
 		## echo PROTOCOL-ID PREFERENCE
 		## example for babel:
 		[ -x "$BABEL_EXE" ] && echo 1 128
+		## example for IS-IS:
+		[ -x "$ISIS_INIT" ] && echo 3 128
 	;;
 	enable|reconfigure|disable)
 		case "$proto" in
@@ -35,6 +38,13 @@ case "$action" in
                                     [ -f $BABEL_PID ] || sleep 2
                                     [ -f $BABEL_PID ] || sleep 4
 				fi 
+			;;
+			3)
+				if [ "$action" = "disable" -o -z "$1" ]; then
+					$ISIS_INIT stop
+				else
+					$ISIS_INIT start "$@"
+				fi
 			;;
 			*)
 				exit 1;
