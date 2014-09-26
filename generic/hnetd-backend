@@ -25,6 +25,8 @@ setfilter|unsetfilter)
 				reject="icmp6-port-unreachable"
 				;;
 		esac
+                $cmd -L MINIUPNPD > /dev/null 2>&1 && \
+                    $cmd $act FORWARD -i "$2" ! -o "$2" -j MINIUPNPD
 		$cmd $act FORWARD -i "$2" -p tcp -m conntrack --ctstate NEW,INVALID -j REJECT --reject-with tcp-reset
 		$cmd $act FORWARD -i "$2" -m conntrack --ctstate NEW,INVALID -j REJECT --reject-with "$reject"
 		$cmd $act INPUT -i "$2" -p tcp -m conntrack --ctstate NEW,INVALID -j REJECT --reject-with tcp-reset
@@ -32,6 +34,9 @@ setfilter|unsetfilter)
 
 	done
 	iptables -t nat $act POSTROUTING -o "$2" -j MASQUERADE
+        iptables -L MINIUPNPD > /dev/null 2>&1 && \
+            iptables -t nat $act PREROUTING -i "$2" -j MINIUPNPD && \
+            iptables -t mangle $act PREROUTING -i "$2" -j MINIUPNPD
 	;;
 
 newaddr|deladdr)
