@@ -313,6 +313,11 @@ void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t l
 		if (dns_cnt || dns4_cnt)
 			dnsbuf[dnsbuflen - 1] = 0;
 
+		char guestbuf[10];
+		sprintf(guestbuf, "GUEST=%s",
+			(c->flags & IFACE_FLAG_GUEST) == IFACE_FLAG_GUEST ?
+			"1": "");
+		putenv(guestbuf);
 		putenv(dnsbuf);
 		putenv(domainbuf);
 		putenv(rawbuf);

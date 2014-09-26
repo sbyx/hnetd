@@ -2,6 +2,34 @@
 
 echo "[hnetd-backend] $*"
 
+update_resolv() {
+    local interface="$1"
+    local dns="$2"
+
+    (
+	flock -n 9
+        FILE=`tempfile`
+        if [ ! -d /run/resolvconf ]
+        then
+	    grep -v "#hnet:$interface:" /etc/resolv.conf > $FILE
+        fi
+	for c in $dns; do
+	    echo "nameserver $c #hnet:$interface:" >> $FILE
+	done
+        if [ -d /run/resolvconf ]
+        then
+            resolvconf -a ${interface}.hnet < $FILE
+            rm -f $FILE
+        else
+            chmod a+r $FILE
+	    mv $FILE /etc/resolv.conf
+        fi
+    ) 9>/tmp/resolv.conf.lock
+    rm -f /tmp/resolv.conf.lock $FILE
+}
+
+
+
 case "$1" in
 dhcpv4client)
 	[ "$2" = 1 ] && export NODEFAULT=1
@@ -100,19 +128,27 @@ stopdhcp)
 	commit dhcp
 EOF
 	killall -SIGHUP odhcpd
+        update_resolv $2 ""
 	;;
 
 setdhcpv6)
 	[ -z "$DNS" ] && exit 0
+
+        # DNS = external DNS server list.
+        # We pass it along to guests only.
+
+        IDNS=""
+        [ -n "$GUEST" ] && IDNS="$DNS"
 	uci batch <<-EOF
 	set dhcp.$2=dhcp
-	set dhcp.$2.dns="$DNS"
+	set dhcp.$2.dns="$IDNS"
 	set dhcp.$2.domain="$SEARCH"
 	set dhcp.$2.dhcpv6_raw="$PASSTHRU"
 	set dhcp.$2.ra_default="$RA_DEFAULT"
 	commit dhcp
 EOF
 	killall -SIGHUP odhcpd
+        update_resolv $2 "$DNS"
 	;;
 
 newnat)
