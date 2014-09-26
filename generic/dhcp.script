@@ -2,6 +2,8 @@
 echo "[dhcp.script] $*"
 [ -z "$1" ] && echo "Error: should be run by udhcpc" && exit 1
 
+. /usr/share/hnetd/utils.script
+
 set_classless_routes() {
 	local max=128
 	shift 1
@@ -12,32 +14,6 @@ set_classless_routes() {
 		shift 2
 	done
 }
-
-update_resolv() {
-	local dns="$1"
-
-	(
-		flock -n 9
-                FILE=`tempfile`
-                if [ ! -d /run/resolvconf ]
-                then
-		    grep -v "#udhcpc:$interface:" /etc/resolv.conf > $FILE
-                fi
-		for c in $dns; do
-			echo "nameserver $c #udhcpc:$interface:" >> $FILE
-		done
-                if [ -d /run/resolvconf ]
-                then
-                    resolvconf -a ${interface}.dhcp < $FILE
-                    rm -f $FILE
-                else
-                    chmod a+r $FILE
-		    mv $FILE /etc/resolv.conf
-                fi
-	) 9>/tmp/resolv.conf.lock
-	rm -f /tmp/resolv.conf.lock $FILE
-}
-
 
 setup_interface () {
 	hnet-call "{\"command\": \"ifup\", \"ifname\": \"$interface\"}"
@@ -58,7 +34,7 @@ setup_interface () {
 	[ -n "$staticroutes" ] && set_classless_routes $staticroutes
 	[ -n "$msstaticroutes" ] && set_classless_routes $msstaticroutes
 
-	update_resolv "$dns"
+	update_resolv "dhcp" "$interface" "$dns"
 	local dnspart=""
 
 	for entry in $dns; do
@@ -76,7 +52,7 @@ deconfig_interface() {
 	ip -4 route flush dev "$interface"
 	ip -4 address flush dev "$interface"
 	hnet-call "{\"command\": \"disable_ipv4_uplink\", \"ifname\": \"$interface\"}"
-	update_resolv "$interface" ""
+	update_resolv "dhcp" "$interface" ""
 }
 
 case "$1" in

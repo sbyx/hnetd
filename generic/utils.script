@@ -1,0 +1,30 @@
+#!/bin/sh
+
+update_resolv() {
+    local service="$1"
+    local interface="$2"
+    local dns="$3"
+
+    (
+	flock -n 9
+        FILE=`tempfile`
+        if [ ! -d /run/resolvconf ]
+        then
+	    grep -v "# ${service}:${interface}" /etc/resolv.conf > $FILE
+        fi
+	for c in $dns; do
+	    echo "nameserver $c # ${service}:${interface}" >> $FILE
+	done
+        if [ -d /run/resolvconf ]
+        then
+            resolvconf -a ${interface}.${service} < $FILE
+            rm -f $FILE
+        else
+            chmod a+r $FILE
+	    mv $FILE /etc/resolv.conf
+        fi
+    ) 9>/tmp/resolv.conf.lock
+    rm -f /tmp/resolv.conf.lock $FILE
+}
+
+

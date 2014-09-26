@@ -1,34 +1,8 @@
 #!/bin/sh
 
+. /usr/share/hnetd/utils.script
+
 echo "[hnetd-backend] $*"
-
-update_resolv() {
-    local interface="$1"
-    local dns="$2"
-
-    (
-	flock -n 9
-        FILE=`tempfile`
-        if [ ! -d /run/resolvconf ]
-        then
-	    grep -v "#hnet:$interface:" /etc/resolv.conf > $FILE
-        fi
-	for c in $dns; do
-	    echo "nameserver $c #hnet:$interface:" >> $FILE
-	done
-        if [ -d /run/resolvconf ]
-        then
-            resolvconf -a ${interface}.hnet < $FILE
-            rm -f $FILE
-        else
-            chmod a+r $FILE
-	    mv $FILE /etc/resolv.conf
-        fi
-    ) 9>/tmp/resolv.conf.lock
-    rm -f /tmp/resolv.conf.lock $FILE
-}
-
-
 
 case "$1" in
 dhcpv4client)
@@ -127,7 +101,7 @@ stopdhcp)
 	commit dhcp
 EOF
 	killall -q -SIGHUP odhcpd
-        update_resolv $2 ""
+        update_resolv "hnetd" "$2" ""
 	;;
 
 setdhcpv6)
@@ -146,7 +120,7 @@ setdhcpv6)
 	commit dhcp
 EOF
 	killall -q -SIGHUP odhcpd
-        update_resolv $2 "$DNS"
+        update_resolv "hnetd" "$2" "$DNS"
 	;;
 
 newnat)

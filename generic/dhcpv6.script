@@ -1,32 +1,10 @@
 #!/bin/sh
 echo "[dhcpv6.script] $*"
 [ -z "$2" ] && echo "Error: should be run by odhcpc6c" && exit 1
+
+. /usr/share/hnetd/utils.script
+
 PROTO=72
-update_resolv() {
-	local device="$1"
-	local dns="$2"
-	
-	(
-		flock -n 9
-                FILE=`tempfile`
-                if [ ! -d /run/resolvconf ]
-                then
-		    grep -v "#odhcp6c:$device:" /etc/resolv.conf > $FILE
-                fi
-		for c in $dns; do
-			echo "nameserver $c #odhcp6c:$device:" >> $FILE
-		done
-                if [ -d /run/resolvconf ]
-                then
-                    resolvconf -a ${device}.dhcpv6 < $FILE
-                    rm -f $FILE
-                else
-                    chmod a+r $FILE
-		    mv $FILE /etc/resolv.conf
-                fi
-	) 9>/tmp/resolv.conf.lock
-	rm -f /tmp/resolv.conf.lock $FILE
-}
 
 setup_interface () {
 	local device="$1"
@@ -49,7 +27,7 @@ setup_interface () {
 		fi
 	done
 
-	update_resolv "$device" "$dns"
+	update_resolv "dhcpv6" "$device" "$dns"
 
 	local prefixpart=""
 	for entry in $PREFIXES; do
@@ -145,7 +123,7 @@ teardown_interface() {
 	ip -6 route flush dev "$device" proto $PROTO
 	ip -6 address flush dev "$device" scope global
 	hnet-call "{\"command\": \"disable_ipv6_uplink\", \"ifname\": \"$device\"}"
-	update_resolv "$device" ""
+	update_resolv "dhcpv6" "$device" ""
 }
 
 case "$2" in
