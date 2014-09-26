@@ -118,8 +118,7 @@ startdhcp)
 	set dhcp.$2.filter_class=HOMENET
 	commit dhcp
 EOF
-	pidof odhcpd || odhcpd &
-	killall -SIGHUP odhcpd
+	pidof odhcpd && killall -SIGHUP odhcpd || odhcpd &
 	;;
 
 stopdhcp)
@@ -127,7 +126,7 @@ stopdhcp)
 	delete dhcp.$2
 	commit dhcp
 EOF
-	killall -SIGHUP odhcpd
+	killall -q -SIGHUP odhcpd
         update_resolv $2 ""
 	;;
 
@@ -140,14 +139,13 @@ setdhcpv6)
         IDNS=""
         [ -n "$GUEST" ] && IDNS="$DNS"
 	uci batch <<-EOF
-	set dhcp.$2=dhcp
 	set dhcp.$2.dns="$IDNS"
 	set dhcp.$2.domain="$SEARCH"
 	set dhcp.$2.dhcpv6_raw="$PASSTHRU"
 	set dhcp.$2.ra_default="$RA_DEFAULT"
 	commit dhcp
 EOF
-	killall -SIGHUP odhcpd
+	killall -q -SIGHUP odhcpd
         update_resolv $2 "$DNS"
 	;;
 
