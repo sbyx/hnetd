@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Tue Jun 17 16:13:31 2014 mstenber
+ * Last modified: Mon Sep 29 11:10:18 2014 mstenber
  * Edit time:     116 min
  *
  */
@@ -216,6 +216,7 @@ void test_hncp_sd(void)
   /* Play with ohybridproxy */
   smock_push("execv_cmd", "s-ohp");
   smock_push("execv_arg", "start");
+  smock_push("execv_arg", "-4");
   smock_push("execv_arg", "-a");
   smock_push("execv_arg", "127.0.0.2");
   smock_push("execv_arg", "-p");
@@ -233,6 +234,7 @@ void test_hncp_sd(void)
 
   smock_push("execv_cmd", "s-ohp");
   smock_push("execv_arg", "start");
+  smock_push("execv_arg", "-4");
   smock_push("execv_arg", "-a");
   smock_push("execv_arg", "127.0.0.2");
   smock_push("execv_arg", "-p");

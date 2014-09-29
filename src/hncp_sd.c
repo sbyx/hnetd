@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Sep  1 10:40:09 2014 mstenber
- * Edit time:     562 min
+ * Last modified: Mon Sep 29 11:00:40 2014 mstenber
+ * Edit time:     565 min
  *
  */
 
@@ -35,8 +35,11 @@
 
 #define DNS_PORT 53
 
+/* Provided to ohybridproxy */
+#define LOCAL_OHP_AF "-4"
 #define LOCAL_OHP_ADDRESS "127.0.0.2"
 #define LOCAL_OHP_PORT 54
+
 #define ARGS_MAX_LEN 512
 #define ARGS_MAX_COUNT 64
 
@@ -465,6 +468,7 @@ bool hncp_sd_reconfigure_ohp(hncp_sd sd)
         {
           char port[6];
           PUSH_ARG("start");
+          PUSH_ARG(LOCAL_OHP_AF);
           PUSH_ARG("-a");
           PUSH_ARG(LOCAL_OHP_ADDRESS);
           PUSH_ARG("-p");
