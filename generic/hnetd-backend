@@ -114,6 +114,7 @@ setdhcpv6)
         IDNS=""
         [ -n "$GUEST" ] && IDNS="$DNS"
 	uci batch <<-EOF
+	set dhcp.$2=dhcp
 	set dhcp.$2.dns="$IDNS"
 	set dhcp.$2.domain="$SEARCH"
 	set dhcp.$2.dhcpv6_raw="$PASSTHRU"
