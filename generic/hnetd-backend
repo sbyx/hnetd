@@ -45,6 +45,7 @@ newaddr|deladdr)
 	[ "$1" = "newaddr" ] && act="replace" || act="del"
 	[ -n "$4" -a -n "$5" ] && args="preferred_lft $4 valid_lft $5" || args=""
 	ip address $act "$3" dev "$2" $args
+	killall -q -SIGHUP odhcpd
 	;;
 
 newroute|delroute)
