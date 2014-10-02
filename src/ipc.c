@@ -132,7 +132,7 @@ int ipc_client(const char *buffer)
 
 	for (ssize_t len = blob_len(b.head); true; sleep(1)) {
 		if (sendto(sock, blob_data(b.head), len, 0, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) == len) {
-			struct {
+			struct __packed {
 				struct blob_attr hdr;
 				uint8_t buf[1024*128];
 			} resp;
@@ -142,7 +142,7 @@ int ipc_client(const char *buffer)
 
 			ssize_t rcvlen = recv(sock, resp.buf, sizeof(resp.buf), 0);
 			if (rcvlen > 0) {
-				blob_set_raw_len(&resp.hdr, rcvlen);
+				blob_set_raw_len(&resp.hdr, rcvlen + sizeof(resp.hdr));
 				char *buf = blobmsg_format_json_indent(&resp.hdr, true, true);
 				puts(buf);
 				free(buf);
