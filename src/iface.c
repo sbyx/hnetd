@@ -131,9 +131,7 @@ void iface_pa_ifs(__attribute__((unused))struct pa_data_user *user,
 
 		bool owner = !(flags & PADF_IF_TODELETE)
 			&& iface->do_dhcp
-			&& strncmp(c->ifname, "lo", 2)
-			&& avl_is_empty(&c->delegated.avl) /* Why? */
-			&& !c->v4_saddr.s_addr /* Why #2? */;
+			&& strncmp(c->ifname, "lo", 2);
 		if (owner != c->linkowner) {
 			c->linkowner = owner;
 			platform_set_owner(c, owner);
