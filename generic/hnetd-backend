@@ -102,7 +102,6 @@ stopdhcp)
 	commit dhcp
 EOF
 	killall -q -SIGHUP odhcpd
-        update_resolv "hnetd" "$2" ""
 	;;
 
 setdhcpv6)
