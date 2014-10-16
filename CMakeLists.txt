@@ -113,6 +113,11 @@ target_link_libraries(test_hncp_io ubox ${BACKEND_LINK} blobmsg_json)
 add_test(hncp_io test_hncp_io)
 add_dependencies(check test_hncp_io)
 
+add_executable(test_dtls test/test_dtls.c)
+target_link_libraries(test_dtls crypto ssl ubox ${BACKEND_LINK} blobmsg_json)
+add_test(dtls test_dtls)
+add_dependencies(check test_dtls)
+
 add_executable(test_hncp_net test/test_hncp_net.c ${HNCP_WITH_GLUE} ${BT})
 target_link_libraries(test_hncp_net ubox ${BACKEND_LINK} blobmsg_json)
 add_test(hncp_net test_hncp_net)
