@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Wed Jul 16 23:42:51 2014 mstenber
- * Edit time:     152 min
+ * Last modified: Thu Oct 16 10:03:17 2014 mstenber
+ * Edit time:     153 min
  *
  */
 
@@ -546,6 +546,7 @@ void hncp_io_schedule(hncp o, int msecs)
 ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
                          char *ifname,
                          struct in6_addr *src,
+                         uint16_t *src_port,
                          struct in6_addr *dst)
 {
   net_node node = container_of(o, net_node_s, n);
@@ -556,6 +557,7 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
       int s = m->len > len ? len : m->len;
       strcpy(ifname, m->l->ifname);
       *src = m->src;
+      *src_port = o->udp_port;
       *dst = m->dst;
       memcpy(buf, m->buf, s);
       list_del(&m->h);
@@ -645,7 +647,8 @@ void _sendto(net_sim s, void *buf, size_t len, hncp_link sl, hncp_link dl,
 
 ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
                        const char *ifname,
-                       const struct in6_addr *dst)
+                       const struct in6_addr *dst,
+                       uint16_t dst_port)
 {
   net_node node = container_of(o, net_node_s, n);
   net_sim s = node->s;

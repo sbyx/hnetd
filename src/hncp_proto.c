@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu Jul 17 08:54:07 2014 mstenber
+ * Last modified: Thu Oct 16 10:01:57 2014 mstenber
  * Edit time:     542 min
  *
  */
@@ -113,7 +113,7 @@ void hncp_link_send_network_state(hncp_link l,
   L_DEBUG("hncp_link_send_network_state -> %s%%" HNCP_LINK_F,
           ADDR_REPR(dst), HNCP_LINK_D(l));
   hncp_io_sendto(o, tlv_data(tb.head), tlv_len(tb.head),
-                 l->ifname, dst);
+                 l->ifname, dst, 0);
  done:
   tlv_buf_free(&tb);
 }
@@ -137,7 +137,7 @@ void hncp_link_send_node_data(hncp_link l,
       L_DEBUG("hncp_link_send_node_state %s -> %s%%" HNCP_LINK_F,
               HNCP_NODE_REPR(n), ADDR_REPR(dst), HNCP_LINK_D(l));
       hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head),
-                     l->ifname, dst);
+                     l->ifname, dst, 0);
     }
   tlv_buf_free(&tb);
 }
@@ -155,7 +155,7 @@ void hncp_link_send_req_network_state(hncp_link l,
       L_DEBUG("hncp_link_send_req_network_state -> %s%%" HNCP_LINK_F,
               ADDR_REPR(dst), HNCP_LINK_D(l));
       hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head),
-                     l->ifname, dst);
+                     l->ifname, dst, 0);
     }
   tlv_buf_free(&tb);
 }
@@ -176,7 +176,7 @@ void hncp_link_send_req_node_data(hncp_link l,
               ADDR_REPR(dst), HNCP_LINK_D(l));
       memcpy(tlv_data(a), &ns->node_identifier_hash, HNCP_HASH_LEN);
       hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head),
-                     l->ifname, dst);
+                     l->ifname, dst, 0);
     }
   tlv_buf_free(&tb);
 }
@@ -576,11 +576,17 @@ void hncp_poll(hncp o)
   ssize_t read;
   char srcif[IFNAMSIZ];
   struct in6_addr src;
+  uint16_t src_port;
   struct in6_addr dst;
   hncp_link l;
 
-  while ((read = hncp_io_recvfrom(o, buf, sizeof(buf), srcif, &src, &dst)) > 0)
+  while ((read = hncp_io_recvfrom(o, buf, sizeof(buf),
+                                  srcif, &src, &src_port, &dst)) > 0)
     {
+      /* We will send replies back to HNCP port, so if it is from some
+       * other port number, too bad. */
+      if (src_port != o->udp_port)
+        continue;
       /* First off. If it's off some link we aren't supposed to use, ignore. */
       l = hncp_find_link_by_name(o, srcif, false);
       if (!l)

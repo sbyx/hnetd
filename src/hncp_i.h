@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Jul 17 09:22:54 2014 mstenber
- * Edit time:     244 min
+ * Last modified: Thu Oct 16 10:01:28 2014 mstenber
+ * Edit time:     246 min
  *
  */
 
@@ -98,6 +98,12 @@ struct hncp_struct {
   /* First free local interface identifier (we allocate them in
    * monotonically increasing fashion just to keep things simple). */
   int first_free_iid;
+
+  /* The UDP port number our socket is bound to. 0 = use default. */
+  /* (Currently only of internal utility as no way to provide it when
+   * initializing hncp instance, and by the time it is created, it is
+   * too late to change.) */
+  uint16_t udp_port;
 
   /* UDP socket. */
   int udp_socket;
@@ -342,10 +348,12 @@ hnetd_time_t hncp_io_time(hncp o);
 ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
                          char *ifname,
                          struct in6_addr *src,
+                         uint16_t *src_port,
                          struct in6_addr *dst);
 ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
                        const char *ifname,
-                       const struct in6_addr *dst);
+                       const struct in6_addr *dst,
+                       uint16_t dst_port);
 
 /* Multicast rejoin utility. (in hncp.c) */
 bool hncp_link_join(hncp_link l);

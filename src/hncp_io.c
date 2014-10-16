@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Wed Apr 16 12:16:38 2014 mstenber
- * Edit time:     238 min
+ * Last modified: Thu Oct 16 10:00:07 2014 mstenber
+ * Edit time:     248 min
  *
  */
 
@@ -95,19 +95,10 @@ bool hncp_io_init(hncp o)
   int s;
   int on = 1;
   int off = 0;
-#if 0
-  /* Could also use usock here; however, it uses getaddrinfo, which
-   * doesn't seem to work when e.g. default routes aren't currently
-   * set up. Too bad. */
-  char buf[6];
-
-  sprintf(buf, "%d", HNCP_PORT);
-  s = usock(USOCK_IPV6ONLY|USOCK_UDP|USOCK_SERVER|USOCK_NONBLOCK, NULL, buf);
-  if (s < 0)
-    return false;
-#else
   struct sockaddr_in6 addr;
 
+  if (!o->udp_port)
+    o->udp_port = HNCP_PORT;
   s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
   if (s<0) {
     L_ERR("unable to create IPv6 UDP socket");
@@ -116,14 +107,13 @@ bool hncp_io_init(hncp o)
   fcntl(s, F_SETFL, O_NONBLOCK);
   memset(&addr, 0, sizeof(addr));
   addr.sin6_family = AF_INET6;
-  addr.sin6_port = htons(HNCP_PORT);
+  addr.sin6_port = htons(o->udp_port);
   const int one = 1;
   setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
   if (bind(s, (struct sockaddr *)&addr, sizeof(addr))<0) {
-    L_ERR("unable to bind to port %d", HNCP_PORT);
+    L_ERR("unable to bind to port %d", o->udp_port);
     return false;
   }
-#endif
   if (setsockopt(s, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) < 0)
     {
       L_ERR("unable to setsockopt IPV6_RECVPKTINFO:%s", strerror(errno));
@@ -191,6 +181,7 @@ void hncp_io_schedule(hncp o, int msecs)
 ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
                          char *ifname,
                          struct in6_addr *src,
+                         uint16_t *src_port,
                          struct in6_addr *dst)
 {
   struct sockaddr_in6 srcsa;
@@ -207,6 +198,7 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
     {
       *ifname = 0;
       *src = srcsa.sin6_addr;
+      *src_port = ntohs(srcsa.sin6_port);
       for (h = CMSG_FIRSTHDR(&msg); h ;
            h = CMSG_NXTHDR(&msg, h))
         if (h->cmsg_level == IPPROTO_IPV6
@@ -240,7 +232,8 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
 
 ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
                        const char *ifname,
-                       const struct in6_addr *to)
+                       const struct in6_addr *to,
+                       uint16_t to_port)
 {
   int flags = 0;
   struct sockaddr_in6 dst;
@@ -254,7 +247,9 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
       return -1;
     }
   dst.sin6_family = AF_INET6;
-  dst.sin6_port = htons(HNCP_PORT);
+  if (!to_port)
+    to_port = o->udp_port;
+  dst.sin6_port = htons(to_port);
   dst.sin6_addr = *to;
   r = sendto(o->udp_socket, buf, len, flags,
              (struct sockaddr *)&dst, sizeof(dst));
