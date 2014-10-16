@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Thu Oct 16 10:00:07 2014 mstenber
- * Edit time:     248 min
+ * Last modified: Thu Oct 16 12:10:59 2014 mstenber
+ * Edit time:     252 min
  *
  */
 
@@ -108,8 +108,7 @@ bool hncp_io_init(hncp o)
   memset(&addr, 0, sizeof(addr));
   addr.sin6_family = AF_INET6;
   addr.sin6_port = htons(o->udp_port);
-  const int one = 1;
-  setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+  setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
   if (bind(s, (struct sockaddr *)&addr, sizeof(addr))<0) {
     L_ERR("unable to bind to port %d", o->udp_port);
     return false;
