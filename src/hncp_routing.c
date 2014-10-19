@@ -191,12 +191,13 @@ static void hncp_routing_run(struct uloop_timeout *t)
 	unsigned routing_supported[HNCP_ROUTING_MAX] = {0};
 
 	vlist_for_each_element(&hncp->nodes, c, in_nodes) {
+		bool have_routing = false;
+
 		// Mark all nodes as not visited
 		c->bfs.next_hop = NULL;
 		c->bfs.next_hop4 = NULL;
 		c->bfs.hopcount = 0;
 
-		++routercnt;
 		struct tlv_attr *a;
 		hncp_node_for_each_tlv_with_type(c, a, HNCP_T_ROUTING_PROTOCOL) {
 			if (tlv_len(a) >= sizeof(hncp_t_routing_protocol_s)) {
@@ -205,8 +206,12 @@ static void hncp_routing_run(struct uloop_timeout *t)
 					++routing_supported[p->protocol];
 					routing_preference[p->protocol] += p->preference;
 				}
+				have_routing = true;
 			}
 		}
+
+		if (have_routing)
+			++routercnt;
 	}
 
 	// Elect routing protocol
