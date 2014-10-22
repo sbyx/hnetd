@@ -6,14 +6,15 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Thu Oct 16 14:57:34 2014 mstenber
- * Edit time:     159 min
+ * Last modified: Wed Oct 22 18:03:06 2014 mstenber
+ * Edit time:     265 min
  *
  */
 
 #include "dtls.h"
 #include <unistd.h>
 #include <stdlib.h>
+#include <openssl/err.h>
 #include <openssl/ssl.h>
 #include <openssl/rand.h>
 #include <libubox/list.h>
@@ -33,6 +34,10 @@
 
 /* How long cookies are valid (in seconds) */
 #define COOKIE_VALIDITY_PERIOD 10
+
+/* Try to use one context for both client and server connections
+ * ( does it matter?) */
+#define USE_ONE_CONTEXT
 
 /* These lurk in queue, waiting for connection to finish (outbound). */
 typedef struct {
@@ -72,9 +77,12 @@ typedef struct dtls_struct {
   /* We keep this around, just for re-binding of new received connections. */
   struct sockaddr_in6 local_addr;
 
-  SSL_CTX *ssl_ctx;
+  SSL_CTX *ssl_client_ctx;
+
+  SSL_CTX *ssl_server_ctx;
 
   struct uloop_fd ufd;
+  struct uloop_timeout uto;
   int listen_socket;
   BIO *listen_bio;
   SSL *listen_ssl;
@@ -83,26 +91,49 @@ typedef struct dtls_struct {
   unsigned char cookie_secret[COOKIE_SECRET_LENGTH];
 
   bool readable;
+  bool started;
+
+  char *psk;
+  unsigned int psk_len;
 } dtls_s;
 
 static bool _ssl_initialized = false;
 
+static bool _drain_errors()
+{
+  if (!ERR_peek_error())
+    return false;
+
+  BIO *bio_stderr = BIO_new(BIO_s_file());
+  BIO_set_fp(bio_stderr, stderr, BIO_NOCLOSE|BIO_FP_TEXT);
+  ERR_print_errors(bio_stderr);
+  BIO_free(bio_stderr);
+
+  /* Clear stack */
+  while (ERR_peek_error())
+    ERR_get_error();
+  return true;
+}
 
 static int _cookie_gen_fixed_time(SSL *ssl,
                                   unsigned char *cookie,
                                   unsigned int *cookie_len,
                                   time_t t)
 {
-  /* CRYPTO_set_ex_data(ssl->ex_data, 0, d); */
   dtls d = CRYPTO_get_ex_data(&ssl->ex_data, 0);
   struct sockaddr_storage ss;
   struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&ss;
   md5_ctx_t ctx;
   unsigned char result[COOKIE_LENGTH];
 
+  (void)BIO_dgram_get_peer(SSL_get_rbio(ssl), &ss);
+
   /* If it is wrong AF, we do not care. */
   if (sin6->sin6_family != AF_INET6)
-    return 0;
+    {
+      L_ERR("got ipv4 remote peer address?!?");
+      return 0;
+    }
 
   /* Store timestamp in the beginning */
   *((time_t *)result) = t;
@@ -134,7 +165,10 @@ static int _cookie_verify_cb(SSL *ssl,
 
   /* If it is of different size than what we produce, clearly not ours. */
   if (cookie_len != COOKIE_LENGTH)
-    return 0;
+    {
+      L_ERR("_cookie_verify_cb: invalid cookie length: %d", (int) cookie_len);
+      return 0;
+    }
 
   nt = time(NULL);
   ct = *((time_t *)cookie);
@@ -142,13 +176,28 @@ static int _cookie_verify_cb(SSL *ssl,
   /* If our clock is really moving backwards, we might as well pretend
    * it is fake, for now. (Little loss, UDP _is_ lossy after all.)*/
   if (ct > nt)
-    return 0;
+    {
+      L_ERR("_cookie_verify_cb: received time > current time");
+      return 0;
+    }
 
   if ((nt - ct) > COOKIE_VALIDITY_PERIOD)
-    return 0;
-  return cookie_len == COOKIE_LENGTH
-    && _cookie_gen_fixed_time(ssl, tbuf, &tbuf_len, ct)
-    && memcmp(tbuf, cookie, cookie_len) == 0;
+    {
+      L_ERR("_cookie_verify_cb: received time too old");
+      return 0;
+    }
+  if (!_cookie_gen_fixed_time(ssl, tbuf, &tbuf_len, ct))
+    {
+      L_ERR("_cookie_verify_cb: generate failed");
+      return 0;
+    }
+  if (memcmp(tbuf, cookie, cookie_len) != 0)
+    {
+      L_ERR("_cookie_verify_cb: data mismatch");
+      return 0;
+    }
+  L_DEBUG("_cookie_verify_cb succeeded");
+  return 1;
 }
 
 static void _dtls_listen(dtls d);
@@ -156,7 +205,6 @@ static void _dtls_listen(dtls d);
 static void _qb_free(dtls_queued_buffer qb)
 {
   list_del(&qb->in_queued_buffers);
-  free(qb->buf);
   free(qb);
 }
 
@@ -169,6 +217,7 @@ static void _connection_free(dtls_connection dc)
   list_del(&dc->in_connections);
   SSL_free(dc->ssl);
   uloop_fd_delete(&dc->ufd);
+  uloop_timeout_cancel(&dc->uto);
   free(dc);
 }
 
@@ -207,14 +256,15 @@ static void _connection_poll(dtls_connection dc)
           if (rv > 0)
             {
               if (rv != qb->len)
-                {
-                  L_ERR("partial write from queue?!?");
-                }
+                L_ERR("partial write from queue?!?");
+              else
+                L_DEBUG("wrote %d from queue", (int)rv);
               _qb_free(qb);
             }
           else
             {
-              L_DEBUG("queued data write failed");
+              L_DEBUG("queued data write of %d failed", (int)qb->len);
+              _drain_errors();
               return;
             }
         }
@@ -243,11 +293,17 @@ static void _connection_poll(dtls_connection dc)
   /* Non-0, but probably timeout */
   int err = SSL_get_error(dc->ssl, rv);
   if (err != SSL_ERROR_WANT_READ)
-    L_DEBUG("SSL_{accept/connect} => error %d", err);
+    _drain_errors();
 
   /* Handle the timeout here too */
-  DTLSv1_get_timeout(dc->ssl, &dc->uto.time);
-  uloop_timeout_add(&dc->uto);
+  struct timeval tv;
+  if (DTLSv1_get_timeout(dc->ssl, &tv) == 1)
+    {
+      L_DEBUG("c-timeout in %d/%d", (int)tv.tv_sec, (int)tv.tv_usec);
+      uloop_timeout_set(&dc->uto, tv.tv_usec / 1000 + 1000 * tv.tv_sec);
+    }
+  else
+    uloop_timeout_cancel(&dc->uto);
 }
 
 static int _socket_connect(struct sockaddr_in6 *local_addr,
@@ -296,6 +352,9 @@ void _connection_uto_cb(struct uloop_timeout *t)
 
   L_DEBUG("_connection_uto_cb %p", dc);
   DTLSv1_handle_timeout(dc->ssl);
+
+  /* reset the timeout */
+  _connection_poll(dc);
 }
 
 static dtls_connection _connection_create(dtls d, int s)
@@ -326,10 +385,19 @@ static void _dtls_poll(dtls d)
         {
           int err = SSL_get_error(d->listen_ssl, rv);
           if (err != SSL_ERROR_WANT_READ)
-            L_DEBUG("DTLSv1_listen error:%d", err);
+            _drain_errors();
+          else
+            L_DEBUG("DTLSv1_listen wanted more");
         }
-      return;
+      else
+        L_DEBUG("DTLSv1_listen returned 0");
+      goto wait;
     }
+  L_DEBUG("_dtls_poll: new connection accepted");
+  /* seems like it sometimes returns 0 even if it does not really mean
+   * it, grr */
+  if (_drain_errors())
+    goto wait;
   int s = _socket_connect(&d->local_addr, &remote_addr);
   if (s < 0)
     goto fail;
@@ -353,17 +421,33 @@ static void _dtls_poll(dtls d)
   if (dc)
     free(dc);
   close(s);
+  return;
+
+ wait:
+  {
+    /* Set up the timeout */
+    struct timeval tv;
+    if (DTLSv1_get_timeout(d->listen_ssl, &tv) == 1)
+      {
+        L_DEBUG("l-timeout in %d/%d", (int)tv.tv_sec, (int)tv.tv_usec);
+        uloop_timeout_set(&d->uto, tv.tv_usec / 1000 + 1000 * tv.tv_sec);
+      }
+    else
+      uloop_timeout_cancel(&d->uto);
+  }
 }
 
 static void _dtls_listen(dtls d)
 {
   d->listen_bio = BIO_new_dgram(d->listen_socket, BIO_NOCLOSE);
-  SSL *ssl = SSL_new(d->ssl_ctx);
+  SSL *ssl = SSL_new(d->ssl_server_ctx);
   if (!ssl)
     {
       L_ERR("SSL_new failed");
+      _drain_errors();
       return;
     }
+  CRYPTO_set_ex_data(&ssl->ex_data, 0, d);
   d->listen_ssl = ssl;
   SSL_set_bio(ssl, d->listen_bio, d->listen_bio);
   SSL_set_options(ssl, SSL_OP_COOKIE_EXCHANGE);
@@ -377,6 +461,16 @@ void _dtls_ufd_cb(struct uloop_fd *u, unsigned int events __unused)
   L_DEBUG("_dtls_ufd_cb");
   _dtls_poll(d);
 }
+
+void _dtls_uto_cb(struct uloop_timeout *t)
+{
+  dtls d = container_of(t, dtls_s, uto);
+
+  L_DEBUG("_dtls_uto_cb");
+  DTLSv1_handle_timeout(d->listen_ssl);
+  _dtls_poll(d);
+}
+
 
 /* Create/destroy instance. */
 dtls dtls_create(uint16_t port, dtls_readable_callback cb, void *cb_context)
@@ -425,25 +519,36 @@ dtls dtls_create(uint16_t port, dtls_readable_callback cb, void *cb_context)
       goto fail;
     }
 #endif /* 0 */
+#ifdef USE_ONE_CONTEXT
   SSL_CTX *ctx = SSL_CTX_new(DTLSv1_method());
+#else
+  SSL_CTX *ctx = SSL_CTX_new(DTLSv1_server_method());
+#endif /* USE_ONE_CONTEXT */
   if (!ctx)
     {
-      L_ERR("unable to create SSL_CTX");
+      L_ERR("unable to create server SSL_CTX");
       goto fail;
     }
-  /* XXX - load certificates + private key? */
+  SSL_CTX_set_read_ahead(ctx, 1);
   SSL_CTX_set_cookie_generate_cb(ctx, _cookie_gen_cb);
   SSL_CTX_set_cookie_verify_cb(ctx, _cookie_verify_cb);
   RAND_bytes(d->cookie_secret, COOKIE_SECRET_LENGTH);
-  /* XXX - set up verify callback? */
+  d->ssl_server_ctx = ctx;
 
-  d->ssl_ctx = ctx;
+#ifndef USE_ONE_CONTEXT
+  ctx = SSL_CTX_new(DTLSv1_client_method());
+  if (!ctx)
+    {
+      L_ERR("unable to create client SSL_CTX");
+      goto fail;
+    }
+  SSL_CTX_set_read_ahead(ctx, 1);
+#endif /* !USE_ONE_CONTEXT */
+  d->ssl_client_ctx = ctx;
   d->listen_socket = s;
-  _dtls_listen(d);
-
+  d->uto.cb = _dtls_uto_cb;
   d->ufd.cb = _dtls_ufd_cb;
   d->ufd.fd = s;
-  uloop_fd_add(&d->ufd, ULOOP_READ);
   L_DEBUG("dtls_create succeeded - fd %d @ port %d", s, port);
   return d;
 
@@ -454,9 +559,32 @@ dtls dtls_create(uint16_t port, dtls_readable_callback cb, void *cb_context)
   return NULL;
 }
 
+void dtls_start(dtls d)
+{
+  if (d->started) return;
+  d->started = true;
+  uloop_fd_add(&d->ufd, ULOOP_READ);
+  _dtls_listen(d);
+}
+
 void dtls_destroy(dtls d)
 {
+  dtls_connection dc, dc2;
+
+  if (d->psk)
+    free(d->psk);
+  SSL_free(d->listen_ssl);
+  SSL_CTX_free(d->ssl_server_ctx);
+#ifndef USE_ONE_CONTEXT
+  SSL_CTX_free(d->ssl_client_ctx);
+#endif /* USE_ONE_CONTEXT */
+  list_for_each_entry_safe(dc, dc2, &d->connections, in_connections)
+    {
+      _connection_free(dc);
+    }
+  /* XXX - get rid of client connections too */
   uloop_fd_delete(&d->ufd);
+  uloop_timeout_cancel(&d->uto);
   free(d);
 }
 
@@ -467,7 +595,22 @@ ssize_t dtls_recvfrom(dtls d, void *buf, size_t len,
                       uint16_t *src_port,
                       struct in6_addr *dst)
 {
-  L_DEBUG("dtls_recvfrom");
+  dtls_connection dc;
+
+  list_for_each_entry(dc, &d->connections, in_connections)
+    {
+      size_t rv = SSL_read(dc->ssl, buf, len);
+      if (rv > 0)
+        {
+          *ifname = 0;
+          if (dc->remote_addr.sin6_scope_id)
+            if_indextoname(dc->remote_addr.sin6_scope_id, ifname);
+          *src = dc->remote_addr.sin6_addr;
+          *src_port = ntohs(dc->remote_addr.sin6_port);
+          *dst = d->local_addr.sin6_addr;
+          return rv;
+        }
+    }
   return -1;
 }
 
@@ -504,6 +647,7 @@ ssize_t dtls_sendto(dtls d, void *buf, size_t len,
                   if (rv != len)
                     {
                       L_ERR("partial write?!?");
+                      _drain_errors();
                       return -1;
                     }
                   L_DEBUG("had existing connection in good state, write ok");
@@ -535,8 +679,9 @@ ssize_t dtls_sendto(dtls d, void *buf, size_t len,
       BIO *bio = BIO_new_dgram(s, 0);
       BIO_ctrl(bio, BIO_CTRL_DGRAM_SET_CONNECTED, 0, &dst);
 
-      SSL *ssl = SSL_new(d->ssl_ctx);
+      SSL *ssl = SSL_new(d->ssl_client_ctx);
       SSL_set_bio(ssl, bio, bio);
+      CRYPTO_set_ex_data(&ssl->ex_data, 0, d);
 
       dc->ssl = ssl;
 
@@ -549,6 +694,80 @@ ssize_t dtls_sendto(dtls d, void *buf, size_t len,
       return -1;
     }
   memcpy(qb->buf, buf, len);
+  qb->len = len;
   list_add(&qb->in_queued_buffers, &dc->queued_buffers);
   return len;
+}
+
+#define R1(where, x) do                                 \
+{                                                       \
+  int rv = (x);                                         \
+  if (rv != 1)                                          \
+    {                                                   \
+      L_ERR("error in %s:%d/%d", where, rv, errno);     \
+      _drain_errors();                                  \
+      goto fail;                                        \
+    }                                                   \
+} while(0)
+
+static int _verify_cert(int ok, X509_STORE_CTX *ctx)
+{
+  return 1;
+}
+
+bool dtls_set_local_cert(dtls d, const char *certfile, const char *pkfile)
+{
+  R1("server cert",
+     SSL_CTX_use_certificate_chain_file(d->ssl_server_ctx, certfile));
+  R1("server private key",
+     SSL_CTX_use_PrivateKey_file(d->ssl_server_ctx, pkfile, SSL_FILETYPE_PEM));
+  SSL_CTX_set_verify(d->ssl_server_ctx, SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT, _verify_cert);
+
+#ifndef USE_ONE_CONTEXT
+  R1("client cert",
+     SSL_CTX_use_certificate_chain_file(d->ssl_client_ctx, certfile));
+  R1("client private key",
+     SSL_CTX_use_PrivateKey_file(d->ssl_client_ctx, pkfile, SSL_FILETYPE_PEM));
+  SSL_CTX_set_verify(d->ssl_client_ctx, SSL_VERIFY_PEER_FAIL_IF_NO_PEER_CERT, _verify_cert);
+#endif /* !USE_ONE_CONTEXT */
+  return true;
+ fail:
+  return false;
+}
+
+unsigned int _server_psk(SSL *ssl, const char *identity,
+                         unsigned char *psk, unsigned int max_psk_len)
+{
+  dtls d = CRYPTO_get_ex_data(&ssl->ex_data, 0);
+  unsigned int len = d->psk_len;
+
+  if (!d->psk)
+    return 0;
+  if (d->psk_len < max_psk_len)
+    max_psk_len = d->psk_len;
+  memcpy(psk, d->psk, max_psk_len);
+  return max_psk_len;
+}
+
+unsigned int _client_psk(SSL *ssl, const char *hint,
+                         char *identity, unsigned int max_identity_len,
+                         unsigned char *psk, unsigned int max_psk_len)
+{
+  return _server_psk(ssl, NULL, psk, max_psk_len);
+}
+
+
+bool dtls_set_psk(dtls d, const char *psk, size_t psk_len)
+{
+  free(d->psk);
+  d->psk = malloc(psk_len);
+  if (!d->psk)
+    return false;
+  d->psk_len = psk_len;
+  memcpy(d->psk, psk, psk_len);
+  SSL_CTX_set_psk_client_callback(d->ssl_client_ctx,
+                                  _client_psk);
+  SSL_CTX_set_psk_server_callback(d->ssl_server_ctx,
+                                  _server_psk);
+  return true;
 }

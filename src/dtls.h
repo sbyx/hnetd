@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:50:18 2014 mstenber
- * Last modified: Thu Oct 16 10:59:29 2014 mstenber
- * Edit time:     6 min
+ * Last modified: Wed Oct 22 17:21:44 2014 mstenber
+ * Edit time:     7 min
  *
  */
 
@@ -34,7 +34,13 @@ typedef void (*dtls_readable_callback)(dtls d, void *context);
 
 /* Create/destroy instance. */
 dtls dtls_create(uint16_t port, dtls_readable_callback cb, void *cb_context);
+void dtls_start();
 void dtls_destroy(dtls d);
+
+/* Set local authentication information */
+bool dtls_set_local_cert(dtls d, const char *certfile, const char *pkfile);
+
+bool dtls_set_psk(dtls d, const char *psk, size_t psk_len);
 
 /* Send/receive data. */
 ssize_t dtls_recvfrom(dtls d, void *buf, size_t len,

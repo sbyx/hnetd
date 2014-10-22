@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:31 2014 mstenber
- * Last modified: Thu Oct 16 14:34:30 2014 mstenber
- * Edit time:     12 min
+ * Last modified: Wed Oct 22 18:08:30 2014 mstenber
+ * Edit time:     35 min
  *
  */
 
@@ -49,6 +49,7 @@ void dtls_readable(dtls d, void *context)
   char ifname[IFNAMSIZ];
   struct in6_addr src, dst;
   uint16_t src_port;
+
   r = dtls_recvfrom(d, buf, len, ifname, &src, &src_port, &dst);
   smock_pull_int_is("dtls_recvfrom", r);
   if (r >= 0)
@@ -70,33 +71,62 @@ void dtls_readable(dtls d, void *context)
 
 static void dtls_basic_2()
 {
+  int i;
+
   (void)uloop_init();
-  dtls d1 = dtls_create(49000, dtls_readable, NULL);
-  dtls d2 = dtls_create(49001, dtls_readable, NULL);
-  int rv;
-  struct in6_addr a;
-  char *msg = "foo";
-  char *ifname = LOOPBACK_NAME;
-  struct uloop_timeout t = { .cb = test_timeout };
+  for (i = 0 ; i < 2 ; i++)
+    {
+      int pbase = 49000 + i*2;
+      dtls d1 = dtls_create(pbase, dtls_readable, NULL);
+      dtls d2 = dtls_create(pbase+1, dtls_readable, NULL);
+      int rv;
+      struct in6_addr a, a2 = {};
+      char *msg = "foo";
+      char *ifname = LOOPBACK_NAME, *empty_ifname="";
+      struct uloop_timeout t = { .cb = test_timeout };
+      bool rb;
 
-  /* Send a packet to ourselves */
-  (void)inet_pton(AF_INET6, "::1", &a);
-  smock_push_int("dtls_recvfrom", 3);
-  smock_push_int("dtls_recvfrom_src", &a);
-  smock_push_int("dtls_recvfrom_dst", &a);
-  smock_push_int("dtls_recvfrom_buf", msg);
-  smock_push_int("dtls_recvfrom_ifname", ifname);
-  smock_push_int("dtls_recvfrom_src_port", 49000);
-  rv = dtls_sendto(d1, msg, strlen(msg), ifname, &a, 49001);
-  L_DEBUG("got %d", rv);
-  sput_fail_unless(rv == 3, "sendto failed?");
-  pending_readable++;
+      if (i == 0)
+        {
+      rb = dtls_set_local_cert(d1, "test/cert1.pem", "test/key1.pem");
+      sput_fail_unless(rb, "dtls_set_local_cert 1");
 
-  uloop_timeout_set(&t, 5000);
-  uloop_run();
+      rb = dtls_set_local_cert(d2, "test/cert2.pem", "test/key2.pem");
+      sput_fail_unless(rb, "dtls_set_local_cert 2");
+        }
+      else
+        {
+          rb = dtls_set_psk(d1, "foo", 3);
+          sput_fail_unless(rb, "dtls_set_psk");
 
-  dtls_destroy(d1);
-  dtls_destroy(d2);
+          rb = dtls_set_psk(d2, "foo", 3);
+          sput_fail_unless(rb, "dtls_set_psk");
+        }
+
+      /* Start the instances once they have been configured */
+      dtls_start(d1);
+      dtls_start(d2);
+
+      /* Send a packet to ourselves */
+      (void)inet_pton(AF_INET6, "::1", &a);
+      smock_push_int("dtls_recvfrom", 3);
+      smock_push("dtls_recvfrom_src", &a);
+      smock_push("dtls_recvfrom_dst", &a2);
+      smock_push("dtls_recvfrom_buf", msg);
+      smock_push("dtls_recvfrom_ifname", empty_ifname);
+      smock_push_int("dtls_recvfrom_src_port", pbase);
+      rv = dtls_sendto(d1, msg, strlen(msg), ifname, &a, pbase+1);
+      L_DEBUG("got %d", rv);
+      sput_fail_unless(rv == 3, "sendto failed?");
+      pending_readable++;
+
+      uloop_timeout_set(&t, 5000);
+      uloop_run();
+
+      dtls_destroy(d1);
+      dtls_destroy(d2);
+      uloop_timeout_cancel(&t);
+    }
 }
 
 int main(int argc, char **argv)
