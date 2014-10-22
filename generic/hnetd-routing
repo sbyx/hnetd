@@ -18,9 +18,11 @@ ISIS_INIT=/usr/sbin/autoisis
 case "$action" in
 	enumerate)
 		## echo PROTOCOL-ID PREFERENCE
-		## example for babel:
+		## need at least fallback to qualify as router
+		echo 0 0
+		## check babel
 		[ -x "$BABEL_EXE" ] && echo 1 128
-		## example for IS-IS:
+		## check IS-IS
 		[ -x "$ISIS_INIT" ] && echo 3 128
 	;;
 	enable|reconfigure|disable)

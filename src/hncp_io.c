@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Thu Oct 16 12:10:59 2014 mstenber
+ * Last modified: Wed Oct 22 11:45:44 2014 mstenber
  * Edit time:     252 min
  *
  */
@@ -49,7 +49,7 @@ hncp_io_get_hwaddrs(unsigned char *buf, int buf_left)
 
   if (buf_left < ETHER_ADDR_LEN * 2)
     return 0;
-  memset(buf, ETHER_ADDR_LEN * 2, 0);
+  memset(buf, 0, ETHER_ADDR_LEN * 2);
   if (r)
     return 0;
   for (p = ia ; p ; p = p->ifa_next)
