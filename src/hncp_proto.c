@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu Oct 16 10:01:57 2014 mstenber
- * Edit time:     542 min
+ * Last modified: Thu Oct 23 14:44:12 2014 mstenber
+ * Edit time:     546 min
  *
  */
 
@@ -585,7 +585,11 @@ void hncp_poll(hncp o)
     {
       /* We will send replies back to HNCP port, so if it is from some
        * other port number, too bad. */
-      if (src_port != o->udp_port)
+      if (src_port != o->udp_port
+#ifdef DTLS
+          && (!o->d || src_port != HNCP_DTLS_PORT)
+#endif /* DTLS */
+          )
         continue;
       /* First off. If it's off some link we aren't supposed to use, ignore. */
       l = hncp_find_link_by_name(o, srcif, false);
