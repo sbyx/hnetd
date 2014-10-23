@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 09:56:00 2014 mstenber
- * Last modified: Thu Oct 23 16:33:49 2014 mstenber
- * Edit time:     29 min
+ * Last modified: Thu Oct 23 18:12:36 2014 mstenber
+ * Edit time:     30 min
  *
  */
 
@@ -15,6 +15,8 @@
  * interface seems to work correctly, _and_ that we can use it to send
  * packets back and forth. */
 
+#include "hncp_i.h"
+#define hncp_find_link_by_name(o,n,c) NULL
 #include "hncp_io.c"
 #include "sput.h"
 #include "smock.h"

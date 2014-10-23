@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu Oct 23 16:21:01 2014 mstenber
- * Edit time:     557 min
+ * Last modified: Thu Oct 23 19:37:29 2014 mstenber
+ * Edit time:     565 min
  *
  */
 
@@ -575,18 +575,8 @@ void hncp_poll(hncp o)
   struct in6_addr dst;
   hncp_link l;
 
-  while ((read = hncp_io_recvfrom(o, buf, sizeof(buf),
-                                  srcif, &src, &dst)) > 0)
+  while ((read = hncp_io_recvfrom(o, buf, sizeof(buf), srcif, &src, &dst)) > 0)
     {
-      uint16_t src_port = ntohs(src.sin6_port);
-      /* We will send replies back to HNCP port, so if it is from some
-       * other port number, too bad. */
-      if (src_port != o->udp_port
-#ifdef DTLS
-          && !o->d
-#endif /* DTLS */
-          )
-        continue;
       /* First off. If it's off some link we aren't supposed to use, ignore. */
       l = hncp_find_link_by_name(o, srcif, false);
       if (!l)
@@ -595,14 +585,13 @@ void hncp_poll(hncp o)
        * the multicast address. */
       if (IN6_IS_ADDR_MULTICAST(&dst))
         {
-          if (memcmp(&dst, &o->multicast_sa6.sin6_addr,
-                     sizeof(dst)) != 0)
+          if (memcmp(&dst, &o->multicast_address, sizeof(dst)) != 0)
             continue;
           /* XXX - should we care about source address too? */
           handle_message(l, &src, buf, read, true);
           continue;
         }
-      /* If it's not aimed at our linklocal address, we don't care. */
+      /* If it's not aimed _a_ linklocal address, we don't care. */
       if (!IN6_IS_ADDR_LINKLOCAL(&dst))
         continue;
       handle_message(l, &src, buf, read, false);

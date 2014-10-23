@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Oct 23 16:51:07 2014 mstenber
+ * Last modified: Thu Oct 23 19:35:31 2014 mstenber
  * Edit time:     742 min
  *
  */
@@ -324,6 +324,10 @@ bool hncp_init(hncp o, const void *node_identifier, int len)
   vlist_init(&o->links, compare_links, update_link);
   INIT_LIST_HEAD(&o->link_confs);
   hncp_calculate_hash(node_identifier, len, &h);
+  if (inet_pton(AF_INET6, HNCP_MCAST_GROUP, &o->multicast_address) < 1) {
+    L_ERR("unable to inet_pton multicast group address");
+    return false;
+  }
   o->first_free_iid = 1;
   o->last_prune = 1;
   /* this way new nodes with last_prune=0 won't be reachable */

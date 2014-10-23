@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Oct 23 16:14:01 2014 mstenber
- * Edit time:     251 min
+ * Last modified: Thu Oct 23 19:39:33 2014 mstenber
+ * Edit time:     253 min
  *
  */
 
@@ -115,7 +115,7 @@ struct hncp_struct {
   struct uloop_timeout timeout;
 
   /* Multicast address */
-  struct sockaddr_in6 multicast_sa6;
+  struct in6_addr multicast_address;
 
   /* When did multicast join fail last time? */
   hnetd_time_t join_failed_time;
@@ -162,6 +162,9 @@ struct hncp_link_struct {
 
   /* Name of the (local) link. */
   char ifname[IFNAMSIZ];
+
+  /* In-system ifindex; if not set, determine dynamically. */
+  uint32_t ifindex;
 
   /* Interface identifier - these should be unique over lifetime of
    * hncp process. */

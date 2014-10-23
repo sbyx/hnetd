@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu Oct 23 16:44:29 2014 mstenber
- * Edit time:     162 min
+ * Last modified: Thu Oct 23 19:40:12 2014 mstenber
+ * Edit time:     175 min
  *
  */
 
@@ -358,6 +358,8 @@ hncp_link net_sim_hncp_find_link_by_name(hncp o, const char *name)
       /* Override the iid to be unique. */
       if (n->s->use_global_iids)
         l->iid = n->s->next_free_iid++;
+
+      l->ifindex = l->iid;
     }
   return l;
 }
@@ -629,6 +631,7 @@ void _sendto(net_sim s, void *buf, size_t len, hncp_link sl, hncp_link dl,
   memset(&m->src, 0, sizeof(m->src));
   m->src.sin6_family = AF_INET6;
   m->src.sin6_addr = sl->ipv6_address;
+  m->src.sin6_scope_id = dl->ifindex;
   m->dst = *dst;
   list_add(&m->h, &s->messages);
   m->deliver_to.cb = _message_deliver_cb;
@@ -638,7 +641,7 @@ void _sendto(net_sim s, void *buf, size_t len, hncp_link sl, hncp_link dl,
   hncp o = dl->hncp;
   net_node node1 = container_of(sl->hncp, net_node_s, n);
   net_node node2 = container_of(dl->hncp, net_node_s, n);
-  bool is_multicast = memcmp(dst, &o->multicast_sa6.sin6_addr, sizeof(*dst)) == 0;
+  bool is_multicast = memcmp(dst, &o->multicast_address, sizeof(*dst)) == 0;
   L_DEBUG("sendto: %s/%s -> %s/%s (%d bytes %s)",
           node1->name, sl->ifname, node2->name, dl->ifname, (int)len,
           is_multicast ? "multicast" : "unicast");
@@ -652,7 +655,7 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
   net_sim s = node->s;
   sput_fail_unless(dst->sin6_scope_id, "scope id must be set");
   hncp_link l = hncp_find_link_by_id(o, dst->sin6_scope_id);
-  bool is_multicast = memcmp(dst, &o->multicast_sa6.sin6_addr, sizeof(*dst)) == 0;
+  bool is_multicast = memcmp(&dst->sin6_addr, &o->multicast_address, sizeof(o->multicast_address)) == 0;
   net_neigh n;
 
   if (!l)

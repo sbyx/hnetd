@@ -272,7 +272,7 @@ int main(__unused int argc, char *argv[])
 	if (dtls_password) {
 #ifdef DTLS
 		dtls d;
-		if (!(d = dtls_create(HNCP_DTLS_PORT))) {
+		if (!(d = dtls_create(HNCP_DTLS_SERVER_PORT))) {
 			L_ERR("Unable to create dtls");
 			return 13;
 		}

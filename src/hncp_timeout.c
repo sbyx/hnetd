@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu Oct 23 16:18:13 2014 mstenber
- * Edit time:     332 min
+ * Last modified: Thu Oct 23 19:41:41 2014 mstenber
+ * Edit time:     337 min
  *
  */
 
@@ -58,12 +58,16 @@ static void trickle_send(hncp_link l)
     {
       l->num_trickle_sent++;
       l->last_trickle_sent = hncp_time(l->hncp);
-      struct sockaddr_in6 dst = l->hncp->multicast_sa6;
-      if (!(dst.sin6_scope_id = if_nametoindex(l->ifname)))
-        {
-          L_ERR("Unable to find index for " HNCP_LINK_F, HNCP_LINK_D(l));
-          return;
-        }
+      struct sockaddr_in6 dst = { .sin6_family = AF_INET6,
+                                  .sin6_addr = l->hncp->multicast_address,
+                                  .sin6_port = htons(l->hncp->udp_port)
+      };
+      if (!(dst.sin6_scope_id = l->ifindex))
+        if (!(dst.sin6_scope_id = if_nametoindex(l->ifname)))
+          {
+            L_ERR("Unable to find index for " HNCP_LINK_F, HNCP_LINK_D(l));
+            return;
+          }
       hncp_link_send_network_state(l, &dst, HNCP_MAXIMUM_MULTICAST_SIZE);
     }
   else

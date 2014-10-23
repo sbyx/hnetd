@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Thu Oct 23 16:10:10 2014 mstenber
- * Edit time:     282 min
+ * Last modified: Thu Oct 23 19:50:45 2014 mstenber
+ * Edit time:     293 min
  *
  */
 
@@ -99,13 +99,6 @@ bool hncp_io_init(hncp o)
 
   if (!o->udp_port)
     o->udp_port = HNCP_PORT;
-  memset(&o->multicast_sa6, 0, sizeof(o->multicast_sa6));
-  o->multicast_sa6.sin6_family = AF_INET6;
-  o->multicast_sa6.sin6_port = htons(o->udp_port);
-  if (inet_pton(AF_INET6, HNCP_MCAST_GROUP, &o->multicast_sa6.sin6_addr) < 1) {
-    L_ERR("unable to inet_pton multicast group address");
-    return false;
-  }
   s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
   if (s<0) {
     L_ERR("unable to create IPv6 UDP socket");
@@ -155,15 +148,19 @@ bool hncp_io_set_ifname_enabled(hncp o,
 {
   struct ipv6_mreq val;
 
-  val.ipv6mr_multiaddr = o->multicast_sa6.sin6_addr;
+  val.ipv6mr_multiaddr = o->multicast_address;
   L_DEBUG("hncp_io_set_ifname_enabled %s %s",
           ifname, enabled ? "enabled" : "disabled");
-  if (!(val.ipv6mr_interface = if_nametoindex(ifname)))
-    {
-      L_DEBUG("unable to enable on %s - if_nametoindex: %s",
-              ifname, strerror(errno));
-      goto fail;
-    }
+  uint32_t ifindex = 0;
+  hncp_link l = hncp_find_link_by_name(o, ifname, false);
+  if (!(l && (ifindex = l->ifindex)))
+    if (!(ifindex = if_nametoindex(ifname)))
+      {
+        L_DEBUG("unable to enable on %s - if_nametoindex: %s",
+                ifname, strerror(errno));
+        goto fail;
+      }
+  val.ipv6mr_interface = ifindex;
   if (setsockopt(o->udp_socket,
                  IPPROTO_IPV6,
                  enabled ? IPV6_ADD_MEMBERSHIP : IPV6_DROP_MEMBERSHIP,
@@ -258,9 +255,9 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
           continue;
         }
 #ifdef DTLS
-      if (o->d && IN6_IS_ADDR_LINKLOCAL(dst))
+      if (o->d && !IN6_IS_ADDR_MULTICAST(dst))
         {
-          L_ERR("plaintext received when in dtls mode - skip");
+          L_ERR("plaintext unicast received when in dtls mode - skip");
           continue;
         }
 #endif /* DTLS */
@@ -278,7 +275,16 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
 
 #ifdef DTLS
   if (o->d && !IN6_IS_ADDR_MULTICAST(&dst->sin6_addr))
-    r = dtls_sendto(o->d, buf, len, dst);
+    {
+      /* Change destination port to DTLS server port too if it is the
+       * default port. Otherwise answer on the different port (which
+       * is presumably already DTLS protected due to protection in
+       * input path).*/
+      struct sockaddr_in6 rdst = *dst;
+      if (rdst.sin6_port == htons(HNCP_PORT))
+        rdst.sin6_port = htons(HNCP_DTLS_SERVER_PORT);
+      r = dtls_sendto(o->d, buf, len, &rdst);
+    }
   else
 #endif /* DTLS */
   r = sendto(o->udp_socket, buf, len, flags,

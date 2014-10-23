@@ -73,11 +73,15 @@ void hncp_bfs_one(void)
 	struct iface *i1 = iface_create("l1", "l1", 0);
 	struct iface *i3 = iface_create("l3", "l3", 0);
 
+	struct sockaddr_in6 dummy1 = {.sin6_family = AF_INET6};
+	memset(&dummy1.sin6_addr, 1, sizeof(dummy1.sin6_addr));
+	struct sockaddr_in6 dummy3 = {.sin6_family = AF_INET6};
+	memset(&dummy3.sin6_addr, 3, sizeof(dummy3.sin6_addr));
 	hncp_t_link_id_s lid1 = {n1->node_identifier_hash, 0};
-	_heard(l1, &lid1, (struct sockaddr_in6*)n1->node_identifier_hash.buf);
+	_heard(l1, &lid1, &dummy1);
 
 	hncp_t_link_id_s lid3 = {n3->node_identifier_hash, 0};
-	_heard(l3, &lid3, (struct sockaddr_in6*)n3->node_identifier_hash.buf);
+	_heard(l3, &lid3, &dummy3);
 
 	// TLV foo
 	struct tlv_buf b = {NULL, NULL, 0, NULL};
@@ -227,17 +231,17 @@ void hncp_bfs_one(void)
 
 	hncp_routing_run(&bfs->t);
 
-	struct iface_route up31 = {.from = {.prefix = dp.prefix, .plen = 48}, .via = *((struct in6_addr*)n3->node_identifier_hash.buf), .metric = 10000 + 1};
+	struct iface_route up31 = {.from = {.prefix = dp.prefix, .plen = 48}, .via = dummy3.sin6_addr, .metric = 10000 + 1};
 	sput_fail_unless(!!vlist_find(&i3->routes, &up31, &up31, node), "uplink 3 #1");
 
-	struct iface_route up32 = {.from = {.plen = 128}, .via = *((struct in6_addr*)n3->node_identifier_hash.buf), .metric = 10000 + 1};
+	struct iface_route up32 = {.from = {.plen = 128}, .via = dummy3.sin6_addr, .metric = 10000 + 1};
 	sput_fail_unless(!!vlist_find(&i3->routes, &up32, &up32, node), "uplink 3 #2");
 
 	dp.prefix.s6_addr[5] = 0;
-	struct iface_route up11 = {.from = {.prefix = dp.prefix, .plen = 48}, .via = *((struct in6_addr*)n1->node_identifier_hash.buf), .metric = 10000 + 2};
+	struct iface_route up11 = {.from = {.prefix = dp.prefix, .plen = 48}, .via = dummy1.sin6_addr, .metric = 10000 + 2};
 	sput_fail_unless(!!vlist_find(&i1->routes, &up11, &up11, node), "uplink 1 #1");
 
-	struct iface_route up12 = {.from = {.plen = 128}, .via = *((struct in6_addr*)n1->node_identifier_hash.buf), .metric = 10000 + 2};
+	struct iface_route up12 = {.from = {.plen = 128}, .via = dummy1.sin6_addr, .metric = 10000 + 2};
 	sput_fail_unless(!!vlist_find(&i1->routes, &up12, &up12, node), "uplink 1 #2");
 }
 

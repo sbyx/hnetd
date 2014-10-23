@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Thu Oct 23 16:49:31 2014 mstenber
- * Edit time:     180 min
+ * Last modified: Thu Oct 23 19:42:37 2014 mstenber
+ * Edit time:     183 min
  *
  */
 
@@ -383,9 +383,11 @@ static void hncp_ok(void)
   smock_push_int("time", t);
 
   /* Should send stuff on an interface. */
-  smock_push("sendto_ifname", dummy_ifname);
-  struct sockaddr_in6 dummydst = o->multicast_sa6;
-  dummydst.sin6_scope_id = FIXED_IF_INDEX;
+  struct sockaddr_in6 dummydst = { .sin6_family = AF_INET6,
+                                   .sin6_addr = o->multicast_address,
+                                   .sin6_port = htons(o->udp_port),
+                                   .sin6_scope_id = FIXED_IF_INDEX
+  };
   smock_push("sendto_dst", &dummydst);
   smock_push_int("sendto_return", 1);
 

@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:31 2014 mstenber
- * Last modified: Thu Oct 23 13:34:20 2014 mstenber
- * Edit time:     39 min
+ * Last modified: Thu Oct 23 18:50:59 2014 mstenber
+ * Edit time:     43 min
  *
  */
 
@@ -46,9 +46,10 @@ void dtls_readable(dtls d, void *context)
   if (r >= 0)
     {
       void *b = smock_pull("dtls_recvfrom_buf");
-      struct in6_addr *s = smock_pull("dtls_recvfrom_src");
+      struct sockaddr_in6 *s = smock_pull("dtls_recvfrom_src");
 
       sput_fail_unless(memcmp(b, buf, r)==0, "buf mismatch");
+      s->sin6_port = src.sin6_port; /* cheat - dtls has dynamic client port now */
       sput_fail_unless(memcmp(s, &src, sizeof(src))==0, "src mismatch");
     }
   if (!--pending_readable)
@@ -97,8 +98,8 @@ static void dtls_basic_2()
       /* Send a packet to ourselves */
       (void)inet_pton(AF_INET6, "::1", &src.sin6_addr);
       (void)inet_pton(AF_INET6, "::1", &dst.sin6_addr);
-      src.sin6_port = ntohs(pbase);
-      dst.sin6_port = ntohs(pbase+1);
+      src.sin6_port = htons(pbase);
+      dst.sin6_port = htons(pbase+1);
       smock_push_int("dtls_recvfrom", 3);
       smock_push("dtls_recvfrom_src", &src);
       smock_push("dtls_recvfrom_buf", msg);

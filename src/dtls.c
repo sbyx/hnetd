@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Thu Oct 23 16:22:30 2014 mstenber
- * Edit time:     286 min
+ * Last modified: Thu Oct 23 20:06:54 2014 mstenber
+ * Edit time:     295 min
  *
  */
 
@@ -34,6 +34,9 @@
 
 /* How long cookies are valid (in seconds) */
 #define COOKIE_VALIDITY_PERIOD 10
+
+/* Do we want to use arbitrary client ports? */
+#undef USE_FLOATING_CLIENT_PORT
 
 /* Try to use one context for both client and server connections
  * ( does it matter?) */
@@ -212,6 +215,7 @@ static void _connection_free(dtls_connection dc)
 {
   dtls_queued_buffer qb, qb2;
 
+  L_DEBUG("_connection_free %p", dc);
   list_for_each_entry_safe(qb, qb2, &dc->queued_buffers, in_queued_buffers)
     _qb_free(qb);
   list_del(&dc->in_connections);
@@ -282,6 +286,8 @@ static void _connection_poll(dtls_connection dc)
       dc->d->readable = true;
       if (dc->d->cb)
         dc->d->cb(dc->d, dc->d->cb_context);
+      else
+        L_DEBUG("no readable callback on ready connection %p", dc);
       return;
     }
   /* Shared handling of errors for accept/listen */
@@ -613,6 +619,7 @@ ssize_t dtls_recvfrom(dtls d, void *buf, size_t len,
   dtls_connection dc;
 
   L_DEBUG("dtls_recvfrom");
+  d->readable = false;
   list_for_each_entry(dc, &d->connections, in_connections)
     {
       ssize_t rv = SSL_read(dc->ssl, buf, len);
@@ -655,9 +662,11 @@ ssize_t dtls_sendto(dtls d, void *buf, size_t len,
     {
       /* Create new connection object */
       L_DEBUG("creating new client connection");
+#ifdef USE_FLOATING_CLIENT_PORT
       int s = _socket_connect(NULL, dst);
-      /* XXX - can also use local-addr of &d->local_addr, but
-       * that leads to nasty race conditions. Perhaps better not? */
+#else
+      int s = _socket_connect(&d->local_addr, dst);
+#endif /* USE_FLOATING_CLIENT_PORT */
       if (s < 0)
         {
           return -1;
@@ -703,8 +712,9 @@ ssize_t dtls_sendto(dtls d, void *buf, size_t len,
     }                                                   \
 } while(0)
 
-static int _verify_cert(int ok, X509_STORE_CTX *ctx)
+static int _verify_cert(int ok __unused, X509_STORE_CTX *ctx __unused)
 {
+  /* TBD */
   return 1;
 }
 
@@ -728,7 +738,7 @@ bool dtls_set_local_cert(dtls d, const char *certfile, const char *pkfile)
   return false;
 }
 
-unsigned int _server_psk(SSL *ssl, const char *identity,
+unsigned int _server_psk(SSL *ssl, const char *identity __unused,
                          unsigned char *psk, unsigned int max_psk_len)
 {
   dtls d = CRYPTO_get_ex_data(&ssl->ex_data, 0);
@@ -742,8 +752,10 @@ unsigned int _server_psk(SSL *ssl, const char *identity,
   return max_psk_len;
 }
 
-unsigned int _client_psk(SSL *ssl, const char *hint,
-                         char *identity, unsigned int max_identity_len,
+unsigned int _client_psk(SSL *ssl,
+                         const char *hint __unused,
+                         char *identity __unused,
+                         unsigned int max_identity_len __unused,
                          unsigned char *psk, unsigned int max_psk_len)
 {
   return _server_psk(ssl, NULL, psk, max_psk_len);
