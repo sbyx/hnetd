@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu Oct 16 10:03:17 2014 mstenber
- * Edit time:     153 min
+ * Last modified: Thu Oct 23 16:44:29 2014 mstenber
+ * Edit time:     162 min
  *
  */
 
@@ -50,7 +50,7 @@ typedef struct {
   struct list_head h;
 
   hncp_link l;
-  struct in6_addr src;
+  struct sockaddr_in6 src;
   struct in6_addr dst;
   void *buf;
   size_t len;
@@ -245,7 +245,7 @@ bool net_sim_is_converged(net_sim s)
                       n->name,
                       (long long) hn->origination_time,
                       (long long) n2->n.own_node->origination_time,
-                      n2->name, 
+                      n2->name,
                       hn->update_number);
               s->not_converged_count++;
               return false;
@@ -545,8 +545,7 @@ void hncp_io_schedule(hncp o, int msecs)
 
 ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
                          char *ifname,
-                         struct in6_addr *src,
-                         uint16_t *src_port,
+                         struct sockaddr_in6 *src,
                          struct in6_addr *dst)
 {
   net_node node = container_of(o, net_node_s, n);
@@ -557,7 +556,6 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
       int s = m->len > len ? len : m->len;
       strcpy(ifname, m->l->ifname);
       *src = m->src;
-      *src_port = o->udp_port;
       *dst = m->dst;
       memcpy(buf, m->buf, s);
       list_del(&m->h);
@@ -619,12 +617,6 @@ void _message_deliver_cb(struct uloop_timeout *t)
 void _sendto(net_sim s, void *buf, size_t len, hncp_link sl, hncp_link dl,
              const struct in6_addr *dst)
 {
-#if L_LEVEL >= 7
-  hncp o = dl->hncp;
-  net_node node1 = container_of(sl->hncp, net_node_s, n);
-  net_node node2 = container_of(dl->hncp, net_node_s, n);
-  bool is_multicast = memcmp(dst, &o->multicast_address, sizeof(*dst)) == 0;
-#endif /* L_LEVEL >= 7 */
   net_msg m = calloc(1, sizeof(*m));
 
   sput_fail_unless(m, "calloc neigh");
@@ -634,26 +626,33 @@ void _sendto(net_sim s, void *buf, size_t len, hncp_link sl, hncp_link dl,
   memcpy(m->buf, buf, len);
   m->len = len;
   sput_fail_unless(sl->has_ipv6_address, "no ipv6 address?!?");
-  m->src = sl->ipv6_address;
+  memset(&m->src, 0, sizeof(m->src));
+  m->src.sin6_family = AF_INET6;
+  m->src.sin6_addr = sl->ipv6_address;
   m->dst = *dst;
   list_add(&m->h, &s->messages);
   m->deliver_to.cb = _message_deliver_cb;
   uloop_timeout_set(&m->deliver_to, MESSAGE_PROPAGATION_DELAY);
 
+#if L_LEVEL >= 7
+  hncp o = dl->hncp;
+  net_node node1 = container_of(sl->hncp, net_node_s, n);
+  net_node node2 = container_of(dl->hncp, net_node_s, n);
+  bool is_multicast = memcmp(dst, &o->multicast_sa6.sin6_addr, sizeof(*dst)) == 0;
   L_DEBUG("sendto: %s/%s -> %s/%s (%d bytes %s)",
           node1->name, sl->ifname, node2->name, dl->ifname, (int)len,
           is_multicast ? "multicast" : "unicast");
+#endif /* L_LEVEL >= 7 */
 }
 
 ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
-                       const char *ifname,
-                       const struct in6_addr *dst,
-                       uint16_t dst_port)
+                       const struct sockaddr_in6 *dst)
 {
   net_node node = container_of(o, net_node_s, n);
   net_sim s = node->s;
-  hncp_link l = hncp_find_link_by_name(o, ifname, false);
-  bool is_multicast = memcmp(dst, &o->multicast_address, sizeof(*dst)) == 0;
+  sput_fail_unless(dst->sin6_scope_id, "scope id must be set");
+  hncp_link l = hncp_find_link_by_id(o, dst->sin6_scope_id);
+  bool is_multicast = memcmp(dst, &o->multicast_sa6.sin6_addr, sizeof(*dst)) == 0;
   net_neigh n;
 
   if (!l)
@@ -675,12 +674,12 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
       if (n->src == l
           && (is_multicast
               || (n->dst->has_ipv6_address
-                  && memcmp(&n->dst->ipv6_address, dst, sizeof(*dst)) == 0)))
-        _sendto(s, buf, len, n->src, n->dst, dst);
+                  && memcmp(&n->dst->ipv6_address, &dst->sin6_addr, sizeof(dst->sin6_addr)) == 0)))
+        _sendto(s, buf, len, n->src, n->dst, &dst->sin6_addr);
     }
   /* Loop at self too, just for fun. */
   if (is_multicast)
-    _sendto(s, buf, len, l, l, dst);
+    _sendto(s, buf, len, l, l, &dst->sin6_addr);
   return 1;
 }
 

@@ -74,10 +74,10 @@ void hncp_bfs_one(void)
 	struct iface *i3 = iface_create("l3", "l3", 0);
 
 	hncp_t_link_id_s lid1 = {n1->node_identifier_hash, 0};
-	_heard(l1, &lid1, (struct in6_addr*)n1->node_identifier_hash.buf);
+	_heard(l1, &lid1, (struct sockaddr_in6*)n1->node_identifier_hash.buf);
 
 	hncp_t_link_id_s lid3 = {n3->node_identifier_hash, 0};
-	_heard(l3, &lid3, (struct in6_addr*)n3->node_identifier_hash.buf);
+	_heard(l3, &lid3, (struct sockaddr_in6*)n3->node_identifier_hash.buf);
 
 	// TLV foo
 	struct tlv_buf b = {NULL, NULL, 0, NULL};

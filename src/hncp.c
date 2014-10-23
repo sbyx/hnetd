@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Oct 23 09:24:56 2014 mstenber
- * Edit time:     741 min
+ * Last modified: Thu Oct 23 16:51:07 2014 mstenber
+ * Edit time:     742 min
  *
  */
 
@@ -71,8 +71,10 @@ void hncp_node_set(hncp_node n, uint32_t update_number,
       else
         {
           uint32_t version = 0;
+#if L_LEVEL >= LOG_ERR
           const char *agent = NULL;
           int agent_len = 0;
+#endif /* L_LEVEL >= LOG_ERR */
           struct tlv_attr *va;
           hncp_node on = n->hncp->own_node;
 
@@ -83,8 +85,10 @@ void hncp_node_set(hncp_node n, uint32_t update_number,
                 {
                   hncp_t_version v = tlv_data(va);
                   version = ntohl(v->version);
+#if L_LEVEL >= LOG_ERR
                   agent = v->user_agent;
                   agent_len = tlv_len(va) - sizeof(hncp_t_version_s);
+#endif /* L_LEVEL >= LOG_ERR */
                   break;
                 }
             }
@@ -320,10 +324,6 @@ bool hncp_init(hncp o, const void *node_identifier, int len)
   vlist_init(&o->links, compare_links, update_link);
   INIT_LIST_HEAD(&o->link_confs);
   hncp_calculate_hash(node_identifier, len, &h);
-  if (inet_pton(AF_INET6, HNCP_MCAST_GROUP, &o->multicast_address) < 1) {
-    L_ERR("unable to inet_pton multicast group address");
-    return false;
-  }
   o->first_free_iid = 1;
   o->last_prune = 1;
   /* this way new nodes with last_prune=0 won't be reachable */

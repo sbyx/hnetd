@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Thu Oct 23 14:52:42 2014 mstenber
- * Edit time:     276 min
+ * Last modified: Thu Oct 23 16:22:30 2014 mstenber
+ * Edit time:     286 min
  *
  */
 
@@ -319,14 +319,17 @@ static int _socket_connect(const struct sockaddr_in6 *local_addr,
       return -1;
     }
   fcntl(s, F_SETFL, O_NONBLOCK);
-#ifdef SO_REUSEPORT
-  setsockopt(s, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on));
-#endif /* SO_REUSEPORT */
-  setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-  if (bind(s, (struct sockaddr *)local_addr, sizeof(*local_addr))<0)
+  if (local_addr)
     {
-      L_ERR("unable to bind [client]");
-      goto fail;
+#ifdef SO_REUSEPORT
+      setsockopt(s, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on));
+#endif /* SO_REUSEPORT */
+      setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+      if (bind(s, (struct sockaddr *)local_addr, sizeof(*local_addr))<0)
+        {
+          L_ERR("unable to bind [client]");
+          goto fail;
+        }
     }
   if (connect(s, (struct sockaddr *)remote_addr, sizeof(*remote_addr))<0)
     {
@@ -356,6 +359,16 @@ void _connection_uto_cb(struct uloop_timeout *t)
 
   /* reset the timeout */
   _connection_poll(dc);
+}
+
+static dtls_connection _connection_find(dtls d, const struct sockaddr_in6 *dst)
+{
+  dtls_connection dc;
+
+  list_for_each_entry(dc, &d->connections, in_connections)
+    if (memcmp(dst, &dc->remote_addr, sizeof(*dst)) == 0)
+      return dc;
+  return NULL;
 }
 
 static dtls_connection _connection_create(dtls d, int s)
@@ -617,38 +630,34 @@ ssize_t dtls_sendto(dtls d, void *buf, size_t len,
                     const struct sockaddr_in6 *dst)
 {
   L_DEBUG("dtls_sendto");
-  /* Try to find existing connection */
-  dtls_connection idc, dc = NULL;
-  list_for_each_entry(idc, &d->connections, in_connections)
+  dtls_connection dc = _connection_find(d, dst);
+  if (dc && memcmp(dst, &dc->remote_addr, sizeof(*dst)) == 0)
     {
-      if (memcmp(dst, &idc->remote_addr, sizeof(*dst)) == 0)
+      if (dc->state == STATE_DATA)
         {
-          if (idc->state == STATE_DATA)
+          size_t rv = SSL_write(dc->ssl, buf, len);
+          if (rv > 0)
             {
-              size_t rv = SSL_write(idc->ssl, buf, len);
-              if (rv > 0)
+              if (rv != len)
                 {
-                  if (rv != len)
-                    {
-                      L_ERR("partial write?!?");
-                      _drain_errors();
-                      return -1;
-                    }
-                  L_DEBUG("had existing connection in good state, write ok");
-                  return rv;
+                  L_ERR("partial write?!?");
+                  _drain_errors();
+                  return -1;
                 }
+              L_DEBUG("had existing connection in good state, write ok");
+              return rv;
             }
-          L_DEBUG("had existing connection");
-          dc = idc;
-          break;
         }
+      L_DEBUG("had existing connection");
     }
 
   if (!dc)
     {
       /* Create new connection object */
       L_DEBUG("creating new client connection");
-      int s = _socket_connect(&d->local_addr, dst);
+      int s = _socket_connect(NULL, dst);
+      /* XXX - can also use local-addr of &d->local_addr, but
+       * that leads to nasty race conditions. Perhaps better not? */
       if (s < 0)
         {
           return -1;

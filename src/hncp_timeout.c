@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu Jul 17 09:28:37 2014 mstenber
- * Edit time:     330 min
+ * Last modified: Thu Oct 23 16:18:13 2014 mstenber
+ * Edit time:     332 min
  *
  */
 
@@ -58,8 +58,13 @@ static void trickle_send(hncp_link l)
     {
       l->num_trickle_sent++;
       l->last_trickle_sent = hncp_time(l->hncp);
-      hncp_link_send_network_state(l, &l->hncp->multicast_address,
-                                   HNCP_MAXIMUM_MULTICAST_SIZE);
+      struct sockaddr_in6 dst = l->hncp->multicast_sa6;
+      if (!(dst.sin6_scope_id = if_nametoindex(l->ifname)))
+        {
+          L_ERR("Unable to find index for " HNCP_LINK_F, HNCP_LINK_D(l));
+          return;
+        }
+      hncp_link_send_network_state(l, &dst, HNCP_MAXIMUM_MULTICAST_SIZE);
     }
   else
     {
@@ -296,7 +301,7 @@ void hncp_run(hncp o)
           /* Send a ping */
           L_DEBUG("pinging " HNCP_NEIGH_F "  on " HNCP_LINK_F,
                   HNCP_NEIGH_D(n), HNCP_LINK_D(l));
-          hncp_link_send_req_network_state(l, &n->last_address);
+          hncp_link_send_req_network_state(l, &n->last_sa6);
         }
     }
 

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu Oct 23 14:44:12 2014 mstenber
- * Edit time:     546 min
+ * Last modified: Thu Oct 23 16:21:01 2014 mstenber
+ * Edit time:     557 min
  *
  */
 
@@ -80,7 +80,7 @@ static bool _push_link_id_tlv(struct tlv_buf *tb, hncp_link l)
 /****************************************** Actual payload sending utilities */
 
 void hncp_link_send_network_state(hncp_link l,
-                                  struct in6_addr *dst,
+                                  struct sockaddr_in6 *dst,
                                   size_t maximum_size)
 {
   struct tlv_buf tb;
@@ -110,16 +110,15 @@ void hncp_link_send_network_state(hncp_link l,
     }
   if (maximum_size && tlv_len(tb.head) > maximum_size)
     goto done;
-  L_DEBUG("hncp_link_send_network_state -> %s%%" HNCP_LINK_F,
-          ADDR_REPR(dst), HNCP_LINK_D(l));
-  hncp_io_sendto(o, tlv_data(tb.head), tlv_len(tb.head),
-                 l->ifname, dst, 0);
+  L_DEBUG("hncp_link_send_network_state -> " SA6_F "%%" HNCP_LINK_F,
+          SA6_D(dst), HNCP_LINK_D(l));
+  hncp_io_sendto(o, tlv_data(tb.head), tlv_len(tb.head), dst);
  done:
   tlv_buf_free(&tb);
 }
 
 void hncp_link_send_node_data(hncp_link l,
-                              struct in6_addr *dst,
+                              struct sockaddr_in6 *dst,
                               hncp_node n)
 {
   /* Send two things:
@@ -134,16 +133,15 @@ void hncp_link_send_node_data(hncp_link l,
       && _push_node_state_tlv(&tb, n)
       && _push_node_data_tlv(&tb, n))
     {
-      L_DEBUG("hncp_link_send_node_state %s -> %s%%" HNCP_LINK_F,
-              HNCP_NODE_REPR(n), ADDR_REPR(dst), HNCP_LINK_D(l));
-      hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head),
-                     l->ifname, dst, 0);
+      L_DEBUG("hncp_link_send_node_state %s -> " SA6_F " %%" HNCP_LINK_F,
+              HNCP_NODE_REPR(n), SA6_D(dst), HNCP_LINK_D(l));
+      hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head), dst);
     }
   tlv_buf_free(&tb);
 }
 
 void hncp_link_send_req_network_state(hncp_link l,
-                                      struct in6_addr *dst)
+                                      struct sockaddr_in6 *dst)
 {
   struct tlv_buf tb;
 
@@ -152,16 +150,15 @@ void hncp_link_send_req_network_state(hncp_link l,
   if (_push_link_id_tlv(&tb, l)
       && tlv_new(&tb, HNCP_T_REQ_NET_HASH, 0))
     {
-      L_DEBUG("hncp_link_send_req_network_state -> %s%%" HNCP_LINK_F,
-              ADDR_REPR(dst), HNCP_LINK_D(l));
-      hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head),
-                     l->ifname, dst, 0);
+      L_DEBUG("hncp_link_send_req_network_state -> " SA6_F "%%" HNCP_LINK_F,
+              SA6_D(dst), HNCP_LINK_D(l));
+      hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head), dst);
     }
   tlv_buf_free(&tb);
 }
 
 void hncp_link_send_req_node_data(hncp_link l,
-                                  struct in6_addr *dst,
+                                  struct sockaddr_in6 *dst,
                                   hncp_t_node_state ns)
 {
   struct tlv_buf tb;
@@ -172,11 +169,10 @@ void hncp_link_send_req_node_data(hncp_link l,
   if (_push_link_id_tlv(&tb, l)
       && (a = tlv_new(&tb, HNCP_T_REQ_NODE_DATA, HNCP_HASH_LEN)))
     {
-      L_DEBUG("hncp_link_send_req_node_state -> %s%%" HNCP_LINK_F,
-              ADDR_REPR(dst), HNCP_LINK_D(l));
+      L_DEBUG("hncp_link_send_req_node_state -> " SA6_F "%%" HNCP_LINK_F,
+              SA6_D(dst), HNCP_LINK_D(l));
       memcpy(tlv_data(a), &ns->node_identifier_hash, HNCP_HASH_LEN);
-      hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head),
-                     l->ifname, dst, 0);
+      hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head), dst);
     }
   tlv_buf_free(&tb);
 }
@@ -184,7 +180,7 @@ void hncp_link_send_req_node_data(hncp_link l,
 /************************************************************ Input handling */
 
 static hncp_neighbor
-_heard(hncp_link l, hncp_t_link_id lid, struct in6_addr *src)
+_heard(hncp_link l, hncp_t_link_id lid, struct sockaddr_in6 *src)
 {
   hncp_neighbor_s nc;
   hncp_neighbor n;
@@ -206,7 +202,7 @@ _heard(hncp_link l, hncp_t_link_id lid, struct in6_addr *src)
               HNCP_NEIGH_D(n), HNCP_LINK_D(l));
     }
 
-  n->last_address = *src;
+  n->last_sa6 = *src;
   n->last_heard = hncp_time(o);
   if (n->in_sync)
     n->ping_count = 0;
@@ -245,7 +241,7 @@ _handle_collision(hncp o)
 /* Handle a single received message. */
 static void
 handle_message(hncp_link l,
-               struct in6_addr *src,
+               struct sockaddr_in6 *src,
                unsigned char *data, ssize_t len,
                bool multicast)
 {
@@ -575,19 +571,19 @@ void hncp_poll(hncp o)
   unsigned char buf[HNCP_MAXIMUM_PAYLOAD_SIZE];
   ssize_t read;
   char srcif[IFNAMSIZ];
-  struct in6_addr src;
-  uint16_t src_port;
+  struct sockaddr_in6 src;
   struct in6_addr dst;
   hncp_link l;
 
   while ((read = hncp_io_recvfrom(o, buf, sizeof(buf),
-                                  srcif, &src, &src_port, &dst)) > 0)
+                                  srcif, &src, &dst)) > 0)
     {
+      uint16_t src_port = ntohs(src.sin6_port);
       /* We will send replies back to HNCP port, so if it is from some
        * other port number, too bad. */
       if (src_port != o->udp_port
 #ifdef DTLS
-          && (!o->d || src_port != HNCP_DTLS_PORT)
+          && !o->d
 #endif /* DTLS */
           )
         continue;
@@ -599,7 +595,8 @@ void hncp_poll(hncp o)
        * the multicast address. */
       if (IN6_IS_ADDR_MULTICAST(&dst))
         {
-          if (memcmp(&dst, &o->multicast_address, sizeof(dst)) != 0)
+          if (memcmp(&dst, &o->multicast_sa6.sin6_addr,
+                     sizeof(dst)) != 0)
             continue;
           /* XXX - should we care about source address too? */
           handle_message(l, &src, buf, read, true);

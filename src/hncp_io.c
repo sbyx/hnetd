@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Thu Oct 23 14:33:59 2014 mstenber
- * Edit time:     270 min
+ * Last modified: Thu Oct 23 16:10:10 2014 mstenber
+ * Edit time:     282 min
  *
  */
 
@@ -99,6 +99,13 @@ bool hncp_io_init(hncp o)
 
   if (!o->udp_port)
     o->udp_port = HNCP_PORT;
+  memset(&o->multicast_sa6, 0, sizeof(o->multicast_sa6));
+  o->multicast_sa6.sin6_family = AF_INET6;
+  o->multicast_sa6.sin6_port = htons(o->udp_port);
+  if (inet_pton(AF_INET6, HNCP_MCAST_GROUP, &o->multicast_sa6.sin6_addr) < 1) {
+    L_ERR("unable to inet_pton multicast group address");
+    return false;
+  }
   s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
   if (s<0) {
     L_ERR("unable to create IPv6 UDP socket");
@@ -148,7 +155,7 @@ bool hncp_io_set_ifname_enabled(hncp o,
 {
   struct ipv6_mreq val;
 
-  val.ipv6mr_multiaddr = o->multicast_address;
+  val.ipv6mr_multiaddr = o->multicast_sa6.sin6_addr;
   L_DEBUG("hncp_io_set_ifname_enabled %s %s",
           ifname, enabled ? "enabled" : "disabled");
   if (!(val.ipv6mr_interface = if_nametoindex(ifname)))
@@ -179,14 +186,12 @@ void hncp_io_schedule(hncp o, int msecs)
 
 ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
                          char *ifname,
-                         struct in6_addr *src,
-                         uint16_t *src_port,
+                         struct sockaddr_in6 *src,
                          struct in6_addr *dst)
 {
-  struct sockaddr_in6 srcsa;
   struct iovec iov = {buf, len};
   unsigned char cmsg_buf[256];
-  struct msghdr msg = {&srcsa, sizeof(srcsa), &iov, 1,
+  struct msghdr msg = {src, sizeof(*src), &iov, 1,
                        cmsg_buf, sizeof(cmsg_buf), 0};
   ssize_t l;
   struct cmsghdr *h;
@@ -197,26 +202,24 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
 #ifdef DTLS
       if (o->d)
         {
-          l = dtls_recvfrom(o->d, buf, len, &srcsa);
+          l = dtls_recvfrom(o->d, buf, len, src);
           if (l > 0)
             {
-              if (!IN6_IS_ADDR_LINKLOCAL(&srcsa.sin6_addr))
+              if (!IN6_IS_ADDR_LINKLOCAL(&src->sin6_addr))
                 continue;
               /* In case of DTLS, we have just to trust that it has sane
                * scope id as we use that for interface determination. */
-              if (!srcsa.sin6_scope_id)
+              if (!src->sin6_scope_id)
                 {
                   L_DEBUG("linklocal w/o scope id..?");
                   continue;
                 }
-              if (!if_indextoname(srcsa.sin6_scope_id, ifname))
+              if (!if_indextoname(src->sin6_scope_id, ifname))
                 {
                   L_ERR("unable to receive (dtls) - if_indextoname:%s",
                         strerror(errno));
                   continue;
                 }
-              *src = srcsa.sin6_addr;
-              *src_port = ntohs(srcsa.sin6_port);
               /* We do not _know_ destination address. However,
                * the code does not really care, so we fake something
                * here that looks like unicast linklocal address. */
@@ -234,8 +237,6 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
           return l;
         }
       *ifname = 0;
-      *src = srcsa.sin6_addr;
-      *src_port = ntohs(srcsa.sin6_port);
       for (h = CMSG_FIRSTHDR(&msg); h ;
            h = CMSG_NXTHDR(&msg, h))
         if (h->cmsg_level == IPPROTO_IPV6
@@ -270,43 +271,25 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
 }
 
 ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
-                       const char *ifname,
-                       const struct in6_addr *to,
-                       uint16_t to_port)
+                       const struct sockaddr_in6 *dst)
 {
   int flags = 0;
-  struct sockaddr_in6 dst;
   ssize_t r;
 
-  memset(&dst, 0, sizeof(dst));
-  if (!(dst.sin6_scope_id = if_nametoindex(ifname)))
-    {
-      L_ERR("unable to send on %s - if_nametoindex: %s",
-            ifname, strerror(errno));
-      return -1;
-    }
-  dst.sin6_family = AF_INET6;
-  if (!to_port)
-    to_port = o->udp_port;
-  dst.sin6_port = htons(to_port);
-  dst.sin6_addr = *to;
 #ifdef DTLS
-  if (o->d && !IN6_IS_ADDR_MULTICAST(to))
-    {
-      dst.sin6_port = htons(HNCP_DTLS_PORT);
-      r = dtls_sendto(o->d, buf, len, &dst);
-    }
+  if (o->d && !IN6_IS_ADDR_MULTICAST(&dst->sin6_addr))
+    r = dtls_sendto(o->d, buf, len, dst);
   else
 #endif /* DTLS */
   r = sendto(o->udp_socket, buf, len, flags,
-             (struct sockaddr *)&dst, sizeof(dst));
+             (struct sockaddr *)dst, sizeof(*dst));
 #if L_LEVEL >= 3
   if (r < 0)
     {
       char buf[128];
-      const char *c = inet_ntop(AF_INET6, to, buf, sizeof(buf));
-      L_ERR("unable to send to %s%%%s - sendto:%s",
-            c ? c : "?", ifname, strerror(errno));
+      const char *c = inet_ntop(AF_INET6, &dst->sin6_addr, buf, sizeof(buf));
+      L_ERR("unable to send to %s - sendto:%s",
+            c ? c : "?", strerror(errno));
     }
 #endif /* L_LEVEL >= 3 */
   return r;

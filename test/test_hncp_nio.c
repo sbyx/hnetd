@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Thu Oct 16 10:04:46 2014 mstenber
- * Edit time:     175 min
+ * Last modified: Thu Oct 23 16:49:31 2014 mstenber
+ * Edit time:     180 min
  *
  */
 
@@ -21,6 +21,11 @@
 #include <stdlib.h>
 #define random random_mock
 static int random_mock(void);
+
+#include <net/if.h>
+#define FIXED_IF_INDEX 42
+#define if_nametoindex(x) FIXED_IF_INDEX
+
 #include "hncp.c"
 #include "hncp_notify.c"
 #include "hncp_proto.c"
@@ -90,13 +95,12 @@ void hncp_io_schedule(hncp o, int msecs)
 
 ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
                          char *ifname,
-                         struct in6_addr *src,
-                         uint16_t *src_port,
+                         struct sockaddr_in6 *src,
                          struct in6_addr *dst)
 {
   unsigned char *r = smock_pull("recvfrom_buf");
   int r_len = smock_pull_int("recvfrom_len");
-  struct in6_addr *r_src = smock_pull("recvfrom_src");
+  struct sockaddr_in6 *r_src = smock_pull("recvfrom_src");
   struct in6_addr *r_dst = smock_pull("recvfrom_dst");
   smock_pull_string_is("recvfrom_ifname", ifname);
 
@@ -104,24 +108,19 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
   sput_fail_unless(o && o->udp_socket == 1, "hncp_io_schedule valid");
   sput_fail_unless(r_len <= ((int) len), "result length reasonable");
   *src = *r_src;
-  *src_port = o->udp_port;
   *dst = *r_dst;
   memcpy(buf, r, r_len);
   return r_len;
 }
 
 ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
-                       const char *ifname,
-                       const struct in6_addr *dst, uint16_t dst_port)
+                       const struct sockaddr_in6 *dst)
 {
   if (check_send)
     {
       sput_fail_unless(o, "hncp");
-      sput_fail_unless(!dst_port || dst_port == o->udp_port,
-                       "weird destination port");
       sput_fail_unless(o && o->udp_socket == 1, "hncp_io ready");
-      smock_pull_string_is("sendto_ifname", ifname);
-      struct in6_addr *e_dst = smock_pull("sendto_dst");
+      struct sockaddr_in6 *e_dst = smock_pull("sendto_dst");
       sput_fail_unless(e_dst && memcmp(e_dst, dst, sizeof(*dst)) == 0, "dst match");
       /* Two optional verification steps.. */
       if (_smock_get_queue("sendto_len", false))
@@ -385,7 +384,9 @@ static void hncp_ok(void)
 
   /* Should send stuff on an interface. */
   smock_push("sendto_ifname", dummy_ifname);
-  smock_push("sendto_dst", &o->multicast_address);
+  struct sockaddr_in6 dummydst = o->multicast_sa6;
+  dummydst.sin6_scope_id = FIXED_IF_INDEX;
+  smock_push("sendto_dst", &dummydst);
   smock_push_int("sendto_return", 1);
 
   /* And schedule next one (=end of interval). */

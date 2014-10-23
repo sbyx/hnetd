@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 09:56:00 2014 mstenber
- * Last modified: Thu Oct 16 10:37:15 2014 mstenber
- * Edit time:     21 min
+ * Last modified: Thu Oct 23 16:33:49 2014 mstenber
+ * Edit time:     29 min
  *
  */
 
@@ -45,22 +45,21 @@ void hncp_poll(hncp o)
   size_t len = sizeof(buf);
   int r;
   char ifname[IFNAMSIZ];
-  struct in6_addr src, dst;
-  uint16_t src_port;
+  struct sockaddr_in6 srcsa;
+  struct in6_addr dst;
 
-  r = hncp_io_recvfrom(o, buf, len, ifname, &src, &src_port, &dst);
+  r = hncp_io_recvfrom(o, buf, len, ifname, &srcsa, &dst);
   smock_pull_int_is("hncp_poll_io_recvfrom", r);
   if (r >= 0)
     {
       void *b = smock_pull("hncp_poll_io_recvfrom_buf");
       char *ifn = smock_pull("hncp_poll_io_recvfrom_ifname");
-      struct in6_addr *s = smock_pull("hncp_poll_io_recvfrom_src");
+      struct sockaddr_in6 *sa = smock_pull("hncp_poll_io_recvfrom_src");
       struct in6_addr *d = smock_pull("hncp_poll_io_recvfrom_dst");
 
       sput_fail_unless(memcmp(b, buf, r)==0, "buf mismatch");
       sput_fail_unless(strcmp(ifn, ifname) == 0, "ifname mismatch");
-      sput_fail_unless(memcmp(s, &src, sizeof(src))==0, "src mismatch");
-      smock_pull_int_is("hncp_poll_io_recvfrom_src_port", src_port);
+      sput_fail_unless(memcmp(sa, &srcsa, sizeof(srcsa))==0, "src mismatch");
       sput_fail_unless(memcmp(d, &dst, sizeof(dst))==0, "dst mismatch");
     }
   if (!--pending_poll)
@@ -88,13 +87,22 @@ static void hncp_io_basic_2()
 
   /* Send a packet to ourselves */
   (void)inet_pton(AF_INET6, "::1", &a);
+  struct sockaddr_in6 src;
+  memset(&src, 0, sizeof(src));
+  src.sin6_family = AF_INET6;
+  src.sin6_port = htons(h1.udp_port);
+  src.sin6_addr = a;
+  struct sockaddr_in6 dst;
+  memset(&dst, 0, sizeof(dst));
+  dst.sin6_family = AF_INET6;
+  dst.sin6_port = htons(h2.udp_port);
+  dst.sin6_addr = a;
   smock_push_int("hncp_poll_io_recvfrom", 3);
-  smock_push_int("hncp_poll_io_recvfrom_src", &a);
+  smock_push_int("hncp_poll_io_recvfrom_src", &src);
   smock_push_int("hncp_poll_io_recvfrom_dst", &a);
   smock_push_int("hncp_poll_io_recvfrom_buf", msg);
   smock_push_int("hncp_poll_io_recvfrom_ifname", ifname);
-  smock_push_int("hncp_poll_io_recvfrom_src_port", h1.udp_port);
-  rv = hncp_io_sendto(&h1, msg, strlen(msg), ifname, &a, h2.udp_port);
+  rv = hncp_io_sendto(&h1, msg, strlen(msg), &dst);
   L_DEBUG("got %d", rv);
   sput_fail_unless(rv == 3, "sendto failed?");
   pending_poll++;

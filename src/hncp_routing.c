@@ -281,7 +281,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 
 					neigh = vlist_find(&link->neighbors, &query, &query, in_neighbors);
 					if (neigh) {
-						n->bfs.next_hop = &neigh->last_address;
+						n->bfs.next_hop = &neigh->last_sa6.sin6_addr;
 						n->bfs.ifname = link->ifname;
 					}
 

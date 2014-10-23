@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Oct 23 14:23:42 2014 mstenber
- * Edit time:     247 min
+ * Last modified: Thu Oct 23 16:14:01 2014 mstenber
+ * Edit time:     251 min
  *
  */
 
@@ -115,7 +115,7 @@ struct hncp_struct {
   struct uloop_timeout timeout;
 
   /* Multicast address */
-  struct in6_addr multicast_address;
+  struct sockaddr_in6 multicast_sa6;
 
   /* When did multicast join fail last time? */
   hnetd_time_t join_failed_time;
@@ -196,7 +196,7 @@ struct hncp_neighbor_struct {
   iid_t iid;
 
   /* Link-level address */
-  struct in6_addr last_address;
+  struct sockaddr_in6 last_sa6;
 
   /* When did we last hear from this one? */
   hnetd_time_t last_heard;
@@ -324,9 +324,9 @@ static inline unsigned long long hncp_hash64(hncp_hash h)
 
 /* Utility functions to send frames. */
 void hncp_link_send_network_state(hncp_link l,
-                                  struct in6_addr *dst,
+                                  struct sockaddr_in6 *dst,
                                   size_t maximum_size);
-void hncp_link_send_req_network_state(hncp_link l, struct in6_addr *dst);
+void hncp_link_send_req_network_state(hncp_link l, struct sockaddr_in6 *dst);
 void hncp_link_set_ipv6_address(hncp_link l, const struct in6_addr *addr);
 
 /* Subscription stuff (hncp_notify.c) */
@@ -351,13 +351,10 @@ hnetd_time_t hncp_io_time(hncp o);
 
 ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
                          char *ifname,
-                         struct in6_addr *src,
-                         uint16_t *src_port,
+                         struct sockaddr_in6 *src,
                          struct in6_addr *dst);
 ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
-                       const char *ifname,
-                       const struct in6_addr *dst,
-                       uint16_t dst_port);
+                       const struct sockaddr_in6 *dst);
 
 /* Multicast rejoin utility. (in hncp.c) */
 bool hncp_link_join(hncp_link l);
@@ -394,6 +391,8 @@ static inline hnetd_time_t hncp_time(hncp o)
 #define HNCP_LINK_F "link %s[#%d]"
 #define HNCP_LINK_D(l) l->ifname,l->iid
 
+#define SA6_F "%s:%d"
+#define SA6_D(sa) ADDR_REPR(&sa->sin6_addr),ntohs(sa->sin6_port)
 
 static inline struct tlv_attr *
 hncp_node_get_tlv_with_type(hncp_node n, uint16_t type, bool first)
