@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Thu Oct 23 13:27:46 2014 mstenber
- * Edit time:     275 min
+ * Last modified: Thu Oct 23 14:46:53 2014 mstenber
+ * Edit time:     276 min
  *
  */
 
@@ -599,11 +599,13 @@ ssize_t dtls_recvfrom(dtls d, void *buf, size_t len,
 {
   dtls_connection dc;
 
+  L_DEBUG("dtls_recvfrom");
   list_for_each_entry(dc, &d->connections, in_connections)
     {
       size_t rv = SSL_read(dc->ssl, buf, len);
       if (rv > 0)
         {
+          L_DEBUG(" .. winner from connection %p: %d bytes", dc, (int)rv);
           *src = dc->remote_addr;
           return rv;
         }
