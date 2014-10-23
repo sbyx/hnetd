@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:50:18 2014 mstenber
- * Last modified: Thu Oct 23 09:03:29 2014 mstenber
- * Edit time:     9 min
+ * Last modified: Thu Oct 23 13:26:54 2014 mstenber
+ * Edit time:     11 min
  *
  */
 
@@ -27,15 +27,25 @@
  *
  * The API is more or less same as what hncp_io provides; however,
  * underneath, a number of sockets are juggled.
+ *
+ * Basic usage:
+ * 1. create
+ * 2. .. configure things (psk, callbacks, ..)
+ * 3. start
+ * 4. .. do things .. (send, or recvfrom as needed, possibly triggered by cb)
+ * 5. destroy
  */
 
 typedef struct dtls_struct *dtls;
 typedef void (*dtls_readable_callback)(dtls d, void *context);
 
 /* Create/destroy instance. */
-dtls dtls_create(uint16_t port, dtls_readable_callback cb, void *cb_context);
+dtls dtls_create(uint16_t port);
 void dtls_start();
 void dtls_destroy(dtls d);
+
+/* Callback to call when dtls has new data. */
+void dtls_set_readable_callback(dtls d, dtls_readable_callback cb, void *cb_context);
 
 /* Set local authentication information */
 bool dtls_set_local_cert(dtls d, const char *certfile, const char *pkfile);

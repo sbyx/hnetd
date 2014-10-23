@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:31 2014 mstenber
- * Last modified: Thu Oct 23 09:05:13 2014 mstenber
+ * Last modified: Thu Oct 23 13:34:20 2014 mstenber
  * Edit time:     39 min
  *
  */
@@ -63,8 +63,10 @@ static void dtls_basic_2()
   for (i = 0 ; i < 2 ; i++)
     {
       int pbase = 49000 + i*2;
-      dtls d1 = dtls_create(pbase, dtls_readable, NULL);
-      dtls d2 = dtls_create(pbase+1, dtls_readable, NULL);
+      dtls d1 = dtls_create(pbase);
+      dtls_set_readable_callback(d1, dtls_readable, NULL);
+      dtls d2 = dtls_create(pbase+1);
+      dtls_set_readable_callback(d2, dtls_readable, NULL);
       int rv;
       char *msg = "foo";
       struct uloop_timeout t = { .cb = test_timeout };

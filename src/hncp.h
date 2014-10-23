@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Tue Jun 17 14:51:27 2014 mstenber
- * Edit time:     121 min
+ * Last modified: Thu Oct 23 13:32:03 2014 mstenber
+ * Edit time:     122 min
  *
  */
 
@@ -17,6 +17,10 @@
 #include "hnetd.h"
 #include "tlv.h"
 #include "hncp_proto.h"
+
+#ifdef DTLS
+#include "dtls.h"
+#endif /* DTLS */
 
 /* in6_addr */
 #include <netinet/in.h>
@@ -229,6 +233,12 @@ void hncp_run(hncp o);
  */
 void hncp_poll(hncp o);
 
+#ifdef DTLS
+/**
+ * Set the dtls instance to be used for securing HNCP traffic.
+ */
+void hncp_set_dtls(hncp o, dtls d);
+#endif /* DTLS */
 
 /************************************************************** Per-node API */
 

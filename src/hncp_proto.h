@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Mon Sep  1 10:41:10 2014 mstenber
+ * Last modified: Thu Oct 23 13:19:25 2014 mstenber
  * Edit time:     75 min
  *
  */
@@ -195,6 +195,7 @@ typedef struct __packed {
 /**************************************************************** Addressing */
 
 #define HNCP_PORT 8808
+#define HNCP_DTLS_PORT 8809
 #define HNCP_MCAST_GROUP "ff02::8808"
 
 /************** Various tunables, that we in practise hardcode (not options) */

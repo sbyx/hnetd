@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Wed Oct 22 11:45:44 2014 mstenber
- * Edit time:     252 min
+ * Last modified: Thu Oct 23 14:23:07 2014 mstenber
+ * Edit time:     269 min
  *
  */
 
@@ -192,9 +192,47 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
   struct cmsghdr *h;
   struct in6_pktinfo *ipi6;
 
-  l = recvmsg(o->udp_socket, &msg, MSG_DONTWAIT);
-  if (l > 0)
+  while (1)
     {
+#ifdef DTLS
+      if (o->d)
+        {
+          l = dtls_recvfrom(o->d, buf, len, &srcsa);
+          if (l > 0)
+            {
+              if (!IN6_IS_ADDR_LINKLOCAL(&srcsa.sin6_addr))
+                continue;
+              /* In case of DTLS, we have just to trust that it has sane
+               * scope id as we use that for interface determination. */
+              if (!srcsa.sin6_scope_id)
+                {
+                  L_DEBUG("linklocal w/o scope id..?");
+                  continue;
+                }
+              if (!if_indextoname(srcsa.sin6_scope_id, ifname))
+                {
+                  L_ERR("unable to receive (dtls) - if_indextoname:%s",
+                        strerror(errno));
+                  continue;
+                }
+              *src = srcsa.sin6_addr;
+              *src_port = ntohs(srcsa.sin6_port);
+              /* We do not _know_ destination address. However,
+               * the code does not really care, so we fake something
+               * here that looks like unicast linklocal address. */
+              struct in6_addr dummy = { .s6_addr = { 0xfe,0x80 }};
+              *dst = dummy;
+              break;
+            }
+        }
+#endif /* DTLS */
+      l = recvmsg(o->udp_socket, &msg, MSG_DONTWAIT);
+      if (l <= 0)
+        {
+          if (l < 0 && errno != EWOULDBLOCK)
+            L_DEBUG("unable to receive - recvmsg:%s", strerror(errno));
+          return l;
+        }
       *ifname = 0;
       *src = srcsa.sin6_addr;
       *src_port = ntohs(srcsa.sin6_port);
@@ -209,23 +247,25 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
                 *ifname = 0;
                 L_ERR("unable to receive - if_indextoname:%s",
                       strerror(errno));
+                break;
               }
             *dst = ipi6->ipi6_addr;
           }
       if (!*ifname)
         {
           L_ERR("unable to receive - no ifname");
-          return -1;
+          continue;
         }
-    }
-  else
-    {
-      *ifname = 0;
-      if (l < 0 && errno != EWOULDBLOCK)
+#ifdef DTLS
+      if (o->d && IN6_IS_ADDR_LINKLOCAL(dst))
         {
-          L_DEBUG("unable to receive - recvmsg:%s", strerror(errno));
+          L_ERR("plaintext received when in dtls mode - skip");
+          continue;
         }
+#endif /* DTLS */
+      break;
     }
+  /* not really reachable */
   return l;
 }
 
@@ -250,6 +290,14 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
     to_port = o->udp_port;
   dst.sin6_port = htons(to_port);
   dst.sin6_addr = *to;
+#ifdef DTLS
+  if (o->d && !IN6_IS_ADDR_MULTICAST(&dst))
+    {
+      dst.sin6_port = htons(HNCP_DTLS_PORT);
+      r = dtls_sendto(o->d, buf, len, &dst);
+    }
+  else
+#endif /* DTLS */
   r = sendto(o->udp_socket, buf, len, flags,
              (struct sockaddr *)&dst, sizeof(dst));
 #if L_LEVEL >= 3
@@ -268,3 +316,21 @@ hnetd_time_t hncp_io_time(hncp o __unused)
 {
   return hnetd_time();
 }
+
+#ifdef DTLS
+
+void _dtls_readable_callback(dtls d __unused, void *context)
+{
+  hncp o = context;
+
+  hncp_poll(o);
+}
+
+
+void hncp_set_dtls(hncp o, dtls d)
+{
+  o->d = d;
+  dtls_set_readable_callback(d, _dtls_readable_callback, o);
+}
+
+#endif /* DTLS */

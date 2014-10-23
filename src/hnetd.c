@@ -28,6 +28,9 @@
 #include "platform.h"
 #include "pa.h"
 #include "pd.h"
+#ifdef DTLS
+#include "dtls.h"
+#endif /* DTLS */
 
 #define FLOODING_DELAY 2 * HNETD_TIME_PER_SECOND
 
@@ -162,11 +165,13 @@ int main(__unused int argc, char *argv[])
 	const char *pd_socket_path = "/var/run/hnetd_pd";
 	const char *pa_ip4prefix = NULL;
 	const char *pa_ulaprefix = NULL;
+	const char *dtls_password = NULL;
 
 	enum {
 		GOL_IPPREFIX = 1000,
 		GOL_ULAPREFIX,
 		GOL_LOGLEVEL,
+		GOL_PASSWORD, /* DTLS password */
 	};
 
 	struct option longopts[] = {
@@ -174,6 +179,7 @@ int main(__unused int argc, char *argv[])
 			{ "ip4prefix",   required_argument,      NULL,           GOL_IPPREFIX },
 			{ "ulaprefix",   required_argument,      NULL,           GOL_ULAPREFIX },
 			{ "loglevel",    required_argument,      NULL,           GOL_LOGLEVEL },
+			{ "password",    required_argument,      NULL,           GOL_PASSWORD },
 			{ NULL,          0,                      NULL,           0 }
 	};
 
@@ -214,6 +220,9 @@ int main(__unused int argc, char *argv[])
 			break;
 		case GOL_LOGLEVEL:
 			log_level = atoi(optarg);
+			break;
+		case GOL_PASSWORD:
+			dtls_password = optarg;
 			break;
 		case '?':
 			L_ERR("Unrecognized option");
@@ -258,6 +267,22 @@ int main(__unused int argc, char *argv[])
 	if (!h) {
 		L_ERR("Unable to initialize HNCP");
 		return 42;
+	}
+
+	if (dtls_password) {
+#ifdef DTLS
+		dtls d;
+		if (!(d = dtls_create(HNCP_DTLS_PORT))) {
+			L_ERR("Unable to create dtls");
+			return 13;
+		}
+		if (!(dtls_set_psk(d, dtls_password, strlen(dtls_password)))) {
+			L_ERR("Unable to set dtls password");
+			return 13;
+		}
+		hncp_set_dtls(h, d);
+		dtls_start(d);
+#endif /* DTLS */
 	}
 
 	if (!(hg = hncp_pa_glue_create(h, &pa.data))) {

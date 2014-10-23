@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Sep 25 12:17:55 2014 mstenber
+ * Last modified: Thu Oct 23 09:24:56 2014 mstenber
  * Edit time:     741 min
  *
  */
@@ -538,7 +538,7 @@ hncp_link hncp_find_link_by_name(hncp o, const char *ifname, bool create)
   hncp_link cl = container_of(ifname, hncp_link_s, ifname[0]);
   hncp_link l;
 
-  if (!ifname)
+  if (!ifname || !*ifname)
     return NULL;
 
   l = vlist_find(&o->links, cl, cl, in_links);

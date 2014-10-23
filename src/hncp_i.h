@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Oct 16 10:01:28 2014 mstenber
- * Edit time:     246 min
+ * Last modified: Thu Oct 23 14:23:42 2014 mstenber
+ * Edit time:     247 min
  *
  */
 
@@ -140,6 +140,10 @@ struct hncp_struct {
   /* Number of TLV indexes we have. That is, the # of non-empty slots
    * in the tlv_type_to_index. */
   int num_tlv_indexes;
+
+#ifdef DTLS
+  dtls d;
+#endif /* DTLS */
 };
 
 typedef struct hncp_link_struct hncp_link_s, *hncp_link;

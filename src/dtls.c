@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Thu Oct 23 09:06:47 2014 mstenber
- * Edit time:     273 min
+ * Last modified: Thu Oct 23 13:27:46 2014 mstenber
+ * Edit time:     275 min
  *
  */
 
@@ -280,7 +280,8 @@ static void _connection_poll(dtls_connection dc)
           return;
         }
       dc->d->readable = true;
-      dc->d->cb(dc->d, dc->d->cb_context);
+      if (dc->d->cb)
+        dc->d->cb(dc->d, dc->d->cb_context);
       return;
     }
   /* Shared handling of errors for accept/listen */
@@ -471,9 +472,15 @@ void _dtls_uto_cb(struct uloop_timeout *t)
   _dtls_poll(d);
 }
 
+void dtls_set_readable_callback(dtls d,
+                                dtls_readable_callback cb, void *cb_context)
+{
+  d->cb = cb;
+  d->cb_context = cb_context;
+}
 
 /* Create/destroy instance. */
-dtls dtls_create(uint16_t port, dtls_readable_callback cb, void *cb_context)
+dtls dtls_create(uint16_t port)
 {
   int s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
   if (s<0)
@@ -493,8 +500,6 @@ dtls dtls_create(uint16_t port, dtls_readable_callback cb, void *cb_context)
     }
   if (!d)
     goto fail;
-  d->cb = cb;
-  d->cb_context = cb_context;
   INIT_LIST_HEAD(&d->connections);
 
   memset(&d->local_addr, 0, sizeof(d->local_addr));
