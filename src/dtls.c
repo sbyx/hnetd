@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Wed Oct 22 18:03:06 2014 mstenber
- * Edit time:     265 min
+ * Last modified: Thu Oct 23 09:06:47 2014 mstenber
+ * Edit time:     273 min
  *
  */
 
@@ -306,8 +306,8 @@ static void _connection_poll(dtls_connection dc)
     uloop_timeout_cancel(&dc->uto);
 }
 
-static int _socket_connect(struct sockaddr_in6 *local_addr,
-                         struct sockaddr_in6 *remote_addr)
+static int _socket_connect(const struct sockaddr_in6 *local_addr,
+                           const struct sockaddr_in6 *remote_addr)
 {
   int s = socket(AF_INET6, SOCK_DGRAM, 0);
   int on = 1;
@@ -590,10 +590,7 @@ void dtls_destroy(dtls d)
 
 /* Send/receive data. */
 ssize_t dtls_recvfrom(dtls d, void *buf, size_t len,
-                      char *ifname,
-                      struct in6_addr *src,
-                      uint16_t *src_port,
-                      struct in6_addr *dst)
+                      struct sockaddr_in6 *src)
 {
   dtls_connection dc;
 
@@ -602,12 +599,7 @@ ssize_t dtls_recvfrom(dtls d, void *buf, size_t len,
       size_t rv = SSL_read(dc->ssl, buf, len);
       if (rv > 0)
         {
-          *ifname = 0;
-          if (dc->remote_addr.sin6_scope_id)
-            if_indextoname(dc->remote_addr.sin6_scope_id, ifname);
-          *src = dc->remote_addr.sin6_addr;
-          *src_port = ntohs(dc->remote_addr.sin6_port);
-          *dst = d->local_addr.sin6_addr;
+          *src = dc->remote_addr;
           return rv;
         }
     }
@@ -615,29 +607,14 @@ ssize_t dtls_recvfrom(dtls d, void *buf, size_t len,
 }
 
 ssize_t dtls_sendto(dtls d, void *buf, size_t len,
-                    const char *ifname,
-                    const struct in6_addr *to,
-                    uint16_t to_port)
+                    const struct sockaddr_in6 *dst)
 {
-  struct sockaddr_in6 dst;
-
   L_DEBUG("dtls_sendto");
-  memset(&dst, 0, sizeof(dst));
-  if (!(dst.sin6_scope_id = if_nametoindex(ifname)))
-    {
-      L_ERR("unable to send on %s - if_nametoindex: %s",
-            ifname, strerror(errno));
-      return -1;
-    }
-  dst.sin6_family = AF_INET6;
-  dst.sin6_port = htons(to_port);
-  dst.sin6_addr = *to;
-
   /* Try to find existing connection */
   dtls_connection idc, dc = NULL;
   list_for_each_entry(idc, &d->connections, in_connections)
     {
-      if (memcmp(&dst, &idc->remote_addr, sizeof(dst)) == 0)
+      if (memcmp(dst, &idc->remote_addr, sizeof(*dst)) == 0)
         {
           if (idc->state == STATE_DATA)
             {
@@ -664,7 +641,7 @@ ssize_t dtls_sendto(dtls d, void *buf, size_t len,
     {
       /* Create new connection object */
       L_DEBUG("creating new client connection");
-      int s = _socket_connect(&d->local_addr, &dst);
+      int s = _socket_connect(&d->local_addr, dst);
       if (s < 0)
         {
           return -1;
@@ -673,11 +650,11 @@ ssize_t dtls_sendto(dtls d, void *buf, size_t len,
       dc = _connection_create(d, s);
       if (!dc)
         return -1;
-      dc->remote_addr = dst;
+      dc->remote_addr = *dst;
       dc->state = STATE_CONNECT;
 
       BIO *bio = BIO_new_dgram(s, 0);
-      BIO_ctrl(bio, BIO_CTRL_DGRAM_SET_CONNECTED, 0, &dst);
+      BIO_ctrl(bio, BIO_CTRL_DGRAM_SET_CONNECTED, 0, (void *)dst);
 
       SSL *ssl = SSL_new(d->ssl_client_ctx);
       SSL_set_bio(ssl, bio, bio);
@@ -739,12 +716,12 @@ unsigned int _server_psk(SSL *ssl, const char *identity,
                          unsigned char *psk, unsigned int max_psk_len)
 {
   dtls d = CRYPTO_get_ex_data(&ssl->ex_data, 0);
-  unsigned int len = d->psk_len;
 
   if (!d->psk)
     return 0;
-  if (d->psk_len < max_psk_len)
-    max_psk_len = d->psk_len;
+  if (d->psk_len > max_psk_len)
+    return 0;
+  max_psk_len = d->psk_len;
   memcpy(psk, d->psk, max_psk_len);
   return max_psk_len;
 }

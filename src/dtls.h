@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:50:18 2014 mstenber
- * Last modified: Wed Oct 22 17:21:44 2014 mstenber
- * Edit time:     7 min
+ * Last modified: Thu Oct 23 09:03:29 2014 mstenber
+ * Edit time:     9 min
  *
  */
 
@@ -44,13 +44,8 @@ bool dtls_set_psk(dtls d, const char *psk, size_t psk_len);
 
 /* Send/receive data. */
 ssize_t dtls_recvfrom(dtls d, void *buf, size_t len,
-                      char *ifname,
-                      struct in6_addr *src,
-                      uint16_t *src_port,
-                      struct in6_addr *dst);
+                      struct sockaddr_in6 *src);
 ssize_t dtls_sendto(dtls o, void *buf, size_t len,
-                    const char *ifname,
-                    const struct in6_addr *to,
-                    uint16_t to_port);
+                    const struct sockaddr_in6 *dst);
 
 #endif /* DTLS_H */

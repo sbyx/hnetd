@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:31 2014 mstenber
- * Last modified: Wed Oct 22 18:08:30 2014 mstenber
- * Edit time:     35 min
+ * Last modified: Thu Oct 23 09:05:13 2014 mstenber
+ * Edit time:     39 min
  *
  */
 
@@ -26,13 +26,6 @@ int log_level = LOG_DEBUG;
 
 int pending_readable = 0;
 
-#ifdef __APPLE__
-#define LOOPBACK_NAME "lo0"
-#else
-#define LOOPBACK_NAME "lo"
-#endif /* __APPLE__ */
-
-
 void test_timeout(struct uloop_timeout *t)
 {
   L_INFO("test failed - timeout");
@@ -46,24 +39,17 @@ void dtls_readable(dtls d, void *context)
   char buf[1024];
   size_t len = sizeof(buf);
   int r;
-  char ifname[IFNAMSIZ];
-  struct in6_addr src, dst;
-  uint16_t src_port;
+  struct sockaddr_in6 src;
 
-  r = dtls_recvfrom(d, buf, len, ifname, &src, &src_port, &dst);
+  r = dtls_recvfrom(d, buf, len, &src);
   smock_pull_int_is("dtls_recvfrom", r);
   if (r >= 0)
     {
       void *b = smock_pull("dtls_recvfrom_buf");
-      char *ifn = smock_pull("dtls_recvfrom_ifname");
       struct in6_addr *s = smock_pull("dtls_recvfrom_src");
-      struct in6_addr *d = smock_pull("dtls_recvfrom_dst");
 
       sput_fail_unless(memcmp(b, buf, r)==0, "buf mismatch");
-      sput_fail_unless(strcmp(ifn, ifname) == 0, "ifname mismatch");
       sput_fail_unless(memcmp(s, &src, sizeof(src))==0, "src mismatch");
-      smock_pull_int_is("dtls_recvfrom_src_port", src_port);
-      sput_fail_unless(memcmp(d, &dst, sizeof(dst))==0, "dst mismatch");
     }
   if (!--pending_readable)
     uloop_end();
@@ -80,12 +66,11 @@ static void dtls_basic_2()
       dtls d1 = dtls_create(pbase, dtls_readable, NULL);
       dtls d2 = dtls_create(pbase+1, dtls_readable, NULL);
       int rv;
-      struct in6_addr a, a2 = {};
       char *msg = "foo";
-      char *ifname = LOOPBACK_NAME, *empty_ifname="";
       struct uloop_timeout t = { .cb = test_timeout };
       bool rb;
-
+      struct sockaddr_in6 src = {.sin6_family = AF_INET6 };
+      struct sockaddr_in6 dst = {.sin6_family = AF_INET6 };
       if (i == 0)
         {
       rb = dtls_set_local_cert(d1, "test/cert1.pem", "test/key1.pem");
@@ -108,14 +93,14 @@ static void dtls_basic_2()
       dtls_start(d2);
 
       /* Send a packet to ourselves */
-      (void)inet_pton(AF_INET6, "::1", &a);
+      (void)inet_pton(AF_INET6, "::1", &src.sin6_addr);
+      (void)inet_pton(AF_INET6, "::1", &dst.sin6_addr);
+      src.sin6_port = ntohs(pbase);
+      dst.sin6_port = ntohs(pbase+1);
       smock_push_int("dtls_recvfrom", 3);
-      smock_push("dtls_recvfrom_src", &a);
-      smock_push("dtls_recvfrom_dst", &a2);
+      smock_push("dtls_recvfrom_src", &src);
       smock_push("dtls_recvfrom_buf", msg);
-      smock_push("dtls_recvfrom_ifname", empty_ifname);
-      smock_push_int("dtls_recvfrom_src_port", pbase);
-      rv = dtls_sendto(d1, msg, strlen(msg), ifname, &a, pbase+1);
+      rv = dtls_sendto(d1, msg, strlen(msg), &dst);
       L_DEBUG("got %d", rv);
       sput_fail_unless(rv == 3, "sendto failed?");
       pending_readable++;
