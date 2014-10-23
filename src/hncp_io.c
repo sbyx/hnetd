@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Thu Oct 23 14:23:07 2014 mstenber
- * Edit time:     269 min
+ * Last modified: Thu Oct 23 14:33:59 2014 mstenber
+ * Edit time:     270 min
  *
  */
 
@@ -291,7 +291,7 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
   dst.sin6_port = htons(to_port);
   dst.sin6_addr = *to;
 #ifdef DTLS
-  if (o->d && !IN6_IS_ADDR_MULTICAST(&dst))
+  if (o->d && !IN6_IS_ADDR_MULTICAST(to))
     {
       dst.sin6_port = htons(HNCP_DTLS_PORT);
       r = dtls_sendto(o->d, buf, len, &dst);
