@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Oct 23 19:35:31 2014 mstenber
- * Edit time:     742 min
+ * Last modified: Thu Oct 30 14:20:54 2014 mstenber
+ * Edit time:     757 min
  *
  */
 
@@ -635,12 +635,16 @@ static struct tlv_attr *_produce_new_tlvs(hncp_node n)
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
   vlist_for_each_element(&o->tlvs, t, in_tlvs)
-    if (!tlv_put_raw(&tb, &t->tlv, tlv_pad_len(&t->tlv)))
-      {
-        L_ERR("hncp_self_flush: tlv_put_raw failed?!?");
-        tlv_buf_free(&tb);
-        return NULL;
-      }
+    {
+      struct tlv_attr *a = tlv_put_raw(&tb, &t->tlv, tlv_pad_len(&t->tlv));
+      if (!a)
+        {
+          L_ERR("hncp_self_flush: tlv_put_raw failed?!?");
+          tlv_buf_free(&tb);
+          return NULL;
+        }
+      tlv_fill_pad(a);
+    }
   tlv_fill_pad(tb.head);
 
   /* Ok, all puts _did_ succeed. */

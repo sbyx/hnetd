@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu Oct 23 19:37:29 2014 mstenber
- * Edit time:     565 min
+ * Last modified: Thu Oct 30 14:21:01 2014 mstenber
+ * Edit time:     569 min
  *
  */
 
@@ -411,9 +411,11 @@ handle_message(hncp_link l,
       if (multicast)
         {
           /* Reset trickle on the link */
+          const char *h1 = HEX_REPR(nethash, HNCP_HASH_LEN);
+          const char *h2 = HEX_REPR(&o->network_hash, HNCP_HASH_LEN);
           L_DEBUG("received inconsistent multicast network state %s != %s",
-                  HEX_REPR(nethash, HNCP_HASH_LEN),
-                  HEX_REPR(&o->network_hash, HNCP_HASH_LEN));
+                  h1, h2
+                  );
           hncp_link_reset_trickle(l);
         }
 
