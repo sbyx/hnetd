@@ -787,7 +787,7 @@ void pa_core_rule_del(struct pa_core *core,
 		pa_cp_set_authoritative(&cpl->cp, false);
 		if(cpl->cp.priority > PA_PRIORITY_DEFAULT)
 			pa_cp_set_priority(&cpl->cp, PA_PRIORITY_DEFAULT);
-		pa_cp_set_advertised(&cpl->cp, &cpl->iface->designated); //This is to avoid changing the designated router
+		pa_cp_set_advertised(&cpl->cp, cpl->iface->designated); //This is to avoid changing the designated router
 		pa_cp_notify(&cpl->cp);
 		__pa_paa_schedule(core);
 	}
