@@ -411,11 +411,9 @@ handle_message(hncp_link l,
       if (multicast)
         {
           /* Reset trickle on the link */
-          const char *h1 = HEX_REPR(nethash, HNCP_HASH_LEN);
-          const char *h2 = HEX_REPR(&o->network_hash, HNCP_HASH_LEN);
           L_DEBUG("received inconsistent multicast network state %s != %s",
-                  h1, h2
-                  );
+                  HEX_REPR(nethash, HNCP_HASH_LEN),
+                  HEX_REPR(&o->network_hash, HNCP_HASH_LEN));
           hncp_link_reset_trickle(l);
         }
 
