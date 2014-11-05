@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:50:18 2014 mstenber
- * Last modified: Thu Oct 23 13:26:54 2014 mstenber
- * Edit time:     11 min
+ * Last modified: Wed Nov  5 18:06:29 2014 mstenber
+ * Edit time:     15 min
  *
  */
 
@@ -38,6 +38,7 @@
 
 typedef struct dtls_struct *dtls;
 typedef void (*dtls_readable_callback)(dtls d, void *context);
+typedef void (*dtls_unknown_callback)(dtls d, const char *pem_x509, void *context);
 
 /* Create/destroy instance. */
 dtls dtls_create(uint16_t port);
@@ -46,10 +47,12 @@ void dtls_destroy(dtls d);
 
 /* Callback to call when dtls has new data. */
 void dtls_set_readable_callback(dtls d, dtls_readable_callback cb, void *cb_context);
+void dtls_set_unknown_cert_callback(dtls d, dtls_unknown_callback cb, void *cb_context);
 
 /* Set local authentication information */
 bool dtls_set_local_cert(dtls d, const char *certfile, const char *pkfile);
 
+/* Set 'global' pre-shared key to use / expect other side to use. */
 bool dtls_set_psk(dtls d, const char *psk, size_t psk_len);
 
 /* Send/receive data. */

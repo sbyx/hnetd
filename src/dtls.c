@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Wed Nov  5 16:45:03 2014 mstenber
- * Edit time:     406 min
+ * Last modified: Wed Nov  5 19:44:10 2014 mstenber
+ * Edit time:     435 min
  *
  */
 
@@ -57,11 +57,10 @@
  * ( does it matter? it seems one context is enough. ) */
 #define USE_ONE_CONTEXT
 
-/* Except in case of CYASSL - it does not define DTLSv1_method */
 #ifdef DTLS_CYASSL
-#ifdef USE_ONE_CONTEXT
+
+/* Except in case of CYASSL - it does not define DTLSv1_method */
 #undef USE_ONE_CONTEXT
-#endif /* USE_ONE_CONTEXT */
 
 /* CyaSSL 3.2.0 compatibility fixes */
 #ifndef BIO_new_dgram
@@ -118,8 +117,11 @@ typedef struct {
 typedef struct dtls_struct {
   /* Client provided - (optional) callback to call when something
    * readable available. */
-  dtls_readable_callback cb;
-  void *cb_context;
+  dtls_readable_callback readable_cb;
+  void *readable_cb_context;
+
+  dtls_unknown_callback unknown_cb;
+  void *unknown_cb_context;
 
   /* We keep this around, just for re-binding of new received connections. */
   struct sockaddr_in6 local_addr;
@@ -155,7 +157,7 @@ static bool _drain_errors()
   if (!ERR_peek_error())
     return false;
 
-#ifndef DTLS_CYASSL
+#ifdef DTLS_OPENSSL
   BIO *bio_stderr = BIO_new(BIO_s_file());
   BIO_set_fp(bio_stderr, stderr, BIO_NOCLOSE|BIO_FP_TEXT);
   ERR_print_errors(bio_stderr);
@@ -164,7 +166,8 @@ static bool _drain_errors()
   /* Clear stack */
   while (ERR_peek_error())
     ERR_get_error();
-#endif /* !DTLS_CYASSL */
+#endif /* DTLS_OPENSSL */
+
   return true;
 }
 
@@ -347,8 +350,8 @@ static void _connection_poll(dtls_connection dc)
           return;
         }
       dc->d->readable = true;
-      if (dc->d->cb)
-        dc->d->cb(dc->d, dc->d->cb_context);
+      if (dc->d->readable_cb)
+        dc->d->readable_cb(dc->d, dc->d->readable_cb_context);
       else
         L_DEBUG("no readable callback on ready connection %p", dc);
       return;
@@ -621,8 +624,16 @@ void _dtls_uto_cb(struct uloop_timeout *t)
 void dtls_set_readable_callback(dtls d,
                                 dtls_readable_callback cb, void *cb_context)
 {
-  d->cb = cb;
-  d->cb_context = cb_context;
+  d->readable_cb = cb;
+  d->readable_cb_context = cb_context;
+}
+
+void dtls_set_unknown_cert_callback(dtls d,
+                                    dtls_unknown_callback cb,
+                                    void *cb_context)
+{
+  d->unknown_cb = cb;
+  d->unknown_cb_context = cb_context;
 }
 
 /* Create/destroy instance. */
@@ -680,6 +691,7 @@ dtls dtls_create(uint16_t port)
       L_ERR("unable to create server SSL_CTX");
       goto fail;
     }
+  SSL_CTX_set_ex_data(ctx, 0, d);
 #ifdef DTLS_OPENSSL
   SSL_CTX_set_read_ahead(ctx, 1);
   SSL_CTX_set_cookie_generate_cb(ctx, _cookie_gen_cb);
@@ -695,6 +707,7 @@ dtls dtls_create(uint16_t port)
       L_ERR("unable to create client SSL_CTX");
       goto fail;
     }
+  SSL_CTX_set_ex_data(ctx, 0, d);
 #ifdef DTLS_OPENSSL
   SSL_CTX_set_read_ahead(ctx, 1);
 #endif /* DTLS_OPENSSL */
@@ -860,10 +873,50 @@ ssize_t dtls_sendto(dtls d, void *buf, size_t len,
     }                                                   \
 } while(0)
 
-static int _verify_cert(int ok __unused, X509_STORE_CTX *ctx __unused)
+static int _verify_cert_cb(int ok, X509_STORE_CTX *ctx)
 {
-  /* TBD */
-  return 1;
+  dtls d = X509_STORE_CTX_get_ex_data(ctx, 0);
+
+  if (!d)
+    {
+      L_ERR("unable to find dtls instance");
+      return 0;
+    }
+
+  /* If OpenSSL says it is ok, not much to add. */
+  if (ok)
+    {
+      L_DEBUG("certificate ok according to SSL library");
+      return 1;
+    }
+
+  X509 *cert = X509_STORE_CTX_get_current_cert(ctx);
+  int depth = X509_STORE_CTX_get_error_depth(ctx);
+  int error = X509_STORE_CTX_get_error(ctx);
+
+  char buf[256];
+  L_ERR("error %d:%s with certificate at depth %d",
+        error, X509_verify_cert_error_string(error), depth);
+  if (cert)
+    {
+      X509_NAME_oneline(X509_get_issuer_name(cert), buf, sizeof(buf));
+      if (*buf)
+        L_ERR("- issuer:%s", buf);
+      X509_NAME_oneline(X509_get_subject_name(cert), buf, sizeof(buf));
+      if (*buf)
+        L_ERR("- subject:%s", buf);
+    }
+
+  if (d->unknown_cb)
+    {
+      char dummy[2048];
+      BIO *bio = BIO_new_mem_buf(dummy, sizeof(dummy));
+      PEM_write_bio_X509(bio, cert);
+      BIO_free(bio);
+      dummy[sizeof(dummy)-1] = 0; /* Make sure it is null terminated */
+      d->unknown_cb(d, dummy, d->unknown_cb_context);
+    }
+  return 0;
 }
 
 bool dtls_set_local_cert(dtls d, const char *certfile, const char *pkfile)
@@ -876,7 +929,7 @@ bool dtls_set_local_cert(dtls d, const char *certfile, const char *pkfile)
 #ifdef DTLS_OPENSSL
                      |SSL_VERIFY_FAIL_IF_NO_PEER_CERT
 #endif /* DTLS_OPENSSL */
-                     , _verify_cert);
+                     , _verify_cert_cb);
 
 #ifndef USE_ONE_CONTEXT
   R1("client cert",
@@ -887,14 +940,31 @@ bool dtls_set_local_cert(dtls d, const char *certfile, const char *pkfile)
 #ifdef DTLS_OPENSSL
                      |SSL_VERIFY_PEER_FAIL_IF_NO_PEER_CERT
 #endif /* DTLS_OPENSSL */
-                     , _verify_cert);
+                     , _verify_cert_cb);
 #endif /* !USE_ONE_CONTEXT */
   return true;
  fail:
   return false;
 }
 
-unsigned int _server_psk(SSL *ssl, const char *identity __unused,
+bool dtls_set_verify_locations(dtls d, const char *path, const char *dir)
+{
+  if (SSL_CTX_load_verify_locations(d->ssl_server_ctx, path, dir) != 1)
+    {
+      _drain_errors();
+      return false;
+    }
+#ifndef USE_ONE
+  if (SSL_CTX_load_verify_locations(d->ssl_client_ctx, path, dir) != 1)
+    {
+      _drain_errors();
+      return false;
+    }
+#endif /* !USE_ONE */
+  return true;
+}
+
+unsigned int _server_psk(SSL *ssl __unused, const char *identity __unused,
                          unsigned char *psk, unsigned int max_psk_len)
 {
   dtls d = SSL_get_ex_data(ssl, 0);
