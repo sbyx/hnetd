@@ -6,14 +6,15 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Wed Nov  5 11:32:46 2014 mstenber
- * Edit time:     311 min
+ * Last modified: Wed Nov  5 13:20:54 2014 mstenber
+ * Edit time:     334 min
  *
  */
 
 #include "dtls.h"
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #include <openssl/rand.h>
@@ -26,6 +27,8 @@
 #include <fcntl.h>
 #define __unused __attribute__((unused))
 
+#ifdef DTLS_OPENSSL
+
 /* How large random string key we use as base for cookies */
 #define COOKIE_SECRET_LENGTH 10
 
@@ -34,6 +37,8 @@
 
 /* How long cookies are valid (in seconds) */
 #define COOKIE_VALIDITY_PERIOD 10
+
+#endif /* DTLS_OPENSSL */
 
 /* Do we want to use arbitrary client ports? */
 /* In practise, this is actually mandatory:
@@ -48,6 +53,18 @@
 /* Try to use one context for both client and server connections
  * ( does it matter? it seems one context is enough. ) */
 #define USE_ONE_CONTEXT
+
+/* Except in case of CYASSL - it does not define DTLSv1_method */
+#ifdef DTLS_CYASSL
+#ifdef USE_ONE_CONTEXT
+#undef USE_ONE_CONTEXT
+#endif /* USE_ONE_CONTEXT */
+
+/* CyaSSL 3.2.0 compatibility fixes */
+#ifndef BIO_new_dgram
+#define BIO_new_dgram(s,f) BIO_new_socket(s,f)
+#endif /* !BIO_new_dgram */
+#endif /* DTLS_CYASSL */
 
 /* These lurk in queue, waiting for connection to finish (outbound). */
 typedef struct {
@@ -98,7 +115,9 @@ typedef struct dtls_struct {
   SSL *listen_ssl;
 
   struct list_head connections;
+#ifdef DTLS_OPENSSL
   unsigned char cookie_secret[COOKIE_SECRET_LENGTH];
+#endif /* DTLS_OPENSSL */
 
   bool readable;
   bool started;
@@ -114,6 +133,7 @@ static bool _drain_errors()
   if (!ERR_peek_error())
     return false;
 
+#ifndef DTLS_CYASSL
   BIO *bio_stderr = BIO_new(BIO_s_file());
   BIO_set_fp(bio_stderr, stderr, BIO_NOCLOSE|BIO_FP_TEXT);
   ERR_print_errors(bio_stderr);
@@ -122,15 +142,21 @@ static bool _drain_errors()
   /* Clear stack */
   while (ERR_peek_error())
     ERR_get_error();
+#endif /* !DTLS_CYASSL */
   return true;
 }
+
+#ifdef DTLS_OPENSSL
+
+
+/* OpenSSL needs this */
 
 static int _cookie_gen_fixed_time(SSL *ssl,
                                   unsigned char *cookie,
                                   unsigned int *cookie_len,
                                   time_t t)
 {
-  dtls d = CRYPTO_get_ex_data(&ssl->ex_data, 0);
+  dtls d = SSL_get_ex_data(ssl, 0);
   struct sockaddr_storage ss;
   struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&ss;
   md5_ctx_t ctx;
@@ -209,6 +235,8 @@ static int _cookie_verify_cb(SSL *ssl,
   L_DEBUG("_cookie_verify_cb succeeded");
   return 1;
 }
+
+#endif /* DTLS_OPENSSL */
 
 static void _dtls_listen(dtls d);
 
@@ -310,8 +338,16 @@ static void _connection_poll(dtls_connection dc)
     _drain_errors();
 
   /* Handle the timeout here too */
-  struct timeval tv;
+  struct timeval tv = { 0, 0 };
+#ifdef DTLS_OPENSSL
   if (DTLSv1_get_timeout(dc->ssl, &tv) == 1)
+#else
+#ifdef DTLS_CYASSL
+  if ((tv.tv_sec = CyaSSL_dtls_get_current_timeout(dc->ssl)) > 0)
+#else
+#error
+#endif /* DTLS_CYASSL */
+#endif /* DTLS_OPENSSL */
     {
       L_DEBUG("c-timeout in %d/%d", (int)tv.tv_sec, (int)tv.tv_usec);
       uloop_timeout_set(&dc->uto, tv.tv_usec / 1000 + 1000 * tv.tv_sec);
@@ -368,7 +404,12 @@ void _connection_uto_cb(struct uloop_timeout *t)
   dtls_connection dc = container_of(t, dtls_connection_s, uto);
 
   L_DEBUG("_connection_uto_cb %p", dc);
+#ifdef DTLS_OPENSSL
   DTLSv1_handle_timeout(dc->ssl);
+#endif /* DTLS_OPENSSL */
+#ifdef DTLS_CYASSL
+  CyaSSL_dtls_got_timeout(dc->ssl);
+#endif /* DTLS_CYASSL */
 
   /* reset the timeout */
   _connection_poll(dc);
@@ -474,7 +515,7 @@ static void _dtls_listen(dtls d)
       _drain_errors();
       return;
     }
-  CRYPTO_set_ex_data(&ssl->ex_data, 0, d);
+  SSL_set_ex_data(ssl, 0, d);
   d->listen_ssl = ssl;
   SSL_set_bio(ssl, d->listen_bio, d->listen_bio);
   SSL_set_options(ssl, SSL_OP_COOKIE_EXCHANGE);
@@ -494,7 +535,12 @@ void _dtls_uto_cb(struct uloop_timeout *t)
   dtls d = container_of(t, dtls_s, uto);
 
   L_DEBUG("_dtls_uto_cb");
+#ifdef DTLS_OPENSSL
   DTLSv1_handle_timeout(d->listen_ssl);
+#endif /* DTLS_OPENSSL */
+#ifdef DTLS_CYASSL
+  CyaSSL_dtls_got_timeout(d->listen_ssl);
+#endif /* DTLS_CYASSL */
   _dtls_poll(d);
 }
 
@@ -560,10 +606,12 @@ dtls dtls_create(uint16_t port)
       L_ERR("unable to create server SSL_CTX");
       goto fail;
     }
+#ifdef DTLS_OPENSSL
   SSL_CTX_set_read_ahead(ctx, 1);
   SSL_CTX_set_cookie_generate_cb(ctx, _cookie_gen_cb);
   SSL_CTX_set_cookie_verify_cb(ctx, _cookie_verify_cb);
   RAND_bytes(d->cookie_secret, COOKIE_SECRET_LENGTH);
+#endif /* DTLS_OPENSSL */
   d->ssl_server_ctx = ctx;
 
 #ifndef USE_ONE_CONTEXT
@@ -573,7 +621,9 @@ dtls dtls_create(uint16_t port)
       L_ERR("unable to create client SSL_CTX");
       goto fail;
     }
+#ifdef DTLS_OPENSSL
   SSL_CTX_set_read_ahead(ctx, 1);
+#endif /* DTLS_OPENSSL */
 #endif /* !USE_ONE_CONTEXT */
   d->ssl_client_ctx = ctx;
   d->listen_socket = s;
@@ -690,7 +740,7 @@ ssize_t dtls_sendto(dtls d, void *buf, size_t len,
 
       SSL *ssl = SSL_new(d->ssl_client_ctx);
       SSL_set_bio(ssl, bio, bio);
-      CRYPTO_set_ex_data(&ssl->ex_data, 0, d);
+      SSL_set_ex_data(ssl, 0, d);
 
       dc->ssl = ssl;
 
@@ -731,14 +781,22 @@ bool dtls_set_local_cert(dtls d, const char *certfile, const char *pkfile)
      SSL_CTX_use_certificate_chain_file(d->ssl_server_ctx, certfile));
   R1("server private key",
      SSL_CTX_use_PrivateKey_file(d->ssl_server_ctx, pkfile, SSL_FILETYPE_PEM));
-  SSL_CTX_set_verify(d->ssl_server_ctx, SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT, _verify_cert);
+  SSL_CTX_set_verify(d->ssl_server_ctx, SSL_VERIFY_PEER
+#ifdef DTLS_OPENSSL
+                     |SSL_VERIFY_FAIL_IF_NO_PEER_CERT
+#endif /* DTLS_OPENSSL */
+                     , _verify_cert);
 
 #ifndef USE_ONE_CONTEXT
   R1("client cert",
      SSL_CTX_use_certificate_chain_file(d->ssl_client_ctx, certfile));
   R1("client private key",
      SSL_CTX_use_PrivateKey_file(d->ssl_client_ctx, pkfile, SSL_FILETYPE_PEM));
-  SSL_CTX_set_verify(d->ssl_client_ctx, SSL_VERIFY_PEER_FAIL_IF_NO_PEER_CERT, _verify_cert);
+  SSL_CTX_set_verify(d->ssl_client_ctx, SSL_VERIFY_PEER
+#ifdef DTLS_OPENSSL
+                     |SSL_VERIFY_PEER_FAIL_IF_NO_PEER_CERT
+#endif /* DTLS_OPENSSL */
+                     , _verify_cert);
 #endif /* !USE_ONE_CONTEXT */
   return true;
  fail:
@@ -748,7 +806,7 @@ bool dtls_set_local_cert(dtls d, const char *certfile, const char *pkfile)
 unsigned int _server_psk(SSL *ssl, const char *identity __unused,
                          unsigned char *psk, unsigned int max_psk_len)
 {
-  dtls d = CRYPTO_get_ex_data(&ssl->ex_data, 0);
+  dtls d = SSL_get_ex_data(ssl, 0);
 
   if (!d->psk)
     return 0;
