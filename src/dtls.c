@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Thu Oct 23 20:06:54 2014 mstenber
- * Edit time:     295 min
+ * Last modified: Wed Nov  5 11:07:56 2014 mstenber
+ * Edit time:     303 min
  *
  */
 
@@ -754,10 +754,12 @@ unsigned int _server_psk(SSL *ssl, const char *identity __unused,
 
 unsigned int _client_psk(SSL *ssl,
                          const char *hint __unused,
-                         char *identity __unused,
+                         char *identity,
                          unsigned int max_identity_len __unused,
                          unsigned char *psk, unsigned int max_psk_len)
 {
+  /* We don't have identity for the key. */
+  *identity = 0;
   return _server_psk(ssl, NULL, psk, max_psk_len);
 }
 
