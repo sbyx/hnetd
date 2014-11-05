@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Wed Nov  5 11:07:56 2014 mstenber
- * Edit time:     303 min
+ * Last modified: Wed Nov  5 11:32:46 2014 mstenber
+ * Edit time:     311 min
  *
  */
 
@@ -36,10 +36,17 @@
 #define COOKIE_VALIDITY_PERIOD 10
 
 /* Do we want to use arbitrary client ports? */
-#undef USE_FLOATING_CLIENT_PORT
+/* In practise, this is actually mandatory:
+ * Otherwise there is a race condition between client- and server
+ * connection with a remote IP, and in worst case, the socket bind order
+ * for the (localip, localport, remoteip, remoteport) is 'wrong way around'
+ * so the client socket will get remote party's client traffic, and
+ * server socket gets nothing (for example).
+ */
+#define USE_FLOATING_CLIENT_PORT
 
 /* Try to use one context for both client and server connections
- * ( does it matter?) */
+ * ( does it matter? it seems one context is enough. ) */
 #define USE_ONE_CONTEXT
 
 /* These lurk in queue, waiting for connection to finish (outbound). */
