@@ -27,10 +27,10 @@ elseif(${DTLS_CYASSL})
   set(DTLS_SOURCE src/dtls.c)
   set(DTLS_LINK cyassl)
   add_definitions(-DDTLS=1 -DDTLS_CYASSL=1)
-else(${DTLS})
+else()
   set(DTLS_SOURCE "")
   set(DTLS_LINK "")
-endif(${DTLS})
+endif()
 
 OPTION(COVERAGE "build with coverage" OFF)
 

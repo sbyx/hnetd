@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Wed Nov  5 13:20:54 2014 mstenber
- * Edit time:     334 min
+ * Last modified: Wed Nov  5 16:45:03 2014 mstenber
+ * Edit time:     406 min
  *
  */
 
@@ -15,6 +15,9 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef DTLS_CYASSL
+#include <cyassl/options.h>
+#endif /* DTLS_CYASSL */
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #include <openssl/rand.h>
@@ -64,6 +67,23 @@
 #ifndef BIO_new_dgram
 #define BIO_new_dgram(s,f) BIO_new_socket(s,f)
 #endif /* !BIO_new_dgram */
+#define _dtls_listen(d)
+
+#undef SSL_get_ex_data
+#define SSL_get_ex_data(ssl,n) _dtls
+#undef SSL_set_ex_data
+#define SSL_set_ex_data(ssl,n,d)                                        \
+do                                                                      \
+  {                                                                     \
+    if (_dtls && _dtls != d)                                            \
+      {                                                                 \
+        L_ERR("more than one DTLS context is not supported in CyaSSL"); \
+      }                                                                 \
+    _dtls = d;                                                          \
+  } while(0)
+
+dtls _dtls = NULL;
+
 #endif /* DTLS_CYASSL */
 
 /* These lurk in queue, waiting for connection to finish (outbound). */
@@ -83,9 +103,9 @@ typedef struct {
   struct sockaddr_in6 remote_addr;
 
   enum {
-    STATE_ACCEPT=1,
-    STATE_CONNECT=2,
-    STATE_DATA=3
+    STATE_ACCEPT,
+    STATE_CONNECT,
+    STATE_DATA
   } state;
 
   struct uloop_fd ufd;
@@ -111,8 +131,10 @@ typedef struct dtls_struct {
   struct uloop_fd ufd;
   struct uloop_timeout uto;
   int listen_socket;
+#ifdef DTLS_OPENSSL
   BIO *listen_bio;
   SSL *listen_ssl;
+#endif /* DTLS_OPENSSL */
 
   struct list_head connections;
 #ifdef DTLS_OPENSSL
@@ -161,6 +183,12 @@ static int _cookie_gen_fixed_time(SSL *ssl,
   struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&ss;
   md5_ctx_t ctx;
   unsigned char result[COOKIE_LENGTH];
+
+  if (!d)
+    {
+      L_ERR("NULL ex_data 0?!?");
+      return 0;
+    }
 
   (void)BIO_dgram_get_peer(SSL_get_rbio(ssl), &ss);
 
@@ -236,9 +264,9 @@ static int _cookie_verify_cb(SSL *ssl,
   return 1;
 }
 
-#endif /* DTLS_OPENSSL */
-
 static void _dtls_listen(dtls d);
+
+#endif /* DTLS_OPENSSL */
 
 static void _qb_free(dtls_queued_buffer qb)
 {
@@ -447,6 +475,8 @@ static void _dtls_poll(dtls d)
   int rv;
   dtls_connection dc = NULL;
 
+#ifdef DTLS_OPENSSL
+
   if ((rv = DTLSv1_listen(d->listen_ssl, &remote_addr)) <= 0)
     {
       if (rv < 0)
@@ -466,19 +496,62 @@ static void _dtls_poll(dtls d)
    * it, grr */
   if (_drain_errors())
     goto wait;
+#endif /* DTLS_OPENSSL */
+#ifdef DTLS_CYASSL
+  /* There is no elegant way of handling the no-DTLSv1_listen case
+   * that is both secure, and works instantly. So we simply recvfrom
+   * (_without_ peek) from the socket, and let the resend set up the
+   * connection.
+   *
+   * (In principle, PEEK + some socket juggling would work, unless
+   * there are in queue packets from multiple parties and in that case
+   * SSL state machine would get horribly confused. Sigh.)
+   */
+  char buf[1];
+  socklen_t remote_len = sizeof(remote_addr);
+
+  if ((rv = recvfrom(d->listen_socket, buf, sizeof(buf), 0,
+                     &remote_addr, &remote_len)) <= 0)
+    {
+      L_DEBUG("recvfrom did not return anything");
+      goto wait;
+    }
+
+#endif /* DTLS_CYASSL */
+
   int s = _socket_connect(&d->local_addr, &remote_addr);
   if (s < 0)
     goto fail;
-  BIO_set_fd(d->listen_bio, s, 0);
-  BIO_ctrl(d->listen_bio, BIO_CTRL_DGRAM_SET_CONNECTED, 0, &remote_addr);
 
   dc = _connection_create(d, s);
   if (!dc)
     goto fail;
   dc->remote_addr = remote_addr;
-  dc->ssl = d->listen_ssl;
   dc->state = STATE_ACCEPT;
-
+#ifdef DTLS_OPENSSL
+  BIO_set_fd(d->listen_bio, s, 0);
+  BIO_ctrl(d->listen_bio, BIO_CTRL_DGRAM_SET_CONNECTED, 0, &remote_addr);
+  dc->ssl = d->listen_ssl;
+#endif /* DTLS_OPENSSL */
+#ifdef DTLS_CYASSL
+  SSL *ssl = SSL_new(d->ssl_server_ctx);
+  if (!ssl)
+    {
+      L_ERR("CyaSSL SSL_new");
+      goto fail;
+    }
+  SSL_set_ex_data(ssl, 0, d);
+  CyaSSL_set_fd(ssl, s);
+  CyaSSL_set_using_nonblock(ssl, 1);
+  rv =
+    CyaSSL_dtls_set_peer(ssl, &dc->remote_addr, sizeof(dc->remote_addr));
+  if (rv != SSL_SUCCESS)
+    {
+      L_ERR("CyaSSL_dtls_set_peer");
+      goto fail;
+    }
+  dc->ssl = ssl;
+#endif /* DTLS_CYASSL */
   /* Poll the connection to mark it 'live' */
   _connection_poll(dc);
 
@@ -493,6 +566,7 @@ static void _dtls_poll(dtls d)
 
  wait:
   {
+#ifdef DTLS_OPENSSL
     /* Set up the timeout */
     struct timeval tv;
     if (DTLSv1_get_timeout(d->listen_ssl, &tv) == 1)
@@ -502,9 +576,11 @@ static void _dtls_poll(dtls d)
       }
     else
       uloop_timeout_cancel(&d->uto);
+#endif /* DTLS_OPENSSL */
   }
 }
 
+#ifdef DTLS_OPENSSL
 static void _dtls_listen(dtls d)
 {
   d->listen_bio = BIO_new_dgram(d->listen_socket, BIO_NOCLOSE);
@@ -521,6 +597,7 @@ static void _dtls_listen(dtls d)
   SSL_set_options(ssl, SSL_OP_COOKIE_EXCHANGE);
   _dtls_poll(d);
 }
+#endif /* DTLS_OPENSSL */
 
 void _dtls_ufd_cb(struct uloop_fd *u, unsigned int events __unused)
 {
@@ -538,9 +615,6 @@ void _dtls_uto_cb(struct uloop_timeout *t)
 #ifdef DTLS_OPENSSL
   DTLSv1_handle_timeout(d->listen_ssl);
 #endif /* DTLS_OPENSSL */
-#ifdef DTLS_CYASSL
-  CyaSSL_dtls_got_timeout(d->listen_ssl);
-#endif /* DTLS_CYASSL */
   _dtls_poll(d);
 }
 
@@ -654,7 +728,9 @@ void dtls_destroy(dtls d)
 
   if (d->psk)
     free(d->psk);
+#ifdef DTLS_OPENSSL
   SSL_free(d->listen_ssl);
+#endif /* DTLS_OPENSSL */
   SSL_CTX_free(d->ssl_server_ctx);
 #ifndef USE_ONE_CONTEXT
   SSL_CTX_free(d->ssl_client_ctx);
@@ -735,12 +811,27 @@ ssize_t dtls_sendto(dtls d, void *buf, size_t len,
       dc->remote_addr = *dst;
       dc->state = STATE_CONNECT;
 
+      SSL *ssl = SSL_new(d->ssl_client_ctx);
+      if (!ssl)
+        return -1;
+      SSL_set_ex_data(ssl, 0, d);
+#ifdef DTLS_OPENSSL
       BIO *bio = BIO_new_dgram(s, 0);
       BIO_ctrl(bio, BIO_CTRL_DGRAM_SET_CONNECTED, 0, (void *)dst);
-
-      SSL *ssl = SSL_new(d->ssl_client_ctx);
       SSL_set_bio(ssl, bio, bio);
-      SSL_set_ex_data(ssl, 0, d);
+#endif /* DTLS_OPENSSL */
+
+#ifdef DTLS_CYASSL
+      CyaSSL_set_fd(ssl, s);
+      CyaSSL_set_using_nonblock(ssl, 1);
+      int rv =
+      CyaSSL_dtls_set_peer(ssl, &dc->remote_addr, sizeof(dc->remote_addr));
+      if (rv != SSL_SUCCESS)
+        {
+          L_ERR("CyaSSL_dtls_set_peer");
+          return -1;
+        }
+#endif /* DTLS_CYASSL */
 
       dc->ssl = ssl;
 
@@ -808,6 +899,11 @@ unsigned int _server_psk(SSL *ssl, const char *identity __unused,
 {
   dtls d = SSL_get_ex_data(ssl, 0);
 
+  if (!d)
+    {
+      L_ERR("NULL ex_data 0?!?");
+      return 0;
+    }
   if (!d->psk)
     return 0;
   if (d->psk_len > max_psk_len)
@@ -837,9 +933,24 @@ bool dtls_set_psk(dtls d, const char *psk, size_t psk_len)
     return false;
   d->psk_len = psk_len;
   memcpy(d->psk, psk, psk_len);
-  SSL_CTX_set_psk_client_callback(d->ssl_client_ctx,
-                                  _client_psk);
-  SSL_CTX_set_psk_server_callback(d->ssl_server_ctx,
-                                  _server_psk);
+  SSL_CTX_set_psk_client_callback(d->ssl_client_ctx, _client_psk);
+  SSL_CTX_set_psk_server_callback(d->ssl_server_ctx, _server_psk);
+#ifdef DTLS_CYASSL
+  /* CyaSSL does not seem to realize that non-PSK ciphersuites are bad
+   * idea if you do not have certs.. */
+  if (CyaSSL_CTX_set_cipher_list(d->ssl_client_ctx,
+                                 "PSK-AES128-CBC-SHA256") != SSL_SUCCESS)
+    {
+      L_ERR("unable to set cipher list");
+      return false;
+    }
+  if (CyaSSL_CTX_set_cipher_list(d->ssl_server_ctx,
+                                 "PSK-AES128-CBC-SHA256") != SSL_SUCCESS)
+    {
+      L_ERR("unable to set cipher list");
+      return false;
+    }
+#endif /* DTLS_CYASSL */
+
   return true;
 }
