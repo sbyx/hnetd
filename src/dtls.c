@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Thu Nov  6 13:05:38 2014 mstenber
- * Edit time:     542 min
+ * Last modified: Thu Nov  6 13:59:53 2014 mstenber
+ * Edit time:     566 min
  *
  */
 
@@ -29,10 +29,18 @@
  * MatrixSSL should probably work fairly straightforwardly. The
  * certificate code, on the other hand, may be painful to adapt to
  * non-OpenSSL.
+ *
+ * TBD:
+ * - add some sort of limits on # of pending connections
+ * - add some sort of timing out for connections
  */
 
 
 #include "dtls.h"
+#if L_LEVEL >= LOG_DEBUG
+/* HEX_REPR */
+#include "tlv.h"
+#endif /* L_LEVEL >= LOG_DEBUG */
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
@@ -122,11 +130,11 @@ typedef struct dtls_struct {
 
   struct uloop_fd ufd_server;
   int server_socket;
-  struct list_head server_connections;
 
   struct uloop_fd ufd_client;
   int client_socket;
-  struct list_head client_connections;
+
+  struct list_head connections;
 
 #ifdef DTLS_OPENSSL
   unsigned char cookie_secret[COOKIE_SECRET_LENGTH];
@@ -267,13 +275,28 @@ static void _connection_free(dtls_connection dc)
   free(dc);
 }
 
-static void _connection_poll_read(dtls_connection dc)
+static bool _connection_poll_write(dtls_connection dc)
+{
+  while (BIO_ctrl_pending(dc->wbio) > 0)
+    {
+      char buf[2048];
+      int outsize = BIO_read(dc->wbio, buf, sizeof(buf));
+      int s = dc->is_client ? dc->d->client_socket : dc->d->server_socket;
+      sendto(s, buf, outsize, 0,
+             (struct sockaddr *)&dc->remote_addr, sizeof(dc->remote_addr));
+      L_DEBUG("sent %d bytes to peer", outsize);
+    }
+  /* We do not close sockets here. */
+  return true;
+}
+
+static bool _connection_poll_read(dtls_connection dc)
 {
   unsigned char buf[1];
   int rv;
   dtls_queued_buffer qb, qb2;
 
-  L_DEBUG("_connection_poll %p @%d", dc, dc->state);
+  L_DEBUG("_connection_poll_read %p @%d", dc, dc->state);
  redo:
   switch (dc->state)
     {
@@ -310,33 +333,33 @@ static void _connection_poll_read(dtls_connection dc)
             {
               L_DEBUG("queued data write of %d failed", (int)qb->len);
               _drain_errors();
-              return;
+              return true;
             }
         }
 
       if (dc->d->readable)
         {
           L_DEBUG("already readable, no need for further polling of ready");
-          return;
+          return true;
         }
       if (SSL_peek(dc->ssl, buf, 1) <= 0)
         {
           L_DEBUG("nothing in queue according to SSL_peek");
-          return;
+          return true;
         }
       dc->d->readable = true;
       if (dc->d->readable_cb)
         dc->d->readable_cb(dc->d, dc->d->readable_cb_context);
       else
         L_DEBUG("no readable callback on ready connection %p", dc);
-      return;
+      return true;
     }
   /* Shared handling of errors for accept/listen */
   if (rv == 0)
     {
       L_DEBUG(" got 0 => terminating connection");
       _connection_free(dc);
-      return;
+      return false;
     }
   /* Non-0, but probably timeout */
   int err = SSL_get_error(dc->ssl, rv);
@@ -356,20 +379,18 @@ static void _connection_poll_read(dtls_connection dc)
     }
   else
     uloop_timeout_cancel(&dc->uto);
+  return true;
 }
 
 static void _connection_poll(dtls_connection dc)
 {
-  _connection_poll_read(dc);
-  while (BIO_ctrl_pending(dc->wbio) > 0)
-    {
-      char buf[2048];
-      int outsize = BIO_read(dc->wbio, buf, sizeof(buf));
-      int s = dc->is_client ? dc->d->client_socket : dc->d->server_socket;
-      sendto(s, buf, outsize, 0,
-             (struct sockaddr *)&dc->remote_addr, sizeof(dc->remote_addr));
-      L_DEBUG("sent %d bytes to peer", outsize);
-    }
+  /*
+   * If _connection_poll_read returns false, dc pointer is no longer valid
+   * -> do nothing here.
+   */
+  if (!_connection_poll_read(dc))
+    return;
+  (void)_connection_poll_write(dc);
 }
 
 void _connection_uto_cb(struct uloop_timeout *t)
@@ -386,14 +407,15 @@ void _connection_uto_cb(struct uloop_timeout *t)
 }
 
 static dtls_connection
-_connection_find(struct list_head *connections,
-                 const struct sockaddr_in6 *dst)
+_connection_find(dtls d, int is_client, const struct sockaddr_in6 *dst)
 {
   dtls_connection dc;
 
-  list_for_each_entry(dc, connections, in_connections)
-    if (memcmp(dst, &dc->remote_addr, sizeof(*dst)) == 0)
-      return dc;
+  L_DEBUG("_connection_find dst:%s", HEX_REPR(dst, sizeof(*dst)));
+  list_for_each_entry(dc, &d->connections, in_connections)
+    if (is_client < 0 || (!is_client == !dc->is_client))
+      if (memcmp(dst, &dc->remote_addr, sizeof(*dst)) == 0)
+        return dc;
   return NULL;
 }
 
@@ -431,15 +453,12 @@ _connection_create(dtls d, bool is_client,
   BIO_set_mem_eof_return(dc->wbio, -1);
 
   SSL_set_bio(ssl, dc->rbio, dc->wbio);
-  if (is_client)
-    list_add(&dc->in_connections, &d->client_connections);
-  else
-    list_add(&dc->in_connections, &d->server_connections);
+  list_add(&dc->in_connections, &d->connections);
 
   dc->ssl = ssl;
-  L_DEBUG("Created new %s connection %p",
+  L_DEBUG("Created new %s connection %p to %s",
           is_client ? "client[connect]" : "server[accept]",
-          dc);
+          dc, HEX_REPR(remote_addr, sizeof(*remote_addr)));
   return dc;
 }
 
@@ -458,9 +477,7 @@ static void _dtls_poll(dtls d, bool is_client)
       return;
     }
 
-  struct list_head *cl =
-    is_client ? &d->client_connections : &d->server_connections;
-  dtls_connection dc = _connection_find(cl, &remote_addr);
+  dtls_connection dc = _connection_find(d, is_client, &remote_addr);
   if (!dc)
     {
       /* No new connections on client port */
@@ -474,6 +491,7 @@ static void _dtls_poll(dtls d, bool is_client)
         return;
     }
   /* Feed in the data to the BIO */
+  L_DEBUG("adding %d bytes to rbio", rv);
   BIO_write(dc->rbio, buf, rv);
 
   /* Let the connection do what it feels like. */
@@ -558,13 +576,12 @@ dtls dtls_create(uint16_t port)
     goto fail;
   if ((d->server_socket = _setup_listen_port(port)) < 0)
     goto fail;
-  INIT_LIST_HEAD(&d->server_connections);
+  INIT_LIST_HEAD(&d->connections);
   d->ufd_server.cb = _dtls_ufd_server_cb;
   d->ufd_server.fd = d->server_socket;
 
   if ((d->client_socket = _setup_listen_port(0)) < 0)
     goto fail;
-  INIT_LIST_HEAD(&d->client_connections);
   d->ufd_client.cb = _dtls_ufd_client_cb;
   d->ufd_client.fd = d->client_socket;
 
@@ -628,9 +645,7 @@ void dtls_destroy(dtls d)
 #ifndef USE_ONE_CONTEXT
   SSL_CTX_free(d->ssl_client_ctx);
 #endif /* USE_ONE_CONTEXT */
-  list_for_each_entry_safe(dc, dc2, &d->client_connections, in_connections)
-    _connection_free(dc);
-  list_for_each_entry_safe(dc, dc2, &d->server_connections, in_connections)
+  list_for_each_entry_safe(dc, dc2, &d->connections, in_connections)
     _connection_free(dc);
   uloop_fd_delete(&d->ufd_server);
   uloop_fd_delete(&d->ufd_client);
@@ -645,22 +660,12 @@ ssize_t dtls_recvfrom(dtls d, void *buf, size_t len,
 
   L_DEBUG("dtls_recvfrom");
   d->readable = false;
-  list_for_each_entry(dc, &d->server_connections, in_connections)
+  list_for_each_entry(dc, &d->connections, in_connections)
     {
       ssize_t rv = SSL_read(dc->ssl, buf, len);
       if (rv > 0)
         {
           L_DEBUG(" .. winner from s-connection %p: %d bytes", dc, (int)rv);
-          *src = dc->remote_addr;
-          return rv;
-        }
-    }
-  list_for_each_entry(dc, &d->client_connections, in_connections)
-    {
-      ssize_t rv = SSL_read(dc->ssl, buf, len);
-      if (rv > 0)
-        {
-          L_DEBUG(" .. winner from c-connection %p: %d bytes", dc, (int)rv);
           *src = dc->remote_addr;
           return rv;
         }
@@ -672,7 +677,7 @@ ssize_t dtls_sendto(dtls d, void *buf, size_t len,
                     const struct sockaddr_in6 *dst)
 {
   L_DEBUG("dtls_sendto");
-  dtls_connection dc = _connection_find(&d->client_connections, dst);
+  dtls_connection dc = _connection_find(d, -1, dst);
   if (dc)
     {
       if (dc->state == STATE_DATA)
@@ -686,7 +691,7 @@ ssize_t dtls_sendto(dtls d, void *buf, size_t len,
                   _drain_errors();
                   return -1;
                 }
-              L_DEBUG("had existing connection in good state, write ok");
+              _connection_poll_write(dc);
               return rv;
             }
         }
@@ -700,6 +705,12 @@ ssize_t dtls_sendto(dtls d, void *buf, size_t len,
       if (!dc)
         return -1;
       _connection_poll(dc);
+      /* This may cause the connection to be invalidated. So make sure
+       * it is still ok (although new connections almost never should
+       * be killed outright, but API-wise it is possible). */
+      dc = _connection_find(d, true, dst);
+      if (!dc)
+        return -1;
     }
   dtls_queued_buffer qb = calloc(1, sizeof(*qb) + len);
   if (!qb)
