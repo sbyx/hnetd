@@ -586,7 +586,7 @@ void test_pa_static()
 	test_pa_check_cp(cp, &p1_1, true, PA_PRIORITY_DEFAULT, true);
 
 	//Another AP will send an authoritative (bug situation).
-	ap = pa_ap_get(&pa.data, &p1_2, &rid_higher, true);
+	ap = pa_ap_get(&pa.data, &p1_2, &rid_lower, true);
 	pa_ap_set_authoritative(ap, true);
 	pa_ap_set_iface(ap, i);
 	pa_ap_notify(&pa.data, ap);
