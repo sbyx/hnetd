@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:31 2014 mstenber
- * Last modified: Thu Nov  6 13:02:31 2014 mstenber
- * Edit time:     93 min
+ * Last modified: Thu Nov  6 13:11:14 2014 mstenber
+ * Edit time:     95 min
  *
  */
 
@@ -117,10 +117,12 @@ static void dtls_basic_2()
       char *msg = "foo";
       struct uloop_timeout t = { .cb = _timeout };
       bool rb;
-      struct sockaddr_in6 src = {.sin6_len = sizeof(struct sockaddr_in6),
-                                 .sin6_family = AF_INET6 };
-      struct sockaddr_in6 dst = {.sin6_len = sizeof(struct sockaddr_in6),
-                                 .sin6_family = AF_INET6 };
+      struct sockaddr_in6 src = {.sin6_family = AF_INET6 };
+      struct sockaddr_in6 dst = {.sin6_family = AF_INET6 };
+#ifdef __APPLE__
+      src.sin6_len = sizeof(src);
+      dst.sin6_len = sizeof(dst);
+#endif /* __APPLE__ */
       if (i == 0)
         {
           rb = dtls_set_local_cert(d1, "test/cert1.pem", "test/key1.pem");
@@ -200,10 +202,12 @@ static void dtls_unknown()
       char *msg = "foo";
       struct uloop_timeout t = { .cb = _timeout };
       bool rb;
-      struct sockaddr_in6 src = {.sin6_len = sizeof(struct sockaddr_in6),
-                                 .sin6_family = AF_INET6 };
-      struct sockaddr_in6 dst = {.sin6_len = sizeof(struct sockaddr_in6),
-                                 .sin6_family = AF_INET6 };
+      struct sockaddr_in6 src = {.sin6_family = AF_INET6 };
+      struct sockaddr_in6 dst = {.sin6_family = AF_INET6 };
+#ifdef __APPLE__
+      src.sin6_len = sizeof(src);
+      dst.sin6_len = sizeof(dst);
+#endif /* __APPLE__ */
       rb = dtls_set_local_cert(d1, "test/cert1.pem", "test/key1.pem");
       sput_fail_unless(rb, "dtls_set_local_cert 1");
 
@@ -237,6 +241,8 @@ static void dtls_unknown()
       dst.sin6_port = htons(pbase+1);
 
       rv = dtls_sendto(d1, msg, strlen(msg), &dst);
+      L_DEBUG("sendto => %d", rv);
+      sput_fail_unless(rv == 3, "sendto failed?");
       pending_unknown = 1;
 
       uloop_timeout_set(&t, 5000);
