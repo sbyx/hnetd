@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:31 2014 mstenber
- * Last modified: Thu Nov  6 10:40:41 2014 mstenber
- * Edit time:     91 min
+ * Last modified: Thu Nov  6 13:02:31 2014 mstenber
+ * Edit time:     93 min
  *
  */
 
@@ -117,8 +117,10 @@ static void dtls_basic_2()
       char *msg = "foo";
       struct uloop_timeout t = { .cb = _timeout };
       bool rb;
-      struct sockaddr_in6 src = {.sin6_family = AF_INET6 };
-      struct sockaddr_in6 dst = {.sin6_family = AF_INET6 };
+      struct sockaddr_in6 src = {.sin6_len = sizeof(struct sockaddr_in6),
+                                 .sin6_family = AF_INET6 };
+      struct sockaddr_in6 dst = {.sin6_len = sizeof(struct sockaddr_in6),
+                                 .sin6_family = AF_INET6 };
       if (i == 0)
         {
           rb = dtls_set_local_cert(d1, "test/cert1.pem", "test/key1.pem");
@@ -198,8 +200,10 @@ static void dtls_unknown()
       char *msg = "foo";
       struct uloop_timeout t = { .cb = _timeout };
       bool rb;
-      struct sockaddr_in6 src = {.sin6_family = AF_INET6 };
-      struct sockaddr_in6 dst = {.sin6_family = AF_INET6 };
+      struct sockaddr_in6 src = {.sin6_len = sizeof(struct sockaddr_in6),
+                                 .sin6_family = AF_INET6 };
+      struct sockaddr_in6 dst = {.sin6_len = sizeof(struct sockaddr_in6),
+                                 .sin6_family = AF_INET6 };
       rb = dtls_set_local_cert(d1, "test/cert1.pem", "test/key1.pem");
       sput_fail_unless(rb, "dtls_set_local_cert 1");
 
