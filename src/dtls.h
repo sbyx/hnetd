@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:50:18 2014 mstenber
- * Last modified: Wed Nov  5 18:06:29 2014 mstenber
+ * Last modified: Thu Nov  6 10:39:26 2014 mstenber
  * Edit time:     15 min
  *
  */
@@ -38,7 +38,7 @@
 
 typedef struct dtls_struct *dtls;
 typedef void (*dtls_readable_callback)(dtls d, void *context);
-typedef void (*dtls_unknown_callback)(dtls d, const char *pem_x509, void *context);
+typedef bool (*dtls_unknown_callback)(dtls d, const char *pem_x509, void *context);
 
 /* Create/destroy instance. */
 dtls dtls_create(uint16_t port);

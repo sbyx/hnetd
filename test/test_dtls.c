@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:31 2014 mstenber
- * Last modified: Wed Nov  5 18:49:07 2014 mstenber
- * Edit time:     72 min
+ * Last modified: Thu Nov  6 10:40:41 2014 mstenber
+ * Edit time:     91 min
  *
  */
 
@@ -18,6 +18,7 @@
 #include <net/if.h>
 #include <libubox/uloop.h>
 #include <arpa/inet.h>
+#include <ctype.h>
 
 int log_level = LOG_DEBUG;
 
@@ -57,16 +58,48 @@ void _readable_cb(dtls d, void *context)
 }
 
 int pending_unknown;
+int dumped = 0;
 
-void _unknown_cb(dtls d, const char *pem, void *context)
+bool _cert_same(const char *pem1, const char *pem2)
+{
+  const char *c = pem1, *d = pem2;
+
+  if (!pem1)
+    return false;
+  if (!pem2)
+    return false;
+  /* Just skip newlines/whitespace */
+  while (*c && *d)
+    {
+      while (*c && isspace(*c)) c++;
+      while (*d && isspace(*d)) d++;
+      if (!*c)
+        break;
+      if (*c != *d)
+        break;
+      c++;
+      d++;
+    }
+  return *c == 0 && *d == 0;
+}
+
+bool _unknown_cb(dtls d, const char *pem, void *context)
 {
   const char *s = smock_pull("dtls_unknown_pem");
+  char filename[128];
+  FILE *f;
 
+  sprintf(filename, "/tmp/unknown%d.pem", dumped++);
+  f = fopen(filename, "w");
+  fwrite(pem, strlen(pem), 1, f);
+  fclose(f);
   L_DEBUG("_unknown_cb: %s", pem);
-  sput_fail_unless(strcmp(pem, s) == 0, "string mismatch");
+  sput_fail_unless(_cert_same(s, pem), "cert mismatch");
   if (!--pending_unknown)
     uloop_end();
   sput_fail_unless(pending_unknown >= 0, "too many unknown");
+  /* Override that we trust this -> no error messages should show up. */
+  return true;
 }
 
 static void dtls_basic_2()
@@ -140,6 +173,19 @@ static void dtls_basic_2()
 static void dtls_unknown()
 {
   int i;
+  char cert1[2048];
+  FILE *f;
+  char cert2[2048];
+  int len;
+
+  f = fopen("test/cert1.pem", "r");
+  len = fread(cert1, 1, sizeof(cert1), f);
+  cert1[len] = 0;
+  fclose(f);
+  f = fopen("test/cert2.pem", "r");
+  len = fread(cert2, 1, sizeof(cert2), f);
+  cert2[len] = 0;
+  fclose(f);
 
   for (i = 0 ; i < 2 ; i++)
     {
@@ -162,6 +208,8 @@ static void dtls_unknown()
           rb = dtls_set_verify_locations(d1, "test/cert2.pem", NULL);
           sput_fail_unless(rb, "dtls_set_verify_locations 1");
         }
+      else
+        smock_push("dtls_unknown_pem", cert2);
 
       rb = dtls_set_local_cert(d2, "test/cert2.pem", "test/key2.pem");
       sput_fail_unless(rb, "dtls_set_local_cert 2");
@@ -171,6 +219,8 @@ static void dtls_unknown()
           rb = dtls_set_verify_locations(d2, "test/cert1.pem", NULL);
           sput_fail_unless(rb, "dtls_set_verify_locations 2");
         }
+      else
+        smock_push("dtls_unknown_pem", cert1);
 
       /* Start the instances once they have been configured */
       dtls_start(d1);

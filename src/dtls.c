@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Wed Nov  5 19:44:10 2014 mstenber
- * Edit time:     435 min
+ * Last modified: Thu Nov  6 10:39:12 2014 mstenber
+ * Edit time:     448 min
  *
  */
 
@@ -18,6 +18,7 @@
 #ifdef DTLS_CYASSL
 #include <cyassl/options.h>
 #endif /* DTLS_CYASSL */
+#include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #include <openssl/rand.h>
@@ -875,7 +876,7 @@ ssize_t dtls_sendto(dtls d, void *buf, size_t len,
 
 static int _verify_cert_cb(int ok, X509_STORE_CTX *ctx)
 {
-  dtls d = X509_STORE_CTX_get_ex_data(ctx, 0);
+  dtls d = CRYPTO_get_ex_data(&ctx->ctx->ex_data, 0);
 
   if (!d)
     {
@@ -891,6 +892,21 @@ static int _verify_cert_cb(int ok, X509_STORE_CTX *ctx)
     }
 
   X509 *cert = X509_STORE_CTX_get_current_cert(ctx);
+
+  if (d->unknown_cb && cert)
+    {
+      char dummy[2048];
+      BIO *bio = BIO_new(BIO_s_mem());
+      int r;
+
+      PEM_write_bio_X509(bio, cert);
+      r = BIO_read(bio, dummy, sizeof(dummy));
+      dummy[r] = 0; /* Make sure it is null terminated */
+      BIO_free(bio);
+      if (d->unknown_cb(d, dummy, d->unknown_cb_context))
+        return 1;
+    }
+#if L_LEVEL >= LOG_ERR
   int depth = X509_STORE_CTX_get_error_depth(ctx);
   int error = X509_STORE_CTX_get_error(ctx);
 
@@ -906,16 +922,7 @@ static int _verify_cert_cb(int ok, X509_STORE_CTX *ctx)
       if (*buf)
         L_ERR("- subject:%s", buf);
     }
-
-  if (d->unknown_cb)
-    {
-      char dummy[2048];
-      BIO *bio = BIO_new_mem_buf(dummy, sizeof(dummy));
-      PEM_write_bio_X509(bio, cert);
-      BIO_free(bio);
-      dummy[sizeof(dummy)-1] = 0; /* Make sure it is null terminated */
-      d->unknown_cb(d, dummy, d->unknown_cb_context);
-    }
+#endif /* L_LEVEL >= LOG_ERR */
   return 0;
 }
 
@@ -930,6 +937,7 @@ bool dtls_set_local_cert(dtls d, const char *certfile, const char *pkfile)
                      |SSL_VERIFY_FAIL_IF_NO_PEER_CERT
 #endif /* DTLS_OPENSSL */
                      , _verify_cert_cb);
+  CRYPTO_set_ex_data(&d->ssl_server_ctx->cert_store->ex_data, 0, d);
 
 #ifndef USE_ONE_CONTEXT
   R1("client cert",
@@ -941,7 +949,9 @@ bool dtls_set_local_cert(dtls d, const char *certfile, const char *pkfile)
                      |SSL_VERIFY_PEER_FAIL_IF_NO_PEER_CERT
 #endif /* DTLS_OPENSSL */
                      , _verify_cert_cb);
+  CRYPTO_set_ex_data(&d->ssl_client_ctx->cert_store->ex_data, 0, d);
 #endif /* !USE_ONE_CONTEXT */
+
   return true;
  fail:
   return false;
