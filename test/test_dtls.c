@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:31 2014 mstenber
- * Last modified: Wed Nov 19 13:28:02 2014 mstenber
- * Edit time:     115 min
+ * Last modified: Wed Nov 19 17:22:56 2014 mstenber
+ * Edit time:     121 min
  *
  */
 
@@ -100,12 +100,15 @@ bool _cert_same(const char *pem1, const char *pem2)
   return *c == 0 && *d == 0;
 }
 
-bool _unknown_cb(dtls d, const char *pem, void *context)
+bool _unknown_cb(dtls d, dtls_cert cert, void *context)
 {
   const char *s = smock_pull("dtls_unknown_pem");
+  char pem[2048];
   char filename[128];
   FILE *f;
 
+  dtls_cert_to_pem_buf(cert, pem, sizeof(pem));
+  sput_fail_unless(*pem, "pem encoding error");
   sprintf(filename, "/tmp/unknown%d.pem", dumped++);
   f = fopen(filename, "w");
   fwrite(pem, strlen(pem), 1, f);

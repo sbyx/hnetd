@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Wed Nov 19 13:35:55 2014 mstenber
- * Edit time:     599 min
+ * Last modified: Wed Nov 19 17:22:40 2014 mstenber
+ * Edit time:     614 min
  *
  */
 
@@ -878,15 +878,7 @@ static int _verify_cert_cb(int ok, X509_STORE_CTX *ctx)
 
   if (d->unknown_cb && cert)
     {
-      char dummy[2048];
-      BIO *bio = BIO_new(BIO_s_mem());
-      int r;
-
-      PEM_write_bio_X509(bio, cert);
-      r = BIO_read(bio, dummy, sizeof(dummy));
-      dummy[r] = 0; /* Make sure it is null terminated */
-      BIO_free(bio);
-      if (d->unknown_cb(d, dummy, d->unknown_cb_context))
+      if (d->unknown_cb(d, cert, d->unknown_cb_context))
         return 1;
     }
 #if L_LEVEL >= LOG_ERR
@@ -1000,4 +992,39 @@ bool dtls_set_psk(dtls d, const char *psk, size_t psk_len)
   SSL_CTX_set_psk_client_callback(d->ssl_client_ctx, _client_psk);
   SSL_CTX_set_psk_server_callback(d->ssl_server_ctx, _server_psk);
   return true;
+}
+
+bool dtls_cert_to_pem_buf(dtls_cert cert, char *buf, int buf_len)
+{
+#ifdef DTLS_OPENSSL
+  BIO *bio = BIO_new(BIO_s_mem());
+  int r;
+
+  PEM_write_bio_X509(bio, cert);
+  r = BIO_read(bio, buf, buf_len);
+  if (r < 0 || r >= buf_len)
+    return false;
+  buf[r] = 0; /* Make sure it is null terminated */
+  BIO_free(bio);
+  return true;
+#else
+  return false;
+#endif /* DTLS_OPENSSL */
+}
+
+int dtls_cert_to_der_buf(dtls_cert cert, unsigned char *buf, int buf_len)
+{
+#ifdef DTLS_OPENSSL
+  unsigned char *p = NULL;
+  int r = i2d_X509(cert, &p);
+  if (r > 0 && r <= buf_len)
+    memcpy(buf, p, r);
+  else
+    r = -1;
+  if (p)
+    free(p);
+  return r;
+#else
+  return false;
+#endif /* DTLS_OPENSSL */
 }

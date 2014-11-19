@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:50:18 2014 mstenber
- * Last modified: Thu Nov  6 16:52:42 2014 mstenber
- * Edit time:     24 min
+ * Last modified: Wed Nov 19 17:46:40 2014 mstenber
+ * Edit time:     35 min
  *
  */
 
@@ -36,9 +36,15 @@
  * 5. destroy
  */
 
+#ifdef DTLS_OPENSSL
+typedef struct x509_st *dtls_cert;
+#else
+#error
+#endif /* DTLS_OPENSSL */
+
 typedef struct dtls_struct *dtls;
 typedef void (*dtls_readable_callback)(dtls d, void *context);
-typedef bool (*dtls_unknown_callback)(dtls d, const char *pem_x509, void *context);
+typedef bool (*dtls_unknown_callback)(dtls d, dtls_cert cert, void *context);
 
 /* Create/destroy instance. */
 dtls dtls_create(uint16_t port);
@@ -111,5 +117,11 @@ ssize_t dtls_recvfrom(dtls d, void *buf, size_t len,
                       struct sockaddr_in6 *src);
 ssize_t dtls_sendto(dtls o, void *buf, size_t len,
                     const struct sockaddr_in6 *dst);
+
+/* Certificate handling utilities */
+bool dtls_cert_to_pem_buf(dtls_cert cert, char *buf, int buf_len);
+int dtls_cert_to_der_buf(dtls_cert cert, unsigned char *buf, int buf_len);
+void dtls_cert_hash_sha256(dtls_cert cert, unsigned char *buf);
+
 
 #endif /* DTLS_H */
