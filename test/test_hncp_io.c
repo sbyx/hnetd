@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 09:56:00 2014 mstenber
- * Last modified: Thu Oct 23 18:12:36 2014 mstenber
- * Edit time:     30 min
+ * Last modified: Wed Nov 19 12:45:18 2014 mstenber
+ * Edit time:     31 min
  *
  */
 
@@ -94,11 +94,17 @@ static void hncp_io_basic_2()
   src.sin6_family = AF_INET6;
   src.sin6_port = htons(h1.udp_port);
   src.sin6_addr = a;
+#ifdef __APPLE__
+  src.sin6_len = sizeof(src);
+#endif /* __APPLE__ */
   struct sockaddr_in6 dst;
   memset(&dst, 0, sizeof(dst));
   dst.sin6_family = AF_INET6;
   dst.sin6_port = htons(h2.udp_port);
   dst.sin6_addr = a;
+#ifdef __APPLE__
+  dst.sin6_len = sizeof(dst);
+#endif /* __APPLE__ */
   smock_push_int("hncp_poll_io_recvfrom", 3);
   smock_push_int("hncp_poll_io_recvfrom_src", &src);
   smock_push_int("hncp_poll_io_recvfrom_dst", &a);
