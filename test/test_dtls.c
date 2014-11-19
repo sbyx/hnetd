@@ -6,9 +6,13 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:31 2014 mstenber
- * Last modified: Thu Nov  6 14:57:59 2014 mstenber
- * Edit time:     99 min
+ * Last modified: Wed Nov 19 13:28:02 2014 mstenber
+ * Edit time:     115 min
  *
+ */
+
+/*
+ * TBD: Write some tests that ensure the handling of limits is sane.
  */
 
 #include "dtls.c"
@@ -22,6 +26,8 @@
 
 int log_level = LOG_DEBUG;
 
+dtls d1, d2;
+
 /* Lots of stubs here, rather not put __unused all over the place. */
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
@@ -29,6 +35,17 @@ void _timeout(struct uloop_timeout *t)
 {
   L_INFO("test failed - timeout");
   sput_fail_unless(false, "test timed out");
+  uloop_end();
+}
+
+void _no_connections_timeout(struct uloop_timeout *t)
+{
+  uloop_timeout_set(t, 5);
+  if (d1->num_data_connections ||
+      d1->num_non_data_connections ||
+      d2->num_data_connections ||
+      d2->num_non_data_connections)
+    return;
   uloop_end();
 }
 
@@ -105,9 +122,9 @@ bool _unknown_cb(dtls d, const char *pem, void *context)
 static void _test_basic_i(int i)
 {
   int pbase = 49000 + i * 2;
-  dtls d1 = dtls_create(pbase);
+  d1 = dtls_create(pbase);
   dtls_set_readable_callback(d1, _readable_cb, NULL);
-  dtls d2 = dtls_create(pbase+1);
+  d2 = dtls_create(pbase+1);
   dtls_set_readable_callback(d2, _readable_cb, NULL);
   int rv;
   char *msg = "foo";
@@ -161,11 +178,32 @@ static void _test_basic_i(int i)
   uloop_run();
   sput_fail_unless(!pending_readable, "readable left");
 
+  /* Do shutdown on one side, and expect other to behave accordingly */
+  if (i % 2)
+    {
+      dtls_connection dc = list_first_entry(&d2->connections,
+                                            dtls_connection_s, in_connections);
+      sput_fail_unless(dc, "no connection at dst");
+      L_DEBUG("shutdown (server-side)");
+      _connection_shutdown(dc);
+    }
+  else
+    {
+      dtls_connection dc = _connection_find(d1, -1, &dst);
+      sput_fail_unless(dc, "no connection at src");
+      L_DEBUG("shutdown (client-side)");
+      _connection_shutdown(dc);
+    }
+  struct uloop_timeout t2 = { .cb = _no_connections_timeout };
+  uloop_timeout_set(&t2, 5);
+  uloop_run();
+
   L_DEBUG("killing dtls instances");
 
   dtls_destroy(d1);
   dtls_destroy(d2);
   uloop_timeout_cancel(&t);
+  uloop_timeout_cancel(&t2);
 }
 
 static void _test_unknown_i(int i)
@@ -185,9 +223,9 @@ static void _test_unknown_i(int i)
   fclose(f);
 
   int pbase = 49100 + i * 2;
-  dtls d1 = dtls_create(pbase);
+  d1 = dtls_create(pbase);
   dtls_set_unknown_cert_callback(d1, _unknown_cb, NULL);
-  dtls d2 = dtls_create(pbase+1);
+  d2 = dtls_create(pbase+1);
   dtls_set_unknown_cert_callback(d2, _unknown_cb, NULL);
   int rv;
   char *msg = "foo";

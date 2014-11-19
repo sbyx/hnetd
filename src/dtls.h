@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:50:18 2014 mstenber
- * Last modified: Thu Nov  6 11:09:22 2014 mstenber
- * Edit time:     18 min
+ * Last modified: Thu Nov  6 16:52:42 2014 mstenber
+ * Edit time:     24 min
  *
  */
 
@@ -44,6 +44,43 @@ typedef bool (*dtls_unknown_callback)(dtls d, const char *pem_x509, void *contex
 dtls dtls_create(uint16_t port);
 void dtls_start();
 void dtls_destroy(dtls d);
+
+typedef struct {
+  /*
+   * All limits specified here are 'non-zero => enforce, zero => use default'.
+   */
+
+  /*
+   * Per-packet processing limits (which is easy attack vector, given we do
+   * relatively expensive operations even on first packet due to
+   * braindeath that is the DTLS API).
+   */
+
+  /*
+   * Set the acceptable packets per second to process. Anything more
+   * than this will be silently dropped.
+   */
+  int input_pps;
+
+  /*
+   * How many seconds a connection can be idle before it is eliminated.
+   */
+  int connection_idle_limit_seconds;
+
+  /*
+   * Maximum number of connections in non-DATA state
+   */
+  int num_non_data_connections;
+
+  /*
+   * Maximum number of connections in DATA state
+   */
+  int num_data_connections;
+
+} dtls_limits_s, *dtls_limits;
+
+void dtls_set_limits(dtls d, dtls_limits limits);
+
 
 /* Callback to call when dtls has new data. */
 void dtls_set_readable_callback(dtls d, dtls_readable_callback cb, void *cb_context);

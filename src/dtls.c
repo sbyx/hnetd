@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Thu Nov  6 13:59:53 2014 mstenber
- * Edit time:     566 min
+ * Last modified: Wed Nov 19 13:35:55 2014 mstenber
+ * Edit time:     599 min
  *
  */
 
@@ -30,9 +30,6 @@
  * certificate code, on the other hand, may be painful to adapt to
  * non-OpenSSL.
  *
- * TBD:
- * - add some sort of limits on # of pending connections
- * - add some sort of timing out for connections
  */
 
 
@@ -103,7 +100,8 @@ typedef struct {
   enum {
     STATE_ACCEPT,
     STATE_CONNECT,
-    STATE_DATA
+    STATE_DATA,
+    STATE_SHUTDOWN
   } state;
 
   struct uloop_timeout uto;
@@ -112,6 +110,8 @@ typedef struct {
   SSL *ssl;
   BIO *rbio;
   BIO *wbio;
+
+  time_t last_use;
 } dtls_connection_s, *dtls_connection;
 
 typedef struct dtls_struct {
@@ -145,7 +145,24 @@ typedef struct dtls_struct {
 
   char *psk;
   unsigned int psk_len;
+
+  dtls_limits_s limits;
+
+  int num_non_data_connections;
+  int num_data_connections;
+
+  time_t t;
+  int pps;
 } dtls_s;
+
+static dtls_limits_s _default_limits = {
+  .input_pps = 100,
+  .connection_idle_limit_seconds = 1800,
+  .num_non_data_connections = 10,
+  .num_data_connections = 100,
+};
+
+#define DTLS_LIMIT(x) (d->limits.x ? d->limits.x : _default_limits.x)
 
 static bool _ssl_initialized = false;
 
@@ -267,6 +284,13 @@ static void _connection_free(dtls_connection dc)
   dtls_queued_buffer qb, qb2;
 
   L_DEBUG("_connection_free %p", dc);
+  if (dc->state != STATE_SHUTDOWN)
+    {
+      if (dc->state == STATE_DATA)
+        dc->d->num_data_connections--;
+      else
+        dc->d->num_non_data_connections--;
+    }
   list_for_each_entry_safe(qb, qb2, &dc->queued_buffers, in_queued_buffers)
     _qb_free(qb);
   list_del(&dc->in_connections);
@@ -290,11 +314,58 @@ static bool _connection_poll_write(dtls_connection dc)
   return true;
 }
 
+static bool _connection_poll_read(dtls_connection dc);
+
+static void _connection_shutdown(dtls_connection dc)
+{
+  if (dc->state != STATE_SHUTDOWN)
+    {
+      if (dc->state == STATE_DATA)
+        dc->d->num_data_connections--;
+      else
+        dc->d->num_non_data_connections--;
+      dc->state = STATE_SHUTDOWN;
+      /* The SSL_shutdown needs to be called 2+ times; first time, it
+       * does local bookkeeping, and second time confirms receipt of
+       * ack from remote side (eventually). */
+       (void)SSL_shutdown(dc->ssl);
+    }
+  _connection_poll_read(dc);
+}
+
+static void _connection_drop(dtls d, bool is_data)
+{
+  dtls_connection dc, dc2, lru = NULL;
+  int dropped = 0;
+
+  list_for_each_entry_safe(dc, dc2, &d->connections, in_connections)
+    {
+      if (dc->state == STATE_SHUTDOWN)
+        continue;
+      if ((d->t - dc->last_use) >= DTLS_LIMIT(connection_idle_limit_seconds))
+        {
+          if ((dc->state == STATE_DATA) == !!is_data)
+            dropped++;
+          _connection_shutdown(dc);
+          continue;
+        }
+      if ((dc->state == STATE_DATA) == !is_data)
+        continue;
+      if (lru && lru->last_use <= dc->last_use)
+        continue;
+      lru = dc;
+    }
+  if (dropped || !lru)
+    return;
+  _connection_shutdown(lru);
+}
+
 static bool _connection_poll_read(dtls_connection dc)
 {
   unsigned char buf[1];
   int rv;
   dtls_queued_buffer qb, qb2;
+  dtls d = dc->d;
 
   L_DEBUG("_connection_poll_read %p @%d", dc, dc->state);
  redo:
@@ -304,6 +375,11 @@ static bool _connection_poll_read(dtls_connection dc)
       if ((rv = SSL_accept(dc->ssl)) > 0)
         {
           L_DEBUG("connection %p accept->data", dc);
+        to_data:
+          if (dc->d->num_data_connections == DTLS_LIMIT(num_data_connections))
+            _connection_drop(d, true);
+          dc->d->num_non_data_connections--;
+          dc->d->num_data_connections++;
           dc->state = STATE_DATA;
           goto redo;
         }
@@ -312,8 +388,7 @@ static bool _connection_poll_read(dtls_connection dc)
       if ((rv = SSL_connect(dc->ssl)) > 0)
         {
           L_DEBUG("connection %p connect->data", dc);
-          dc->state = STATE_DATA;
-          goto redo;
+          goto to_data;
         }
       break;
     case STATE_DATA:
@@ -345,6 +420,11 @@ static bool _connection_poll_read(dtls_connection dc)
       if (SSL_peek(dc->ssl, buf, 1) <= 0)
         {
           L_DEBUG("nothing in queue according to SSL_peek");
+          if (SSL_get_shutdown(dc->ssl) == SSL_RECEIVED_SHUTDOWN)
+            {
+              _connection_shutdown(dc);
+              return false;
+            }
           return true;
         }
       dc->d->readable = true;
@@ -352,6 +432,14 @@ static bool _connection_poll_read(dtls_connection dc)
         dc->d->readable_cb(dc->d, dc->d->readable_cb_context);
       else
         L_DEBUG("no readable callback on ready connection %p", dc);
+      return true;
+    case STATE_SHUTDOWN:
+      rv = SSL_shutdown(dc->ssl);
+      if (rv == 1)
+        {
+          _connection_free(dc);
+          return false;
+        }
       return true;
     }
   /* Shared handling of errors for accept/listen */
@@ -413,10 +501,25 @@ _connection_find(dtls d, int is_client, const struct sockaddr_in6 *dst)
 
   L_DEBUG("_connection_find dst:%s", HEX_REPR(dst, sizeof(*dst)));
   list_for_each_entry(dc, &d->connections, in_connections)
-    if (is_client < 0 || (!is_client == !dc->is_client))
+    if (dc->state != STATE_SHUTDOWN
+        && (is_client < 0 || (!is_client == !dc->is_client)))
       if (memcmp(dst, &dc->remote_addr, sizeof(*dst)) == 0)
-        return dc;
+        {
+          dc->last_use = d->t;
+          return dc;
+        }
   return NULL;
+}
+
+static void _dtls_update_t(dtls d)
+{
+  time_t t = time(NULL);
+
+  if (t == d->t)
+    return;
+
+  d->t = t;
+  d->pps = 0;
 }
 
 static dtls_connection
@@ -427,12 +530,16 @@ _connection_create(dtls d, bool is_client,
 
   if (!dc)
     return NULL;
+  if (d->num_non_data_connections == DTLS_LIMIT(num_non_data_connections))
+    _connection_drop(d, false);
   INIT_LIST_HEAD(&dc->queued_buffers);
   dc->d = d;
+  _dtls_update_t(d);
+  dc->last_use = d->t;
   dc->uto.cb = _connection_uto_cb;
   dc->remote_addr = *remote_addr;
   dc->is_client = is_client;
-
+  d->num_non_data_connections++;
   if (is_client)
     dc->state = STATE_CONNECT;
   else
@@ -474,6 +581,14 @@ static void _dtls_poll(dtls d, bool is_client)
                      (struct sockaddr *)&remote_addr, &remote_len)) <= 0)
     {
       L_DEBUG("recvfrom did not return anything");
+      return;
+    }
+
+  _dtls_update_t(d);
+  if (d->pps++ >= DTLS_LIMIT(input_pps))
+    {
+      L_DEBUG("dropping packet due to too big pps (%d > %d)",
+              d->pps, DTLS_LIMIT(input_pps));
       return;
     }
 
@@ -627,6 +742,12 @@ dtls dtls_create(uint16_t port)
   return NULL;
 }
 
+void dtls_set_limits(dtls d, dtls_limits limits)
+{
+  d->limits = *limits;
+}
+
+
 void dtls_start(dtls d)
 {
   if (d->started) return;
@@ -677,6 +798,7 @@ ssize_t dtls_sendto(dtls d, void *buf, size_t len,
                     const struct sockaddr_in6 *dst)
 {
   L_DEBUG("dtls_sendto");
+  _dtls_update_t(d);
   dtls_connection dc = _connection_find(d, -1, dst);
   if (dc)
     {
