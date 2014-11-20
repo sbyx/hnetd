@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Oct 23 19:39:33 2014 mstenber
- * Edit time:     253 min
+ * Last modified: Thu Nov 20 14:50:59 2014 mstenber
+ * Edit time:     274 min
  *
  */
 
@@ -142,7 +142,13 @@ struct hncp_struct {
   int num_tlv_indexes;
 
 #ifdef DTLS
+  /* DTLS 'socket' abstraction, which actually hides two UDP sockets
+   * (client and server) and N OpenSSL contexts tied to each of
+   * them. */
   dtls d;
+
+  /* Trust consensus model of authz for DTLS is _not_ here; see
+   * hncp_trust.[ch]. */
 #endif /* DTLS */
 };
 
@@ -473,6 +479,22 @@ hncp_tlv_router_address(const struct tlv_attr *a)
 {
   if (tlv_id(a) != HNCP_T_ROUTER_ADDRESS
       || tlv_len(a) != sizeof(hncp_t_router_address_s))
+    return NULL;
+  return tlv_data(a);
+}
+
+static inline hncp_t_trust_verdict
+hncp_tlv_trust_verdict(const struct tlv_attr *a)
+{
+  if (tlv_id(a) != HNCP_T_TRUST_VERDICT)
+    return NULL;
+  if (tlv_len(a) < sizeof(hncp_t_trust_verdict_s) + 1)
+    return NULL;
+  if (tlv_len(a) > sizeof(hncp_t_trust_verdict_s) + HNCP_T_TRUST_VERDICT_CNAME_LEN)
+    return NULL;
+  const char *data = tlv_data(a);
+  /* Make sure it is also null terminated */
+  if (data[tlv_len(a)-1])
     return NULL;
   return tlv_data(a);
 }

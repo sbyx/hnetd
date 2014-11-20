@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Thu Oct 23 18:52:32 2014 mstenber
- * Edit time:     77 min
+ * Last modified: Thu Nov 20 14:50:23 2014 mstenber
+ * Edit time:     81 min
  *
  */
 
@@ -28,6 +28,9 @@
 
 /* Let's assume we use MD5 for the time being.. */
 #define HNCP_HASH_LEN 16
+
+/* However, in security stuff, we use sha256 */
+#define HNCP_SHA256_LEN 32
 
 /* 64 bit version of the hash */
 #define HNCP_HASH64_LEN 8
@@ -67,6 +70,8 @@ enum {
 
   HNCP_T_VERSION = 10,
 
+  HNCP_T_TRUST_VERDICT = 20,
+
   HNCP_T_EXTERNAL_CONNECTION = 41,
   HNCP_T_DELEGATED_PREFIX = 42, /* may contain TLVs */
   HNCP_T_ASSIGNED_PREFIX = 43, /* may contain TLVs */
@@ -88,6 +93,10 @@ enum {
 typedef struct __packed {
   unsigned char buf[HNCP_HASH_LEN];
 } hncp_hash_s, *hncp_hash;
+
+typedef struct __packed {
+  unsigned char buf[HNCP_SHA256_LEN];
+} hncp_sha256_s, *hncp_sha256;
 
 /* HNCP_T_LINK_ID */
 typedef struct __packed {
@@ -134,6 +143,24 @@ typedef struct __packed {
 } hncp_t_version_s, *hncp_t_version;
 
 /* HNCP_T_EXTERNAL_CONNECTION - just container, no own content */
+
+typedef enum {
+  HNCP_VERDICT_NONE = -1, /* internal, should not be stored */
+  HNCP_VERDICT_NEUTRAL = 0,
+  HNCP_VERDICT_CACHED_POSITIVE = 1,
+  HNCP_VERDICT_CACHED_NEGATIVE = 2,
+  HNCP_VERDICT_CONFIGURED_POSITIVE = 3,
+  HNCP_VERDICT_CONFIGURED_NEGATIVE = 4
+} hncp_trust_verdict;
+
+#define HNCP_T_TRUST_VERDICT_CNAME_LEN 64
+
+typedef struct __packed {
+  uint8_t verdict;
+  uint8_t reserved[3];
+  hncp_sha256_s sha256_hash;
+  char cname[];
+} hncp_t_trust_verdict_s, *hncp_t_trust_verdict;
 
 /* HNCP_T_DELEGATED_PREFIX */
 typedef struct __packed {

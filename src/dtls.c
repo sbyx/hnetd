@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Wed Nov 19 17:22:40 2014 mstenber
- * Edit time:     614 min
+ * Last modified: Thu Nov 20 11:31:38 2014 mstenber
+ * Edit time:     618 min
  *
  */
 
@@ -481,7 +481,7 @@ static void _connection_poll(dtls_connection dc)
   (void)_connection_poll_write(dc);
 }
 
-void _connection_uto_cb(struct uloop_timeout *t)
+static void _connection_uto_cb(struct uloop_timeout *t)
 {
   dtls_connection dc = container_of(t, dtls_connection_s, uto);
 
@@ -949,8 +949,9 @@ bool dtls_set_verify_locations(dtls d, const char *path, const char *dir)
   return true;
 }
 
-unsigned int _server_psk(SSL *ssl __unused, const char *identity __unused,
-                         unsigned char *psk, unsigned int max_psk_len)
+static unsigned int
+_server_psk(SSL *ssl __unused, const char *identity __unused,
+            unsigned char *psk, unsigned int max_psk_len)
 {
   dtls_connection dc = SSL_get_ex_data(ssl, 0);
 
@@ -969,11 +970,11 @@ unsigned int _server_psk(SSL *ssl __unused, const char *identity __unused,
   return max_psk_len;
 }
 
-unsigned int _client_psk(SSL *ssl,
-                         const char *hint __unused,
-                         char *identity,
-                         unsigned int max_identity_len __unused,
-                         unsigned char *psk, unsigned int max_psk_len)
+static unsigned int
+_client_psk(SSL *ssl,
+            const char *hint __unused,
+            char *identity, unsigned int max_identity_len __unused,
+            unsigned char *psk, unsigned int max_psk_len)
 {
   /* We don't have identity for the key. */
   *identity = 0;
