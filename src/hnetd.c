@@ -109,8 +109,8 @@ int usage() {
 	 "\t-s pa_store file\n"
 	 "\t-p socket path\n"
 	 "\t--ip4prefix v.x.y.z/prefix\n"
-	 "\t--ip6prefix v:x:y:z::/prefix\n"
 	 "\t--ulaprefix v:x:y:z::/prefix\n"
+	 "\t--ulamode [on,off,ifnov6]\n"
 	 "\t--loglevel [0-9]\n"
 	 );
     return(3);
