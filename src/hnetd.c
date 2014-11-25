@@ -162,10 +162,12 @@ int main(__unused int argc, char *argv[])
 	const char *pd_socket_path = "/var/run/hnetd_pd";
 	const char *pa_ip4prefix = NULL;
 	const char *pa_ulaprefix = NULL;
+	const char *pa_ulamode = NULL;
 
 	enum {
 		GOL_IPPREFIX = 1000,
 		GOL_ULAPREFIX,
+		GOL_ULAMODE,
 		GOL_LOGLEVEL,
 	};
 
@@ -173,6 +175,7 @@ int main(__unused int argc, char *argv[])
 			//Can use no_argument, required_argument or optional_argument
 			{ "ip4prefix",   required_argument,      NULL,           GOL_IPPREFIX },
 			{ "ulaprefix",   required_argument,      NULL,           GOL_ULAPREFIX },
+			{ "ulamode",     required_argument,      NULL,           GOL_ULAMODE },
 			{ "loglevel",    required_argument,      NULL,           GOL_LOGLEVEL },
 			{ NULL,          0,                      NULL,           0 }
 	};
@@ -211,6 +214,9 @@ int main(__unused int argc, char *argv[])
 			break;
 		case GOL_ULAPREFIX:
 			pa_ulaprefix = optarg;
+			break;
+		case GOL_ULAMODE:
+			pa_ulamode = optarg;
 			break;
 		case GOL_LOGLEVEL:
 			log_level = atoi(optarg);
@@ -251,6 +257,21 @@ int main(__unused int argc, char *argv[])
 			}
 			pa.local.conf.use_random_ula = false;
 			L_INFO("Setting %s as ULA prefix", PREFIX_REPR(&pa.local.conf.ula_prefix));
+		}
+	}
+
+	if(pa_ulamode) {
+		if(!strcmp(pa_ulamode, "off")) {
+			pa.local.conf.use_ula = 0;
+		} else if(!strcmp(pa_ulamode, "ifnov6")) {
+			pa.local.conf.use_ula = 1;
+			pa.local.conf.no_ula_if_glb_ipv6 = 1;
+		} else if(!strcmp(pa_ulamode, "on")) {
+			pa.local.conf.use_ula = 1;
+			pa.local.conf.no_ula_if_glb_ipv6 = 0;
+		} else {
+			L_ERR("Invalid ulamode option (Can be on, off or ifnov6)");
+			return 43;
 		}
 	}
 
