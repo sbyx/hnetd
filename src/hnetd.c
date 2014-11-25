@@ -98,6 +98,24 @@ void hncp_iface_glue(hncp_iface_user hiu, hncp h, hncp_glue g)
 	iface_register_user(&hiu->iu);
 }
 
+int usage() {
+  L_ERR( "Valid options are:\n"
+	 "\t-d dnsmasq_script\n"
+	 "\t-f dnsmasq_bonus_file\n"
+	 "\t-o odhcp_script\n"
+	 "\t-c pcp_script\n"
+	 "\t-n router_name\n"
+	 "\t-m domain_name\n"
+	 "\t-s pa_store file\n"
+	 "\t-p socket path\n"
+	 "\t--ip4prefix v.x.y.z/prefix\n"
+	 "\t--ip6prefix v:x:y:z::/prefix\n"
+	 "\t--ulaprefix v:x:y:z::/prefix\n"
+	 "\t--loglevel [0-9]\n"
+	 );
+    return(3);
+}
+
 int main(__unused int argc, char *argv[])
 {
 	hncp h;
@@ -177,10 +195,11 @@ int main(__unused int argc, char *argv[])
 			{ "ulaprefix",   required_argument,      NULL,           GOL_ULAPREFIX },
 			{ "ulamode",     required_argument,      NULL,           GOL_ULAMODE },
 			{ "loglevel",    required_argument,      NULL,           GOL_LOGLEVEL },
+			{ "help",	 no_argument,		 NULL,           '?' },
 			{ NULL,          0,                      NULL,           0 }
 	};
 
-	while ((c = getopt_long(argc, argv, "d:f:o:n:r:s:p:m:c:", longopts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "?d:f:o:n:r:s:p:m:c:", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'd':
 			sd_params.dnsmasq_script = optarg;
@@ -221,9 +240,10 @@ int main(__unused int argc, char *argv[])
 		case GOL_LOGLEVEL:
 			log_level = atoi(optarg);
 			break;
-		case '?':
+		default:
 			L_ERR("Unrecognized option");
-			return 3;
+		case '?': return usage();
+			  break;
 		}
 	}
 
