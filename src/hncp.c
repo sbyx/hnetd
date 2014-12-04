@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Oct 30 14:20:54 2014 mstenber
- * Edit time:     757 min
+ * Last modified: Thu Dec  4 13:02:41 2014 mstenber
+ * Edit time:     761 min
  *
  */
 
@@ -70,7 +70,7 @@ void hncp_node_set(hncp_node n, uint32_t update_number,
         }
       else
         {
-          uint32_t version = 0;
+          uint8_t version = 0;
 #if L_LEVEL >= LOG_ERR
           const char *agent = NULL;
           int agent_len = 0;
@@ -84,7 +84,7 @@ void hncp_node_set(hncp_node n, uint32_t update_number,
                   tlv_len(va) >= sizeof(hncp_t_version_s))
                 {
                   hncp_t_version v = tlv_data(va);
-                  version = ntohl(v->version);
+                  version = v->version;
 #if L_LEVEL >= LOG_ERR
                   agent = v->user_agent;
                   agent_len = tlv_len(va) - sizeof(hncp_t_version_s);
@@ -380,10 +380,14 @@ hncp hncp_create(void)
     hncp_t_version_s h;
     char agent[32];
   } data;
-  data.h.version = htonl(HNCP_VERSION);
+  memset(&data, 0, sizeof(data));
+  data.h.version = HNCP_VERSION;
   int alen = snprintf(data.agent, sizeof(data.agent),
                       "hnetd-%s", STR(HNETD_VERSION));
-  hncp_add_tlv_raw(o, HNCP_T_VERSION, &data, sizeof(data.h) + alen);
+  if (alen == sizeof(data.agent))
+    alen = sizeof(data.agent) - 1;
+  data.agent[alen] = 0;
+  hncp_add_tlv_raw(o, HNCP_T_VERSION, &data, sizeof(data.h) + alen + 1);
 
   return o;
  err2:

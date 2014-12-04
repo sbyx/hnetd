@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Thu Dec  4 12:57:18 2014 mstenber
- * Edit time:     82 min
+ * Last modified: Thu Dec  4 12:59:08 2014 mstenber
+ * Edit time:     83 min
  *
  */
 
@@ -138,7 +138,8 @@ typedef struct __packed {
 
 /* HNCP_T_VERSION */
 typedef struct __packed {
-  uint32_t version;
+  uint8_t version;
+  uint8_t reserved[3];
   char user_agent[];
 } hncp_t_version_s, *hncp_t_version;
 
