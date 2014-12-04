@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Thu Nov 20 14:50:23 2014 mstenber
- * Edit time:     81 min
+ * Last modified: Thu Dec  4 12:57:18 2014 mstenber
+ * Edit time:     82 min
  *
  */
 
@@ -203,10 +203,9 @@ typedef struct __packed {
   uint8_t ll[];
 } hncp_t_dns_delegated_zone_s, *hncp_t_dns_delegated_zone;
 
-#define HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE 1
-#define HNCP_T_DNS_DELEGATED_ZONE_FLAG_SEARCH 2
+#define HNCP_T_DNS_DELEGATED_ZONE_FLAG_SEARCH 1
+#define HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE 2
 #define HNCP_T_DNS_DELEGATED_ZONE_FLAG_LEGACY_BROWSE 4
-/* TBD: insert legacy browse to draft */
 
 /* HNCP_T_DNS_DOMAIN_NAME has just DNS label sequence */
 
