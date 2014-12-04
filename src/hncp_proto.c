@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu Dec  4 19:26:19 2014 mstenber
- * Edit time:     605 min
+ * Last modified: Thu Dec  4 22:14:37 2014 mstenber
+ * Edit time:     621 min
  *
  */
 
@@ -181,7 +181,7 @@ void hncp_link_send_req_node_data(hncp_link l,
 
 static hncp_neighbor
 _heard(hncp_link l, hncp_t_link_id lid, struct sockaddr_in6 *src,
-       bool allow_add, bool multicast)
+       bool multicast)
 {
   hncp_neighbor_s nc;
   hncp_neighbor n;
@@ -192,7 +192,8 @@ _heard(hncp_link l, hncp_t_link_id lid, struct sockaddr_in6 *src,
   n = vlist_find(&l->neighbors, &nc, &nc, in_neighbors);
   if (!n)
     {
-      if (!allow_add)
+      /* Doing add based on multicast is relatively insecure. */
+      if (multicast)
         return NULL;
       /* new neighbor */
       n = malloc(sizeof(nc));
@@ -240,27 +241,6 @@ _handle_collision(hncp o)
   return false;
 }
 
-#define GET_NE(allow_add, multicast)                                    \
-do {                                                                    \
-  if (memcmp(&lid->node_identifier, &o->own_node->node_identifier,      \
-             DNCP_NI_LEN) != 0)                                         \
-    {                                                                   \
-      ne = _heard(l, lid, src, allow_add, multicast);                   \
-      if (!ne && allow_add)                                             \
-        return;                                                         \
-    }                                                                   \
-  if (ne && !multicast)                                                 \
-    {                                                                   \
-    tlv_for_each_in_buf(a, data, len)                                   \
-      if (tlv_id(a) == DNCP_T_KEEPALIVE_INTERVAL                        \
-          && tlv_len(a) == 4)                                           \
-        {                                                               \
-          uint32_t interval = be32_to_cpu(*((uint32_t *)tlv_data(a)));  \
-          ne->keepalive_interval = interval;                            \
-        }                                                               \
-    }                                                                   \
- } while(0)
-
 
 /* Handle a single received message. */
 static void
@@ -307,6 +287,25 @@ handle_message(hncp_link l,
       return;
     }
 
+  if (memcmp(&lid->node_identifier, &o->own_node->node_identifier,
+             DNCP_NI_LEN) != 0)
+    {
+      ne = _heard(l, lid, src, multicast);
+      if (!ne && !multicast)
+        return;
+    }
+
+  if (ne)
+    {
+      tlv_for_each_in_buf(a, data, len)
+        if (tlv_id(a) == DNCP_T_KEEPALIVE_INTERVAL
+            && tlv_len(a) == 4)
+          {
+            uint32_t interval = be32_to_cpu(*((uint32_t *)tlv_data(a)));
+            ne->keepalive_interval = interval;
+          }
+    }
+
   /* Estimates what's in the payload + handles the few
    * request messages we support. */
   tlv_for_each_in_buf(a, data, len)
@@ -336,7 +335,6 @@ handle_message(hncp_link l,
               L_INFO("ignoring req-net-hash in multicast");
               return;
             }
-          GET_NE(true, multicast);
           hncp_link_send_network_state(l, src, 0);
           return;
         case HNCP_T_REQ_NODE_DATA:
@@ -350,7 +348,6 @@ handle_message(hncp_link l,
           int len = tlv_len(a);
           if (!len || tlv_len(a) % HNCP_HASH_LEN)
             return;
-          GET_NE(true, multicast);
           for (; len > 0 ; len = len - HNCP_HASH_LEN, p = p + HNCP_HASH_LEN)
             {
               n = hncp_find_node_by_node_identifier(o, p, false);
@@ -375,8 +372,6 @@ handle_message(hncp_link l,
           return;
         }
     }
-
-  GET_NE(false, multicast);
 
   /* Requests were handled above. So what's left is response
    * processing here. If it was unicast, it was probably solicited
@@ -405,6 +400,13 @@ handle_message(hncp_link l,
             {
               l->trickle_c++;
               ne->last_sync = hncp_time(l->hncp);
+            }
+          else if (memcmp(&lid->node_identifier, &o->own_node->node_identifier,
+                          DNCP_NI_LEN) != 0)
+            {
+              /* Send an unicast request, to potentially set up the
+               * peer structure. */
+              hncp_link_send_req_network_state(l, src);
             }
           return;
         }
