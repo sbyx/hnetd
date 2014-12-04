@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu Oct 23 19:40:12 2014 mstenber
- * Edit time:     175 min
+ * Last modified: Thu Dec  4 16:38:42 2014 mstenber
+ * Edit time:     176 min
  *
  */
 
@@ -220,9 +220,7 @@ bool net_sim_is_converged(net_sim s)
       list_for_each_entry(n2, &s->nodes, h)
         {
           /* Make sure that the information about other node _is_ valid */
-          hn = hncp_find_node_by_hash(&n->n,
-                                      &n2->n.own_node->node_identifier_hash,
-                                      false);
+          hn = hncp_find_node_by_node_identifier(&n->n, &n2->n.own_node->node_identifier, false);
           if (!hn)
             {
               L_DEBUG("unable to find other node hash - %s -> %s",
@@ -347,7 +345,7 @@ hncp_link net_sim_hncp_find_link_by_name(hncp o, const char *name)
 
       hncp_calculate_hash(name, strlen(name), &h1);
       for (i = 0; i < HNCP_HASH_LEN; i++)
-        h.buf[i] = h1.buf[i] ^ o->own_node->node_identifier_hash.buf[i];
+        h.buf[i] = h1.buf[i] ^ o->own_node->node_identifier.buf[i];
       h.buf[0] = 0xFE;
       h.buf[1] = 0x80;
       /* Let's pretend it's /64; clear out 2-7 */

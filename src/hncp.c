@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Dec  4 13:02:41 2014 mstenber
- * Edit time:     761 min
+ * Last modified: Thu Dec  4 16:24:17 2014 mstenber
+ * Edit time:     771 min
  *
  */
 
@@ -18,8 +18,7 @@
 
 int hncp_node_cmp(hncp_node n1, hncp_node n2)
 {
-  return memcmp(&n1->node_identifier_hash, &n2->node_identifier_hash,
-                HNCP_HASH_LEN);
+  return memcmp(&n1->node_identifier, &n2->node_identifier, DNCP_NI_LEN);
 }
 
 static int
@@ -256,8 +255,7 @@ compare_neighbors(const void *a, const void *b, void *ptr __unused)
   hncp_neighbor n1 = (hncp_neighbor) a, n2 = (hncp_neighbor) b;
   int r;
 
-  r = memcmp(&n1->node_identifier_hash, &n2->node_identifier_hash,
-             HNCP_HASH_LEN);
+  r = memcmp(&n1->node_identifier, &n2->node_identifier, DNCP_NI_LEN);
   if (r)
     return r;
   return memcmp(&n1->iid, &n2->iid, sizeof(n1->iid));
@@ -289,13 +287,14 @@ void hncp_calculate_hash(const void *buf, int len, hncp_hash dest)
 
   md5_begin(&ctx);
   md5_hash(buf, len, &ctx);
-  md5_end(dest, &ctx);
+  hncp_md5_end(dest, &ctx);
 }
 
 
-hncp_node hncp_find_node_by_hash(hncp o, hncp_hash h, bool create)
+hncp_node
+hncp_find_node_by_node_identifier(hncp o, hncp_node_identifier ni, bool create)
 {
-  hncp_node ch = container_of(h, hncp_node_s, node_identifier_hash);
+  hncp_node ch = container_of(ni, hncp_node_s, node_identifier);
   hncp_node n = vlist_find(&o->nodes, ch, ch, in_nodes);
 
   if (n)
@@ -305,7 +304,7 @@ hncp_node hncp_find_node_by_hash(hncp o, hncp_hash h, bool create)
   n = calloc(1, sizeof(*n));
   if (!n)
     return false;
-  n->node_identifier_hash = *h;
+  n->node_identifier = *ni;
   n->hncp = o;
   n->tlv_index_dirty = true;
   vlist_add(&o->nodes, &n->in_nodes, n);
@@ -331,17 +330,17 @@ bool hncp_init(hncp o, const void *node_identifier, int len)
   o->first_free_iid = 1;
   o->last_prune = 1;
   /* this way new nodes with last_prune=0 won't be reachable */
-  return hncp_set_own_hash(o, &h);
+  return hncp_set_own_node_identifier(o, (hncp_node_identifier)&h);
 }
 
-bool hncp_set_own_hash(hncp o, hncp_hash h)
+bool hncp_set_own_node_identifier(hncp o, hncp_node_identifier ni)
 {
   if (o->own_node)
     {
       vlist_delete(&o->nodes, &o->own_node->in_nodes);
       o->own_node = NULL;
     }
-  hncp_node n = hncp_find_node_by_hash(o, h, true);
+  hncp_node n = hncp_find_node_by_node_identifier(o, ni, true);
   if (!n)
     {
       L_ERR("unable to create own node");
@@ -698,7 +697,7 @@ void hncp_self_flush(hncp_node n)
                        TLV_SIZE + sizeof(hncp_t_node_data_neighbor_s));
               hncp_t_node_data_neighbor d = tlv_data(nt);
 
-              d->neighbor_node_identifier_hash = ne->node_identifier_hash;
+              d->neighbor_node_identifier = ne->node_identifier;
               d->neighbor_link_id = cpu_to_be32(ne->iid);
               d->link_id = cpu_to_be32(l->iid);
 
@@ -749,16 +748,16 @@ void hncp_calculate_node_data_hash(hncp_node n)
 
   l = n->tlv_container ? tlv_len(n->tlv_container) : 0;
   tlv_init(h, HNCP_T_NODE_DATA, sizeof(buf) + l);
-  ndh->node_identifier_hash = n->node_identifier_hash;
+  ndh->node_identifier = n->node_identifier;
   ndh->update_number = cpu_to_be32(n->update_number);
   md5_begin(&ctx);
   md5_hash(buf, sizeof(buf), &ctx);
   if (l)
     md5_hash(tlv_data(n->tlv_container), l, &ctx);
-  md5_end(&n->node_data_hash, &ctx);
+  hncp_md5_end(&n->node_data_hash, &ctx);
   n->node_data_hash_dirty = false;
-  L_DEBUG("hncp_calculate_node_data_hash @%p %llx=%llx%s",
-          n->hncp, hncp_hash64(&n->node_identifier_hash),
+  L_DEBUG("hncp_calculate_node_data_hash @%p %s=%llx%s",
+          n->hncp, HNCP_NODE_REPR(n),
           hncp_hash64(&n->node_data_hash),
           n == n->hncp->own_node ? " [self]" : "");
 }
@@ -776,7 +775,7 @@ void hncp_calculate_network_hash(hncp o)
       hncp_calculate_node_data_hash(n);
       md5_hash(&n->node_data_hash, HNCP_HASH_LEN, &ctx);
     }
-  md5_end(&o->network_hash, &ctx);
+  hncp_md5_end(&o->network_hash, &ctx);
   L_DEBUG("hncp_calculate_network_hash @%p =%llx",
           o, hncp_hash64(&o->network_hash));
   o->network_hash_dirty = false;
@@ -892,8 +891,8 @@ bool hncp_if_has_highest_id(hncp o, const char *ifname)
       {
         if (nh->link_id != iid)
           continue;
-        if (memcmp(&o->own_node->node_identifier_hash,
-                   &nh->neighbor_node_identifier_hash, HNCP_HASH_LEN) < 0)
+        if (memcmp(&o->own_node->node_identifier,
+                   &nh->neighbor_node_identifier, DNCP_NI_LEN) < 0)
           return false;
       }
   return true;

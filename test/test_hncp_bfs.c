@@ -51,16 +51,16 @@ void hncp_bfs_one(void)
 
 	hncp_bfs bfs = hncp_routing_create(hncp, NULL);
 
-	hncp_hash_s h = {{0}};
+	hncp_node_identifier_s h = {{0}};
 	hncp_node n0 = hncp->own_node;
 	h.buf[0] = 1;
-	hncp_node n1 = hncp_find_node_by_hash(hncp, &h, true);
+	hncp_node n1 = hncp_find_node_by_node_identifier(hncp, &h, true);
 	h.buf[0] = 2;
-	hncp_node n2 = hncp_find_node_by_hash(hncp, &h, true);
+	hncp_node n2 = hncp_find_node_by_node_identifier(hncp, &h, true);
 	h.buf[0] = 3;
-	hncp_node n3 = hncp_find_node_by_hash(hncp, &h, true);
+	hncp_node n3 = hncp_find_node_by_node_identifier(hncp, &h, true);
 	h.buf[0] = 4;
-	hncp_node n4 = hncp_find_node_by_hash(hncp, &h, true);
+	hncp_node n4 = hncp_find_node_by_node_identifier(hncp, &h, true);
 
 	// Create a network topology with us + 4 routers:
 	// US -- N1 -- N2 |- N4
@@ -77,10 +77,10 @@ void hncp_bfs_one(void)
 	memset(&dummy1.sin6_addr, 1, sizeof(dummy1.sin6_addr));
 	struct sockaddr_in6 dummy3 = {.sin6_family = AF_INET6};
 	memset(&dummy3.sin6_addr, 3, sizeof(dummy3.sin6_addr));
-	hncp_t_link_id_s lid1 = {n1->node_identifier_hash, 0};
+	hncp_t_link_id_s lid1 = {n1->node_identifier, 0};
 	_heard(l1, &lid1, &dummy1);
 
-	hncp_t_link_id_s lid3 = {n3->node_identifier_hash, 0};
+	hncp_t_link_id_s lid3 = {n3->node_identifier, 0};
 	_heard(l3, &lid3, &dummy3);
 
 	// TLV foo
@@ -107,7 +107,7 @@ void hncp_bfs_one(void)
 	// N0 link 0
 	n.link_id = htonl(l1->iid);
 	n.neighbor_link_id = htonl(0);
-	n.neighbor_node_identifier_hash = n1->node_identifier_hash;
+	n.neighbor_node_identifier = n1->node_identifier;
 	tlv_put(&b, HNCP_T_NODE_DATA_NEIGHBOR, &n, sizeof(n));
 
 	ap.hdr.link_id = htonl(l1->iid);
@@ -119,7 +119,7 @@ void hncp_bfs_one(void)
 	// N0 link 1
 	n.link_id = htonl(l3->iid);
 	n.neighbor_link_id = htonl(0);
-	n.neighbor_node_identifier_hash = n3->node_identifier_hash;
+	n.neighbor_node_identifier = n3->node_identifier;
 	tlv_put(&b, HNCP_T_NODE_DATA_NEIGHBOR, &n, sizeof(n));
 
 	ap.hdr.link_id = 0;
@@ -137,13 +137,13 @@ void hncp_bfs_one(void)
 	// N1 link 0
 	n.link_id = htonl(0);
 	n.neighbor_link_id = htonl(l1->iid);
-	n.neighbor_node_identifier_hash = n0->node_identifier_hash;
+	n.neighbor_node_identifier = n0->node_identifier;
 	tlv_put(&b, HNCP_T_NODE_DATA_NEIGHBOR, &n, sizeof(n));
 
 	// N1 link 1
 	n.link_id = htonl(1);
 	n.neighbor_link_id =htonl(0);
-	n.neighbor_node_identifier_hash = n2->node_identifier_hash;
+	n.neighbor_node_identifier = n2->node_identifier;
 	tlv_put(&b, HNCP_T_NODE_DATA_NEIGHBOR, &n, sizeof(n));
 
 	ap.hdr.link_id = htonl(0);
@@ -161,19 +161,19 @@ void hncp_bfs_one(void)
 	// N2 link 0
 	n.link_id = htonl(0);
 	n.neighbor_link_id = htonl(1);
-	n.neighbor_node_identifier_hash = n1->node_identifier_hash;
+	n.neighbor_node_identifier = n1->node_identifier;
 	tlv_put(&b, HNCP_T_NODE_DATA_NEIGHBOR, &n, sizeof(n));
 
 	// N2 link 1
 	n.link_id = htonl(1);
 	n.neighbor_link_id = htonl(1);
-	n.neighbor_node_identifier_hash = n3->node_identifier_hash;
+	n.neighbor_node_identifier = n3->node_identifier;
 	tlv_put(&b, HNCP_T_NODE_DATA_NEIGHBOR, &n, sizeof(n));
 
 	// N2 link 2
 	n.link_id = htonl(2);
 	n.neighbor_link_id = htonl(0);
-	n.neighbor_node_identifier_hash = n4->node_identifier_hash;
+	n.neighbor_node_identifier = n4->node_identifier;
 	tlv_put(&b, HNCP_T_NODE_DATA_NEIGHBOR, &n, sizeof(n));
 
 	ap.hdr.link_id = htonl(2);
@@ -198,13 +198,13 @@ void hncp_bfs_one(void)
 	// N3 link 0
 	n.link_id = htonl(0);
 	n.neighbor_link_id = htonl(l3->iid);
-	n.neighbor_node_identifier_hash = n0->node_identifier_hash;
+	n.neighbor_node_identifier = n0->node_identifier;
 	tlv_put(&b, HNCP_T_NODE_DATA_NEIGHBOR, &n, sizeof(n));
 
 	// N3 link 1
 	n.link_id = htonl(1);
 	n.neighbor_link_id = htonl(1);
-	n.neighbor_node_identifier_hash = n2->node_identifier_hash;
+	n.neighbor_node_identifier = n2->node_identifier;
 	tlv_put(&b, HNCP_T_NODE_DATA_NEIGHBOR, &n, sizeof(n));
 
 	ap.hdr.link_id = htonl(1);

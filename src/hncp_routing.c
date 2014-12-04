@@ -251,7 +251,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 
 	while (!list_empty(&queue)) {
 		c = container_of(list_first_entry(&queue, struct hncp_bfs_head, head), hncp_node_s, bfs);
-		L_WARN("Router %d", c->node_identifier_hash.buf[0]);
+		L_WARN("Router %s", HNCP_NODE_REPR(c));
 
 		struct tlv_attr *a, *a2;
 		hncp_node_for_each_tlv(c, a) {
@@ -259,8 +259,8 @@ static void hncp_routing_run(struct uloop_timeout *t)
 			hncp_t_node_data_neighbor ne;
 			if ((ne = hncp_tlv_neighbor(a))) {
 
-				n = hncp_find_node_by_hash(hncp,
-					&ne->neighbor_node_identifier_hash, false);
+				n = hncp_find_node_by_node_identifier(hncp,
+					&ne->neighbor_node_identifier, false);
 
 				if (!(n = hncp_node_find_neigh_bidir(c, ne)))
 					continue; // Connection not mutual
@@ -275,7 +275,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 						continue;
 
 					hncp_neighbor_s *neigh, query = {
-						.node_identifier_hash = ne->neighbor_node_identifier_hash,
+						.node_identifier = ne->neighbor_node_identifier,
 						.iid = be32_to_cpu(ne->neighbor_link_id)
 					};
 
@@ -331,7 +331,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 				// Skip routes for prefixes on connected links
 				if (link && ifo && (ifo->flags & IFACE_FLAG_ADHOC) != IFACE_FLAG_ADHOC && c->bfs.hopcount == 1) {
 					hncp_neighbor_s query = {
-						.node_identifier_hash = c->node_identifier_hash,
+						.node_identifier = c->node_identifier,
 						.iid = be32_to_cpu(ap->link_id)
 					};
 					if (vlist_find(&link->neighbors, &query, &query, in_neighbors))

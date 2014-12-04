@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Sep 29 11:00:40 2014 mstenber
- * Edit time:     565 min
+ * Last modified: Thu Dec  4 15:43:20 2014 mstenber
+ * Edit time:     566 min
  *
  */
 
@@ -116,7 +116,7 @@ static bool _sh_changed(md5_ctx_t *ctx, hncp_hash reference)
 {
   hncp_hash_s h;
 
-  md5_end(&h, ctx);
+  hncp_md5_end(&h, ctx);
   if (memcmp(&h, reference, sizeof(h)))
     {
       *reference = h;

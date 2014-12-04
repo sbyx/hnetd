@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Tue Jun 17 16:12:55 2014 mstenber
- * Edit time:     77 min
+ * Last modified: Thu Dec  4 16:31:39 2014 mstenber
+ * Edit time:     80 min
  *
  */
 
@@ -143,12 +143,14 @@ void hncp_int(void)
   /* Make sure we can add nodes if we feel like it. */
   hncp_hash_s h;
   hncp_calculate_hash("bar", 3, &h);
-  n = hncp_find_node_by_hash(o, &h, false);
+  hncp_node_identifier ni = (hncp_node_identifier)&h;
+
+  n = hncp_find_node_by_node_identifier(o, ni, false);
   sput_fail_unless(!n, "hncp_find_node_by_hash w/ create=false => none");
-  n = hncp_find_node_by_hash(o, &h, true);
+  n = hncp_find_node_by_node_identifier(o, ni, true);
   sput_fail_unless(n, "hncp_find_node_by_hash w/ create=false => !none");
-  sput_fail_unless(hncp_find_node_by_hash(o, &h, false), "should exist");
-  sput_fail_unless(hncp_find_node_by_hash(o, &h, false) == n, "still same");
+  sput_fail_unless(hncp_find_node_by_node_identifier(o, ni, false), "should exist");
+  sput_fail_unless(hncp_find_node_by_node_identifier(o, ni, false) == n, "still same");
 
   n = hncp_get_first_node(o);
   sput_fail_unless(n, "hncp_get_first_node");

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu Oct 30 14:21:01 2014 mstenber
- * Edit time:     569 min
+ * Last modified: Thu Dec  4 16:25:21 2014 mstenber
+ * Edit time:     574 min
  *
  */
 
@@ -30,7 +30,7 @@ static bool _push_node_state_tlv(struct tlv_buf *tb, hncp_node n)
   if (!a)
     return false;
   s = tlv_data(a);
-  s->node_identifier_hash = n->node_identifier_hash;
+  s->node_identifier = n->node_identifier;
   s->update_number = cpu_to_be32(n->update_number);
   s->ms_since_origination = cpu_to_be32(now - n->origination_time);
   s->node_data_hash = n->node_data_hash;
@@ -46,7 +46,7 @@ static bool _push_node_data_tlv(struct tlv_buf *tb, hncp_node n)
   if (!a)
     return false;
   h = tlv_data(a);
-  h->node_identifier_hash = n->node_identifier_hash;
+  h->node_identifier = n->node_identifier;
   h->update_number = cpu_to_be32(n->update_number);
   memcpy((void *)h + sizeof(*h), tlv_data(n->tlv_container), s);
   return true;
@@ -72,7 +72,7 @@ static bool _push_link_id_tlv(struct tlv_buf *tb, hncp_link l)
   if (!a)
     return false;
   lid = tlv_data(a);
-  lid->node_identifier_hash = l->hncp->own_node->node_identifier_hash;
+  lid->node_identifier = l->hncp->own_node->node_identifier;
   lid->link_id = cpu_to_be32(l->iid);
   return true;
 }
@@ -171,7 +171,7 @@ void hncp_link_send_req_node_data(hncp_link l,
     {
       L_DEBUG("hncp_link_send_req_node_state -> " SA6_F "%%" HNCP_LINK_F,
               SA6_D(dst), HNCP_LINK_D(l));
-      memcpy(tlv_data(a), &ns->node_identifier_hash, HNCP_HASH_LEN);
+      memcpy(tlv_data(a), &ns->node_identifier, DNCP_NI_LEN);
       hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head), dst);
     }
   tlv_buf_free(&tb);
@@ -187,7 +187,7 @@ _heard(hncp_link l, hncp_t_link_id lid, struct sockaddr_in6 *src)
   hncp o = l->hncp;
 
   memset(&nc, 0, sizeof(nc));
-  nc.node_identifier_hash = lid->node_identifier_hash;
+  nc.node_identifier = lid->node_identifier;
   nc.iid = be32_to_cpu(lid->link_id);
   n = vlist_find(&l->neighbors, &nc, &nc, in_neighbors);
   if (!n)
@@ -217,15 +217,15 @@ _handle_collision(hncp o)
   int delta = hncp_io_time(o) - o->collisions[o->last_collision];
   if (delta < HNCP_UPDATE_COLLISION_N)
     {
-      L_ERR("%d hash conflicts encountered in %.3fs - changing own id",
+      L_ERR("%d node id conflicts encountered in %.3fs - changing own id",
             HNCP_UPDATE_COLLISIONS_IN_N,
             1.0 * delta / HNETD_TIME_PER_SECOND);
-      hncp_hash_s h;
+      hncp_node_identifier_s ni;
       int i;
 
-      for (i = 0; i < HNCP_HASH_LEN; i++)
-        h.buf[i] = random() % 256;
-      hncp_set_own_hash(o, &h);
+      for (i = 0; i < DNCP_NI_LEN; i++)
+        ni.buf[i] = random() % 256;
+      hncp_set_own_node_identifier(o, &ni);
       return true;
     }
   else
@@ -287,9 +287,8 @@ handle_message(hncp_link l,
    * with duplicated node identifier (hash). If we don't react in some way,
    * it's possible (local) node id collisions stick around forever.
    * However, we can't add them to neighbors so we don't do _heard here. */
-  if (memcmp(&lid->node_identifier_hash,
-             &o->own_node->node_identifier_hash,
-             HNCP_HASH_LEN) != 0)
+  if (memcmp(&lid->node_identifier, &o->own_node->node_identifier,
+             DNCP_NI_LEN) != 0)
     {
       ne = _heard(l, lid, src);
       if (!ne)
@@ -337,7 +336,7 @@ handle_message(hncp_link l,
           if (tlv_len(a) != HNCP_HASH_LEN)
             return;
 
-          n = hncp_find_node_by_hash(o, tlv_data(a), false);
+          n = hncp_find_node_by_node_identifier(o, tlv_data(a), false);
           if (n)
             {
               if (n != o->own_node)
@@ -410,11 +409,10 @@ handle_message(hncp_link l,
 
       if (multicast)
         {
-          /* Reset trickle on the link */
+          /* No need to reset Trickle anymore, but log the fact */
           L_DEBUG("received inconsistent multicast network state %s != %s",
                   HEX_REPR(nethash, HNCP_HASH_LEN),
                   HEX_REPR(&o->network_hash, HNCP_HASH_LEN));
-          hncp_link_reset_trickle(l);
         }
 
       /* Short form (raw network hash) */
@@ -438,7 +436,8 @@ handle_message(hncp_link l,
                 return;
               }
             ns = tlv_data(a);
-            n = hncp_find_node_by_hash(o, &ns->node_identifier_hash, false);
+            n = hncp_find_node_by_node_identifier(o, &ns->node_identifier,
+                                                  false);
             new_update_number = be32_to_cpu(ns->update_number);
             bool interesting = !n
               || (new_update_number > n->update_number
@@ -448,16 +447,14 @@ handle_message(hncp_link l,
                                 sizeof(n->node_data_hash)) != 0));
             if (interesting)
               {
-                L_DEBUG("saw something new for %llx/%p (update number %d)",
-                        hncp_hash64(&ns->node_identifier_hash),
-                        n, new_update_number);
+                L_DEBUG("saw something new for %s/%p (update number %d)",
+                        HNCP_NODE_REPR(ns), n, new_update_number);
                 hncp_link_send_req_node_data(l, src, ns);
               }
             else
               {
-                L_DEBUG("saw something old for %llx/%p (update number %d)",
-                        hncp_hash64(&ns->node_identifier_hash),
-                        n, new_update_number);
+                L_DEBUG("saw something old for %s/%p (update number %d)",
+                        HNCP_NODE_REPR(ns), n, new_update_number);
               }
           }
       return;
@@ -510,7 +507,7 @@ handle_message(hncp_link l,
       return;
     }
   /* If they're for different nodes, not interested. */
-  if (memcmp(&ns->node_identifier_hash, &nd->node_identifier_hash, HNCP_HASH_LEN))
+  if (memcmp(&ns->node_identifier, &nd->node_identifier, DNCP_NI_LEN))
     {
       L_INFO("node data and state identifier mismatch, ignoring");
       return;
@@ -522,7 +519,7 @@ handle_message(hncp_link l,
       return;
     }
   /* Let's see if it's more recent. */
-  n = hncp_find_node_by_hash(o, &ns->node_identifier_hash, true);
+  n = hncp_find_node_by_node_identifier(o, &ns->node_identifier, true);
   if (!n)
     return;
   new_update_number = be32_to_cpu(ns->update_number);

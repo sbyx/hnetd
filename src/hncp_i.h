@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Nov 20 14:50:59 2014 mstenber
- * Edit time:     274 min
+ * Last modified: Thu Dec  4 16:32:12 2014 mstenber
+ * Edit time:     282 min
  *
  */
 
@@ -201,7 +201,7 @@ typedef struct hncp_neighbor_struct hncp_neighbor_s, *hncp_neighbor;
 struct hncp_neighbor_struct {
   struct vlist_node in_neighbors;
 
-  hncp_hash_s node_identifier_hash;
+  hncp_node_identifier_s node_identifier;
   iid_t iid;
 
   /* Link-level address */
@@ -247,7 +247,7 @@ struct hncp_node_struct {
   struct hncp_bfs_head bfs;
 
   /* These map 1:1 to node data TLV's start */
-  hncp_hash_s node_identifier_hash;
+  hncp_node_identifier_s node_identifier;
   uint32_t update_number;
 
   uint32_t version;
@@ -300,11 +300,12 @@ bool hncp_init(hncp o, const void *node_identifier, int len);
 void hncp_uninit(hncp o);
 
 /* Utility to change local node identifier - use with care */
-bool hncp_set_own_hash(hncp o, hncp_hash h);
+bool hncp_set_own_node_identifier(hncp o, hncp_node_identifier ni);
 
 hncp_link hncp_find_link_by_name(hncp o, const char *ifname, bool create);
 hncp_link hncp_find_link_by_id(hncp o, uint32_t link_id);
-hncp_node hncp_find_node_by_hash(hncp o, const hncp_hash h, bool create);
+hncp_node
+hncp_find_node_by_node_identifier(hncp o, hncp_node_identifier ni, bool create);
 
 /* Private utility - shouldn't be used by clients. */
 void hncp_link_reset_trickle(hncp_link l);
@@ -392,10 +393,11 @@ static inline hnetd_time_t hncp_time(hncp o)
 
 #define TMIN(x,y) ((x) == 0 ? (y) : (y) == 0 ? (x) : (x) < (y) ? (x) : (y))
 
-#define HNCP_NODE_REPR(n) HEX_REPR(&n->node_identifier_hash, HNCP_HASH_LEN)
+#define HNCP_NODE_REPR(n) \
+  HEX_REPR(&n->node_identifier, sizeof(n->node_identifier))
 
-#define HNCP_NEIGH_F "neighbor %llx/#%d"
-#define HNCP_NEIGH_D(n) hncp_hash64(&n->node_identifier_hash),n->iid
+#define HNCP_NEIGH_F "neighbor %s/#%d"
+#define HNCP_NEIGH_D(n) HNCP_NODE_REPR(n),n->iid
 
 #define HNCP_LINK_F "link %s[#%d]"
 #define HNCP_LINK_D(l) l->ifname,l->iid
@@ -504,8 +506,8 @@ hncp_node_find_neigh_bidir(hncp_node n, hncp_t_node_data_neighbor ne)
 {
   if (!n)
     return NULL;
-  hncp_hash oh = &ne->neighbor_node_identifier_hash;
-  hncp_node n2 = hncp_find_node_by_hash(n->hncp, oh, false);
+  hncp_node_identifier ni = &ne->neighbor_node_identifier;
+  hncp_node n2 = hncp_find_node_by_node_identifier(n->hncp, ni, false);
   if (!n2)
     return NULL;
   struct tlv_attr *a;
@@ -516,12 +518,19 @@ hncp_node_find_neigh_bidir(hncp_node n, hncp_t_node_data_neighbor ne)
       {
         if (ne->link_id == ne2->neighbor_link_id
             && ne->neighbor_link_id == ne2->link_id &&
-            !memcmp(&ne2->neighbor_node_identifier_hash,
-                    &n->node_identifier_hash, sizeof(n->node_identifier_hash)))
+            !memcmp(&ne2->neighbor_node_identifier,
+                    &n->node_identifier, DNCP_NI_LEN))
           return n2;
       }
 
   return NULL;
 }
+
+#define hncp_md5_end(h, ctx)    \
+do {                            \
+  char tbuf[16];                \
+  md5_end(tbuf, ctx);           \
+  *h = *((hncp_hash)tbuf);      \
+} while (0)
 
 #endif /* HNCP_I_H */

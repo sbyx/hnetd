@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu Oct 23 19:41:41 2014 mstenber
+ * Last modified: Thu Dec  4 16:19:02 2014 mstenber
  * Edit time:     337 min
  *
  */
@@ -116,8 +116,8 @@ static void hncp_prune_rec(hncp_node n)
 
   tlvs = hncp_node_get_tlvs(n);
 
-  L_DEBUG("hncp_prune_rec %llx / %p = %p",
-          hncp_hash64(&n->node_identifier_hash), n, tlvs);
+  L_DEBUG("hncp_prune_rec %s / %p = %p",
+          HNCP_NODE_REPR(n), n, tlvs);
 
   /* No TLVs? No point recursing, unless the node is us (we have to
    * visit it always in any case). */

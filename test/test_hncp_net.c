@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Jul 16 23:40:12 2014 mstenber
- * Edit time:     516 min
+ * Last modified: Thu Dec  4 16:39:58 2014 mstenber
+ * Edit time:     517 min
  *
  */
 
@@ -278,8 +278,7 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes)
 {
   /* A LOT of routers connected in a tube (R1 R2 R3 .. RN). */
   unsigned int i;
-  hncp_hash_s h1;
-  hncp_hash_s h2;
+  hncp_node_identifier_s h1, h2;
 
   memset(&h1, 0, sizeof(h1));
   memset(&h2, 1, sizeof(h2));
@@ -295,9 +294,9 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes)
       if (!no_conflicts)
         {
           if (i == 0 || i == 1 || i == 3)
-            hncp_set_own_hash(n1, &h1);
+            hncp_set_own_node_identifier(n1, &h1);
           else if (i == 2 || i == 4)
-            hncp_set_own_hash(n1, &h2);
+            hncp_set_own_node_identifier(n1, &h2);
         }
 
       sprintf(buf, "node%d", i+1);
@@ -394,9 +393,9 @@ hncp_t_node_data_neighbor monkey_neighbor(hncp n1, hncp_link l1,
           continue;
         if (nh->neighbor_link_id != cpu_to_be32(l2->iid))
           continue;
-        if (memcmp(&nh->neighbor_node_identifier_hash,
-                   &n2->own_node->node_identifier_hash,
-                   sizeof(n2->own_node->node_identifier_hash)))
+        if (memcmp(&nh->neighbor_node_identifier,
+                   &n2->own_node->node_identifier,
+                   DNCP_NI_LEN))
           continue;
         return nh;
       }

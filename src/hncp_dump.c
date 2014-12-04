@@ -8,6 +8,7 @@
 
 static char __hexhash[HNCP_HASH_LEN*2 + 1];
 #define hd_hash_to_hex(hash) hexlify(__hexhash, (hash)->buf, HNCP_HASH_LEN)
+#define hd_ni_to_hex(hash) hexlify(__hexhash, (hash)->buf, DNCP_NI_LEN)
 
 static hnetd_time_t hd_now; //time hncp_dump is called
 
@@ -153,7 +154,7 @@ static int hd_node_neighbor(struct tlv_attr *tlv, struct blob_buf *b)
 
 	if (!(nh = hncp_tlv_neighbor(tlv)))
 		return -1;
-	hd_a(!blobmsg_add_string(b, "node-id", hd_hash_to_hex(&nh->neighbor_node_identifier_hash)), return -1);
+	hd_a(!blobmsg_add_string(b, "node-id", hd_ni_to_hex(&nh->neighbor_node_identifier)), return -1);
 	hd_a(!blobmsg_add_u32(b, "local-link", ntohl(nh->link_id)), return -1);
 	hd_a(!blobmsg_add_u32(b, "neighbor-link", ntohl(nh->neighbor_link_id)), return -1);
 	return 0;
@@ -267,7 +268,7 @@ static int hd_nodes(hncp o, struct blob_buf *b)
 {
 	hncp_node node;
 	hncp_for_each_node(o, node)
-		hd_do_in_table(b, hd_hash_to_hex(&node->node_identifier_hash), hd_node(o, node,b), return -1);
+		hd_do_in_table(b, hd_ni_to_hex(&node->node_identifier), hd_node(o, node,b), return -1);
 	return 0;
 }
 
@@ -282,7 +283,7 @@ static int hd_links(hncp o, struct blob_buf *b)
 static int hd_info(hncp o, struct blob_buf *b)
 {
 	hd_a(!blobmsg_add_u64(b, "time", hd_now), return -1);
-	hd_a(!blobmsg_add_string(b, "node-id", hd_hash_to_hex(&o->own_node->node_identifier_hash)), return -1);
+	hd_a(!blobmsg_add_string(b, "node-id", hd_ni_to_hex(&o->own_node->node_identifier)), return -1);
 	return 0;
 }
 

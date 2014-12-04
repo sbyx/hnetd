@@ -55,16 +55,15 @@
 
 /* Router ID */
 struct pa_rid {
-#define PA_RIDLEN 16
+  /* TBD - this has to be same as DNCP_NI_LEN. Hardcoded # here sucks,
+     as does PA_RID_L/LA.. */
+#define PA_RIDLEN 4
 	uint8_t id[PA_RIDLEN];
 
 #define PA_RIDCMP(r1, r2) memcmp((r1)->id, (r2)->id, PA_RIDLEN)
 #define PA_RIDCPY(dst, src) memcpy((dst)->id, (src)->id, PA_RIDLEN)
-#define PA_RID_L		"%02x%02x%02x%02x:%02x%02x%02x%02x:%02x%02x%02x%02x:%02x%02x%02x%02x"
-#define PA_RID_LA(rid)  (rid)->id[0], (rid)->id[1], (rid)->id[2], (rid)->id[3], \
-		(rid)->id[4], (rid)->id[5], (rid)->id[6], (rid)->id[7], \
-		(rid)->id[8], (rid)->id[9], (rid)->id[10], (rid)->id[11], \
-		(rid)->id[12], (rid)->id[13], (rid)->id[15], (rid)->id[15]
+#define PA_RID_L		"%02x%02x%02x%02x"
+#define PA_RID_LA(rid)  (rid)->id[0], (rid)->id[1], (rid)->id[2], (rid)->id[3]
 };
 
 struct pa_dp;

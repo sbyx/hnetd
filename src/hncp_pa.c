@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Thu Sep 25 16:23:35 2014 mstenber
+ * Last modified: Thu Dec  4 16:14:28 2014 mstenber
  * Edit time:     491 min
  *
  */
@@ -193,8 +193,8 @@ static hncp_link _find_local_link(hncp_node onode, uint32_t olink_no)
       {
         if (nh->neighbor_link_id != olink_no)
           continue;
-        if (memcmp(&onode->node_identifier_hash,
-                   &nh->neighbor_node_identifier_hash, HNCP_HASH_LEN) != 0)
+        if (memcmp(&onode->node_identifier,
+                   &nh->neighbor_node_identifier, DNCP_NI_LEN) != 0)
           continue;
         /* Yay, it is this one. */
         return hncp_find_link_by_id(o, be32_to_cpu(nh->link_id));
@@ -218,7 +218,7 @@ static void _update_a_tlv(hncp_glue g, hncp_node n,
   memcpy(&p, ah->prefix_data, plen);
   l = _find_local_link(n, ah->link_id);
 
-  struct pa_ap *ap = pa_ap_get(g->pa_data, &p, (struct pa_rid *)&n->node_identifier_hash, add);
+  struct pa_ap *ap = pa_ap_get(g->pa_data, &p, (struct pa_rid *)&n->node_identifier, add);
   if (!ap)
     return;
 
@@ -336,7 +336,7 @@ static void _update_d_tlv(hncp_glue g, hncp_node n,
         }
     }
 
-  struct pa_edp *edp = pa_edp_get(g->pa_data, &p, (struct pa_rid *)&n->node_identifier_hash, !!valid);
+  struct pa_edp *edp = pa_edp_get(g->pa_data, &p, (struct pa_rid *)&n->node_identifier, !!valid);
   if(!edp)
 	  return;
 
@@ -379,7 +379,7 @@ static void _update_a_local_links(hncp_glue g)
           int plen = ROUND_BITS_TO_BYTES(p.plen);
           memcpy(&p, ah->prefix_data, plen);
           l = _find_local_link(n, ah->link_id);
-          struct pa_ap *ap = pa_ap_get(g->pa_data, &p, (struct pa_rid *)&n->node_identifier_hash, false);
+          struct pa_ap *ap = pa_ap_get(g->pa_data, &p, (struct pa_rid *)&n->node_identifier, false);
           if (!ap)
             {
               L_DEBUG(" unable to find AP for %s", PREFIX_REPR(&p));
@@ -446,7 +446,7 @@ static void _tlv_cb(hncp_subscriber s,
         if (ra)
         {
           _update_pa_eaa(g->pa_data, &ra->address,
-                         (struct pa_rid *)&n->node_identifier_hash,
+                         (struct pa_rid *)&n->node_identifier,
                          !add);
         }
       else
@@ -777,7 +777,7 @@ static void _node_change_cb(hncp_subscriber s, hncp_node n, bool add)
    * NULL and operation of interest is add.. */
   if (o->own_node || !add)
     return;
-  struct pa_rid *rid = (struct pa_rid *)&n->node_identifier_hash;
+  struct pa_rid *rid = (struct pa_rid *)&n->node_identifier;
 
   /* Set the rid */
   pa_flood_set_rid(g->pa_data, rid);
@@ -793,7 +793,7 @@ static void _ap_if_update_timeout_cb(struct uloop_timeout *to)
 
 hncp_glue hncp_pa_glue_create(hncp o, struct pa_data *pa_data)
 {
-  struct pa_rid *rid = (struct pa_rid *)&o->own_node->node_identifier_hash;
+  struct pa_rid *rid = (struct pa_rid *)&o->own_node->node_identifier;
   hncp_glue g = calloc(1, sizeof(*g));
 
   if (!g)

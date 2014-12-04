@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Thu Dec  4 12:59:08 2014 mstenber
- * Edit time:     83 min
+ * Last modified: Thu Dec  4 16:40:51 2014 mstenber
+ * Edit time:     92 min
  *
  */
 
@@ -16,6 +16,13 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+
+/******************************************************************* dncp-00 */
+
+/* Profile specific definitions */
+
+/* Size of the node identifier */
+#define DNCP_NI_LEN 4
 
 /******************************** Not standardized, but hopefully one day..  */
 
@@ -26,8 +33,8 @@
  */
 #define HNCP_VERSION 1
 
-/* Let's assume we use MD5 for the time being.. */
-#define HNCP_HASH_LEN 16
+/* Let's assume we use 64-bit version of MD5 for the time being.. */
+#define HNCP_HASH_LEN 8
 
 /* However, in security stuff, we use sha256 */
 #define HNCP_SHA256_LEN 32
@@ -49,6 +56,8 @@
 #define HNCP_SD_DEFAULT_DOMAIN "home."
 
 /******************************************************************* TLV T's */
+
+/* TBD renumber (+rename?) to match DNCP-00, HNCP-03 */
 
 enum {
   /* This should be included in every message to facilitate neighbor
@@ -98,9 +107,13 @@ typedef struct __packed {
   unsigned char buf[HNCP_SHA256_LEN];
 } hncp_sha256_s, *hncp_sha256;
 
+typedef struct __packed {
+  unsigned char buf[DNCP_NI_LEN];
+} hncp_node_identifier_s, *hncp_node_identifier;
+
 /* HNCP_T_LINK_ID */
 typedef struct __packed {
-  hncp_hash_s node_identifier_hash;
+  hncp_node_identifier_s node_identifier;
   uint32_t link_id;
 } hncp_t_link_id_s, *hncp_t_link_id;
 
@@ -112,7 +125,7 @@ typedef struct __packed {
 
 /* HNCP_T_NODE_STATE */
 typedef struct __packed {
-  hncp_hash_s node_identifier_hash;
+  hncp_node_identifier_s node_identifier;
   uint32_t update_number;
   uint32_t ms_since_origination;
   hncp_hash_s node_data_hash;
@@ -120,7 +133,7 @@ typedef struct __packed {
 
 /* HNCP_T_NODE_DATA */
 typedef struct __packed {
-  hncp_hash_s node_identifier_hash;
+  hncp_node_identifier_s node_identifier;
   uint32_t update_number;
 } hncp_t_node_data_header_s, *hncp_t_node_data_header;
 
@@ -129,7 +142,7 @@ typedef struct __packed {
 
 /* HNCP_T_NODE_DATA_NEIGHBOR */
 typedef struct __packed {
-  hncp_hash_s neighbor_node_identifier_hash;
+  hncp_node_identifier_s neighbor_node_identifier;
   uint32_t neighbor_link_id;
   uint32_t link_id;
 } hncp_t_node_data_neighbor_s, *hncp_t_node_data_neighbor;
@@ -256,10 +269,15 @@ typedef struct __packed {
  * Why is this needed at all? Non-transitively connected links lead to
  * cases where Trickle i values will not be in sync by default.
  */
+/* TBD: This is no longer relevant due to Trickle change in
+   dncp-00. Get rid of it. */
 #define HNCP_TRICKLE_MAXIMUM_SEND_INTERVAL (600 * HNETD_TIME_PER_SECOND)
 
 /* Redundancy constant. */
 #define HNCP_TRICKLE_K 1
+
+/* TBD: Get rid of the pinging mechanism, and instead implement the
+ * per-connection keep-alive mechanism. */
 
 
 /* When do we want to consider unicast ping to make sure other end is
@@ -274,5 +292,7 @@ typedef struct __packed {
 /* First attempt is done at HNCP_INTERVAL_WORRIED + HNCP_INTERVAL_BASE.
    Nth one at HNCP_INTERVAL_WORRIED + 2^(N-1) * HNCP_INTERVAL_BASE  */
 #define HNCP_INTERVAL_BASE HNETD_TIME_PER_SECOND
+
+/* TBD: Allow configuration of keep-alive interval */
 
 #endif /* HNCP_PROTO_H */

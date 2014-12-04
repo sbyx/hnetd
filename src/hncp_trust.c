@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Nov 19 17:34:25 2014 mstenber
- * Last modified: Thu Nov 20 14:59:19 2014 mstenber
- * Edit time:     154 min
+ * Last modified: Thu Dec  4 15:44:39 2014 mstenber
+ * Edit time:     155 min
  *
  */
 
@@ -125,7 +125,7 @@ static void _trust_calculate_hash(hncp_trust t, hncp_hash h)
         continue;
       md5_hash(&tn->stored, sizeof(tn->stored), &ctx);
     }
-  md5_end(h, &ctx);
+  hncp_md5_end(h, &ctx);
 }
 
 static void _trust_load(hncp_trust t)
