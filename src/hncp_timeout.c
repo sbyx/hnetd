@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu Dec  4 16:19:02 2014 mstenber
- * Edit time:     337 min
+ * Last modified: Thu Dec  4 21:01:15 2014 mstenber
+ * Edit time:     368 min
  *
  */
 
@@ -23,22 +23,7 @@ static void trickle_set_i(hncp_link l, int i)
 
   i = i < imin ? imin : i > imax ? imax : i;
   l->trickle_i = i;
-#if 0
-
-  /* !!! XXX document this change somewhere; normal Trickle
-   * does t=[I/2,I). We do t=[Imin/2,I) to ensure we are never
-   * send starved even if someone else operates at Imin all the time.
-   *
-   * Note that as this doesn't change trickle interval end time,
-   * unless this causes conflicts, it will _not_ cause extra traffic
-   * in stable state.
-  */
-  /* (HNCP_TRICKLE_MAXIMUM_SEND_INTERVAL takes care of this. Which is
-   * better solution should be studied.) */
-  int t = imin / 2 + random() % (i - imin / 2); /* our variant */
-#else
   int t = i / 2 + random() % (i / 2);
-#endif /* 0 */
   l->trickle_send_time = now + t;
   l->trickle_interval_end_time = now + i;
   l->trickle_c = 0;
@@ -50,25 +35,30 @@ static void trickle_upgrade(hncp_link l)
   trickle_set_i(l, l->trickle_i * 2);
 }
 
+static void trickle_send_nocheck(hncp_link l)
+{
+  l->num_trickle_sent++;
+  l->last_trickle_sent = hncp_time(l->hncp);
+  struct sockaddr_in6 dst = { .sin6_family = AF_INET6,
+                              .sin6_addr = l->hncp->multicast_address,
+                              .sin6_port = htons(l->hncp->udp_port)
+  };
+  if (!(dst.sin6_scope_id = l->ifindex))
+    if (!(dst.sin6_scope_id = if_nametoindex(l->ifname)))
+      {
+        L_ERR("Unable to find index for " HNCP_LINK_F, HNCP_LINK_D(l));
+        return;
+      }
+  hncp_link_send_network_state(l, &dst, HNCP_MAXIMUM_MULTICAST_SIZE);
+  if (l->conf->keepalive_interval)
+    l->next_keepalive_time = l->last_trickle_sent + l->conf->keepalive_interval;
+}
+
 static void trickle_send(hncp_link l)
 {
-  if (l->trickle_c < l->conf->trickle_k
-      || (HNCP_TRICKLE_MAXIMUM_SEND_INTERVAL &&
-          (l->last_trickle_sent + HNCP_TRICKLE_MAXIMUM_SEND_INTERVAL) <= hncp_time(l->hncp)))
+  if (l->trickle_c < l->conf->trickle_k)
     {
-      l->num_trickle_sent++;
-      l->last_trickle_sent = hncp_time(l->hncp);
-      struct sockaddr_in6 dst = { .sin6_family = AF_INET6,
-                                  .sin6_addr = l->hncp->multicast_address,
-                                  .sin6_port = htons(l->hncp->udp_port)
-      };
-      if (!(dst.sin6_scope_id = l->ifindex))
-        if (!(dst.sin6_scope_id = if_nametoindex(l->ifname)))
-          {
-            L_ERR("Unable to find index for " HNCP_LINK_F, HNCP_LINK_D(l));
-            return;
-          }
-      hncp_link_send_network_state(l, &dst, HNCP_MAXIMUM_MULTICAST_SIZE);
+      trickle_send_nocheck(l);
     }
   else
     {
@@ -173,21 +163,12 @@ static void hncp_prune(hncp o)
   o->last_prune = now;
 }
 
-void hncp_link_reset_trickle(hncp_link l)
-{
-  if (l->join_pending)
-    return;
-  trickle_set_i(l, l->conf->trickle_imin);
-  hncp_schedule(l->hncp);
-}
-
 void hncp_run(hncp o)
 {
   hnetd_time_t next = 0;
   hnetd_time_t now = hncp_io_time(o);
   hncp_link l;
   hncp_neighbor n, n2;
-  int time_since_failed_join = now - o->join_failed_time;
 
   /* Assumption: We're within RTC step here -> can use same timestamp
    * all the way. */
@@ -237,7 +218,7 @@ void hncp_run(hncp o)
            * trickle (that is actually running; join_pending ones
            * don't really count). */
           vlist_for_each_element(&o->links, l, in_links)
-            hncp_link_reset_trickle(l);
+            trickle_set_i(l, l->conf->trickle_imin);
         }
     }
 
@@ -245,14 +226,36 @@ void hncp_run(hncp o)
     {
       /* If we're in join pending state, we retry every
        * HNCP_REJOIN_INTERVAL if necessary. */
-      if (l->join_pending)
+      if (l->join_failed_time)
         {
-          if (time_since_failed_join >= HNCP_REJOIN_INTERVAL
-              && hncp_link_join(l))
-            trickle_set_i(l, l->conf->trickle_imin);
-          else
+          hnetd_time_t next_time =
+            l->join_failed_time + HNCP_REJOIN_INTERVAL;
+          if (next_time <= now)
             {
-              next = TMIN(next, now + HNCP_REJOIN_INTERVAL - (now - o->join_failed_time));
+              if (!hncp_io_set_ifname_enabled(o, l->ifname, true))
+                {
+                  l->join_failed_time = now;
+                }
+              else
+                {
+                  l->join_failed_time = 0;
+
+                  /* This is essentially second-stage init for a
+                   * link. Before multicast join succeeds, it is
+                   * essentially zombie. */
+                  if (l->conf->keepalive_interval)
+                    l->next_keepalive_time =
+                      hncp_time(l->hncp) + l->conf->keepalive_interval;
+                  trickle_set_i(l, l->conf->trickle_imin);
+                }
+            }
+          /* If still join pending, do not use this for anything. */
+          if (l->join_failed_time)
+            {
+              /* join_failed_time may have changed.. */
+              hnetd_time_t next_time =
+                l->join_failed_time + HNCP_REJOIN_INTERVAL;
+              next = TMIN(next, next_time);
               continue;
             }
         }
@@ -261,9 +264,16 @@ void hncp_run(hncp o)
         trickle_upgrade(l);
       else if (l->trickle_send_time && l->trickle_send_time <= now)
         trickle_send(l);
-
+      else if (l->next_keepalive_time && l->next_keepalive_time <= now)
+        {
+          L_DEBUG("sending keep-alive");
+          trickle_send_nocheck(l);
+          /* Do not increment Trickle i, but set next t to i/2 .. i */
+          trickle_set_i(l, l->trickle_i);
+        }
       next = TMIN(next, l->trickle_interval_end_time);
       next = TMIN(next, l->trickle_send_time);
+      next = TMIN(next, l->next_keepalive_time);
 
       /* Look at neighbors we should be worried about.. */
       /* vlist_for_each_element(&l->neighbors, n, in_neighbors) */
@@ -271,19 +281,8 @@ void hncp_run(hncp o)
         {
           hnetd_time_t next_time;
 
-          if (!n->ping_count)
-            {
-              /* For new neighbors, send ~immediate ping */
-              if (!n->last_response)
-                next_time = now;
-              /* if they're in sync with me, we can just use last_heard */
-              else if (n->last_heard > n->last_response && n->in_sync)
-                next_time = n->last_heard + l->conf->ping_worried_t;
-              else
-                next_time = n->last_response + l->conf->ping_worried_t;
-            }
-          else
-            next_time = n->last_ping + (l->conf->ping_retry_base_t << n->ping_count);
+          next_time = n->last_sync +
+            n->keepalive_interval * DNCP_KEEPALIVE_MULTIPLIER;
 
           /* No cause to do anything right now. */
           if (next_time > now)
@@ -292,20 +291,10 @@ void hncp_run(hncp o)
               continue;
             }
 
-          if (n->ping_count++== l->conf->ping_retries)
-            {
-              /* Zap the neighbor */
-              L_DEBUG(HNCP_NEIGH_F " gone on " HNCP_LINK_F,
-                      HNCP_NEIGH_D(n), HNCP_LINK_D(l));
-              vlist_delete(&l->neighbors, &n->in_neighbors);
-              continue;
-            }
-
-          n->last_ping = hncp_time(o);
-          /* Send a ping */
-          L_DEBUG("pinging " HNCP_NEIGH_F "  on " HNCP_LINK_F,
+          /* Zap the neighbor */
+          L_DEBUG(HNCP_NEIGH_F " gone on " HNCP_LINK_F,
                   HNCP_NEIGH_D(n), HNCP_LINK_D(l));
-          hncp_link_send_req_network_state(l, &n->last_sa6);
+          vlist_delete(&l->neighbors, &n->in_neighbors);
         }
     }
 

@@ -99,6 +99,15 @@ static inline int fu_timeout_set(struct uloop_timeout *timeout, int ms)
   return 0;
 }
 
+static inline int fu_timeouts()
+{
+  int c = 0;
+  struct uloop_timeout *tp;
+  list_for_each_entry(tp, &timeouts, list)
+    c++;
+  return c;
+}
+
 static int fu_timeout_cancel(struct uloop_timeout *timeout)
 {
 #ifdef FU_PARANOID_TIMEOUT_CANCEL

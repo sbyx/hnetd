@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu Dec  4 16:38:42 2014 mstenber
- * Edit time:     176 min
+ * Last modified: Thu Dec  4 21:29:18 2014 mstenber
+ * Edit time:     183 min
  *
  */
 
@@ -101,6 +101,7 @@ typedef struct net_sim_t {
 
   bool disable_sd;
 
+  int node_count;
   bool should_be_stable_topology;
   hnetd_time_t start;
 
@@ -176,14 +177,10 @@ bool net_sim_is_converged(net_sim s)
   net_node n, n2, fn = NULL;
   bool first = true;
   hncp_node hn;
-
+  int acceptable_offset = MAXIMUM_PROPAGATION_DELAY * (s->node_count - 1);
 #if L_LEVEL >= 7
   /* Dump # of nodes in each node */
-  int n_nodes = 0;
-  list_for_each_entry(n, &s->nodes, h)
-    n_nodes++;
-
-  char *buf = alloca(4 * n_nodes), *c = buf;
+  char *buf = alloca(4 * s->node_count), *c = buf;
   list_for_each_entry(n, &s->nodes, h)
     {
       int count = 0;
@@ -235,8 +232,8 @@ bool net_sim_is_converged(net_sim s)
               return false;
             }
           if (!s->accept_time_errors
-              && abs(n2->n.own_node->origination_time -
-                                        hn->origination_time) > 5000)
+              && abs(n2->n.own_node->origination_time
+                     - hn->origination_time) > acceptable_offset)
             {
               L_DEBUG("origination time mismatch at "
                       "%s: %lld !=~ %lld for %s [update number %d]",
@@ -316,6 +313,7 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
       return NULL;
 #endif /* !DISABLE_HNCP_SD */
   n->debug_subscriber.local_tlv_change_callback = net_sim_local_tlv_callback;
+  s->node_count++;
   hncp_subscribe(&n->n, &n->debug_subscriber);
   L_DEBUG("[%s] %s net_sim_find_hncp added",
           HNCP_NODE_REPR(n->n.own_node), n->name);

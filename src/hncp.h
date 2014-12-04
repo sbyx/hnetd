@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Thu Oct 23 13:32:03 2014 mstenber
- * Edit time:     122 min
+ * Last modified: Thu Dec  4 17:00:05 2014 mstenber
+ * Edit time:     123 min
  *
  */
 
@@ -129,9 +129,9 @@ struct hncp_link_conf_struct {
   hnetd_time_t trickle_imin, trickle_imax;
   int trickle_k;
 
-  /* Unreachability conf */
-  hnetd_time_t ping_worried_t, ping_retry_base_t;
-  int ping_retries;
+  /* How frequently (overriding Trickle) we MUST send something on the
+   * link. */
+  hnetd_time_t keepalive_interval;
 };
 
 /**

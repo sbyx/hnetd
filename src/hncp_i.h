@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Dec  4 16:32:12 2014 mstenber
- * Edit time:     282 min
+ * Last modified: Thu Dec  4 21:00:38 2014 mstenber
+ * Edit time:     287 min
  *
  */
 
@@ -117,9 +117,6 @@ struct hncp_struct {
   /* Multicast address */
   struct in6_addr multicast_address;
 
-  /* When did multicast join fail last time? */
-  hnetd_time_t join_failed_time;
-
   /* List of subscribers to change notifications. */
   struct list_head subscribers;
 
@@ -176,7 +173,10 @@ struct hncp_link_struct {
    * hncp process. */
   iid_t iid;
 
-  /* Join failed -> probably tried during DAD. Should try later again. */
+  /* When did multicast join fail last time? */
+  /* -> probably tried during DAD. Should try later again. */
+  hnetd_time_t join_failed_time;
+
   bool join_pending;
 
   /* Trickle state */
@@ -185,6 +185,9 @@ struct hncp_link_struct {
   hnetd_time_t trickle_interval_end_time; /* when does current interval end */
   int trickle_c; /* counter */
   hnetd_time_t last_trickle_sent;
+
+  /* When the next keep-alive should be sent (if any) */
+  hnetd_time_t next_keepalive_time;
 
   /* Statistics about Trickle (mostly for debugging) */
   int num_trickle_sent;
@@ -207,21 +210,11 @@ struct hncp_neighbor_struct {
   /* Link-level address */
   struct sockaddr_in6 last_sa6;
 
-  /* When did we last hear from this one? */
-  hnetd_time_t last_heard;
+  /* When did we last time receive _consistent_ state from the peer. */
+  hnetd_time_t last_sync;
 
-  /* When did they last respond to our message? */
-  hnetd_time_t last_response;
-
-  /* Was the node in sync with us or not the last time we received
-   * network state from it */
-  bool in_sync;
-
-  /* How many pings we have sent that haven't been responded to. */
-  int ping_count;
-
-  /* When did we send the ping most recently. */
-  hnetd_time_t last_ping;
+  /* When did the remote party say they would be sending keep-alives. */
+  hnetd_time_t keepalive_interval;
 };
 
 
@@ -308,7 +301,6 @@ hncp_node
 hncp_find_node_by_node_identifier(hncp o, hncp_node_identifier ni, bool create);
 
 /* Private utility - shouldn't be used by clients. */
-void hncp_link_reset_trickle(hncp_link l);
 int hncp_node_cmp(hncp_node n1, hncp_node n2);
 void hncp_node_set(hncp_node n,
                    uint32_t update_number, hnetd_time_t t,
@@ -365,9 +357,6 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
                          struct in6_addr *dst);
 ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
                        const struct sockaddr_in6 *dst);
-
-/* Multicast rejoin utility. (in hncp.c) */
-bool hncp_link_join(hncp_link l);
 
 /* TLV handling */
 #include "prefix_utils.h"

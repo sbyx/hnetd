@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Thu Dec  4 16:39:58 2014 mstenber
- * Edit time:     517 min
+ * Last modified: Thu Dec  4 21:20:57 2014 mstenber
+ * Edit time:     528 min
  *
  */
 
@@ -125,8 +125,9 @@ void hncp_two(void)
                    "hashes different");
 
   /* Should also have done the necessary purging of nodes due to lack
-   * of reachability.. */
-  sput_fail_unless(n2->nodes.avl.count == 1, "n2 nodes == 1");
+   * of reachability (eventually; this may take some more time due to
+   * grace period).. */
+  SIM_WHILE(&s, 1000, n2->nodes.avl.count != 1);
 
   sput_fail_unless(hncp_if_has_highest_id(n1, "eth0") &&
                    hncp_if_has_highest_id(n2, "eth1"),
@@ -216,8 +217,8 @@ static void raw_bird14(net_sim s)
   s->should_be_stable_topology = true;
   L_DEBUG("assume stable topology");
   SIM_WHILE(s, 100000, !net_sim_is_converged(s) ||
-            (hnetd_time() - convergence_time) < (HNCP_INTERVAL_WORRIED * 2 *
-                                                 HNCP_INTERVAL_RETRIES));
+            (hnetd_time() - convergence_time) < (DNCP_KEEPALIVE_INTERVAL*
+                                                 DNCP_KEEPALIVE_MULTIPLIER));
   L_NOTICE("unicasts sent:%d after convergence, last %lld ms after convergence",
            s->sent_unicast - sent_unicast, (long long)(s->last_unicast_sent - convergence_time));
 #if 0
@@ -324,14 +325,29 @@ void hncp_tube_small(void)
   raw_hncp_tube(&s, 6);
 }
 
+
+/* Intentionally pick a number that is close to IPv6 MTU / node state
+ * (network state hash etc left as rounding errors) */
+#define MEDIUM_TUBE_LENGTH 1000 / sizeof(hncp_t_node_state_s)
+
+void hncp_tube_medium(void)
+{
+  net_sim_s s;
+
+  net_sim_init(&s);
+  raw_hncp_tube(&s, MEDIUM_TUBE_LENGTH);
+}
+
+  /* Intentionally pick a number that is >> IPv6 MTU / node state
+   * (network state hash etc left as rounding errors) */
+#define BIG_TUBE_LENGTH 3000 / sizeof(hncp_t_node_state_s)
+
 void hncp_tube_beyond_multicast(void)
 {
   net_sim_s s;
 
   net_sim_init(&s);
-  /* Intentionally pick a number that is >>
-     IPv6 MTU / (HNCP_HASH_LEN * 2 + 2 * 4 + TLV_SIZE) =~ 28 */
-  raw_hncp_tube(&s, 60);
+  raw_hncp_tube(&s, BIG_TUBE_LENGTH);
 }
 
 void hncp_tube_beyond_multicast_unique(void)
@@ -340,9 +356,7 @@ void hncp_tube_beyond_multicast_unique(void)
 
   net_sim_init(&s);
   s.use_global_iids = true;
-  /* Intentionally pick a number that is >>
-     IPv6 MTU / (HNCP_HASH_LEN * 2 + 2 * 4 + TLV_SIZE) =~ 28 */
-  raw_hncp_tube(&s, 60);
+  raw_hncp_tube(&s, BIG_TUBE_LENGTH);
 }
 
 /* Note: As we play with bitmasks,
@@ -630,6 +644,7 @@ int main(__unused int argc, __unused char **argv)
   maybe_run_test(hncp_bird14);
   maybe_run_test(hncp_bird14_unique);
   maybe_run_test(hncp_tube_small);
+  maybe_run_test(hncp_tube_medium);
   maybe_run_test(hncp_tube_beyond_multicast);
   maybe_run_test(hncp_tube_beyond_multicast_unique);
   maybe_run_test(hncp_random_monkey);

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Thu Dec  4 16:40:51 2014 mstenber
- * Edit time:     92 min
+ * Last modified: Thu Dec  4 19:27:00 2014 mstenber
+ * Edit time:     97 min
  *
  */
 
@@ -23,6 +23,17 @@
 
 /* Size of the node identifier */
 #define DNCP_NI_LEN 4
+
+/* Default keep-alive interval to be used; overridable by user config */
+#define DNCP_KEEPALIVE_INTERVAL 24 * HNETD_TIME_PER_SECOND
+
+/* How many keep-alive periods can be missed until peer is declared M.I.A. */
+/* (Note: This CANNOT be configured) */
+#define DNCP_KEEPALIVE_MULTIPLIER 5/2
+
+enum {
+  DNCP_T_KEEPALIVE_INTERVAL = 123
+};
 
 /******************************** Not standardized, but hopefully one day..  */
 
@@ -72,7 +83,7 @@ enum {
   HNCP_T_NODE_STATE = 5,
 
   HNCP_T_NODE_DATA = 6,
-  HNCP_T_NODE_DATA_KEY = 7, /* public key payload, not implemented*/
+  /* HNCP_T_NODE_DATA_KEY = 7, */ /* public key payload, not implemented*/
   HNCP_T_NODE_DATA_NEIGHBOR = 8,
 
   HNCP_T_CUSTOM = 9, /* not implemented */
@@ -136,9 +147,6 @@ typedef struct __packed {
   hncp_node_identifier_s node_identifier;
   uint32_t update_number;
 } hncp_t_node_data_header_s, *hncp_t_node_data_header;
-
-/* HNCP_T_NODE_DATA_KEY has only raw public key (perhaps it should
- * have more information though? TBD */
 
 /* HNCP_T_NODE_DATA_NEIGHBOR */
 typedef struct __packed {
@@ -240,59 +248,22 @@ typedef struct __packed {
 
 /************** Various tunables, that we in practise hardcode (not options) */
 
+/* TBD sync with HNCP-03 values */
+
 /* How often we retry multicast joins? Once per second seems sane
  * enough. */
 #define HNCP_REJOIN_INTERVAL (1 * HNETD_TIME_PER_SECOND)
 
 /* Minimum interval trickle starts at. The first potential time it may
  * send something is actually this divided by two. */
-#define HNCP_TRICKLE_IMIN (HNETD_TIME_PER_SECOND / 4)
+#define HNCP_TRICKLE_IMIN (HNETD_TIME_PER_SECOND / 5)
 
 /* Note: This is concrete value, NOT exponent # as noted in RFC. I
  * don't know why RFC does that.. We don't want to ever need do
  * exponentiation in any case in code. 64 seconds for the time being.. */
-#define HNCP_TRICKLE_IMAX (64 * HNETD_TIME_PER_SECOND)
-
-/* Maximum allowed interval _not_ to send Trickled multicast.  This is
- * relevant to provide forced upper guarantee if and when someone else
- * is operating at Imin, and we're at Imax; without it, if IMIN and
- * IMAX are orders of magnitude apart, it may lead to
- * (probabilistically speaking) low chance of us ever sending _any_
- * packets. This provides a guarantee that one packet is sent by every
- * node at least at some interval. This will cause e.g. new
- * connections to be noticed at some point.
- *
- * Another option would be to adapt to Trickle interval of other
- * senders. XXX - This needs some study. This can be set to 0 to
- * disable, but it's probably good idea to keep.
- *
- * Why is this needed at all? Non-transitively connected links lead to
- * cases where Trickle i values will not be in sync by default.
- */
-/* TBD: This is no longer relevant due to Trickle change in
-   dncp-00. Get rid of it. */
-#define HNCP_TRICKLE_MAXIMUM_SEND_INTERVAL (600 * HNETD_TIME_PER_SECOND)
+#define HNCP_TRICKLE_IMAX (40 * HNETD_TIME_PER_SECOND)
 
 /* Redundancy constant. */
 #define HNCP_TRICKLE_K 1
-
-/* TBD: Get rid of the pinging mechanism, and instead implement the
- * per-connection keep-alive mechanism. */
-
-
-/* When do we want to consider unicast ping to make sure other end is
- * reachable? */
-#define HNCP_INTERVAL_WORRIED HNCP_TRICKLE_IMAX
-
-/* Exponentially backed off retries to 'ping' other side somehow
- * ( either within protocol or without protocol ) to hear from them
- */
-#define HNCP_INTERVAL_RETRIES 3
-
-/* First attempt is done at HNCP_INTERVAL_WORRIED + HNCP_INTERVAL_BASE.
-   Nth one at HNCP_INTERVAL_WORRIED + 2^(N-1) * HNCP_INTERVAL_BASE  */
-#define HNCP_INTERVAL_BASE HNETD_TIME_PER_SECOND
-
-/* TBD: Allow configuration of keep-alive interval */
 
 #endif /* HNCP_PROTO_H */

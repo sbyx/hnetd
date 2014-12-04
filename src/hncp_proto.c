@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu Dec  4 16:25:21 2014 mstenber
- * Edit time:     574 min
+ * Last modified: Thu Dec  4 19:26:19 2014 mstenber
+ * Edit time:     605 min
  *
  */
 
@@ -180,11 +180,11 @@ void hncp_link_send_req_node_data(hncp_link l,
 /************************************************************ Input handling */
 
 static hncp_neighbor
-_heard(hncp_link l, hncp_t_link_id lid, struct sockaddr_in6 *src)
+_heard(hncp_link l, hncp_t_link_id lid, struct sockaddr_in6 *src,
+       bool allow_add, bool multicast)
 {
   hncp_neighbor_s nc;
   hncp_neighbor n;
-  hncp o = l->hncp;
 
   memset(&nc, 0, sizeof(nc));
   nc.node_identifier = lid->node_identifier;
@@ -192,20 +192,22 @@ _heard(hncp_link l, hncp_t_link_id lid, struct sockaddr_in6 *src)
   n = vlist_find(&l->neighbors, &nc, &nc, in_neighbors);
   if (!n)
     {
+      if (!allow_add)
+        return NULL;
       /* new neighbor */
       n = malloc(sizeof(nc));
       if (!n)
         return NULL;
       *n = nc;
+      n->last_sync = hncp_time(l->hncp);
+      n->keepalive_interval = l->conf->keepalive_interval;
       vlist_add(&l->neighbors, &n->in_neighbors, n);
       L_DEBUG(HNCP_NEIGH_F " added on " HNCP_LINK_F,
               HNCP_NEIGH_D(n), HNCP_LINK_D(l));
     }
 
-  n->last_sa6 = *src;
-  n->last_heard = hncp_time(o);
-  if (n->in_sync)
-    n->ping_count = 0;
+  if (!multicast)
+    n->last_sa6 = *src;
   return n;
 }
 
@@ -237,6 +239,28 @@ _handle_collision(hncp o)
     }
   return false;
 }
+
+#define GET_NE(allow_add, multicast)                                    \
+do {                                                                    \
+  if (memcmp(&lid->node_identifier, &o->own_node->node_identifier,      \
+             DNCP_NI_LEN) != 0)                                         \
+    {                                                                   \
+      ne = _heard(l, lid, src, allow_add, multicast);                   \
+      if (!ne && allow_add)                                             \
+        return;                                                         \
+    }                                                                   \
+  if (ne && !multicast)                                                 \
+    {                                                                   \
+    tlv_for_each_in_buf(a, data, len)                                   \
+      if (tlv_id(a) == DNCP_T_KEEPALIVE_INTERVAL                        \
+          && tlv_len(a) == 4)                                           \
+        {                                                               \
+          uint32_t interval = be32_to_cpu(*((uint32_t *)tlv_data(a)));  \
+          ne->keepalive_interval = interval;                            \
+        }                                                               \
+    }                                                                   \
+ } while(0)
+
 
 /* Handle a single received message. */
 static void
@@ -283,18 +307,6 @@ handle_message(hncp_link l,
       return;
     }
 
-  /* We cannot simply ignore same node identifier; it might be someone
-   * with duplicated node identifier (hash). If we don't react in some way,
-   * it's possible (local) node id collisions stick around forever.
-   * However, we can't add them to neighbors so we don't do _heard here. */
-  if (memcmp(&lid->node_identifier, &o->own_node->node_identifier,
-             DNCP_NI_LEN) != 0)
-    {
-      ne = _heard(l, lid, src);
-      if (!ne)
-        return;
-    }
-
   /* Estimates what's in the payload + handles the few
    * request messages we support. */
   tlv_for_each_in_buf(a, data, len)
@@ -324,6 +336,7 @@ handle_message(hncp_link l,
               L_INFO("ignoring req-net-hash in multicast");
               return;
             }
+          GET_NE(true, multicast);
           hncp_link_send_network_state(l, src, 0);
           return;
         case HNCP_T_REQ_NODE_DATA:
@@ -333,24 +346,28 @@ handle_message(hncp_link l,
               L_INFO("ignoring req-net-hash in unicast");
               return;
             }
-          if (tlv_len(a) != HNCP_HASH_LEN)
+          void *p = tlv_data(a);
+          int len = tlv_len(a);
+          if (!len || tlv_len(a) % HNCP_HASH_LEN)
             return;
-
-          n = hncp_find_node_by_node_identifier(o, tlv_data(a), false);
-          if (n)
+          GET_NE(true, multicast);
+          for (; len > 0 ; len = len - HNCP_HASH_LEN, p = p + HNCP_HASH_LEN)
             {
+              n = hncp_find_node_by_node_identifier(o, p, false);
+              if (!n)
+                continue;
               if (n != o->own_node)
                 {
                   if (o->graph_dirty)
                     {
                       L_DEBUG("prune pending, ignoring node data request");
-                      return;
+                      continue;
                     }
 
                   if (n->last_reachable_prune != o->last_prune)
                     {
                       L_DEBUG("not reachable request, ignoring");
-                      return;
+                      continue;
                     }
                 }
               hncp_link_send_node_data(l, src, n);
@@ -359,21 +376,16 @@ handle_message(hncp_link l,
         }
     }
 
+  GET_NE(false, multicast);
+
   /* Requests were handled above. So what's left is response
    * processing here. If it was unicast, it was probably solicited
    * response, so we can mark the node as having been in touch with us
    * recently. */
-  if (!multicast && ne)
+  if (!multicast)
     {
-      if (!ne->last_response)
-        {
-          o->links_dirty = true;
-          hncp_schedule(o);
-        }
-      L_DEBUG("unicast received from " HNCP_NEIGH_F " on " HNCP_LINK_F,
-              HNCP_NEIGH_D(ne), HNCP_LINK_D(l));
-      ne->last_response = hncp_time(o);
-      ne->ping_count = 0;
+      L_DEBUG("unicast received from %s on " HNCP_LINK_F,
+              HNCP_NODE_REPR(lid), HNCP_LINK_D(l));
     }
 
   /* Three different cases to be handled for solicited/unsolicited responses:
@@ -388,23 +400,13 @@ handle_message(hncp_link l,
         {
           L_DEBUG("received network state which is consistent");
 
-          /* Increment Trickle count _if and only if_ it's not by us,
-           * is someone who is proven reachable (at some point at
-           * least), and is multicast. */
+          /* Increment Trickle count + last in sync time.*/
           if (ne)
             {
-              ne->in_sync = true;
-              if (multicast && ne->last_response)
-                l->trickle_c++;
+              l->trickle_c++;
+              ne->last_sync = hncp_time(l->hncp);
             }
           return;
-        }
-
-      if (ne && ne->in_sync)
-        {
-          /* may cause us to get worried sooner */
-          hncp_schedule(o);
-          ne->in_sync = false;
         }
 
       if (multicast)

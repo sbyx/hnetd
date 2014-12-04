@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Mon Sep 29 11:10:18 2014 mstenber
- * Edit time:     116 min
+ * Last modified: Thu Dec  4 21:11:59 2014 mstenber
+ * Edit time:     121 min
  *
  */
 
@@ -182,7 +182,8 @@ void test_hncp_sd(void)
   hncp_tlv_ra_update(n1, 1, &p.prefix, true);
   sput_fail_unless(prefix_pton("2001:feed:beef::/64", &p), "prefix_pton");
   hncp_tlv_ap_update(n2, &p, "eth2", false, 0, true);
-  SIM_WHILE(&s, 100, !net_sim_is_converged(&s));
+  SIM_WHILE(&s, 100, !net_sim_is_converged(&s)
+            || fu_timeouts()>2);
   sput_fail_unless(strcmp(node1->sd->router_name, node2->sd->router_name),
                    "router names different");
   smock_is_empty();

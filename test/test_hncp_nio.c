@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Thu Oct 23 19:42:37 2014 mstenber
- * Edit time:     183 min
+ * Last modified: Thu Dec  4 20:51:04 2014 mstenber
+ * Edit time:     205 min
  *
  */
 
@@ -276,6 +276,11 @@ static hncp create_hncp(void)
   hncp_run(o);
   smock_is_empty();
 
+  /* Disable keep-alives; this is essentially Trickle-only test
+   * set. */
+  hncp_link_conf conf = hncp_if_find_conf_by_name(o, dummy_ifname);
+  conf->keepalive_interval = 0;
+
   return o;
 }
 
@@ -308,10 +313,14 @@ static void hncp_rejoin_works(void)
 
   /* we'll try to join dummy_ifname; however, it fails. */
   smock_is_empty();
-  one_join(false);
   smock_push_int("schedule", 0);
-  smock_push_int("time", t);
   hncp_if_set_enabled(o, dummy_ifname, true);
+  smock_is_empty();
+
+  one_join(false);
+  smock_push_int("schedule", HNCP_REJOIN_INTERVAL);
+  smock_push_int("time", t);
+  hncp_run(o);
   smock_is_empty();
 
   /* make sure next timeout before HNCP_REJOIN_INTERVAL just re-schedules. */
@@ -360,10 +369,12 @@ static void hncp_ok(void)
   hncp_subscribe(o, &dummy_subscriber_4);
 
   smock_is_empty();
-  one_join(true);
   smock_push_int("schedule", 0);
   hncp_if_set_enabled(o, dummy_ifname, true);
   smock_is_empty();
+
+  /* The join really happens within _run. */
+  one_join(true);
 
   /* Ok. We're cooking with gas. */
   smock_push_int("time", t);
@@ -467,7 +478,7 @@ static void hncp_ok(void)
   printf("last run starting\n");
   smock_push_int("time", t);
   smock_push_int("random", 0);
-  smock_push_int("schedule", 0);
+  smock_push_int("schedule", HNCP_TRICKLE_IMIN / 2);
 
   /* Should get notification about two added TLVs. */
   smock_push_int("tlv_callback", TLV_ID_A);

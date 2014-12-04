@@ -46,7 +46,7 @@ enum ipc_option {
 	OPT_DISABLE_PA,
 	OPT_PASSTHRU,
 	OPT_ULA_DEFAULT_ROUTER,
-	OPT_PING_INTERVAL,
+	OPT_KEEPALIVE_INTERVAL,
 	OPT_TRICKLE_K,
         OPT_DNSNAME,
 	OPT_MAX
@@ -67,7 +67,7 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_DISABLE_PA] = {"disable_pa", BLOBMSG_TYPE_BOOL},
 	[OPT_PASSTHRU] = {"passthru", BLOBMSG_TYPE_STRING},
 	[OPT_ULA_DEFAULT_ROUTER] = {"ula_default_router", BLOBMSG_TYPE_BOOL},
-	[OPT_PING_INTERVAL] = { .name = "ping_interval", .type = BLOBMSG_TYPE_INT32 },
+	[OPT_KEEPALIVE_INTERVAL] = { .name = "keepalive_interval", .type = BLOBMSG_TYPE_INT32 },
 	[OPT_TRICKLE_K] = { .name = "trickle_k", .type = BLOBMSG_TYPE_INT32 },
         [OPT_DNSNAME] = { .name = "dnsname", .type = BLOBMSG_TYPE_STRING},
 };
@@ -222,7 +222,7 @@ int ipc_ifupdown(int argc, char *argv[])
 			break;
 		case 'P':
 			if(sscanf(optarg, "%d", &i) == 1)
-				blobmsg_add_u32(&b, "ping_interval", i);
+				blobmsg_add_u32(&b, "keepalive_interval", i);
 			break;
 		}
 	}
@@ -360,12 +360,8 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			}
 
 			hncp_link_conf conf;
-			if(c && tb[OPT_PING_INTERVAL] && (conf = hncp_if_find_conf_by_name(ipchncp, c->ifname))) {
-				conf->ping_worried_t = (((hnetd_time_t) blobmsg_get_u32(tb[OPT_PING_INTERVAL])) * HNETD_TIME_PER_SECOND) / 1000;
-				conf->ping_retry_base_t = conf->ping_worried_t / 8;
-				if(conf->ping_retry_base_t < 100)
-					conf->ping_retry_base_t = 100;
-				conf->ping_retries = 3;
+			if(c && tb[OPT_KEEPALIVE_INTERVAL] && (conf = hncp_if_find_conf_by_name(ipchncp, c->ifname))) {
+				conf->keepalive_interval = (((hnetd_time_t) blobmsg_get_u32(tb[OPT_KEEPALIVE_INTERVAL])) * HNETD_TIME_PER_SECOND) / 1000;
 			}
 
 			if(c && tb[OPT_TRICKLE_K] && (conf = hncp_if_find_conf_by_name(ipchncp, c->ifname)))

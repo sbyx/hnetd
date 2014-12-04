@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Dec  4 16:24:17 2014 mstenber
- * Edit time:     771 min
+ * Last modified: Thu Dec  4 21:00:22 2014 mstenber
+ * Edit time:     791 min
  *
  */
 
@@ -212,27 +212,13 @@ compare_links(const void *a, const void *b, void *ptr __unused)
   return strcmp(t1->ifname, t2->ifname);
 }
 
-bool hncp_link_join(hncp_link l)
-{
-  hncp o = l->hncp;
-
-  if (!hncp_io_set_ifname_enabled(o, l->ifname, true))
-    {
-      l->join_pending = true;
-      o->join_failed_time = hncp_time(l->hncp);
-      return false;
-    }
-  l->join_pending = false;
-  return true;
-}
-
 static void update_link(struct vlist_tree *t,
                         struct vlist_node *node_new,
                         struct vlist_node *node_old)
 {
   hncp o = container_of(t, hncp_s, links);
   hncp_link t_old = container_of(node_old, hncp_link_s, in_links);
-  __unused hncp_link t_new = container_of(node_new, hncp_link_s, in_links);
+  hncp_link t_new = container_of(node_new, hncp_link_s, in_links);
 
   if (t_old)
     {
@@ -243,7 +229,7 @@ static void update_link(struct vlist_tree *t,
     }
   else
     {
-      hncp_link_join(t_new);
+      t_new->join_failed_time = 1;
     }
   o->links_dirty = true;
   hncp_schedule(o);
@@ -270,15 +256,10 @@ static void update_neighbor(struct vlist_tree *t,
   hncp_neighbor t_old = container_of(node_old, hncp_neighbor_s, in_neighbors);
   hncp_neighbor t_new = container_of(node_new, hncp_neighbor_s, in_neighbors);
 
-  /* New doesn't mean anything, before it has last_response set. */
-  if (t_new)
-    return;
-  if (t_old->last_response)
-    {
-      o->links_dirty = true;
-      hncp_schedule(o);
-    }
-  free(t_old);
+  o->links_dirty = true;
+  hncp_schedule(o);
+  if (t_old && t_old != t_new)
+    free(t_old);
 }
 
 void hncp_calculate_hash(const void *buf, int len, hncp_hash dest)
@@ -514,30 +495,28 @@ int hncp_remove_tlvs_by_type(hncp o, int type)
 
 static void hncp_link_conf_set_default(hncp_link_conf conf, const char *ifname)
 {
-	conf->trickle_imin = HNCP_TRICKLE_IMIN;
-	conf->trickle_imax = HNCP_TRICKLE_IMAX;
-	conf->trickle_k = HNCP_TRICKLE_K;
-	conf->ping_worried_t = HNCP_INTERVAL_WORRIED;
-	conf->ping_retry_base_t = HNCP_INTERVAL_BASE;
-	conf->ping_retries = HNCP_INTERVAL_RETRIES;
-	strncpy(conf->dnsname, ifname, sizeof(conf->ifname));
-	strncpy(conf->ifname, ifname, sizeof(conf->ifname));
+  conf->trickle_imin = HNCP_TRICKLE_IMIN;
+  conf->trickle_imax = HNCP_TRICKLE_IMAX;
+  conf->trickle_k = HNCP_TRICKLE_K;
+  conf->keepalive_interval = DNCP_KEEPALIVE_INTERVAL;
+  strncpy(conf->dnsname, ifname, sizeof(conf->ifname));
+  strncpy(conf->ifname, ifname, sizeof(conf->ifname));
 }
 
 hncp_link_conf hncp_if_find_conf_by_name(hncp o, const char *ifname)
 {
-	hncp_link_conf conf;
-	list_for_each_entry(conf, &o->link_confs, in_link_confs) {
-		if(!strcmp(ifname, conf->ifname))
-			return conf;
-	}
+  hncp_link_conf conf;
+  list_for_each_entry(conf, &o->link_confs, in_link_confs) {
+    if(!strcmp(ifname, conf->ifname))
+      return conf;
+  }
 
-	if(!(conf = malloc(sizeof(hncp_link_conf_s))))
-		return NULL;
+  if(!(conf = malloc(sizeof(hncp_link_conf_s))))
+    return NULL;
 
-	hncp_link_conf_set_default(conf, ifname);
-	list_add(&conf->in_link_confs, &o->link_confs);
-	return conf;
+  hncp_link_conf_set_default(conf, ifname);
+  list_add(&conf->in_link_confs, &o->link_confs);
+  return conf;
 }
 
 hncp_link hncp_find_link_by_name(hncp o, const char *ifname, bool create)
@@ -557,8 +536,8 @@ hncp_link hncp_find_link_by_name(hncp o, const char *ifname, bool create)
         return NULL;
       l->conf = hncp_if_find_conf_by_name(o, ifname);
       if(!l->conf) {
-    	  free(l);
-    	  return NULL;
+        free(l);
+        return NULL;
       }
       l->hncp = o;
       l->iid = o->first_free_iid++;
@@ -683,12 +662,6 @@ void hncp_self_flush(hncp_node n)
         {
           vlist_for_each_element(&l->neighbors, ne, in_neighbors)
             {
-              /* If we don't assume bidirectional reachability, only
-               * advertise nodes that _do_ respond to our unicast at
-               * least once. */
-              if (!ne->last_response)
-                continue;
-
               unsigned char buf[TLV_SIZE + sizeof(hncp_t_node_data_neighbor_s)];
               struct tlv_attr *nt = (struct tlv_attr *)buf;
 

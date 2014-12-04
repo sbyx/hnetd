@@ -78,10 +78,10 @@ void hncp_bfs_one(void)
 	struct sockaddr_in6 dummy3 = {.sin6_family = AF_INET6};
 	memset(&dummy3.sin6_addr, 3, sizeof(dummy3.sin6_addr));
 	hncp_t_link_id_s lid1 = {n1->node_identifier, 0};
-	_heard(l1, &lid1, &dummy1);
+	_heard(l1, &lid1, &dummy1, true, false);
 
 	hncp_t_link_id_s lid3 = {n3->node_identifier, 0};
-	_heard(l3, &lid3, &dummy3);
+	_heard(l3, &lid3, &dummy3, true, false);
 
 	// TLV foo
 	struct tlv_buf b = {NULL, NULL, 0, NULL};
