@@ -73,7 +73,6 @@ setup_interface () {
 	hnet-call "{\"command\": \"enable_ipv6_uplink\", \"ifname\": \"$device\", \"prefix\": [$prefixpart], \"dns\": [$dnspart]$cerid$passthru}"
 
 	ip -6 route flush dev "$device" proto $PROTO
-	ip -6 address flush dev "$device" scope global
 
 	# Merge addresses
 	for entry in $RA_ADDRESSES; do
@@ -93,7 +92,15 @@ setup_interface () {
 		entry="${entry#*,}"
 		local valid="${entry%%,*}"
 
-		ip -6 address add "$addr" dev "$device" preferred_lft "$preferred" valid_lft "$valid" 
+		ip -6 address replace "$addr" dev "$device" preferred_lft "$preferred" valid_lft "$valid"
+	done
+
+	for entry in `ip -6 -o address list scope global dev "$device" | awk '{print $4}'`; do
+		local duplicate=0
+		for dentry in $ADDRESSES; do
+			[ "$entry" = "${dentry%%,*}" ] && duplicate=1
+		done
+		[ "$duplicate" = "0" ] && ip -6 address del "$entry" dev "$device"
 	done
 
 	for entry in $RA_ROUTES; do
