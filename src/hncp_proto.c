@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu Dec  4 22:14:37 2014 mstenber
- * Edit time:     621 min
+ * Last modified: Tue Dec  9 09:23:10 2014 mstenber
+ * Edit time:     625 min
  *
  */
 
@@ -344,30 +344,33 @@ handle_message(hncp_link l,
               L_INFO("ignoring req-net-hash in unicast");
               return;
             }
-          void *p = tlv_data(a);
-          int len = tlv_len(a);
-          if (!len || tlv_len(a) % HNCP_HASH_LEN)
-            return;
-          for (; len > 0 ; len = len - HNCP_HASH_LEN, p = p + HNCP_HASH_LEN)
+          tlv_for_each_in_buf(a, data, len)
             {
-              n = hncp_find_node_by_node_identifier(o, p, false);
-              if (!n)
-                continue;
-              if (n != o->own_node)
+              if (tlv_id(a) == HNCP_T_REQ_NODE_DATA)
                 {
-                  if (o->graph_dirty)
+                  void *p = tlv_data(a);
+                  int len = tlv_len(a);
+                  if (!len || tlv_len(a) != HNCP_HASH_LEN)
+                    continue;
+                  n = hncp_find_node_by_node_identifier(o, p, false);
+                  if (!n)
+                    continue;
+                  if (n != o->own_node)
                     {
-                      L_DEBUG("prune pending, ignoring node data request");
-                      continue;
-                    }
+                      if (o->graph_dirty)
+                        {
+                          L_DEBUG("prune pending, ignoring node data request");
+                          continue;
+                        }
 
-                  if (n->last_reachable_prune != o->last_prune)
-                    {
-                      L_DEBUG("not reachable request, ignoring");
-                      continue;
+                      if (n->last_reachable_prune != o->last_prune)
+                        {
+                          L_DEBUG("not reachable request, ignoring");
+                          continue;
+                        }
                     }
+                  hncp_link_send_node_data(l, src, n);
                 }
-              hncp_link_send_node_data(l, src, n);
             }
           return;
         }
