@@ -101,6 +101,24 @@ void hncp_iface_glue(hncp_iface_user hiu, hncp h, hncp_glue g)
 	iface_register_user(&hiu->iu);
 }
 
+int usage() {
+  L_ERR( "Valid options are:\n"
+	 "\t-d dnsmasq_script\n"
+	 "\t-f dnsmasq_bonus_file\n"
+	 "\t-o odhcp_script\n"
+	 "\t-c pcp_script\n"
+	 "\t-n router_name\n"
+	 "\t-m domain_name\n"
+	 "\t-s pa_store file\n"
+	 "\t-p socket path\n"
+	 "\t--ip4prefix v.x.y.z/prefix\n"
+	 "\t--ulaprefix v:x:y:z::/prefix\n"
+	 "\t--ulamode [on,off,ifnov6]\n"
+	 "\t--loglevel [0-9]\n"
+	 );
+    return(3);
+}
+
 int main(__unused int argc, char *argv[])
 {
 	hncp h;
@@ -165,11 +183,13 @@ int main(__unused int argc, char *argv[])
 	const char *pd_socket_path = "/var/run/hnetd_pd";
 	const char *pa_ip4prefix = NULL;
 	const char *pa_ulaprefix = NULL;
+	const char *pa_ulamode = NULL;
 	const char *dtls_password = NULL;
 
 	enum {
 		GOL_IPPREFIX = 1000,
 		GOL_ULAPREFIX,
+		GOL_ULAMODE,
 		GOL_LOGLEVEL,
 		GOL_PASSWORD, /* DTLS password */
 	};
@@ -178,12 +198,14 @@ int main(__unused int argc, char *argv[])
 			//Can use no_argument, required_argument or optional_argument
 			{ "ip4prefix",   required_argument,      NULL,           GOL_IPPREFIX },
 			{ "ulaprefix",   required_argument,      NULL,           GOL_ULAPREFIX },
+			{ "ulamode",     required_argument,      NULL,           GOL_ULAMODE },
 			{ "loglevel",    required_argument,      NULL,           GOL_LOGLEVEL },
 			{ "password",    required_argument,      NULL,           GOL_PASSWORD },
+			{ "help",	 no_argument,		 NULL,           '?' },
 			{ NULL,          0,                      NULL,           0 }
 	};
 
-	while ((c = getopt_long(argc, argv, "d:f:o:n:r:s:p:m:c:", longopts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "?d:f:o:n:r:s:p:m:c:", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'd':
 			sd_params.dnsmasq_script = optarg;
@@ -218,15 +240,20 @@ int main(__unused int argc, char *argv[])
 		case GOL_ULAPREFIX:
 			pa_ulaprefix = optarg;
 			break;
+		case GOL_ULAMODE:
+			pa_ulamode = optarg;
+			break;
 		case GOL_LOGLEVEL:
 			log_level = atoi(optarg);
 			break;
 		case GOL_PASSWORD:
 			dtls_password = optarg;
 			break;
-		case '?':
+		default:
 			L_ERR("Unrecognized option");
-			return 3;
+		case '?':
+			return usage();
+			break;
 		}
 	}
 
@@ -260,6 +287,21 @@ int main(__unused int argc, char *argv[])
 			}
 			pa.local.conf.use_random_ula = false;
 			L_INFO("Setting %s as ULA prefix", PREFIX_REPR(&pa.local.conf.ula_prefix));
+		}
+	}
+
+	if(pa_ulamode) {
+		if(!strcmp(pa_ulamode, "off")) {
+			pa.local.conf.use_ula = 0;
+		} else if(!strcmp(pa_ulamode, "ifnov6")) {
+			pa.local.conf.use_ula = 1;
+			pa.local.conf.no_ula_if_glb_ipv6 = 1;
+		} else if(!strcmp(pa_ulamode, "on")) {
+			pa.local.conf.use_ula = 1;
+			pa.local.conf.no_ula_if_glb_ipv6 = 0;
+		} else {
+			L_ERR("Invalid ulamode option (Can be on, off or ifnov6)");
+			return 43;
 		}
 	}
 

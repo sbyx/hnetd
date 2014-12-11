@@ -1,6 +1,6 @@
 #!/bin/sh
 echo Detecting...
-which sudo && which apt-get && apt-get install build-essential git cmake libjson-c-dev
+which sudo && which apt-get && sudo apt-get install build-essential git cmake libjson-c-dev
 
 gitdir="./tmp"
 distdir="$(pwd)/dist"
