@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Thu Dec  4 16:14:28 2014 mstenber
- * Edit time:     491 min
+ * Last modified: Sun Dec 14 18:03:29 2014 mstenber
+ * Edit time:     493 min
  *
  */
 
@@ -197,7 +197,7 @@ static hncp_link _find_local_link(hncp_node onode, uint32_t olink_no)
                    &nh->neighbor_node_identifier, DNCP_NI_LEN) != 0)
           continue;
         /* Yay, it is this one. */
-        return hncp_find_link_by_id(o, be32_to_cpu(nh->link_id));
+        return hncp_find_link_by_id(o, nh->link_id);
       }
   return NULL;
 }
@@ -563,7 +563,7 @@ static void _refresh_ec(hncp_glue g, bool publish)
                      tlv_data(st), tlv_len(st));
         }
       if (publish)
-	hncp_add_tlv(o, tb.head);
+	hncp_add_tlv_attr(o, tb.head, 0);
       tlv_buf_free(&tb);
     }
   hncp_node n;

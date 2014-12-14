@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu Dec  4 21:01:15 2014 mstenber
- * Edit time:     368 min
+ * Last modified: Sun Dec 14 17:49:28 2014 mstenber
+ * Edit time:     373 min
  *
  */
 
@@ -168,7 +168,7 @@ void hncp_run(hncp o)
   hnetd_time_t next = 0;
   hnetd_time_t now = hncp_io_time(o);
   hncp_link l;
-  hncp_neighbor n, n2;
+  hncp_tlv t, t2;
 
   /* Assumption: We're within RTC step here -> can use same timestamp
    * all the way. */
@@ -274,28 +274,30 @@ void hncp_run(hncp o)
       next = TMIN(next, l->trickle_interval_end_time);
       next = TMIN(next, l->trickle_send_time);
       next = TMIN(next, l->next_keepalive_time);
+    }
 
-      /* Look at neighbors we should be worried about.. */
-      /* vlist_for_each_element(&l->neighbors, n, in_neighbors) */
-      avl_for_each_element_safe(&l->neighbors.avl, n, in_neighbors.avl, n2)
-        {
-          hnetd_time_t next_time;
+  /* Look at neighbors we should be worried about.. */
+  /* vlist_for_each_element(&l->neighbors, n, in_neighbors) */
+  hncp_for_each_local_tlv_safe(o, t, t2)
+    if (tlv_id(&t->tlv) == HNCP_T_NODE_DATA_NEIGHBOR)
+      {
+        hncp_neighbor n = hncp_tlv_get_extra(t);
+        hnetd_time_t next_time;
 
-          next_time = n->last_sync +
-            n->keepalive_interval * DNCP_KEEPALIVE_MULTIPLIER;
+        next_time = n->last_sync +
+          n->keepalive_interval * DNCP_KEEPALIVE_MULTIPLIER;
 
-          /* No cause to do anything right now. */
-          if (next_time > now)
-            {
-              next = TMIN(next, next_time);
-              continue;
-            }
+        /* No cause to do anything right now. */
+        if (next_time > now)
+          {
+            next = TMIN(next, next_time);
+            continue;
+          }
 
-          /* Zap the neighbor */
-          L_DEBUG(HNCP_NEIGH_F " gone on " HNCP_LINK_F,
-                  HNCP_NEIGH_D(n), HNCP_LINK_D(l));
-          vlist_delete(&l->neighbors, &n->in_neighbors);
-        }
+        /* Zap the neighbor */
+        L_DEBUG(HNCP_NEIGH_F " gone on " HNCP_LINK_F,
+                HNCP_NEIGH_D(n), HNCP_LINK_D(l));
+        hncp_remove_tlv(o, t);
     }
 
   if (next && !o->immediate_scheduled)

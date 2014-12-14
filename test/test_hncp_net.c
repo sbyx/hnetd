@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Thu Dec  4 21:20:57 2014 mstenber
- * Edit time:     528 min
+ * Last modified: Sun Dec 14 19:06:37 2014 mstenber
+ * Edit time:     532 min
  *
  */
 
@@ -63,6 +63,22 @@ struct prefix p2 = {
       0x20, 0x02, 0x00, 0x01}},
   .plen = 54 };
 
+bool link_has_neighbors(hncp_link l)
+{
+  hncp_tlv t;
+
+  hncp_for_each_local_tlv(l->hncp, t)
+    {
+      if (tlv_id(&t->tlv) == HNCP_T_NODE_DATA_NEIGHBOR)
+        {
+          hncp_t_node_data_neighbor ne = tlv_data(&t->tlv);
+          if (ne->link_id == l->iid)
+            return true;
+        }
+    }
+  return false;
+}
+
 void hncp_two(void)
 {
   net_sim_s s;
@@ -77,8 +93,8 @@ void hncp_two(void)
   n2 = net_sim_find_hncp(&s, "n2");
   l1 = net_sim_hncp_find_link_by_name(n1, "eth0");
   l2 = net_sim_hncp_find_link_by_name(n2, "eth1");
-  sput_fail_unless(avl_is_empty(&l1->neighbors.avl), "no l1 neighbors");
-  sput_fail_unless(avl_is_empty(&l2->neighbors.avl), "no l2 neighbors");
+  sput_fail_unless(!link_has_neighbors(l1), "no l1 neighbors");
+  sput_fail_unless(!link_has_neighbors(l2), "no l2 neighbors");
 
   /* connect l1+l2 -> should converge at some point */
   net_sim_set_connected(l1, l2, true);
@@ -116,7 +132,7 @@ void hncp_two(void)
    * some point disappear. */
   net_sim_set_connected(l1, l2, false);
   SIM_WHILE(&s, 1000,
-            !avl_is_empty(&l2->neighbors.avl));
+            link_has_neighbors(l2));
 
   /* n1 will keep getting stuff from n2, so it's sometimes alive,
    * sometimes not.. However, network hashes should be again
@@ -403,9 +419,9 @@ hncp_t_node_data_neighbor monkey_neighbor(hncp n1, hncp_link l1,
                                    HNCP_T_NODE_DATA_NEIGHBOR)
     if ((nh = hncp_tlv_neighbor(a)))
       {
-        if (nh->link_id != cpu_to_be32(l1->iid))
+        if (nh->link_id != l1->iid)
           continue;
-        if (nh->neighbor_link_id != cpu_to_be32(l2->iid))
+        if (nh->neighbor_link_id != l2->iid)
           continue;
         if (memcmp(&nh->neighbor_node_identifier,
                    &n2->own_node->node_identifier,

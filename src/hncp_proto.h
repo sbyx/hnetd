@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Thu Dec  4 19:27:00 2014 mstenber
- * Edit time:     97 min
+ * Last modified: Sun Dec 14 19:07:54 2014 mstenber
+ * Edit time:     98 min
  *
  */
 
@@ -49,9 +49,6 @@ enum {
 
 /* However, in security stuff, we use sha256 */
 #define HNCP_SHA256_LEN 32
-
-/* 64 bit version of the hash */
-#define HNCP_HASH64_LEN 8
 
 /* How recently the node has to be reachable before prune kills it for real. */
 #define HNCP_PRUNE_GRACE_PERIOD (60 * HNETD_TIME_PER_SECOND)

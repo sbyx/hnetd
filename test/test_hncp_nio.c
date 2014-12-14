@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Thu Dec  4 20:51:04 2014 mstenber
- * Edit time:     205 min
+ * Last modified: Sun Dec 14 18:47:39 2014 mstenber
+ * Edit time:     208 min
  *
  */
 
@@ -455,23 +455,20 @@ static void hncp_ok(void)
 
   /* Ok, Trickle was in a stable state 'long' time. Make sure the
    * state resets once we push something new in. */
-  struct tlv_attr ta;
   L_NOTICE("add tlv a");
 #define TLV_ID_A 123
 #define TLV_ID_B 125
 #define TLV_ID_C 127
 #define TLV_ID_D 124
-  tlv_init(&ta, TLV_ID_A, 4);
   smock_push_int("schedule", 0);
   smock_push_int("local_tlv_callback", TLV_ID_A);
-  hncp_add_tlv(o, &ta);
+  hncp_add_tlv(o, TLV_ID_A, NULL, 0, 0);
   smock_is_empty();
 
   L_NOTICE("add tlv b");
-  tlv_init(&ta, TLV_ID_B, 4);
   /* should NOT cause extra schedule! */
   smock_push_int("local_tlv_callback", TLV_ID_B);
-  hncp_add_tlv(o, &ta);
+  hncp_add_tlv(o, TLV_ID_B, NULL, 0, 0);
   smock_is_empty();
 
   L_NOTICE("running.");
@@ -497,9 +494,8 @@ static void hncp_ok(void)
 
   /* So, let's add one more TLV. Make sure we get notification about it. */
   L_NOTICE("add tlv c");
-  tlv_init(&ta, TLV_ID_C, 4);
   smock_push_int("local_tlv_callback", TLV_ID_C);
-  hncp_add_tlv(o, &ta);
+  hncp_add_tlv(o, TLV_ID_C, NULL, 0, 0);
   smock_is_empty();
   smock_push_int("tlv_callback", TLV_ID_C);
   smock_push_bool("republish_callback", true);
@@ -509,7 +505,7 @@ static void hncp_ok(void)
   /* Remove it. */
   L_NOTICE("remove tlv c");
   smock_push_int("local_tlv_callback", -TLV_ID_C);
-  hncp_remove_tlv(o, &ta);
+  hncp_remove_tlv_matching(o, TLV_ID_C, NULL, 0);
   smock_is_empty();
   smock_push_int("tlv_callback", -TLV_ID_C);
   smock_push_bool("republish_callback", true);
@@ -518,9 +514,8 @@ static void hncp_ok(void)
 
   /* Add TLV D in the middle. */
   L_NOTICE("add tlv d");
-  tlv_init(&ta, TLV_ID_D, 4);
   smock_push_int("local_tlv_callback", TLV_ID_D);
-  hncp_add_tlv(o, &ta);
+  hncp_add_tlv(o, TLV_ID_D, NULL, 0, 0);
   smock_is_empty();
   smock_push_int("tlv_callback", TLV_ID_D);
   smock_push_bool("republish_callback", true);

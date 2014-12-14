@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Nov 19 17:34:25 2014 mstenber
- * Last modified: Thu Dec  4 15:44:39 2014 mstenber
- * Edit time:     155 min
+ * Last modified: Sun Dec 14 17:14:07 2014 mstenber
+ * Edit time:     156 min
  *
  */
 
@@ -107,10 +107,10 @@ typedef struct __packed {
   int verdict_generation;
 
   /* Associated locally published HNCP TLV, if any */
-  struct tlv_attr *a;
+  hncp_tlv tlv;
 
   /* When was the TLV published */
-  hnetd_time_t a_time;
+  hnetd_time_t tlv_time;
 } hncp_trust_node_s, *hncp_trust_node;
 
 static void _trust_calculate_hash(hncp_trust t, hncp_hash h)
@@ -290,10 +290,10 @@ static void _trust_publish_maybe(hncp_trust t, hncp_trust_node n)
   int len = sizeof(n->stored.tlv) + strlen(n->stored.cname) + 1;
   int remote_verdict = _trust_node_remote_verdict(t, n);
 
-  if (n->a)
+  if (n->tlv)
     {
-      hncp_remove_tlv(t->hncp, n->a);
-      n->a = NULL;
+      hncp_remove_tlv(t->hncp, n->tlv);
+      n->tlv = NULL;
     }
   /*
    * Either our idea is _better_, or it is _same_ and our router id is
@@ -303,8 +303,8 @@ static void _trust_publish_maybe(hncp_trust t, hncp_trust_node n)
       || (remote_verdict == n->stored.tlv.verdict
           && (hncp_node_cmp(n->remote_node, t->hncp->own_node) > 0)))
     {
-      n->a = hncp_add_tlv_raw(t->hncp, HNCP_T_TRUST_VERDICT, &n->stored, len);
-      n->a_time = hnetd_time();
+      n->tlv = hncp_add_tlv(t->hncp, HNCP_T_TRUST_VERDICT, &n->stored, len, 0);
+      n->tlv_time = hnetd_time();
     }
 }
 
@@ -318,10 +318,10 @@ static void _update_trust_node(struct vlist_tree *tr,
 
   if (t_old)
     {
-      if (t_old->a)
+      if (t_old->tlv)
         {
-          hncp_remove_tlv(t->hncp, t_old->a);
-          t_old->a = NULL;
+          hncp_remove_tlv(t->hncp, t_old->tlv);
+          t_old->tlv = NULL;
         }
       if (t_old != t_new)
         free(t_old);

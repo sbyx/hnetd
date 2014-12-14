@@ -105,20 +105,20 @@ void hncp_bfs_one(void)
 	tlv_buf_init(&b, 0);
 
 	// N0 link 0
-	n.link_id = htonl(l1->iid);
-	n.neighbor_link_id = htonl(0);
+	n.link_id = l1->iid;
+	n.neighbor_link_id = 0;
 	n.neighbor_node_identifier = n1->node_identifier;
 	tlv_put(&b, HNCP_T_NODE_DATA_NEIGHBOR, &n, sizeof(n));
 
-	ap.hdr.link_id = htonl(l1->iid);
+	ap.hdr.link_id = l1->iid;
 	ap.hdr.prefix_length_bits = 64;
 	ap.prefix.s6_addr[6] = 0;
 	ap.prefix.s6_addr[7] = 0;
 	tlv_put(&b, HNCP_T_ASSIGNED_PREFIX, &ap, sizeof(ap));
 
 	// N0 link 1
-	n.link_id = htonl(l3->iid);
-	n.neighbor_link_id = htonl(0);
+	n.link_id = l3->iid;
+	n.neighbor_link_id = 0;
 	n.neighbor_node_identifier = n3->node_identifier;
 	tlv_put(&b, HNCP_T_NODE_DATA_NEIGHBOR, &n, sizeof(n));
 
@@ -135,18 +135,18 @@ void hncp_bfs_one(void)
 	tlv_buf_init(&b, 0);
 
 	// N1 link 0
-	n.link_id = htonl(0);
-	n.neighbor_link_id = htonl(l1->iid);
+	n.link_id = 0;
+	n.neighbor_link_id = l1->iid;
 	n.neighbor_node_identifier = n0->node_identifier;
 	tlv_put(&b, HNCP_T_NODE_DATA_NEIGHBOR, &n, sizeof(n));
 
 	// N1 link 1
-	n.link_id = htonl(1);
-	n.neighbor_link_id =htonl(0);
+	n.link_id = 1;
+	n.neighbor_link_id =0;
 	n.neighbor_node_identifier = n2->node_identifier;
 	tlv_put(&b, HNCP_T_NODE_DATA_NEIGHBOR, &n, sizeof(n));
 
-	ap.hdr.link_id = htonl(0);
+	ap.hdr.link_id = 0;
 	ap.hdr.prefix_length_bits = 64;
 	ap.prefix.s6_addr[6] = 1;
 	ap.prefix.s6_addr[7] = 1;
@@ -159,24 +159,24 @@ void hncp_bfs_one(void)
 	tlv_buf_init(&b, 0);
 
 	// N2 link 0
-	n.link_id = htonl(0);
-	n.neighbor_link_id = htonl(1);
+	n.link_id = 0;
+	n.neighbor_link_id = 1;
 	n.neighbor_node_identifier = n1->node_identifier;
 	tlv_put(&b, HNCP_T_NODE_DATA_NEIGHBOR, &n, sizeof(n));
 
 	// N2 link 1
-	n.link_id = htonl(1);
-	n.neighbor_link_id = htonl(1);
+	n.link_id = 1;
+	n.neighbor_link_id = 1;
 	n.neighbor_node_identifier = n3->node_identifier;
 	tlv_put(&b, HNCP_T_NODE_DATA_NEIGHBOR, &n, sizeof(n));
 
 	// N2 link 2
-	n.link_id = htonl(2);
-	n.neighbor_link_id = htonl(0);
+	n.link_id = 2;
+	n.neighbor_link_id = 0;
 	n.neighbor_node_identifier = n4->node_identifier;
 	tlv_put(&b, HNCP_T_NODE_DATA_NEIGHBOR, &n, sizeof(n));
 
-	ap.hdr.link_id = htonl(2);
+	ap.hdr.link_id = 2;
 	ap.hdr.prefix_length_bits = 64;
 	ap.prefix.s6_addr[6] = 2;
 	ap.prefix.s6_addr[7] = 2;
@@ -196,18 +196,18 @@ void hncp_bfs_one(void)
 	tlv_buf_init(&b, 0);
 
 	// N3 link 0
-	n.link_id = htonl(0);
-	n.neighbor_link_id = htonl(l3->iid);
+	n.link_id = 0;
+	n.neighbor_link_id = l3->iid;
 	n.neighbor_node_identifier = n0->node_identifier;
 	tlv_put(&b, HNCP_T_NODE_DATA_NEIGHBOR, &n, sizeof(n));
 
 	// N3 link 1
-	n.link_id = htonl(1);
-	n.neighbor_link_id = htonl(1);
+	n.link_id = 1;
+	n.neighbor_link_id = 1;
 	n.neighbor_node_identifier = n2->node_identifier;
 	tlv_put(&b, HNCP_T_NODE_DATA_NEIGHBOR, &n, sizeof(n));
 
-	ap.hdr.link_id = htonl(1);
+	ap.hdr.link_id = 1;
 	ap.hdr.prefix_length_bits = 64;
 	ap.prefix.s6_addr[6] = 3;
 	ap.prefix.s6_addr[7] = 1;

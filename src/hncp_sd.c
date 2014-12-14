@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Thu Dec  4 15:43:20 2014 mstenber
- * Edit time:     566 min
+ * Last modified: Sun Dec 14 18:04:45 2014 mstenber
+ * Edit time:     569 min
  *
  */
 
@@ -231,7 +231,7 @@ static void _publish_ddz(hncp_sd sd, hncp_link l,
     return;
   int flen = sizeof(*dh) + r;
   dh->flags = flags_forward;
-  hncp_add_tlv_raw(sd->hncp, HNCP_T_DNS_DELEGATED_ZONE, dh, flen);
+  hncp_add_tlv(sd->hncp, HNCP_T_DNS_DELEGATED_ZONE, dh, flen, 0);
 
   /* Reverse DDZ handling */
   /* (.ip6.arpa. or .in-addr.arpa.). */
@@ -242,7 +242,7 @@ static void _publish_ddz(hncp_sd sd, hncp_link l,
         return;
       flen = sizeof(*dh) + r;
       dh->flags = 0;
-      hncp_add_tlv_raw(sd->hncp, HNCP_T_DNS_DELEGATED_ZONE, dh, flen);
+      hncp_add_tlv(sd->hncp, HNCP_T_DNS_DELEGATED_ZONE, dh, flen, 0);
     }
 }
 
@@ -269,7 +269,7 @@ static void _publish_ddzs(hncp_sd sd)
               return;
             }
 
-          uint32_t link_id = be32_to_cpu(ah->link_id);
+          uint32_t link_id = ah->link_id;
 
           l = hncp_find_link_by_id(sd->hncp, link_id);
           if (!l)
@@ -299,7 +299,7 @@ static void _publish_ddzs(hncp_sd sd)
           if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX)
             {
               ah = tlv_data(a);
-              uint32_t link_id = be32_to_cpu(ah->link_id);
+              uint32_t link_id = ah->link_id;
               if (link_id == l->iid)
                 {
                   found = true;
@@ -586,8 +586,8 @@ static void
 _set_router_name(hncp_sd sd)
 {
   hncp_remove_tlvs_by_type(sd->hncp, HNCP_T_DNS_ROUTER_NAME);
-  hncp_update_tlv_raw(sd->hncp, HNCP_T_DNS_ROUTER_NAME,
-                      sd->router_name, strlen(sd->router_name), true);
+  hncp_add_tlv(sd->hncp, HNCP_T_DNS_ROUTER_NAME,
+               sd->router_name, strlen(sd->router_name), 0);
 }
 
 static bool
@@ -870,7 +870,7 @@ hncp_sd hncp_sd_create(hncp h, hncp_sd_params p)
           L_ERR("invalid domain:%s", p->domain_name);
           abort();
         }
-      hncp_add_tlv_raw(h, HNCP_T_DNS_DOMAIN_NAME, ll, len);
+      hncp_add_tlv(h, HNCP_T_DNS_DOMAIN_NAME, ll, len, 0);
 
       strncpy(sd->hncp->domain, p->domain_name, DNS_MAX_ESCAPED_LEN);
     }

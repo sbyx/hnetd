@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Dec  4 21:00:38 2014 mstenber
- * Edit time:     287 min
+ * Last modified: Sun Dec 14 18:38:18 2014 mstenber
+ * Edit time:     305 min
  *
  */
 
@@ -62,9 +62,6 @@ struct hncp_struct {
 
   /* Link configuration options */
   struct list_head link_confs;
-
-  /* flag which indicates that we should re-publish links. */
-  bool links_dirty;
 
   /* flag which indicates that we should perhaps re-publish our node
    * in nodes. */
@@ -160,9 +157,6 @@ struct hncp_link_struct {
   /* Pointer to some hncp_link configuration structure */
   hncp_link_conf conf;
 
-  /* Who are the neighbors on the link. */
-  struct vlist_tree neighbors;
-
   /* Name of the (local) link. */
   char ifname[IFNAMSIZ];
 
@@ -202,11 +196,6 @@ typedef struct hncp_neighbor_struct hncp_neighbor_s, *hncp_neighbor;
 
 
 struct hncp_neighbor_struct {
-  struct vlist_node in_neighbors;
-
-  hncp_node_identifier_s node_identifier;
-  iid_t iid;
-
   /* Link-level address */
   struct sockaddr_in6 last_sa6;
 
@@ -277,14 +266,17 @@ struct hncp_node_struct {
   bool tlv_index_dirty;
 };
 
-typedef struct hncp_tlv_struct hncp_tlv_s, *hncp_tlv;
-
 struct hncp_tlv_struct {
   /* hncp->tlvs entry */
   struct vlist_node in_tlvs;
 
   /* Actual TLV attribute itself. */
   struct tlv_attr tlv;
+
+  /* var-length tlv */
+
+  /* .. and after it's padding length: extra data space reserved by
+   * the client, if any */
 };
 
 /* Internal or testing-only way to initialize hp struct _without_
@@ -385,8 +377,8 @@ static inline hnetd_time_t hncp_time(hncp o)
 #define HNCP_NODE_REPR(n) \
   HEX_REPR(&n->node_identifier, sizeof(n->node_identifier))
 
-#define HNCP_NEIGH_F "neighbor %s/#%d"
-#define HNCP_NEIGH_D(n) HNCP_NODE_REPR(n),n->iid
+#define HNCP_NEIGH_F "neighbor %p"
+#define HNCP_NEIGH_D(n) n
 
 #define HNCP_LINK_F "link %s[#%d]"
 #define HNCP_LINK_D(l) l->ifname,l->iid
@@ -521,5 +513,29 @@ do {                            \
   md5_end(tbuf, ctx);           \
   *h = *((hncp_hash)tbuf);      \
 } while (0)
+
+#define hncp_for_each_local_tlv(o, t)  \
+  avl_for_each_element(&o->tlvs.avl, t, in_tlvs.avl)
+
+#define hncp_for_each_local_tlv_safe(o, t, t2)  \
+  avl_for_each_element_safe(&o->tlvs.avl, t, in_tlvs.avl, t2)
+
+static inline hncp_neighbor
+hncp_link_find_neighbor_for_tlv(hncp_link l, hncp_t_node_data_neighbor n)
+{
+  hncp_tlv t = hncp_find_tlv(l->hncp, HNCP_T_NODE_DATA_NEIGHBOR,
+                             n, sizeof(*n));
+  if (t)
+    return hncp_tlv_get_extra(t);
+  return NULL;
+}
+
+#define hncp_update_tlv(o, t, d, dlen, elen, is_add)    \
+do {                                                    \
+  if (is_add)                                           \
+    hncp_add_tlv(o, t, d, dlen, elen);                  \
+  else                                                  \
+    hncp_remove_tlv_matching(o, t, d, dlen);            \
+ } while(0)
 
 #endif /* HNCP_I_H */

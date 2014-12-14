@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue Dec  9 09:23:10 2014 mstenber
- * Edit time:     625 min
+ * Last modified: Sun Dec 14 18:52:33 2014 mstenber
+ * Edit time:     639 min
  *
  */
 
@@ -73,7 +73,7 @@ static bool _push_link_id_tlv(struct tlv_buf *tb, hncp_link l)
     return false;
   lid = tlv_data(a);
   lid->node_identifier = l->hncp->own_node->node_identifier;
-  lid->link_id = cpu_to_be32(l->iid);
+  lid->link_id = l->iid;
   return true;
 }
 
@@ -183,26 +183,26 @@ static hncp_neighbor
 _heard(hncp_link l, hncp_t_link_id lid, struct sockaddr_in6 *src,
        bool multicast)
 {
-  hncp_neighbor_s nc;
-  hncp_neighbor n;
+  hncp_t_node_data_neighbor_s np = {
+    .neighbor_node_identifier = lid->node_identifier,
+    .neighbor_link_id = lid->link_id,
+    .link_id = l->iid
+  };
 
-  memset(&nc, 0, sizeof(nc));
-  nc.node_identifier = lid->node_identifier;
-  nc.iid = be32_to_cpu(lid->link_id);
-  n = vlist_find(&l->neighbors, &nc, &nc, in_neighbors);
+  hncp_neighbor n = hncp_link_find_neighbor_for_tlv(l, &np);
   if (!n)
     {
       /* Doing add based on multicast is relatively insecure. */
       if (multicast)
         return NULL;
-      /* new neighbor */
-      n = malloc(sizeof(nc));
-      if (!n)
+      hncp_tlv t =
+        hncp_add_tlv(l->hncp, HNCP_T_NODE_DATA_NEIGHBOR, &np, sizeof(np),
+                     sizeof(*n));
+      if (!t)
         return NULL;
-      *n = nc;
+      n = hncp_tlv_get_extra(t);
       n->last_sync = hncp_time(l->hncp);
       n->keepalive_interval = l->conf->keepalive_interval;
-      vlist_add(&l->neighbors, &n->in_neighbors, n);
       L_DEBUG(HNCP_NEIGH_F " added on " HNCP_LINK_F,
               HNCP_NEIGH_D(n), HNCP_LINK_D(l));
     }
@@ -610,9 +610,9 @@ void hncp_tlv_ra_update(hncp o,
 {
   hncp_t_router_address_s ra;
 
-  ra.link_id = cpu_to_be32(lid);
+  ra.link_id = lid;
   ra.address = *address;
-  hncp_update_tlv_raw(o, HNCP_T_ROUTER_ADDRESS, &ra, sizeof(ra), add);
+  hncp_update_tlv(o, HNCP_T_ROUTER_ADDRESS, &ra, sizeof(ra), 0, add);
 }
 
 
@@ -624,29 +624,26 @@ void hncp_tlv_ap_update(hncp o,
                         bool add)
 {
   struct prefix p;
-  int mlen = TLV_SIZE + sizeof(hncp_t_assigned_prefix_header_s) + 16 + 3;
+  int mlen = sizeof(hncp_t_assigned_prefix_header_s) + 16 + 3;
   unsigned char buf[mlen];
-  struct tlv_attr *a = (struct tlv_attr *) buf;
   int plen = ROUND_BITS_TO_BYTES(prefix->plen);
-  int flen = TLV_SIZE + sizeof(hncp_t_delegated_prefix_header_s) + plen;
+  int flen = sizeof(hncp_t_delegated_prefix_header_s) + plen;
   hncp_t_assigned_prefix_header ah;
   hncp_link l;
 
-  memset(buf, 0, mlen);
+  memset(buf, 0, sizeof(buf));
   p = *prefix;
   prefix_canonical(&p, &p);
   /* XXX - what if links renumber? let's hope they don't */
-  tlv_init(a, HNCP_T_ASSIGNED_PREFIX, flen);
-  ah = tlv_data(a);
+  ah = (void *)buf;
   l = hncp_find_link_by_name(o, ifname, false);
   if (l)
-    ah->link_id = cpu_to_be32(l->iid);
+    ah->link_id = l->iid;
   ah->flags =
     HNCP_T_ASSIGNED_PREFIX_FLAG_PREFERENCE(preference)
     | (authoritative ? HNCP_T_ASSIGNED_PREFIX_FLAG_AUTHORITATIVE : 0);
   ah->prefix_length_bits = p.plen;
   ah++;
   memcpy(ah, &p, plen);
-
-  hncp_update_tlv(o, (struct tlv_attr *)buf, add);
+  hncp_update_tlv(o, HNCP_T_ASSIGNED_PREFIX, buf, flen, 0, add);
 }

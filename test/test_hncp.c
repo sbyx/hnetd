@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Thu Dec  4 16:31:39 2014 mstenber
- * Edit time:     80 min
+ * Last modified: Sun Dec 14 18:54:52 2014 mstenber
+ * Edit time:     86 min
  *
  */
 
@@ -48,7 +48,7 @@ void hncp_ext(void)
   hncp_node n;
   bool r;
   struct tlv_buf tb;
-  struct tlv_attr *t, *v = NULL, *t_data;
+  struct tlv_attr *t, *v = NULL;
 
   sput_fail_if(!o, "create works");
   n = hncp_get_first_node(o);
@@ -67,10 +67,10 @@ void hncp_ext(void)
   sput_fail_unless(v && tlv_id(v) == HNCP_T_VERSION, "no version tlv");
 
   tlv_put(&tb, HNCP_T_VERSION, tlv_data(v), tlv_len(v));
-  t_data = tlv_put(&tb, 123, NULL, 0);
+  tlv_put(&tb, 123, NULL, 0);
 
   /* Put the 123 type length = 0 TLV as TLV to hncp. */
-  r = hncp_add_tlv(o, t_data);
+  r = hncp_add_tlv(o, 123, NULL, 0, 0);
   sput_fail_unless(r, "hncp_add_tlv ok (should work)");
 
   hncp_self_flush(n);
@@ -107,11 +107,7 @@ void hncp_ext(void)
   /* Similarly, poll should also be nop (socket should be non-blocking). */
   hncp_poll(o);
 
-  r = hncp_remove_tlv(o, t_data);
-  sput_fail_unless(r, "hncp_remove_tlv should work");
-
-  r = hncp_remove_tlv(o, t_data);
-  sput_fail_unless(!r, "hncp_remove_tlv should not work");
+  hncp_remove_tlv_matching(o, 123, NULL, 0);
 
   n = hncp_node_get_next(n);
   sput_fail_unless(!n, "second node should not exist");
@@ -132,8 +128,6 @@ void hncp_int(void)
   unsigned char hwbuf[] = "foo";
   hncp_node n;
   hncp_link l;
-  struct tlv_buf tb;
-  struct tlv_attr *t1, *t2;
 
   hncp_init(o, hwbuf, strlen((char *)hwbuf));
 
@@ -179,24 +173,21 @@ void hncp_int(void)
   hncp_run(o);
   sput_fail_unless(o->own_node->update_number == 1, "update number ok");
 
-  memset(&tb, 0, sizeof(tb));
-  tlv_buf_init(&tb, 0);
-  t1 = tlv_put(&tb, 123, NULL, 0);
-  t2 = tlv_put(&tb, 124, NULL, 0);
-  hncp_add_tlv(o, t1);
+  hncp_add_tlv(o, 123, NULL, 0, 0);
 
   /* Added TLV should trigger new update */
   hncp_run(o);
   sput_fail_unless(o->own_node->update_number == 2, "update number ok");
 
   /* Adding/removing TLV should NOT trigger new update. */
-  hncp_add_tlv(o, t2);
+  hncp_tlv t2 = hncp_add_tlv(o, 124, NULL, 0, 0);
+  sput_fail_unless(t2, "hncp_add_tlv failed");
+
   hncp_remove_tlv(o, t2);
   hncp_run(o);
   sput_fail_unless(o->own_node->update_number == 2, "update number ok");
-  
+
   hncp_uninit(o);
-  tlv_buf_free(&tb);
 }
 
 int main(int argc, char **argv)

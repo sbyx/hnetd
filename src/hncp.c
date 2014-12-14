@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Dec  4 21:00:22 2014 mstenber
- * Edit time:     791 min
+ * Last modified: Sun Dec 14 18:59:08 2014 mstenber
+ * Edit time:     810 min
  *
  */
 
@@ -224,42 +224,21 @@ static void update_link(struct vlist_tree *t,
     {
       if (!t_new && o->io_init_done)
         hncp_io_set_ifname_enabled(o, t_old->ifname, false);
-      vlist_flush_all(&t_old->neighbors);
+      hncp_tlv t, t2;
+      hncp_for_each_local_tlv_safe(o, t, t2)
+        if (tlv_id(&t->tlv) == HNCP_T_NODE_DATA_NEIGHBOR)
+          {
+            hncp_t_node_data_neighbor ne = tlv_data(&t->tlv);
+            if (ne->link_id == t_old->iid)
+              hncp_remove_tlv(o, t);
+          }
       free(t_old);
     }
   else
     {
       t_new->join_failed_time = 1;
     }
-  o->links_dirty = true;
   hncp_schedule(o);
-}
-
-static int
-compare_neighbors(const void *a, const void *b, void *ptr __unused)
-{
-  hncp_neighbor n1 = (hncp_neighbor) a, n2 = (hncp_neighbor) b;
-  int r;
-
-  r = memcmp(&n1->node_identifier, &n2->node_identifier, DNCP_NI_LEN);
-  if (r)
-    return r;
-  return memcmp(&n1->iid, &n2->iid, sizeof(n1->iid));
-}
-
-static void update_neighbor(struct vlist_tree *t,
-                            struct vlist_node *node_new,
-                            struct vlist_node *node_old)
-{
-  hncp_link l = container_of(t, hncp_link_s, neighbors);
-  hncp o = l->hncp;
-  hncp_neighbor t_old = container_of(node_old, hncp_neighbor_s, in_neighbors);
-  hncp_neighbor t_new = container_of(node_new, hncp_neighbor_s, in_neighbors);
-
-  o->links_dirty = true;
-  hncp_schedule(o);
-  if (t_old && t_old != t_new)
-    free(t_old);
 }
 
 void hncp_calculate_hash(const void *buf, int len, hncp_hash dest)
@@ -367,7 +346,7 @@ hncp hncp_create(void)
   if (alen == sizeof(data.agent))
     alen = sizeof(data.agent) - 1;
   data.agent[alen] = 0;
-  hncp_add_tlv_raw(o, HNCP_T_VERSION, &data, sizeof(data.h) + alen + 1);
+  hncp_add_tlv(o, HNCP_T_VERSION, &data, sizeof(data.h) + alen + 1, 0);
 
   return o;
  err2:
@@ -422,62 +401,28 @@ hncp_node hncp_get_first_node(hncp o)
   return hncp_node_get_next(n);
 }
 
-static hncp_tlv _add_tlv(hncp o, struct tlv_attr *tlv)
+hncp_tlv
+hncp_add_tlv(hncp o, uint16_t type, void *data, uint16_t len, int extra_bytes)
 {
-  hncp_tlv t;
-  int s = tlv_pad_len(tlv);
+  int plen = TLV_SIZE +
+    (len + TLV_ATTR_ALIGN - 1) & ~(TLV_ATTR_ALIGN - 1);
+  hncp_tlv t = calloc(1, sizeof(*t) + plen + extra_bytes);
 
-  t = calloc(1, sizeof(*t) + s - sizeof(*tlv));
-  if (!t) return NULL;
-  memcpy(&t->tlv, tlv, s);
+  if (!t)
+    return NULL;
+  tlv_init(&t->tlv, type, len + TLV_SIZE);
+  memcpy(tlv_data(&t->tlv), data, len);
+  tlv_fill_pad(&t->tlv);
   vlist_add(&o->tlvs, &t->in_tlvs, t);
   return t;
 }
 
-struct tlv_attr *hncp_update_tlv(hncp o, struct tlv_attr *tlv, bool add)
+void hncp_remove_tlv(hncp o, hncp_tlv tlv)
 {
-  if (add)
-    {
-      hncp_tlv t = _add_tlv(o, tlv);
-
-      if (t)
-        {
-          /* These are not expired. */
-          t->in_tlvs.version = -1;
-          return &t->tlv;
-        }
-    }
-  else
-    {
-      /* kids, don't do this at home, the pointer itself is invalid,
-         but it _should_ work as comparison operator only operates on
-         n->tlv. */
-      hncp_tlv t = container_of(tlv, hncp_tlv_s, tlv);
-      hncp_tlv old = vlist_find(&o->tlvs, t, t, in_tlvs);
-
-      if (old)
-        {
-          vlist_delete(&o->tlvs, &old->in_tlvs);
-          return (void *)1;
-        }
-    }
-  return NULL;
+  if (!tlv)
+    return;
+  vlist_delete(&o->tlvs, &tlv->in_tlvs);
 }
-
-struct tlv_attr *hncp_update_tlv_raw(hncp o,
-                                     uint16_t type, void *data, uint16_t len,
-                                     bool add)
-{
-  struct tlv_attr *a = alloca(TLV_SIZE + len);
-
-  if (!a)
-    return NULL;
-  tlv_init(a, type, len + TLV_SIZE);
-  memcpy(tlv_data(a), data, len);
-  tlv_fill_pad(a);
-  return hncp_update_tlv(o, a, add);
-}
-
 
 int hncp_remove_tlvs_by_type(hncp o, int type)
 {
@@ -487,8 +432,10 @@ int hncp_remove_tlvs_by_type(hncp o, int type)
   avl_for_each_element_safe(&o->tlvs.avl, t, in_tlvs.avl, t2)
     {
       if ((int)tlv_id(&t->tlv) == type)
-        if (hncp_remove_tlv(o, &t->tlv))
+        {
+          hncp_remove_tlv(o, t);
           c++;
+        }
     }
   return c;
 }
@@ -541,7 +488,6 @@ hncp_link hncp_find_link_by_name(hncp o, const char *ifname, bool create)
       }
       l->hncp = o;
       l->iid = o->first_free_iid++;
-      vlist_init(&l->neighbors, compare_neighbors, update_neighbor);
       strcpy(l->ifname, ifname);
       vlist_add(&o->links, &l->in_links, l);
     }
@@ -643,43 +589,7 @@ static struct tlv_attr *_produce_new_tlvs(hncp_node n)
 void hncp_self_flush(hncp_node n)
 {
   hncp o = n->hncp;
-  hncp_link l;
-  hncp_neighbor ne;
   struct tlv_attr *a, *a2;
-
-  if (o->links_dirty)
-    {
-      L_DEBUG("hncp_self_flush: handling links_dirty");
-      o->links_dirty = false;
-      /* Rather crude: We simply get rid of existing link TLVs, and
-       * publish new ones. Assumption: Whatever is added using
-       * hncp_add_tlv will have version=-1, and dynamically generated
-       * content (like links) won't => we can just add the new entries
-       * and ignore manually added and/or outdated things. */
-      vlist_update(&o->tlvs);
-
-      vlist_for_each_element(&o->links, l, in_links)
-        {
-          vlist_for_each_element(&l->neighbors, ne, in_neighbors)
-            {
-              unsigned char buf[TLV_SIZE + sizeof(hncp_t_node_data_neighbor_s)];
-              struct tlv_attr *nt = (struct tlv_attr *)buf;
-
-              tlv_init(nt,
-                       HNCP_T_NODE_DATA_NEIGHBOR,
-                       TLV_SIZE + sizeof(hncp_t_node_data_neighbor_s));
-              hncp_t_node_data_neighbor d = tlv_data(nt);
-
-              d->neighbor_node_identifier = ne->node_identifier;
-              d->neighbor_link_id = cpu_to_be32(ne->iid);
-              d->link_id = cpu_to_be32(l->iid);
-
-              _add_tlv(o, nt);
-            }
-        }
-
-      vlist_flush(&o->tlvs);
-    }
 
   if (!(a = _produce_new_tlvs(n)) && !o->republish_tlvs)
     {
@@ -855,7 +765,7 @@ bool hncp_if_has_highest_id(hncp o, const char *ifname)
   if (!l)
     return true;
 
-  uint32_t iid = cpu_to_be32(l->iid);
+  uint32_t iid = l->iid;
   struct tlv_attr *a;
   hncp_t_node_data_neighbor nh;
 
@@ -921,4 +831,23 @@ void hncp_node_recalculate_index(hncp_node n)
         n->tlv_index[2 * idx - 1] = tlv_next(a);
     }
   n->tlv_index_dirty = false;
+}
+
+hncp_tlv hncp_find_tlv(hncp o, uint16_t type, void *data, uint16_t len)
+{
+  hncp_tlv t;
+  /* XXX - this is inefficient, as options are bad (either alloc+copy,
+   * or iterate through a list). */
+  hncp_for_each_local_tlv(o, t)
+    if (tlv_id(&t->tlv) == type
+        && tlv_len(&t->tlv) == len
+        && memcmp(tlv_data(&t->tlv), data, len) == 0)
+      return t;
+  return NULL;
+}
+
+void *hncp_tlv_get_extra(hncp_tlv t)
+{
+  unsigned int ofs = tlv_pad_len(&t->tlv);
+  return ((unsigned char *)t + sizeof(*t) + ofs);
 }

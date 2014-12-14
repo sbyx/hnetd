@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Thu Dec  4 17:00:05 2014 mstenber
- * Edit time:     123 min
+ * Last modified: Sun Dec 14 18:38:23 2014 mstenber
+ * Edit time:     139 min
  *
  */
 
@@ -33,14 +33,20 @@
 
 #include <libubox/list.h>
 
-/* Opaque pointer that represents hncp instance. */
+/********************************************* Opaque object-like structures */
+
+/* A single hncp instance. */
 typedef struct hncp_struct hncp_s, *hncp;
 
-/* Opaque pointer that represents single node (own or another) in
-   hncp. It is effectlively TLV list. */
+/* A single node in the hncp network. It is effectively TLV list and
+ * other associated metadata that should not be visible to users of
+ * this public API. If referring to local node, the TLVs visible here
+ * are the ones that have been actually published to other nodes
+ * (after a delay). */
 typedef struct hncp_node_struct hncp_node_s, *hncp_node;
 
-typedef struct hncp_subscriber_struct hncp_subscriber_s, *hncp_subscriber;
+/* A single, local published TLV.*/
+typedef struct hncp_tlv_struct hncp_tlv_s, *hncp_tlv;
 
 /*
  * Flow of HNCP state change notifications (outbound case):
@@ -50,6 +56,8 @@ typedef struct hncp_subscriber_struct hncp_subscriber_s, *hncp_subscriber;
  * - republish_callback is called
  * - tlv_change_callback is called
  */
+
+typedef struct hncp_subscriber_struct hncp_subscriber_s, *hncp_subscriber;
 
 struct hncp_subscriber_struct {
   /**
@@ -181,20 +189,28 @@ hncp_node hncp_get_first_node(hncp o);
 /**
  * Publish a single TLV.
  *
- * @return If add is true, the newly allocated TLV, which is valid
- * until hncp_remove_tlv is called for it (or a pointer to a TLV that
- * tlv_attr_equal's it). Otherwise NULL.
+ * @return The newly allocated TLV, which is valid until
+ * hncp_remove_tlv is called for it. Otherwise NULL.
  */
-struct tlv_attr *hncp_update_tlv(hncp o, struct tlv_attr *tlv, bool add);
-struct tlv_attr *hncp_update_tlv_raw(hncp o,
-                                     uint16_t type, void *data, uint16_t len,
-                                     bool add);
+hncp_tlv hncp_add_tlv(hncp o,
+                      uint16_t type, void *data, uint16_t len,
+                      int extra_bytes);
 
-/* Backwards compatible API - get rid of this at some point*/
-#define hncp_add_tlv(o,tlv) hncp_update_tlv(o,tlv,true)
-#define hncp_add_tlv_raw(o,t,d,l) hncp_update_tlv_raw(o,t,d,l,true)
-#define hncp_remove_tlv(o,tlv) hncp_update_tlv(o,tlv,false)
-#define hncp_remove_tlv_raw(o,t,d,l) hncp_update_tlv_raw(o,t,d,l,false)
+#define hncp_add_tlv_attr(o, a, bytes) \
+  hncp_add_tlv(o, tlv_id(a), tlv_data(a), tlv_len(a), bytes)
+
+/**
+ * Find TLV with exact match (if any).
+ */
+hncp_tlv hncp_find_tlv(hncp o, uint16_t type, void *data, uint16_t len);
+
+/**
+ * Stop publishing a TLV.
+ */
+void hncp_remove_tlv(hncp o, hncp_tlv tlv);
+
+#define hncp_remove_tlv_matching(o, t, d, dlen) \
+  hncp_remove_tlv(o, hncp_find_tlv(o, t, d, dlen))
 
 /**
  * Remove all TLVs of particular type.
@@ -263,6 +279,15 @@ struct tlv_attr *hncp_node_get_tlvs(hncp_node n);
 #define hncp_node_for_each_tlv(n, a)    \
   tlv_for_each_attr(a, hncp_node_get_tlvs(n))
 
-/*********************************************** Service discovery submodule */
+/******************************************************* Per-(local) tlv API */
+
+/**
+ * Get the extra byte pointer associated with the tlv (extra_bytes).
+ *
+ * As length is not stored anywhere, it is up to the caller to be
+ * consistent. If extra_bytes is zero, the first byte pointed by the
+ * return value may already be invalid.
+ */
+void *hncp_tlv_get_extra(hncp_tlv tlv);
 
 #endif /* HNCP_H */

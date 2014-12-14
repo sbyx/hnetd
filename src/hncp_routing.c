@@ -36,7 +36,7 @@ struct hncp_routing_struct {
 	hncp hncp;
 	struct uloop_timeout t;
 	enum hncp_routing_protocol active;
-	struct tlv_attr *tlv[HNCP_ROUTING_MAX];
+	hncp_tlv tlv[HNCP_ROUTING_MAX];
 	struct iface_user iface;
 	const char *script;
 	const char **ifaces;
@@ -136,15 +136,11 @@ hncp_bfs hncp_routing_create(hncp hncp, const char *script)
 				if (sscanf(buf, "%u %u", &proto, &preference) == 2 &&
 						proto < HNCP_ROUTING_MAX && preference < 256 &&
 						!bfs->tlv[proto]) {
-					struct {
-						struct tlv_attr hdr;
+					struct __packed {
 						uint8_t proto;
 						uint8_t preference;
-					} tlv;
-					tlv_init(&tlv.hdr, HNCP_T_ROUTING_PROTOCOL, 6);
-					tlv.proto = proto;
-					tlv.preference = preference;
-					bfs->tlv[proto] = hncp_add_tlv(hncp, &tlv.hdr);
+					} tlv = { .proto = proto, .preference = preference };
+					bfs->tlv[proto] = hncp_add_tlv(hncp, HNCP_T_ROUTING_PROTOCOL, &tlv, 2, 0);
 				}
 			}
 			fclose(fp);
@@ -270,16 +266,10 @@ static void hncp_routing_run(struct uloop_timeout *t)
 
 
 				if (c == hncp->own_node) { // We are at the start, lookup neighbor
-					hncp_link link = hncp_find_link_by_id(hncp, be32_to_cpu(ne->link_id));
+					hncp_link link = hncp_find_link_by_id(hncp, ne->link_id);
 					if (!link)
 						continue;
-
-					hncp_neighbor_s *neigh, query = {
-						.node_identifier = ne->neighbor_node_identifier,
-						.iid = be32_to_cpu(ne->neighbor_link_id)
-					};
-
-					neigh = vlist_find(&link->neighbors, &query, &query, in_neighbors);
+					hncp_neighbor neigh = hncp_link_find_neighbor_for_tlv(link, ne);
 					if (neigh) {
 						n->bfs.next_hop = &neigh->last_sa6.sin6_addr;
 						n->bfs.ifname = link->ifname;
@@ -330,11 +320,12 @@ static void hncp_routing_run(struct uloop_timeout *t)
 				struct iface *ifo = link ? iface_get(c->bfs.ifname) : NULL;
 				// Skip routes for prefixes on connected links
 				if (link && ifo && (ifo->flags & IFACE_FLAG_ADHOC) != IFACE_FLAG_ADHOC && c->bfs.hopcount == 1) {
-					hncp_neighbor_s query = {
-						.node_identifier = c->node_identifier,
-						.iid = be32_to_cpu(ap->link_id)
+					hncp_t_node_data_neighbor_s np = {
+						.neighbor_node_identifier = c->node_identifier,
+						.neighbor_link_id = ap->link_id,
+						.link_id = link->iid
 					};
-					if (vlist_find(&link->neighbors, &query, &query, in_neighbors))
+					if (hncp_link_find_neighbor_for_tlv(link, &np))
 						continue;
 				}
 
