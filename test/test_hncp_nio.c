@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Sun Dec 14 18:47:39 2014 mstenber
- * Edit time:     208 min
+ * Last modified: Mon Dec 15 16:28:00 2014 mstenber
+ * Edit time:     222 min
  *
  */
 
@@ -43,7 +43,7 @@ bool check_random = true;
 
 int want_schedule;
 int want_send;
-int current_hnetd_time;
+hnetd_time_t current_hnetd_time;
 
 /* Fake version of the I/O interface. */
 bool hncp_io_init(hncp o)
@@ -546,6 +546,47 @@ static void hncp_ok(void)
   destroy_hncp(o);
 }
 
+static void hncp_49d_republish()
+{
+
+  hncp o = create_hncp();
+
+  check_timing = false;
+  check_random = false;
+  check_send = false;
+
+  current_hnetd_time = 123000;
+
+  int i;
+  hncp_link_conf lc = hncp_if_find_conf_by_name(o, dummy_ifname);
+  lc->trickle_imax = HNETD_TIME_PER_SECOND * 86400;
+  lc->keepalive_interval = 0;
+
+  hncp_if_set_enabled(o, dummy_ifname, true);
+  smock_is_empty();
+
+  /* The join really happens within _run. */
+  one_join(true);
+
+  /* Set Trickle maximum interval to a day, so we don't have to do
+   * zillion iterations to hit 49d.. */
+
+  for (i = 0 ; i < 200 ; i++)
+    {
+      want_schedule = 0;
+      hncp_run(o);
+      current_hnetd_time += want_schedule;
+    }
+  sput_fail_unless(current_hnetd_time  >
+                   (1LL<<32), "time advanced enough");
+  sput_fail_unless((current_hnetd_time - o->own_node->origination_time) <
+                   (1LL<<32), "fresh own tlv");
+
+  check_timing = true;
+  check_random = true;
+  check_send = true;
+}
+
 #define maybe_run_test(fun) sput_maybe_run_test(fun, do {} while(0))
 
 int main(int argc, char **argv)
@@ -562,6 +603,7 @@ int main(int argc, char **argv)
   maybe_run_test(hncp_ok_minimal);
   maybe_run_test(hncp_rejoin_works);
   maybe_run_test(hncp_ok);
+  maybe_run_test(hncp_49d_republish);
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();

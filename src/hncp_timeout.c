@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Sun Dec 14 17:49:28 2014 mstenber
- * Edit time:     373 min
+ * Last modified: Mon Dec 15 16:37:23 2014 mstenber
+ * Edit time:     381 min
  *
  */
 
@@ -177,6 +177,17 @@ void hncp_run(hncp o)
   /* If we weren't before, we are now processing within timeout (no
    * sense scheduling extra timeouts within hncp_self_flush or hncp_prune). */
   o->immediate_scheduled = true;
+
+  /* Handle the own TLV roll-over first. */
+  if (!o->tlvs_dirty && o->own_node->update_number)
+    {
+      next = o->own_node->origination_time + (1LL << 32) - (1LL << 16);
+      if (next <= now)
+        {
+          o->republish_tlvs = true;
+          next = 0;
+        }
+    }
 
   /* Refresh locally originated data; by doing this, we can avoid
    * replicating code. */
