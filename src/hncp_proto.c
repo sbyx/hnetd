@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Sun Dec 14 18:52:33 2014 mstenber
- * Edit time:     639 min
+ * Last modified: Mon Dec 15 16:50:42 2014 mstenber
+ * Edit time:     646 min
  *
  */
 
@@ -447,7 +447,8 @@ handle_message(hncp_link l,
                                                   false);
             new_update_number = be32_to_cpu(ns->update_number);
             bool interesting = !n
-              || (new_update_number > n->update_number
+              || (update_number_second_greater(n->update_number,
+                                               new_update_number)
                   || (new_update_number == n->update_number
                       && memcmp(&n->node_data_hash,
                                 &ns->node_data_hash,
@@ -530,7 +531,7 @@ handle_message(hncp_link l,
   if (!n)
     return;
   new_update_number = be32_to_cpu(ns->update_number);
-  if (new_update_number < n->update_number
+  if (update_number_second_greater(new_update_number, n->update_number)
       || (n->update_number == new_update_number
           && !memcmp(&n->node_data_hash,
                      &ns->node_data_hash,
@@ -540,7 +541,6 @@ handle_message(hncp_link l,
               new_update_number, n->update_number);
       return;
     }
-  assert(new_update_number >= n->update_number);
   if (hncp_node_is_self(n))
     {
       L_DEBUG("received %d update number from network, own %d",

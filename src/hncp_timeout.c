@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Mon Dec 15 16:37:23 2014 mstenber
- * Edit time:     381 min
+ * Last modified: Mon Dec 15 17:02:09 2014 mstenber
+ * Edit time:     384 min
  *
  */
 
@@ -179,7 +179,7 @@ void hncp_run(hncp o)
   o->immediate_scheduled = true;
 
   /* Handle the own TLV roll-over first. */
-  if (!o->tlvs_dirty && o->own_node->update_number)
+  if (!o->tlvs_dirty)
     {
       next = o->own_node->origination_time + (1LL << 32) - (1LL << 16);
       if (next <= now)

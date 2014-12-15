@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Sun Dec 14 18:38:18 2014 mstenber
- * Edit time:     305 min
+ * Last modified: Mon Dec 15 16:49:00 2014 mstenber
+ * Edit time:     306 min
  *
  */
 
@@ -537,5 +537,8 @@ do {                                                    \
   else                                                  \
     hncp_remove_tlv_matching(o, t, d, dlen);            \
  } while(0)
+
+#define update_number_second_greater(a,b) \
+  ((((uint32_t)(a) - (uint32_t)(b)) & ((uint32_t)1<<31)) != 0)
 
 #endif /* HNCP_I_H */
