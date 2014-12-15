@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Dec 15 16:55:25 2014 mstenber
- * Edit time:     536 min
+ * Last modified: Mon Dec 15 17:48:04 2014 mstenber
+ * Edit time:     546 min
  *
  */
 
@@ -91,6 +91,8 @@ void hncp_two(void)
   net_sim_init(&s);
   n1 = net_sim_find_hncp(&s, "n1");
   n1->own_node->update_number = 0xFFFFFFFE;
+  hncp_link_conf lc = hncp_if_find_conf_by_name(n1, "eth0");
+  lc->keepalive_interval = 100;
   n2 = net_sim_find_hncp(&s, "n2");
   l1 = net_sim_hncp_find_link_by_name(n1, "eth0");
   l2 = net_sim_hncp_find_link_by_name(n2, "eth1");
@@ -100,7 +102,7 @@ void hncp_two(void)
   /* connect l1+l2 -> should converge at some point */
   net_sim_set_connected(l1, l2, true);
   net_sim_set_connected(l2, l1, true);
-  SIM_WHILE(&s, 100, !net_sim_is_converged(&s));
+  SIM_WHILE(&s, 1000, !net_sim_is_converged(&s));
 
   sput_fail_unless(n1->nodes.avl.count == 2, "n1 nodes == 2");
   sput_fail_unless(n2->nodes.avl.count == 2, "n2 nodes == 2");
@@ -144,7 +146,7 @@ void hncp_two(void)
   /* Should also have done the necessary purging of nodes due to lack
    * of reachability (eventually; this may take some more time due to
    * grace period).. */
-  SIM_WHILE(&s, 1000, n2->nodes.avl.count != 1);
+  SIM_WHILE(&s, 10000, n2->nodes.avl.count != 1);
 
   sput_fail_unless(hncp_if_has_highest_id(n1, "eth0") &&
                    hncp_if_has_highest_id(n2, "eth1"),
