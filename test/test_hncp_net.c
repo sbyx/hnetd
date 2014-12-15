@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Sun Dec 14 19:06:37 2014 mstenber
- * Edit time:     532 min
+ * Last modified: Mon Dec 15 16:55:25 2014 mstenber
+ * Edit time:     536 min
  *
  */
 
@@ -90,6 +90,7 @@ void hncp_two(void)
 
   net_sim_init(&s);
   n1 = net_sim_find_hncp(&s, "n1");
+  n1->own_node->update_number = 0xFFFFFFFE;
   n2 = net_sim_find_hncp(&s, "n2");
   l1 = net_sim_hncp_find_link_by_name(n1, "eth0");
   l2 = net_sim_hncp_find_link_by_name(n2, "eth1");
