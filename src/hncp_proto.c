@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Mon Dec 15 16:50:42 2014 mstenber
- * Edit time:     646 min
+ * Last modified: Mon Dec 15 17:40:06 2014 mstenber
+ * Edit time:     653 min
  *
  */
 
@@ -77,6 +77,16 @@ static bool _push_link_id_tlv(struct tlv_buf *tb, hncp_link l)
   return true;
 }
 
+static bool _push_keepalive_interval_tlv(struct tlv_buf *tb, uint32_t value)
+{
+  struct tlv_attr *a = tlv_new(tb, DNCP_T_KEEPALIVE_INTERVAL, 4);
+
+  if (!a)
+    return false;
+  *((uint32_t *)tlv_data(a)) = cpu_to_be32(value);
+  return true;
+}
+
 /****************************************** Actual payload sending utilities */
 
 void hncp_link_send_network_state(hncp_link l,
@@ -99,7 +109,9 @@ void hncp_link_send_network_state(hncp_link l,
     if (!o->graph_dirty || n == o->own_node)
       nn++;
   if (!maximum_size
-      || maximum_size >= (tlv_len(tb.head) + nn * sizeof(hncp_t_node_state_s)))
+      || maximum_size >= (tlv_len(tb.head)
+                          + 8 /* optional keep-alive interval */
+                          + nn * (4 + sizeof(hncp_t_node_state_s))))
     {
       hncp_for_each_node(o, n)
         {
@@ -108,6 +120,9 @@ void hncp_link_send_network_state(hncp_link l,
               goto done;
         }
     }
+  if (l->conf->keepalive_interval != DNCP_KEEPALIVE_INTERVAL)
+    if (!_push_keepalive_interval_tlv(&tb, l->conf->keepalive_interval))
+      goto done;
   if (maximum_size && tlv_len(tb.head) > maximum_size)
     goto done;
   L_DEBUG("hncp_link_send_network_state -> " SA6_F "%%" HNCP_LINK_F,
@@ -202,7 +217,7 @@ _heard(hncp_link l, hncp_t_link_id lid, struct sockaddr_in6 *src,
         return NULL;
       n = hncp_tlv_get_extra(t);
       n->last_sync = hncp_time(l->hncp);
-      n->keepalive_interval = l->conf->keepalive_interval;
+      n->keepalive_interval = DNCP_KEEPALIVE_INTERVAL;
       L_DEBUG(HNCP_NEIGH_F " added on " HNCP_LINK_F,
               HNCP_NEIGH_D(n), HNCP_LINK_D(l));
     }
