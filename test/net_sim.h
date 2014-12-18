@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu Dec  4 21:29:18 2014 mstenber
- * Edit time:     183 min
+ * Last modified: Thu Dec 18 15:37:01 2014 mstenber
+ * Edit time:     201 min
  *
  */
 
@@ -338,18 +338,23 @@ hncp_link net_sim_hncp_find_link_by_name(hncp o, const char *name)
       /* Initialize the address - in rather ugly way. We just hash
        * ifname + xor that with our own hash. The result should be
        * highly unique still. */
-      hncp_hash_s h1, h;
+      hncp_hash_s h1, h2;
+      unsigned char buf[16];
       int i;
 
       hncp_calculate_hash(name, strlen(name), &h1);
-      for (i = 0; i < HNCP_HASH_LEN; i++)
-        h.buf[i] = h1.buf[i] ^ o->own_node->node_identifier.buf[i];
-      h.buf[0] = 0xFE;
-      h.buf[1] = 0x80;
-      /* Let's pretend it's /64; clear out 2-7 */
-      for (i = 2; i < 8; i++)
-        h.buf[i] = 0;
-      hncp_link_set_ipv6_address(l, (struct in6_addr *)&h);
+      hncp_calculate_hash(n->name, strlen(n->name), &h2);
+
+      int bytes = HNCP_HASH_LEN;
+      if (bytes > 8)
+        bytes = 8;
+      memset(buf, 0, sizeof(buf));
+      for (i = 0; i < bytes; i++)
+        buf[i+8] = h1.buf[i] ^ h2.buf[i];
+      buf[0] = 0xFE;
+      buf[1] = 0x80;
+      /* 2 .. 7 left 0 always */
+      hncp_link_set_ipv6_address(l, (struct in6_addr *)buf);
 
       /* Override the iid to be unique. */
       if (n->s->use_global_iids)
@@ -657,6 +662,8 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
   if (!l)
     return -1;
 
+  L_DEBUG("hncp_io_sendto: %s -> " SA6_F,
+          is_multicast ? "multicast" : "unicast", SA6_D(dst));
   sanity_check_buf(buf, len);
   if (is_multicast)
     {
@@ -668,17 +675,24 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
       s->sent_unicast++;
       s->last_unicast_sent = hnetd_time();
     }
+  int sent = 0;
   list_for_each_entry(n, &s->neighs, h)
     {
       if (n->src == l
           && (is_multicast
               || (n->dst->has_ipv6_address
                   && memcmp(&n->dst->ipv6_address, &dst->sin6_addr, sizeof(dst->sin6_addr)) == 0)))
-        _sendto(s, buf, len, n->src, n->dst, &dst->sin6_addr);
+        {
+          _sendto(s, buf, len, n->src, n->dst, &dst->sin6_addr);
+          sent++;
+        }
     }
   /* Loop at self too, just for fun. */
   if (is_multicast)
     _sendto(s, buf, len, l, l, &dst->sin6_addr);
+  else
+    sput_fail_unless(sent <= 1, "unicast must hit only one target");
+
   return 1;
 }
 
