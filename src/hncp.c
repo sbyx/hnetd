@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Sun Dec 14 18:59:08 2014 mstenber
- * Edit time:     810 min
+ * Last modified: Thu Dec 18 13:55:47 2014 mstenber
+ * Edit time:     819 min
  *
  */
 
@@ -835,15 +835,16 @@ void hncp_node_recalculate_index(hncp_node n)
 
 hncp_tlv hncp_find_tlv(hncp o, uint16_t type, void *data, uint16_t len)
 {
-  hncp_tlv t;
-  /* XXX - this is inefficient, as options are bad (either alloc+copy,
-   * or iterate through a list). */
-  hncp_for_each_local_tlv(o, t)
-    if (tlv_id(&t->tlv) == type
-        && tlv_len(&t->tlv) == len
-        && memcmp(tlv_data(&t->tlv), data, len) == 0)
-      return t;
-  return NULL;
+  /* This is actually slower than list iteration if publishing only
+   * 'some' data. Oh well. I suppose the better performance for 'large
+   * N' cases is more useful. */
+  hncp_tlv dt = alloca(sizeof(hncp_tlv_s) + len);
+  if (!dt)
+    return NULL;
+  tlv_init(&dt->tlv, type, len + TLV_SIZE);
+  memcpy(tlv_data(&dt->tlv), data, len);
+  tlv_fill_pad(&dt->tlv);
+  return vlist_find(&o->tlvs, dt, dt, in_tlvs);
 }
 
 void *hncp_tlv_get_extra(hncp_tlv t)
