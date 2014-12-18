@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Dec 15 17:48:04 2014 mstenber
- * Edit time:     546 min
+ * Last modified: Thu Dec 18 14:28:18 2014 mstenber
+ * Edit time:     560 min
  *
  */
 
@@ -134,7 +134,7 @@ void hncp_two(void)
   /* disconnect on one side (=> unidirectional traffic) => should at
    * some point disappear. */
   net_sim_set_connected(l1, l2, false);
-  SIM_WHILE(&s, 1000,
+  SIM_WHILE(&s, 10000,
             link_has_neighbors(l2));
 
   /* n1 will keep getting stuff from n2, so it's sometimes alive,
@@ -444,9 +444,21 @@ bool monkey_ok(int *ma,
     MONKEY_CONNECTED(ma, j, p2, i, p1) && i != j;
 
   /* Look at the _published_ state only. */
-  hncp_t_node_data_neighbor nh = monkey_neighbor(n1, l1, n2, l2);
-  bool found = nh && hncp_node_find_neigh_bidir(n1->own_node, nh);
+  hncp_t_node_data_neighbor nh1 = monkey_neighbor(n1, l1, n2, l2);
+  bool found1 = nh1 && hncp_node_find_neigh_bidir(n1->own_node, nh1);
+  hncp_t_node_data_neighbor nh2 = monkey_neighbor(n2, l2, n1, l1);
+  bool found2 = nh2 && hncp_node_find_neigh_bidir(n2->own_node, nh2);
 
+  if (found1 != found2)
+    {
+      L_DEBUG("monkey_converged %d/%d <> %d/%d mismatch (%s <=> %s)",
+              i, p1, j, p2,
+              found1 ? "bidir" : nh1 ? "unidir" : "-",
+              found2 ? "bidir" : nh2 ? "unidir" : "-");
+      return false;
+    }
+
+  bool found = found1 && found2;
   if (!found != !should_be_connected)
     {
       L_DEBUG("monkey_converged %d/%d <=> %d/%d %sconnected?!?",
