@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:30:01 2014 mstenber
- * Last modified: Tue Dec 23 15:39:19 2014 mstenber
- * Edit time:     3 min
+ * Last modified: Tue Dec 23 18:09:09 2014 mstenber
+ * Edit time:     4 min
  *
  */
 
@@ -50,5 +50,7 @@ void hncp_set_dtls(hncp o, dtls d);
  * Create HNCP instance
  */
 hncp hncp_create(void);
+
+bool hncp_init(hncp o, const void *node_identifier, int len);
 
 #endif /* HNCP_H */

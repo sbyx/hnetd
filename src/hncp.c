@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 14:50:58 2014 mstenber
- * Last modified: Tue Dec 23 15:40:47 2014 mstenber
- * Edit time:     7 min
+ * Last modified: Tue Dec 23 18:13:31 2014 mstenber
+ * Edit time:     8 min
  *
  */
 
@@ -134,16 +134,30 @@ void hncp_tlv_ap_update(hncp o,
   hncp_update_tlv(o, HNCP_T_ASSIGNED_PREFIX, buf, flen, 0, add);
 }
 
+bool hncp_init(hncp o, const void *node_identifier, int len)
+{
+  if (!dncp_init(o, node_identifier, len))
+    return false;
+  if (inet_pton(AF_INET6, HNCP_MCAST_GROUP,
+                &o->profile_data.multicast_address) < 1)
+    {
+      L_ERR("unable to inet_pton multicast group address");
+      return false;
+    }
+  return true;
+}
+
+void hncp_uninit(hncp o)
+{
+  dncp_uninit(o);
+}
+
+
 hncp hncp_create(void)
 {
   hncp o = dncp_create();
   if (!o)
     return NULL;
-  if (inet_pton(AF_INET6, HNCP_MCAST_GROUP,
-                &o->profile_data.multicast_address) < 1) {
-    L_ERR("unable to inet_pton multicast group address");
-    return false;
-  }
   struct __packed {
     hncp_t_version_s h;
     char agent[32];

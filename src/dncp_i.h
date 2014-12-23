@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Dec 23 15:39:58 2014 mstenber
+ * Last modified: Tue Dec 23 16:04:56 2014 mstenber
  * Edit time:     312 min
  *
  */
@@ -259,8 +259,8 @@ struct hncp_tlv_struct {
 
 /* Internal or testing-only way to initialize hp struct _without_
  * dynamic allocations (and some of the steps omitted too). */
-bool hncp_init(hncp o, const void *node_identifier, int len);
-void hncp_uninit(hncp o);
+bool dncp_init(hncp o, const void *node_identifier, int len);
+void dncp_uninit(hncp o);
 
 /* Utility to change local node identifier - use with care */
 bool hncp_set_own_node_identifier(hncp o, hncp_node_identifier ni);

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Dec 23 15:38:23 2014 mstenber
- * Edit time:     821 min
+ * Last modified: Tue Dec 23 18:10:57 2014 mstenber
+ * Edit time:     824 min
  *
  */
 
@@ -238,7 +238,7 @@ hncp_find_node_by_node_identifier(hncp o, hncp_node_identifier ni, bool create)
   return n;
 }
 
-bool hncp_init(hncp o, const void *node_identifier, int len)
+bool dncp_init(hncp o, const void *node_identifier, int len)
 {
   hncp_hash_s h;
 
@@ -281,7 +281,7 @@ hncp dncp_create(void)
   hncp o;
   unsigned char buf[ETHER_ADDR_LEN * 2], *c = buf;
 
-  /* hncp_init does memset 0 -> we can just malloc here. */
+  /* dncp_init does memset 0 -> we can just malloc here. */
   o = malloc(sizeof(*o));
   if (!o)
     return NULL;
@@ -290,7 +290,7 @@ hncp dncp_create(void)
     L_ERR("no hardware address available, fatal error");
     goto err;
   }
-  if (!hncp_init(o, buf, c-buf))
+  if (!dncp_init(o, buf, c-buf))
     goto err;
   if (!hncp_io_init(o))
     goto err2;
@@ -306,7 +306,7 @@ hncp dncp_create(void)
   return NULL;
 }
 
-void hncp_uninit(hncp o)
+void dncp_uninit(hncp o)
 {
   o->io_init_done = false; /* cannot schedule anything anymore after this. */
 
@@ -335,7 +335,7 @@ void hncp_destroy(hncp o)
 {
   if (!o) return;
   hncp_io_uninit(o);
-  hncp_uninit(o);
+  dncp_uninit(o);
   free(o);
 }
 

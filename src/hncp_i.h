@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:33:03 2014 mstenber
- * Last modified: Tue Dec 23 15:40:06 2014 mstenber
- * Edit time:     6 min
+ * Last modified: Tue Dec 23 18:13:03 2014 mstenber
+ * Edit time:     7 min
  *
  */
 
@@ -75,5 +75,8 @@ void hncp_tlv_ra_update(hncp o,
                         uint32_t lid,
                         const struct in6_addr *address,
                         bool add);
+
+bool hncp_init(hncp o, const void *node_identifier, int len);
+void hncp_uninit(hncp o);
 
 #endif /* HNCP_I_H */
