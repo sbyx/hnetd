@@ -27,7 +27,7 @@ void pa_core_iface_addr_init(__unused struct pa_iface_addr *addr, __unused const
 void pa_core_iface_addr_add(__unused struct pa_core *core, __unused struct pa_iface_addr *addr) {}
 void pa_core_iface_addr_del(__unused struct pa_core *core, __unused struct pa_iface_addr *addr) {}
 void platform_set_owner(__unused struct iface *c, __unused bool enable) {}
-int platform_init(__unused hncp hncp, __unused struct pa_data *data, __unused const char *pd_socket) { return 0; }
+int platform_init(__unused dncp hncp, __unused struct pa_data *data, __unused const char *pd_socket) { return 0; }
 void platform_set_address(__unused struct iface *c, __unused struct iface_addr *addr, __unused bool enable) {}
 void platform_set_route(__unused struct iface *c, __unused struct iface_route *addr, __unused bool enable) {}
 void platform_iface_free(__unused struct iface *c) {}
@@ -39,28 +39,28 @@ void platform_set_dhcpv6_send(__unused struct iface *c, __unused const void *dhc
 void platform_set_prefix_route(__unused const struct prefix *p, __unused bool enable) {}
 void platform_restart_dhcpv4(__unused struct iface *c) {}
 void platform_set_snat(__unused struct iface *c, __unused const struct prefix *p) {}
-void hncp_sd_dump_link_fqdn(__unused hncp_sd sd, __unused hncp_link l, __unused char *buf, __unused size_t buf_len) {}
+void hncp_sd_dump_link_fqdn(__unused hncp_sd sd, __unused dncp_link l, __unused char *buf, __unused size_t buf_len) {}
 
 void hncp_bfs_one(void)
 {
-	hncp hncp = hncp_create();
+	dncp hncp = hncp_create();
 
 	/* Get rid of version, as synthesizing versions for other
 	 * routers is a bore */
-	(void)hncp_remove_tlvs_by_type(hncp, HNCP_T_VERSION);
+	(void)dncp_remove_tlvs_by_type(hncp, HNCP_T_VERSION);
 
 	hncp_bfs bfs = hncp_routing_create(hncp, NULL);
 
-	hncp_node_identifier_s h = {{0}};
-	hncp_node n0 = hncp->own_node;
+	dncp_node_identifier_s h = {{0}};
+	dncp_node n0 = hncp->own_node;
 	h.buf[0] = 1;
-	hncp_node n1 = hncp_find_node_by_node_identifier(hncp, &h, true);
+	dncp_node n1 = dncp_find_node_by_node_identifier(hncp, &h, true);
 	h.buf[0] = 2;
-	hncp_node n2 = hncp_find_node_by_node_identifier(hncp, &h, true);
+	dncp_node n2 = dncp_find_node_by_node_identifier(hncp, &h, true);
 	h.buf[0] = 3;
-	hncp_node n3 = hncp_find_node_by_node_identifier(hncp, &h, true);
+	dncp_node n3 = dncp_find_node_by_node_identifier(hncp, &h, true);
 	h.buf[0] = 4;
-	hncp_node n4 = hncp_find_node_by_node_identifier(hncp, &h, true);
+	dncp_node n4 = dncp_find_node_by_node_identifier(hncp, &h, true);
 
 	// Create a network topology with us + 4 routers:
 	// US -- N1 -- N2 |- N4
@@ -68,8 +68,8 @@ void hncp_bfs_one(void)
 	//       N3
 	// with uni-directional neighbor N2 - N4 and PDs on N2 and N3
 
-	hncp_link l1 = hncp_find_link_by_name(hncp, "l1", true);
-	hncp_link l3 = hncp_find_link_by_name(hncp, "l3", true);
+	dncp_link l1 = dncp_find_link_by_name(hncp, "l1", true);
+	dncp_link l3 = dncp_find_link_by_name(hncp, "l3", true);
 	struct iface *i1 = iface_create("l1", "l1", 0);
 	struct iface *i3 = iface_create("l3", "l3", 0);
 
@@ -77,15 +77,15 @@ void hncp_bfs_one(void)
 	memset(&dummy1.sin6_addr, 1, sizeof(dummy1.sin6_addr));
 	struct sockaddr_in6 dummy3 = {.sin6_family = AF_INET6};
 	memset(&dummy3.sin6_addr, 3, sizeof(dummy3.sin6_addr));
-	hncp_t_link_id_s lid1 = {n1->node_identifier, 0};
+	dncp_t_link_id_s lid1 = {n1->node_identifier, 0};
 	_heard(l1, &lid1, &dummy1, false);
 
-	hncp_t_link_id_s lid3 = {n3->node_identifier, 0};
+	dncp_t_link_id_s lid3 = {n3->node_identifier, 0};
 	_heard(l3, &lid3, &dummy3, false);
 
 	// TLV foo
 	struct tlv_buf b = {NULL, NULL, 0, NULL};
-	hncp_t_node_data_neighbor_s n;
+	dncp_t_node_data_neighbor_s n;
 	struct __attribute__((__packed__)) {
 		hncp_t_delegated_prefix_header_s hdr;
 		struct in6_addr prefix;
@@ -129,7 +129,7 @@ void hncp_bfs_one(void)
 	tlv_put(&b, HNCP_T_ASSIGNED_PREFIX, &ap, sizeof(ap));
 
 	tlv_put(&b, HNCP_T_ROUTING_PROTOCOL, &rp, sizeof(rp));
-	hncp_node_set(n0, 0, 0, tlv_memdup(b.head));
+	dncp_node_set(n0, 0, 0, tlv_memdup(b.head));
 
 
 	tlv_buf_init(&b, 0);
@@ -153,7 +153,7 @@ void hncp_bfs_one(void)
 	tlv_put(&b, HNCP_T_ASSIGNED_PREFIX, &ap, sizeof(ap));
 
 	tlv_put(&b, HNCP_T_ROUTING_PROTOCOL, &rp, sizeof(rp));
-	hncp_node_set(n1, 0, 0, tlv_memdup(b.head));
+	dncp_node_set(n1, 0, 0, tlv_memdup(b.head));
 
 
 	tlv_buf_init(&b, 0);
@@ -190,7 +190,7 @@ void hncp_bfs_one(void)
 	tlv_nest_end(&b, cookie);
 
 	tlv_put(&b, HNCP_T_ROUTING_PROTOCOL, &rp, sizeof(rp));
-	hncp_node_set(n2, 0, 0, tlv_memdup(b.head));
+	dncp_node_set(n2, 0, 0, tlv_memdup(b.head));
 
 
 	tlv_buf_init(&b, 0);
@@ -222,11 +222,11 @@ void hncp_bfs_one(void)
 	tlv_nest_end(&b, cookie);
 
 	tlv_put(&b, HNCP_T_ROUTING_PROTOCOL, &rp, sizeof(rp));
-	hncp_node_set(n3, 0, 0, tlv_memdup(b.head));
+	dncp_node_set(n3, 0, 0, tlv_memdup(b.head));
 
 	tlv_buf_init(&b, 0);
 	tlv_put(&b, HNCP_T_ROUTING_PROTOCOL, &rp, sizeof(rp));
-	hncp_node_set(n4, 0, 0, tlv_memdup(b.head));
+	dncp_node_set(n4, 0, 0, tlv_memdup(b.head));
 
 
 	hncp_routing_run(&bfs->t);

@@ -6,16 +6,16 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Tue Dec 23 15:11:49 2014 mstenber
+ * Last modified: Tue Dec 23 18:58:01 2014 mstenber
  * Edit time:     389 min
  *
  */
 
 #include "dncp_i.h"
 
-static void trickle_set_i(hncp_link l, int i)
+static void trickle_set_i(dncp_link l, int i)
 {
-  hnetd_time_t now = hncp_time(l->hncp);
+  hnetd_time_t now = dncp_time(l->dncp);
   int imin = l->conf->trickle_imin;
   if (!imin) imin = DNCP_TRICKLE_IMIN;
   int imax = l->conf->trickle_imax;
@@ -30,21 +30,21 @@ static void trickle_set_i(hncp_link l, int i)
   L_DEBUG(DNCP_LINK_F " trickle set to %d/%d", DNCP_LINK_D(l), t, i);
 }
 
-static void trickle_upgrade(hncp_link l)
+static void trickle_upgrade(dncp_link l)
 {
   trickle_set_i(l, l->trickle_i * 2);
 }
 
-static void trickle_send_nocheck(hncp_link l)
+static void trickle_send_nocheck(dncp_link l)
 {
   l->num_trickle_sent++;
-  l->last_trickle_sent = hncp_time(l->hncp);
+  l->last_trickle_sent = dncp_time(l->dncp);
   dncp_profile_link_send_network_state(l);
   if (l->conf->keepalive_interval)
     l->next_keepalive_time = l->last_trickle_sent + l->conf->keepalive_interval;
 }
 
-static void trickle_send(hncp_link l)
+static void trickle_send(dncp_link l)
 {
   if (l->trickle_c < l->conf->trickle_k)
     {
@@ -59,9 +59,9 @@ static void trickle_send(hncp_link l)
   l->trickle_send_time = 0;
 }
 
-static void _node_set_reachable(hncp_node n, bool value)
+static void _node_set_reachable(dncp_node n, bool value)
 {
-  hncp o = n->hncp;
+  dncp o = n->dncp;
   bool is_reachable = o->last_prune == n->last_reachable_prune;
 
   if (is_reachable != value)
@@ -69,73 +69,73 @@ static void _node_set_reachable(hncp_node n, bool value)
       o->network_hash_dirty = true;
 
       if (!value)
-        hncp_notify_subscribers_tlvs_changed(n, n->tlv_container_valid, NULL);
+        dncp_notify_subscribers_tlvs_changed(n, n->tlv_container_valid, NULL);
 
-      hncp_notify_subscribers_node_changed(n, value);
+      dncp_notify_subscribers_node_changed(n, value);
 
       if (value)
-        hncp_notify_subscribers_tlvs_changed(n, NULL, n->tlv_container_valid);
+        dncp_notify_subscribers_tlvs_changed(n, NULL, n->tlv_container_valid);
     }
   if (value)
-    n->last_reachable_prune = hncp_time(o);
+    n->last_reachable_prune = dncp_time(o);
 }
 
-static void hncp_prune_rec(hncp_node n)
+static void _prune_rec(dncp_node n)
 {
   struct tlv_attr *tlvs, *a;
-  hncp_t_node_data_neighbor ne;
-  hncp_node n2;
+  dncp_t_node_data_neighbor ne;
+  dncp_node n2;
 
   if (!n)
     return;
 
   /* Stop the iteration if we're already added to current
    * generation. */
-  if (n->in_nodes.version == n->hncp->nodes.version)
+  if (n->in_nodes.version == n->dncp->nodes.version)
     return;
 
-  tlvs = hncp_node_get_tlvs(n);
+  tlvs = dncp_node_get_tlvs(n);
 
-  L_DEBUG("hncp_prune_rec %s / %p = %p",
+  L_DEBUG("_prune_rec %s / %p = %p",
           DNCP_NODE_REPR(n), n, tlvs);
 
   /* No TLVs? No point recursing, unless the node is us (we have to
    * visit it always in any case). */
-  if (!tlvs && n != n->hncp->own_node)
+  if (!tlvs && n != n->dncp->own_node)
     return;
 
   /* Refresh the entry - we clearly did reach it. */
-  vlist_add(&n->hncp->nodes, &n->in_nodes, n);
+  vlist_add(&n->dncp->nodes, &n->in_nodes, n);
   _node_set_reachable(n, true);
 
   /* Look at it's neighbors. */
   tlv_for_each_attr(a, tlvs)
-    if ((ne = hncp_tlv_neighbor(a)))
+    if ((ne = dncp_tlv_neighbor(a)))
       {
         /* Ignore if it's not _bidirectional_ neighbor. Unidirectional
          * ones lead to graph not settling down. */
-        if ((n2 = hncp_node_find_neigh_bidir(n, ne)))
-          hncp_prune_rec(n2);
+        if ((n2 = dncp_node_find_neigh_bidir(n, ne)))
+          _prune_rec(n2);
       }
 }
 
-static void hncp_prune(hncp o)
+static void dncp_prune(dncp o)
 {
-  hnetd_time_t now = hncp_time(o);
+  hnetd_time_t now = dncp_time(o);
   hnetd_time_t grace_after = now - DNCP_PRUNE_GRACE_PERIOD;
 
   /* Logic fails if time isn't moving forward-ish */
   assert(now != o->last_prune);
 
-  L_DEBUG("hncp_prune %p", o);
+  L_DEBUG("dncp_prune %p", o);
 
   /* Prune the node graph. IOW, start at own node, flood fill, and zap
    * anything that didn't seem appropriate. */
   vlist_update(&o->nodes);
 
-  hncp_prune_rec(o->own_node);
+  _prune_rec(o->own_node);
 
-  hncp_node n;
+  dncp_node n;
   hnetd_time_t next_time = 0;
   vlist_for_each_element(&o->nodes, n, in_nodes)
     {
@@ -153,19 +153,19 @@ static void hncp_prune(hncp o)
   o->last_prune = now;
 }
 
-void hncp_run(hncp o)
+void dncp_run(dncp o)
 {
   hnetd_time_t next = 0;
-  hnetd_time_t now = hncp_io_time(o);
-  hncp_link l;
-  hncp_tlv t, t2;
+  hnetd_time_t now = dncp_io_time(o);
+  dncp_link l;
+  dncp_tlv t, t2;
 
   /* Assumption: We're within RTC step here -> can use same timestamp
    * all the way. */
   o->now = now;
 
   /* If we weren't before, we are now processing within timeout (no
-   * sense scheduling extra timeouts within hncp_self_flush or hncp_prune). */
+   * sense scheduling extra timeouts within dncp_self_flush or dncp_prune). */
   o->immediate_scheduled = true;
 
   /* Handle the own TLV roll-over first. */
@@ -181,7 +181,7 @@ void hncp_run(hncp o)
 
   /* Refresh locally originated data; by doing this, we can avoid
    * replicating code. */
-  hncp_self_flush(o->own_node);
+  dncp_self_flush(o->own_node);
 
   if (!o->disable_prune)
     {
@@ -191,10 +191,10 @@ void hncp_run(hncp o)
       if (o->next_prune && o->next_prune <= now)
         {
           o->graph_dirty = false;
-          hncp_prune(o);
+          dncp_prune(o);
         }
 
-      /* next_prune may be set _by_ hncp_prune, therefore redundant
+      /* next_prune may be set _by_ dncp_prune, therefore redundant
        * looking check */
       next = TMIN(next, o->next_prune);
     }
@@ -202,7 +202,7 @@ void hncp_run(hncp o)
   /* Release the flag to allow more change-triggered zero timeouts to
    * be scheduled. (We don't want to do this before we're done with
    * our mutations of state that can be addressed by the ordering of
-   * events within hncp_run). */
+   * events within dncp_run). */
   o->immediate_scheduled = false;
 
   /* First off: If the network hash is dirty, recalculate it (and hope
@@ -210,9 +210,9 @@ void hncp_run(hncp o)
   if (o->network_hash_dirty)
     {
       /* Store original network hash for future study. */
-      hncp_hash_s old_hash = o->network_hash;
+      dncp_hash_s old_hash = o->network_hash;
 
-      hncp_calculate_network_hash(o);
+      dncp_calculate_network_hash(o);
       if (memcmp(&old_hash, &o->network_hash, DNCP_HASH_LEN))
         {
           /* Shocker. The network hash changed -> reset _every_
@@ -233,7 +233,7 @@ void hncp_run(hncp o)
             l->join_failed_time + DNCP_REJOIN_INTERVAL;
           if (next_time <= now)
             {
-              if (!hncp_io_set_ifname_enabled(o, l->ifname, true))
+              if (!dncp_io_set_ifname_enabled(o, l->ifname, true))
                 {
                   l->join_failed_time = now;
                 }
@@ -246,7 +246,7 @@ void hncp_run(hncp o)
                    * essentially zombie. */
                   if (l->conf->keepalive_interval)
                     l->next_keepalive_time =
-                      hncp_time(l->hncp) + l->conf->keepalive_interval;
+                      dncp_time(l->dncp) + l->conf->keepalive_interval;
                   trickle_set_i(l, l->conf->trickle_imin);
                 }
             }
@@ -279,10 +279,10 @@ void hncp_run(hncp o)
 
   /* Look at neighbors we should be worried about.. */
   /* vlist_for_each_element(&l->neighbors, n, in_neighbors) */
-  hncp_for_each_local_tlv_safe(o, t, t2)
+  dncp_for_each_local_tlv_safe(o, t, t2)
     if (tlv_id(&t->tlv) == DNCP_T_NODE_DATA_NEIGHBOR)
       {
-        hncp_neighbor n = hncp_tlv_get_extra(t);
+        dncp_neighbor n = dncp_tlv_get_extra(t);
         hnetd_time_t next_time;
 
         next_time = n->last_sync +
@@ -298,11 +298,11 @@ void hncp_run(hncp o)
         /* Zap the neighbor */
         L_DEBUG(DNCP_NEIGH_F " gone on " DNCP_LINK_F,
                 DNCP_NEIGH_D(n), DNCP_LINK_D(l));
-        hncp_remove_tlv(o, t);
+        dncp_remove_tlv(o, t);
     }
 
   if (next && !o->immediate_scheduled)
-    hncp_io_schedule(o, next - now);
+    dncp_io_schedule(o, next - now);
 
   /* Clear the cached time, it's most likely no longer valid. */
   o->now = 0;

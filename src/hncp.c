@@ -6,34 +6,34 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 14:50:58 2014 mstenber
- * Last modified: Tue Dec 23 18:13:31 2014 mstenber
- * Edit time:     8 min
+ * Last modified: Tue Dec 23 19:01:55 2014 mstenber
+ * Edit time:     9 min
  *
  */
 
 #include "hncp_i.h"
 
-bool dncp_profile_handle_collision(hncp o)
+bool dncp_profile_handle_collision(dncp o)
 {
-  hncp_node_identifier_s ni;
+  dncp_node_identifier_s ni;
   int i;
 
   L_ERR("second+ collision -> changing node identifier");
   for (i = 0; i < DNCP_NI_LEN; i++)
     ni.buf[i] = random() % 256;
-  hncp_set_own_node_identifier(o, &ni);
+  dncp_set_own_node_identifier(o, &ni);
   return true;
 }
 
 
 
 
-void dncp_profile_link_send_network_state(hncp_link l)
+void dncp_profile_link_send_network_state(dncp_link l)
 {
   struct sockaddr_in6 dst =
     { .sin6_family = AF_INET6,
-      .sin6_addr = l->hncp->profile_data.multicast_address,
-      .sin6_port = htons(l->hncp->udp_port)
+      .sin6_addr = l->dncp->profile_data.multicast_address,
+      .sin6_port = htons(l->dncp->udp_port)
     };
   if (!(dst.sin6_scope_id = l->ifindex))
     if (!(dst.sin6_scope_id = if_nametoindex(l->ifname)))
@@ -41,10 +41,10 @@ void dncp_profile_link_send_network_state(hncp_link l)
         L_ERR("Unable to find index for " DNCP_LINK_F, DNCP_LINK_D(l));
         return;
       }
-  hncp_link_send_network_state(l, &dst, HNCP_MAXIMUM_MULTICAST_SIZE);
+  dncp_link_send_network_state(l, &dst, HNCP_MAXIMUM_MULTICAST_SIZE);
 }
 
-struct tlv_attr *dncp_profile_node_validate_data(hncp_node n,
+struct tlv_attr *dncp_profile_node_validate_data(dncp_node n,
                                                  struct tlv_attr *a)
 {
   uint8_t version = 0;
@@ -53,7 +53,7 @@ struct tlv_attr *dncp_profile_node_validate_data(hncp_node n,
   int agent_len = 0;
 #endif /* L_LEVEL >= LOG_ERR */
   struct tlv_attr *va, *a_valid = a;
-  hncp_node on = n->hncp->own_node;
+  dncp_node on = n->dncp->own_node;
 
   tlv_for_each_attr(va, a)
     {
@@ -78,18 +78,18 @@ struct tlv_attr *dncp_profile_node_validate_data(hncp_node n,
     {
       if (!a_valid)
         L_ERR("Incompatible node: %s version %u (%.*s) != %u",
-              HNCP_NODE_REPR(n), version, agent_len, agent,
+              DNCP_NODE_REPR(n), version, agent_len, agent,
               on->profile_data.version);
       else if (!n->profile_data.version)
         L_INFO("%s runs %.*s",
-               HNCP_NODE_REPR(n), agent_len, agent);
+               DNCP_NODE_REPR(n), agent_len, agent);
       n->profile_data.version = version;
     }
   return a_valid;
 }
 
 /* Utilities for formatting TLVs. */
-void hncp_tlv_ra_update(hncp o,
+void dncp_tlv_ra_update(dncp o,
                         uint32_t lid,
                         const struct in6_addr *address,
                         bool add)
@@ -98,11 +98,11 @@ void hncp_tlv_ra_update(hncp o,
 
   ra.link_id = lid;
   ra.address = *address;
-  hncp_update_tlv(o, HNCP_T_ROUTER_ADDRESS, &ra, sizeof(ra), 0, add);
+  dncp_update_tlv(o, HNCP_T_ROUTER_ADDRESS, &ra, sizeof(ra), 0, add);
 }
 
 
-void hncp_tlv_ap_update(hncp o,
+void dncp_tlv_ap_update(dncp o,
                         const struct prefix *prefix,
                         const char *ifname,
                         bool authoritative,
@@ -115,14 +115,14 @@ void hncp_tlv_ap_update(hncp o,
   int plen = ROUND_BITS_TO_BYTES(prefix->plen);
   int flen = sizeof(hncp_t_delegated_prefix_header_s) + plen;
   hncp_t_assigned_prefix_header ah;
-  hncp_link l;
+  dncp_link l;
 
   memset(buf, 0, sizeof(buf));
   p = *prefix;
   prefix_canonical(&p, &p);
   /* XXX - what if links renumber? let's hope they don't */
   ah = (void *)buf;
-  l = hncp_find_link_by_name(o, ifname, false);
+  l = dncp_find_link_by_name(o, ifname, false);
   if (l)
     ah->link_id = l->iid;
   ah->flags =
@@ -131,10 +131,10 @@ void hncp_tlv_ap_update(hncp o,
   ah->prefix_length_bits = p.plen;
   ah++;
   memcpy(ah, &p, plen);
-  hncp_update_tlv(o, HNCP_T_ASSIGNED_PREFIX, buf, flen, 0, add);
+  dncp_update_tlv(o, HNCP_T_ASSIGNED_PREFIX, buf, flen, 0, add);
 }
 
-bool hncp_init(hncp o, const void *node_identifier, int len)
+bool hncp_init(dncp o, const void *node_identifier, int len)
 {
   if (!dncp_init(o, node_identifier, len))
     return false;
@@ -147,15 +147,15 @@ bool hncp_init(hncp o, const void *node_identifier, int len)
   return true;
 }
 
-void hncp_uninit(hncp o)
+void hncp_uninit(dncp o)
 {
   dncp_uninit(o);
 }
 
 
-hncp hncp_create(void)
+dncp hncp_create(void)
 {
-  hncp o = dncp_create();
+  dncp o = dncp_create();
   if (!o)
     return NULL;
   struct __packed {
@@ -169,6 +169,7 @@ hncp hncp_create(void)
   if (alen == sizeof(data.agent))
     alen = sizeof(data.agent) - 1;
   data.agent[alen] = 0;
-  hncp_add_tlv(o, HNCP_T_VERSION, &data, sizeof(data.h) + alen + 1, 0);
+  dncp_add_tlv(o, HNCP_T_VERSION, &data, sizeof(data.h) + alen + 1, 0);
   return o;
 }
+

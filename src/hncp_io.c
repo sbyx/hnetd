@@ -1,13 +1,13 @@
 /*
- * $Id: hncp_io.c $
+ * $Id: dncp_io.c $
  *
  * Author: Markus Stenberg <mstenber@cisco.com>
  *
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Dec 23 15:23:53 2014 mstenber
- * Edit time:     294 min
+ * Last modified: Tue Dec 23 19:01:59 2014 mstenber
+ * Edit time:     295 min
  *
  */
 
@@ -39,7 +39,7 @@
 
 
 int
-hncp_io_get_hwaddrs(unsigned char *buf, int buf_left)
+dncp_io_get_hwaddrs(unsigned char *buf, int buf_left)
 {
   struct ifaddrs *ia, *p;
   int r = getifaddrs(&ia);
@@ -68,11 +68,11 @@ hncp_io_get_hwaddrs(unsigned char *buf, int buf_left)
           memcpy(a2, a, ETHER_ADDR_LEN);
         addrs++;
       }
-  L_INFO("hncp_io_get_hwaddrs => %s", HEX_REPR(buf, ETHER_ADDR_LEN * 2));
+  L_INFO("dncp_io_get_hwaddrs => %s", HEX_REPR(buf, ETHER_ADDR_LEN * 2));
   freeifaddrs(ia);
   if (!addrs)
     {
-      L_ERR("hncp_io_get_hwaddrs failed - no AF_LINK addresses");
+      L_ERR("dncp_io_get_hwaddrs failed - no AF_LINK addresses");
       return 0;
     }
   return ETHER_ADDR_LEN * 2;
@@ -80,17 +80,17 @@ hncp_io_get_hwaddrs(unsigned char *buf, int buf_left)
 
 static void _timeout(struct uloop_timeout *t)
 {
-  hncp o = container_of(t, hncp_s, timeout);
-  hncp_run(o);
+  dncp o = container_of(t, dncp_s, timeout);
+  dncp_run(o);
 }
 
 static void _fd_callback(struct uloop_fd *u, unsigned int events __unused)
 {
-  hncp o = container_of(u, hncp_s, ufd);
-  hncp_poll(o);
+  dncp o = container_of(u, dncp_s, ufd);
+  dncp_poll(o);
 }
 
-bool hncp_io_init(hncp o)
+bool dncp_io_init(dncp o)
 {
   int s;
   int on = 1;
@@ -133,7 +133,7 @@ bool hncp_io_init(hncp o)
   return true;
 }
 
-void hncp_io_uninit(hncp o)
+void dncp_io_uninit(dncp o)
 {
   close(o->udp_socket);
   /* clear the timer from uloop. */
@@ -142,17 +142,17 @@ void hncp_io_uninit(hncp o)
   (void)uloop_fd_delete(&o->ufd);
 }
 
-bool hncp_io_set_ifname_enabled(hncp o,
+bool dncp_io_set_ifname_enabled(dncp o,
                                 const char *ifname,
                                 bool enabled)
 {
   struct ipv6_mreq val;
 
   val.ipv6mr_multiaddr = o->profile_data.multicast_address;
-  L_DEBUG("hncp_io_set_ifname_enabled %s %s",
+  L_DEBUG("dncp_io_set_ifname_enabled %s %s",
           ifname, enabled ? "enabled" : "disabled");
   uint32_t ifindex = 0;
-  hncp_link l = hncp_find_link_by_name(o, ifname, false);
+  dncp_link l = dncp_find_link_by_name(o, ifname, false);
   if (!(l && (ifindex = l->ifindex)))
     if (!(ifindex = if_nametoindex(ifname)))
       {
@@ -176,12 +176,12 @@ bool hncp_io_set_ifname_enabled(hncp o,
   return false;
 }
 
-void hncp_io_schedule(hncp o, int msecs)
+void dncp_io_schedule(dncp o, int msecs)
 {
   uloop_timeout_set(&o->timeout, msecs);
 }
 
-ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
+ssize_t dncp_io_recvfrom(dncp o, void *buf, size_t len,
                          char *ifname,
                          struct sockaddr_in6 *src,
                          struct in6_addr *dst)
@@ -267,7 +267,7 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
   return l;
 }
 
-ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
+ssize_t dncp_io_sendto(dncp o, void *buf, size_t len,
                        const struct sockaddr_in6 *dst)
 {
   int flags = 0;
@@ -301,22 +301,23 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
   return r;
 }
 
-hnetd_time_t hncp_io_time(hncp o __unused)
+hnetd_time_t dncp_io_time(dncp o __unused)
 {
   return hnetd_time();
 }
+
 
 #ifdef DTLS
 
 void _dtls_readable_callback(dtls d __unused, void *context)
 {
-  hncp o = context;
+  dncp o = context;
 
-  hncp_poll(o);
+  dncp_poll(o);
 }
 
 
-void hncp_set_dtls(hncp o, dtls d)
+void hncp_set_dtls(dncp o, dtls d)
 {
   o->profile_data.d = d;
   dtls_set_readable_callback(d, _dtls_readable_callback, o);

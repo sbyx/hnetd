@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Tue Dec 23 15:56:20 2014 mstenber
+ * Last modified: Tue Dec 23 18:51:06 2014 mstenber
  * Edit time:     203 min
  *
  */
@@ -49,7 +49,7 @@
 typedef struct {
   struct list_head h;
 
-  hncp_link l;
+  dncp_link l;
   struct sockaddr_in6 src;
   struct in6_addr dst;
   void *buf;
@@ -62,15 +62,15 @@ typedef struct {
 typedef struct {
   struct list_head h;
 
-  hncp_link src;
-  hncp_link dst;
+  dncp_link src;
+  dncp_link dst;
 } net_neigh_s, *net_neigh;
 
 typedef struct {
   struct list_head h;
   struct net_sim_t *s;
   char *name;
-  hncp_s n;
+  dncp_s n;
   struct pa_data pa_data;
   struct pa_data_user pa_data_user;
 #ifndef DISABLE_HNCP_PA
@@ -89,7 +89,7 @@ typedef struct {
 
   /* Debug subscriber we use just to make sure there are no changes
    * when the topology should be stable. */
-  hncp_subscriber_s debug_subscriber;
+  dncp_subscriber_s debug_subscriber;
 
 } net_node_s, *net_node;
 
@@ -176,7 +176,7 @@ bool net_sim_is_converged(net_sim s)
 {
   net_node n, n2, fn = NULL;
   bool first = true;
-  hncp_node hn;
+  dncp_node hn;
   int acceptable_offset = MAXIMUM_PROPAGATION_DELAY * (s->node_count - 1);
 #if L_LEVEL >= 7
   /* Dump # of nodes in each node */
@@ -185,7 +185,7 @@ bool net_sim_is_converged(net_sim s)
     {
       int count = 0;
 
-      hncp_for_each_node(&n->n, hn)
+      dncp_for_each_node(&n->n, hn)
         count++;
       c += sprintf(c, "%d ", count);
     }
@@ -202,12 +202,12 @@ bool net_sim_is_converged(net_sim s)
           first = false;
           continue;
         }
-      if (memcmp(&fn->n.network_hash, &n->n.network_hash, sizeof(hncp_hash_s)))
+      if (memcmp(&fn->n.network_hash, &n->n.network_hash, sizeof(dncp_hash_s)))
         {
           L_DEBUG("network hash mismatch %s<>%s [%llx <> %llx]",
                   fn->name, n->name,
-                  hncp_hash64(&fn->n.network_hash),
-                  hncp_hash64(&n->n.network_hash));
+                  dncp_hash64(&fn->n.network_hash),
+                  dncp_hash64(&n->n.network_hash));
           s->not_converged_count++;
           return false;
         }
@@ -217,7 +217,7 @@ bool net_sim_is_converged(net_sim s)
       list_for_each_entry(n2, &s->nodes, h)
         {
           /* Make sure that the information about other node _is_ valid */
-          hn = hncp_find_node_by_node_identifier(&n->n, &n2->n.own_node->node_identifier, false);
+          hn = dncp_find_node_by_node_identifier(&n->n, &n2->n.own_node->node_identifier, false);
           if (!hn)
             {
               L_DEBUG("unable to find other node hash - %s -> %s",
@@ -252,7 +252,7 @@ bool net_sim_is_converged(net_sim s)
   return true;
 }
 
-void net_sim_local_tlv_callback(hncp_subscriber sub,
+void net_sim_local_tlv_callback(dncp_subscriber sub,
                                 struct tlv_attr *tlv, bool add)
 {
   net_node n = container_of(sub, net_node_s, debug_subscriber);
@@ -265,7 +265,7 @@ void net_sim_local_tlv_callback(hncp_subscriber sub,
       }
 }
 
-hncp net_sim_find_hncp(net_sim s, const char *name)
+dncp net_sim_find_hncp(net_sim s, const char *name)
 {
   net_node n;
   bool r;
@@ -314,36 +314,36 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
 #endif /* !DISABLE_HNCP_SD */
   n->debug_subscriber.local_tlv_change_callback = net_sim_local_tlv_callback;
   s->node_count++;
-  hncp_subscribe(&n->n, &n->debug_subscriber);
+  dncp_subscribe(&n->n, &n->debug_subscriber);
   L_DEBUG("[%s] %s net_sim_find_hncp added",
           DNCP_NODE_REPR(n->n.own_node), n->name);
   return &n->n;
 }
 
-hncp_link net_sim_hncp_find_link_by_name(hncp o, const char *name)
+dncp_link net_sim_dncp_find_link_by_name(dncp o, const char *name)
 {
   net_node n = container_of(o, net_node_s, n);
-  hncp_link l;
+  dncp_link l;
 
-  l = hncp_find_link_by_name(o, name, false);
+  l = dncp_find_link_by_name(o, name, false);
 
   if (l)
     return l;
 
-  l = hncp_find_link_by_name(o, name, true);
+  l = dncp_find_link_by_name(o, name, true);
 
-  sput_fail_unless(l, "hncp_find_link_by_name");
+  sput_fail_unless(l, "dncp_find_link_by_name");
   if (l)
     {
       /* Initialize the address - in rather ugly way. We just hash
        * ifname + xor that with our own hash. The result should be
        * highly unique still. */
-      hncp_hash_s h1, h2;
+      dncp_hash_s h1, h2;
       unsigned char buf[16];
       int i;
 
-      hncp_calculate_hash(name, strlen(name), &h1);
-      hncp_calculate_hash(n->name, strlen(n->name), &h2);
+      dncp_calculate_hash(name, strlen(name), &h1);
+      dncp_calculate_hash(n->name, strlen(n->name), &h2);
 
       int bytes = DNCP_HASH_LEN;
       if (bytes > 8)
@@ -354,7 +354,7 @@ hncp_link net_sim_hncp_find_link_by_name(hncp o, const char *name)
       buf[0] = 0xFE;
       buf[1] = 0x80;
       /* 2 .. 7 left 0 always */
-      hncp_link_set_ipv6_address(l, (struct in6_addr *)buf);
+      dncp_link_set_ipv6_address(l, (struct in6_addr *)buf);
 
       /* Override the iid to be unique. */
       if (n->s->use_global_iids)
@@ -365,9 +365,9 @@ hncp_link net_sim_hncp_find_link_by_name(hncp o, const char *name)
   return l;
 }
 
-void net_sim_set_connected(hncp_link l1, hncp_link l2, bool enabled)
+void net_sim_set_connected(dncp_link l1, dncp_link l2, bool enabled)
 {
-  hncp o = l1->hncp;
+  dncp o = l1->dncp;
   net_node node = container_of(o, net_node_s, n);
   net_sim s = node->s;
   net_neigh n;
@@ -408,13 +408,13 @@ void net_sim_set_connected(hncp_link l1, hncp_link l2, bool enabled)
 void net_sim_remove_node(net_sim s, net_node node)
 {
   struct list_head *p, *pn;
-  hncp o = &node->n;
+  dncp o = &node->n;
   net_neigh n, nn;
 
   /* Remove from neighbors */
   list_for_each_entry_safe(n, nn, &s->neighs, h)
     {
-      if (n->src->hncp == o || n->dst->hncp == o)
+      if (n->src->dncp == o || n->dst->dncp == o)
         {
           list_del(&n->h);
           free(n);
@@ -425,7 +425,7 @@ void net_sim_remove_node(net_sim s, net_node node)
   list_for_each_safe(p, pn, &s->messages)
     {
       net_msg m = container_of(p, net_msg_s, h);
-      if (m->l->hncp == o)
+      if (m->l->dncp == o)
         {
           uloop_timeout_cancel(&m->deliver_to);
           list_del(&m->h);
@@ -457,7 +457,7 @@ void net_sim_remove_node(net_sim s, net_node node)
 
 void net_sim_remove_node_by_name(net_sim s, const char *name)
 {
-  hncp o = net_sim_find_hncp(s, name);
+  dncp o = net_sim_find_hncp(s, name);
   net_node node = container_of(o, net_node_s, n);
   sput_fail_unless(o, "net_sim_find_hncp");
   net_sim_remove_node(s, node);
@@ -503,28 +503,28 @@ void net_sim_advance(net_sim s, hnetd_time_t t)
     sput_fail_unless(!(criteria), "!criteria at end");  \
   } while(0)
 
-/************************************************* Mocked interface - hncp_io */
+/************************************************* Mocked interface - dncp_io */
 
-bool hncp_io_init(hncp o)
+bool dncp_io_init(dncp o)
 {
   return true;
 }
 
-void hncp_io_uninit(hncp o)
+void dncp_io_uninit(dncp o)
 {
 }
 
-bool hncp_io_set_ifname_enabled(hncp o, const char *ifname, bool enabled)
+bool dncp_io_set_ifname_enabled(dncp o, const char *ifname, bool enabled)
 {
   return true;
 }
 
-int hncp_io_get_hwaddrs(unsigned char *buf, int buf_left)
+int dncp_io_get_hwaddrs(unsigned char *buf, int buf_left)
 {
   return 0;
 }
 
-bool hncp_io_get_ipv6(struct in6_addr *addr, char *prefer_ifname)
+bool dncp_io_get_ipv6(struct in6_addr *addr, char *prefer_ifname)
 {
   memset(addr, 0, sizeof(*addr));
   ((uint8_t *)addr)[0] = prefer_ifname ? 1 : 0;
@@ -534,11 +534,11 @@ bool hncp_io_get_ipv6(struct in6_addr *addr, char *prefer_ifname)
 static void _node_run_cb(struct uloop_timeout *t)
 {
   net_node node = container_of(t, net_node_s, run_to);
-  L_DEBUG("%s: hncp_run", node->name);
-  hncp_run(&node->n);
+  L_DEBUG("%s: dncp_run", node->name);
+  dncp_run(&node->n);
 }
 
-void hncp_io_schedule(hncp o, int msecs)
+void dncp_io_schedule(dncp o, int msecs)
 {
   net_node node = container_of(o, net_node_s, n);
   sput_fail_unless(msecs >= 0, "should be present or future");
@@ -546,7 +546,7 @@ void hncp_io_schedule(hncp o, int msecs)
   uloop_timeout_set(&node->run_to, msecs);
 }
 
-ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
+ssize_t dncp_io_recvfrom(dncp o, void *buf, size_t len,
                          char *ifname,
                          struct sockaddr_in6 *src,
                          struct in6_addr *dst)
@@ -564,7 +564,7 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
       list_del(&m->h);
       free(m->buf);
       free(m);
-      L_DEBUG("%s/%s: hncp_io_recvfrom %d bytes", node->name, ifname, s);
+      L_DEBUG("%s/%s: dncp_io_recvfrom %d bytes", node->name, ifname, s);
       return s;
     }
   return - 1;
@@ -577,7 +577,7 @@ sanity_check_buf(void *buf, size_t len)
   int a_len;
   int last_len;
   bool ok = true;
-  size_t dhs = sizeof(hncp_t_node_data_header_s);
+  size_t dhs = sizeof(dncp_t_node_data_header_s);
 
   tlv_for_each_in_buf(a, buf, len)
     {
@@ -609,15 +609,15 @@ sanity_check_buf(void *buf, size_t len)
 void _message_deliver_cb(struct uloop_timeout *t)
 {
   net_msg m = container_of(t, net_msg_s, deliver_to);
-  hncp o = m->l->hncp;
+  dncp o = m->l->dncp;
   net_node node = container_of(o, net_node_s, n);
 
   list_del(&m->h);
   list_add(&m->h, &node->messages);
-  hncp_poll(&node->n);
+  dncp_poll(&node->n);
 }
 
-void _sendto(net_sim s, void *buf, size_t len, hncp_link sl, hncp_link dl,
+void _sendto(net_sim s, void *buf, size_t len, dncp_link sl, dncp_link dl,
              const struct in6_addr *dst)
 {
   net_msg m = calloc(1, sizeof(*m));
@@ -639,9 +639,9 @@ void _sendto(net_sim s, void *buf, size_t len, hncp_link sl, hncp_link dl,
   uloop_timeout_set(&m->deliver_to, MESSAGE_PROPAGATION_DELAY);
 
 #if L_LEVEL >= 7
-  hncp o = dl->hncp;
-  net_node node1 = container_of(sl->hncp, net_node_s, n);
-  net_node node2 = container_of(dl->hncp, net_node_s, n);
+  dncp o = dl->dncp;
+  net_node node1 = container_of(sl->dncp, net_node_s, n);
+  net_node node2 = container_of(dl->dncp, net_node_s, n);
   bool is_multicast = memcmp(dst, &o->profile_data.multicast_address,
                              sizeof(*dst)) == 0;
   L_DEBUG("sendto: %s/%s -> %s/%s (%d bytes %s)",
@@ -650,20 +650,20 @@ void _sendto(net_sim s, void *buf, size_t len, hncp_link sl, hncp_link dl,
 #endif /* L_LEVEL >= 7 */
 }
 
-ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
+ssize_t dncp_io_sendto(dncp o, void *buf, size_t len,
                        const struct sockaddr_in6 *dst)
 {
   net_node node = container_of(o, net_node_s, n);
   net_sim s = node->s;
   sput_fail_unless(dst->sin6_scope_id, "scope id must be set");
-  hncp_link l = hncp_find_link_by_id(o, dst->sin6_scope_id);
+  dncp_link l = dncp_find_link_by_id(o, dst->sin6_scope_id);
   bool is_multicast = memcmp(&dst->sin6_addr, &o->profile_data.multicast_address, sizeof(o->profile_data.multicast_address)) == 0;
   net_neigh n;
 
   if (!l)
     return -1;
 
-  L_DEBUG("hncp_io_sendto: %s -> " SA6_F,
+  L_DEBUG("dncp_io_sendto: %s -> " SA6_F,
           is_multicast ? "multicast" : "unicast", SA6_D(dst));
   sanity_check_buf(buf, len);
   if (is_multicast)
@@ -697,7 +697,7 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
   return 1;
 }
 
-hnetd_time_t hncp_io_time(hncp o)
+hnetd_time_t dncp_io_time(dncp o)
 {
   return hnetd_time();
 }

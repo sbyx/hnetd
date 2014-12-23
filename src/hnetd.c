@@ -39,7 +39,7 @@ int log_level = LOG_INFO;
 
 typedef struct {
 	struct iface_user iu;
-	hncp hncp;
+	dncp hncp;
 	hncp_glue glue;
 } hncp_iface_user_s, *hncp_iface_user;
 
@@ -50,7 +50,7 @@ void hncp_iface_intaddr_callback(struct iface_user *u, const char *ifname,
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
 
-	hncp_if_set_ipv6_address(hiu->hncp, ifname, addr6 ? &addr6->prefix : NULL);
+	dncp_if_set_ipv6_address(hiu->hncp, ifname, addr6 ? &addr6->prefix : NULL);
 }
 
 
@@ -59,7 +59,7 @@ void hncp_iface_intiface_callback(struct iface_user *u,
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
 	struct iface *c = iface_get(ifname);
-	hncp_if_set_enabled(hiu->hncp, ifname, enabled &&
+	dncp_if_set_enabled(hiu->hncp, ifname, enabled &&
 			(c->flags & IFACE_FLAG_LEAF) != IFACE_FLAG_LEAF);
 }
 
@@ -87,7 +87,7 @@ void hncp_iface_ext4data_callback(struct iface_user *u,
 }
 
 
-void hncp_iface_glue(hncp_iface_user hiu, hncp h, hncp_glue g)
+void hncp_iface_glue(hncp_iface_user hiu, dncp h, hncp_glue g)
 {
 	/* Initialize hiu appropriately */
 	memset(hiu, 0, sizeof(*hiu));
@@ -122,7 +122,7 @@ int usage() {
 
 int main(__unused int argc, char *argv[])
 {
-	hncp h;
+	dncp h;
 	struct pa pa;
 	int c;
 	hncp_iface_user_s hiu;

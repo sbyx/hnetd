@@ -24,7 +24,7 @@
  * It assumes uloop is available to juggle the various file
  * descriptors.
  *
- * The API is more or less same as what hncp_io provides; however,
+ * The API is more or less same as what dncp_io provides; however,
  * underneath, a number of sockets are juggled.
  *
  * Basic usage:

@@ -54,7 +54,7 @@ struct pa {
 	struct pa_store store;                /* Stable storage interface */
 	struct pa_pd pd;                      /* Prefix delegation support */
 	struct iface_user ifu;
-	hncp hncp;                            /* hncp instance */
+	dncp hncp;                            /* hncp instance */
 };
 
 #define pa_data(pa) (&(pa)->data)

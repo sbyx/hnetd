@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Tue Dec 23 15:26:55 2014 mstenber
+ * Last modified: Tue Dec 23 18:56:03 2014 mstenber
  * Edit time:     105 min
  *
  */
@@ -19,8 +19,6 @@
 #include "dncp_profile.h"
 
 /******************************************************************* TLV T's */
-
-/* TBD renumber (+rename?) to match DNCP-00, HNCP-03 */
 
 enum {
   /* This should be included in every message to facilitate neighbor
@@ -45,21 +43,21 @@ enum {
 
 typedef struct __packed {
   unsigned char buf[DNCP_HASH_LEN];
-} hncp_hash_s, *hncp_hash;
+} dncp_hash_s, *dncp_hash;
 
 typedef struct __packed {
   unsigned char buf[DNCP_SHA256_LEN];
-} hncp_sha256_s, *hncp_sha256;
+} dncp_sha256_s, *dncp_sha256;
 
 typedef struct __packed {
   unsigned char buf[DNCP_NI_LEN];
-} hncp_node_identifier_s, *hncp_node_identifier;
+} dncp_node_identifier_s, *dncp_node_identifier;
 
 /* DNCP_T_LINK_ID */
 typedef struct __packed {
-  hncp_node_identifier_s node_identifier;
+  dncp_node_identifier_s node_identifier;
   uint32_t link_id;
-} hncp_t_link_id_s, *hncp_t_link_id;
+} dncp_t_link_id_s, *dncp_t_link_id;
 
 /* DNCP_T_REQ_NET_HASH has no content */
 
@@ -69,24 +67,24 @@ typedef struct __packed {
 
 /* DNCP_T_NODE_STATE */
 typedef struct __packed {
-  hncp_node_identifier_s node_identifier;
+  dncp_node_identifier_s node_identifier;
   uint32_t update_number;
   uint32_t ms_since_origination;
-  hncp_hash_s node_data_hash;
-} hncp_t_node_state_s, *hncp_t_node_state;
+  dncp_hash_s node_data_hash;
+} dncp_t_node_state_s, *dncp_t_node_state;
 
 /* DNCP_T_NODE_DATA */
 typedef struct __packed {
-  hncp_node_identifier_s node_identifier;
+  dncp_node_identifier_s node_identifier;
   uint32_t update_number;
-} hncp_t_node_data_header_s, *hncp_t_node_data_header;
+} dncp_t_node_data_header_s, *dncp_t_node_data_header;
 
 /* DNCP_T_NODE_DATA_NEIGHBOR */
 typedef struct __packed {
-  hncp_node_identifier_s neighbor_node_identifier;
+  dncp_node_identifier_s neighbor_node_identifier;
   uint32_t neighbor_link_id;
   uint32_t link_id;
-} hncp_t_node_data_neighbor_s, *hncp_t_node_data_neighbor;
+} dncp_t_node_data_neighbor_s, *dncp_t_node_data_neighbor;
 
 /* DNCP_T_CUSTOM custom data, with H-64 of URI at start to identify type TBD */
 
@@ -97,16 +95,16 @@ typedef enum {
   DNCP_VERDICT_CACHED_NEGATIVE = 2,
   DNCP_VERDICT_CONFIGURED_POSITIVE = 3,
   DNCP_VERDICT_CONFIGURED_NEGATIVE = 4
-} hncp_trust_verdict;
+} dncp_trust_verdict;
 
 #define DNCP_T_TRUST_VERDICT_CNAME_LEN 64
 
 typedef struct __packed {
   uint8_t verdict;
   uint8_t reserved[3];
-  hncp_sha256_s sha256_hash;
+  dncp_sha256_s sha256_hash;
   char cname[];
-} hncp_t_trust_verdict_s, *hncp_t_trust_verdict;
+} dncp_t_trust_verdict_s, *dncp_t_trust_verdict;
 
 
 /************** Various tunables, that we in practise hardcode (not options) */

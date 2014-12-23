@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Tue Dec 23 15:38:14 2014 mstenber
- * Edit time:     145 min
+ * Last modified: Tue Dec 23 18:54:18 2014 mstenber
+ * Edit time:     153 min
  *
  */
 
@@ -29,21 +29,21 @@
 
 /********************************************* Opaque object-like structures */
 
-/* A single hncp instance. */
-typedef struct hncp_struct hncp_s, *hncp;
+/* A single dncp instance. */
+typedef struct dncp_struct dncp_s, *dncp;
 
-/* A single node in the hncp network. It is effectively TLV list and
+/* A single node in the dncp network. It is effectively TLV list and
  * other associated metadata that should not be visible to users of
  * this public API. If referring to local node, the TLVs visible here
  * are the ones that have been actually published to other nodes
  * (after a delay). */
-typedef struct hncp_node_struct hncp_node_s, *hncp_node;
+typedef struct dncp_node_struct dncp_node_s, *dncp_node;
 
 /* A single, local published TLV.*/
-typedef struct hncp_tlv_struct hncp_tlv_s, *hncp_tlv;
+typedef struct dncp_tlv_struct dncp_tlv_s, *dncp_tlv;
 
 /*
- * Flow of HNCP state change notifications (outbound case):
+ * Flow of DNCP state change notifications (outbound case):
  *
  * - (if local TLV change), local_tlv_change_callback is called
  * .. at some point, when TLV changes are to be published to the network ..
@@ -51,11 +51,11 @@ typedef struct hncp_tlv_struct hncp_tlv_s, *hncp_tlv;
  * - tlv_change_callback is called
  */
 
-typedef struct hncp_subscriber_struct hncp_subscriber_s, *hncp_subscriber;
+typedef struct dncp_subscriber_struct dncp_subscriber_s, *dncp_subscriber;
 
-struct hncp_subscriber_struct {
+struct dncp_subscriber_struct {
   /**
-   * Place within list of subscribers (owned by hncp while subscription
+   * Place within list of subscribers (owned by dncp while subscription
    * is valid). Using the same subscriber object twice will result in
    * undefined (and most likely bad) behavior.
    */
@@ -70,7 +70,7 @@ struct hncp_subscriber_struct {
    * @param tlv The TLV that is being added or removed (there is no 'update').
    * @param add Flag which indicates whether the operation was add or remove.
    */
-  void (*local_tlv_change_callback)(hncp_subscriber s,
+  void (*local_tlv_change_callback)(dncp_subscriber s,
                                     struct tlv_attr *tlv, bool add);
 
   /**
@@ -80,31 +80,31 @@ struct hncp_subscriber_struct {
    * It is called _before_ TLV change notifications for _local_ TLVs
    * are provided.
    */
-  void (*republish_callback)(hncp_subscriber r);
+  void (*republish_callback)(dncp_subscriber r);
 
   /**
    * TLV change notification.
    *
-   * This is called whenever one TLV within one node in HNCP
+   * This is called whenever one TLV within one node in DNCP
    * changes. This INCLUDE also the local node itself.
    *
    * @param n The node for which change notification occurs.
    * @param tlv The TLV that is being added or removed (there is no 'update').
    * @param add Flag which indicates whether the operation was add or remove.
    */
-  void (*tlv_change_callback)(hncp_subscriber s,
-                              hncp_node n, struct tlv_attr *tlv, bool add);
+  void (*tlv_change_callback)(dncp_subscriber s,
+                              dncp_node n, struct tlv_attr *tlv, bool add);
 
   /**
    * Node change notification.
    *
    * This is called whenever a node is being added or removed within
-   * HNCP.
+   * DNCP.
    *
    * @param n The node which is being added or removed.
    * @param add Flag which indicates whether the operation was add or remove.
    */
-  void (*node_change_callback)(hncp_subscriber s, hncp_node n, bool add);
+  void (*node_change_callback)(dncp_subscriber s, dncp_node n, bool add);
 
   /**
    * Some link-specific information changed.
@@ -114,15 +114,15 @@ struct hncp_subscriber_struct {
    * this is just general reconfiguration signal. name or index is
    * trivial to add later on if needed, though).
    */
-  void (*link_change_callback)(hncp_subscriber s);
+  void (*link_change_callback)(dncp_subscriber s);
 };
 
 /********************************************* API for handling single links */
 
-/* (hncp_link itself is implementation detail) */
+/* (dncp_link itself is implementation detail) */
 
-typedef struct hncp_link_conf_struct hncp_link_conf_s, *hncp_link_conf;
-struct hncp_link_conf_struct {
+typedef struct dncp_link_conf_struct dncp_link_conf_s, *dncp_link_conf;
+struct dncp_link_conf_struct {
   struct list_head in_link_confs;
   char ifname[IFNAMSIZ]; /* Name of the link. */
   char dnsname[DNS_MAX_ESCAPED_LEN]; /* DNS FQDN or label */
@@ -137,127 +137,127 @@ struct hncp_link_conf_struct {
 };
 
 /**
- * Find or create new hncp_link_conf_s that matches the interface.
+ * Find or create new dncp_link_conf_s that matches the interface.
  */
-hncp_link_conf hncp_if_find_conf_by_name(hncp o, const char *ifname);
+dncp_link_conf dncp_if_find_conf_by_name(dncp o, const char *ifname);
 
 /**
- * Does the current HNCP instance have highest ID on the given interface?
+ * Does the current DNCP instance have highest ID on the given interface?
  */
-bool hncp_if_has_highest_id(hncp o, const char *ifname);
+bool dncp_if_has_highest_id(dncp o, const char *ifname);
 
 /**
- * Enable/disable HNCP protocol on an interface.
+ * Enable/disable DNCP protocol on an interface.
  */
-bool hncp_if_set_enabled(hncp o, const char *ifname, bool enabled);
+bool dncp_if_set_enabled(dncp o, const char *ifname, bool enabled);
 
-/************************************************ API for whole hncp instance */
+/************************************************ API for whole dncp instance */
 
 /**
  * Create DNCP instance.
  *
- * This call will create the hncp object, and register it to uloop. In
+ * This call will create the dncp object, and register it to uloop. In
  * case of error, NULL is returned.
  */
-hncp dncp_create(void);
+dncp dncp_create(void);
 
 /**
- * Destroy HNCP instance
+ * Destroy DNCP instance
  *
- * This call will destroy the previous created HNCP object.
+ * This call will destroy the previous created DNCP object.
  */
-void hncp_destroy(hncp o);
+void dncp_destroy(dncp o);
 
 /**
- * Get first HNCP node.
+ * Get first DNCP node.
  */
-hncp_node hncp_get_first_node(hncp o);
+dncp_node dncp_get_first_node(dncp o);
 
 /**
  * Publish a single TLV.
  *
  * @return The newly allocated TLV, which is valid until
- * hncp_remove_tlv is called for it. Otherwise NULL.
+ * dncp_remove_tlv is called for it. Otherwise NULL.
  */
-hncp_tlv hncp_add_tlv(hncp o,
+dncp_tlv dncp_add_tlv(dncp o,
                       uint16_t type, void *data, uint16_t len,
                       int extra_bytes);
 
-#define hncp_add_tlv_attr(o, a, bytes) \
-  hncp_add_tlv(o, tlv_id(a), tlv_data(a), tlv_len(a), bytes)
+#define dncp_add_tlv_attr(o, a, bytes) \
+  dncp_add_tlv(o, tlv_id(a), tlv_data(a), tlv_len(a), bytes)
 
 /**
  * Find TLV with exact match (if any).
  */
-hncp_tlv hncp_find_tlv(hncp o, uint16_t type, void *data, uint16_t len);
+dncp_tlv dncp_find_tlv(dncp o, uint16_t type, void *data, uint16_t len);
 
 /**
  * Stop publishing a TLV.
  */
-void hncp_remove_tlv(hncp o, hncp_tlv tlv);
+void dncp_remove_tlv(dncp o, dncp_tlv tlv);
 
-#define hncp_remove_tlv_matching(o, t, d, dlen) \
-  hncp_remove_tlv(o, hncp_find_tlv(o, t, d, dlen))
+#define dncp_remove_tlv_matching(o, t, d, dlen) \
+  dncp_remove_tlv(o, dncp_find_tlv(o, t, d, dlen))
 
 /**
  * Remove all TLVs of particular type.
  *
  * @return The number of TLVs removed.
  */
-int hncp_remove_tlvs_by_type(hncp o, int type);
+int dncp_remove_tlvs_by_type(dncp o, int type);
 
 /**
- * Subscribe to HNCP state change events.
+ * Subscribe to DNCP state change events.
  *
- * This call will register the caller as subscriber to HNCP state
+ * This call will register the caller as subscriber to DNCP state
  * changes. It will also trigger a series of add notifications for
  * existing state.
  */
-void hncp_subscribe(hncp o, hncp_subscriber s);
+void dncp_subscribe(dncp o, dncp_subscriber s);
 
 /**
- * Unsubscribe from HNCP state change events.
+ * Unsubscribe from DNCP state change events.
  *
- * Inverse of hncp_subscribe (including calls to pretend to remove all
+ * Inverse of dncp_subscribe (including calls to pretend to remove all
  * state).
  */
-void hncp_unsubscribe(hncp o, hncp_subscriber s);
+void dncp_unsubscribe(dncp o, dncp_subscriber s);
 
 /**
- * Run HNCP state machine once. It should re-queue itself when needed.
+ * Run DNCP state machine once. It should re-queue itself when needed.
  * (This should be mainly called from timeout callback, or from unit
  * tests).
  */
-void hncp_run(hncp o);
+void dncp_run(dncp o);
 
 /**
  * Poll the i/o system once. This should be called from event loop
  * whenever the udp socket has inputs.
  */
-void hncp_poll(hncp o);
+void dncp_poll(dncp o);
 
 /************************************************************** Per-node API */
 
 /**
- * Get next HNCP node (in order, from HNCP).
+ * Get next DNCP node (in order, from DNCP).
  */
-hncp_node hncp_node_get_next(hncp_node n);
+dncp_node dncp_node_get_next(dncp_node n);
 
 /**
- * Check if the HNCP node is ourselves (may require different handling).
+ * Check if the DNCP node is ourselves (may require different handling).
  */
-bool hncp_node_is_self(hncp_node n);
+bool dncp_node_is_self(dncp_node n);
 
 /**
- * Get the TLVs for particular HNCP node.
+ * Get the TLVs for particular DNCP node.
  */
-struct tlv_attr *hncp_node_get_tlvs(hncp_node n);
+struct tlv_attr *dncp_node_get_tlvs(dncp_node n);
 
-#define hncp_for_each_node(o, n)                                        \
-  for (n = hncp_get_first_node(o) ; n ; n = hncp_node_get_next(n))
+#define dncp_for_each_node(o, n)                                        \
+  for (n = dncp_get_first_node(o) ; n ; n = dncp_node_get_next(n))
 
-#define hncp_node_for_each_tlv(n, a)    \
-  tlv_for_each_attr(a, hncp_node_get_tlvs(n))
+#define dncp_node_for_each_tlv(n, a)    \
+  tlv_for_each_attr(a, dncp_node_get_tlvs(n))
 
 /******************************************************* Per-(local) tlv API */
 
@@ -268,4 +268,4 @@ struct tlv_attr *hncp_node_get_tlvs(hncp_node n);
  * consistent. If extra_bytes is zero, the first byte pointed by the
  * return value may already be invalid.
  */
-void *hncp_tlv_get_extra(hncp_tlv tlv);
+void *dncp_tlv_get_extra(dncp_tlv tlv);

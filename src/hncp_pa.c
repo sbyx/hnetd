@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Tue Dec 23 15:20:18 2014 mstenber
+ * Last modified: Tue Dec 23 18:50:34 2014 mstenber
  * Edit time:     494 min
  *
  */
@@ -75,13 +75,13 @@ struct hncp_glue_struct {
   struct vlist_tree dps;
 
   /* HNCP notification subscriber structure */
-  hncp_subscriber_s subscriber;
+  dncp_subscriber_s subscriber;
 
   /* Timeout for updating assigned prefixes links */
   struct uloop_timeout ap_if_update_timeout;
 
   /* What are we gluing together anyway? */
-  hncp hncp;
+  dncp dncp;
   struct pa_data *pa_data;
   struct pa_data_user data_user;
 
@@ -98,11 +98,11 @@ typedef struct {
 
 static void _schedule_refresh_ec(hncp_glue g)
 {
-  hncp o = g->hncp;
+  dncp o = g->dncp;
 
   L_DEBUG("_schedule_refresh_ec");
   o->republish_tlvs = true;
-  hncp_schedule(o);
+  dncp_schedule(o);
 }
 
 static void _refresh_ec(hncp_glue g, bool publish);
@@ -179,17 +179,17 @@ static hncp_external_link _find_or_create_external_link(hncp_glue g,
   return el;
 }
 
-static hncp_link _find_local_link(hncp_node onode, uint32_t olink_no)
+static dncp_link _find_local_link(dncp_node onode, uint32_t olink_no)
 {
-  hncp o = onode->hncp;
+  dncp o = onode->dncp;
   struct tlv_attr *a;
-  hncp_t_node_data_neighbor nh;
+  dncp_t_node_data_neighbor nh;
 
   /* We're lazy and just compare published information; we _could_
    * of course also look at per-link and per-neighbor structures,
    * but this is simpler.. */
-  hncp_node_for_each_tlv_with_type(o->own_node, a, DNCP_T_NODE_DATA_NEIGHBOR)
-    if ((nh = hncp_tlv_neighbor(a)))
+  dncp_node_for_each_tlv_with_type(o->own_node, a, DNCP_T_NODE_DATA_NEIGHBOR)
+    if ((nh = dncp_tlv_neighbor(a)))
       {
         if (nh->neighbor_link_id != olink_no)
           continue;
@@ -197,20 +197,20 @@ static hncp_link _find_local_link(hncp_node onode, uint32_t olink_no)
                    &nh->neighbor_node_identifier, DNCP_NI_LEN) != 0)
           continue;
         /* Yay, it is this one. */
-        return hncp_find_link_by_id(o, nh->link_id);
+        return dncp_find_link_by_id(o, nh->link_id);
       }
   return NULL;
 }
 
-static void _update_a_tlv(hncp_glue g, hncp_node n,
+static void _update_a_tlv(hncp_glue g, dncp_node n,
                           struct tlv_attr *tlv, bool add)
 {
   hncp_t_assigned_prefix_header ah;
   int plen;
   struct prefix p;
-  hncp_link l;
+  dncp_link l;
 
-  if (!(ah = hncp_tlv_ap(tlv)))
+  if (!(ah = dncp_tlv_ap(tlv)))
     return;
   memset(&p, 0, sizeof(p));
   p.plen = ah->prefix_length_bits;
@@ -279,7 +279,7 @@ static void _pa_dp_delayed_delete(struct uloop_timeout *to)
 	pa_dp_notify(edp->data, &edp->dp);
 }
 
-static void _update_d_tlv(hncp_glue g, hncp_node n,
+static void _update_d_tlv(hncp_glue g, dncp_node n,
                           struct tlv_attr *tlv, bool add)
 {
   hnetd_time_t preferred, valid;
@@ -289,7 +289,7 @@ static void _update_d_tlv(hncp_glue g, hncp_node n,
   int plen;
   struct prefix p;
 
-  if (!(dh = hncp_tlv_dp(tlv)))
+  if (!(dh = dncp_tlv_dp(tlv)))
     return;
   memset(&p, 0, sizeof(p));
   p.plen = dh->prefix_length_bits;
@@ -357,22 +357,22 @@ static void _update_d_tlv(hncp_glue g, hncp_node n,
 
 static void _update_a_local_links(hncp_glue g)
 {
-  hncp o = g->hncp;
-  hncp_node n;
+  dncp o = g->dncp;
+  dncp_node n;
   struct tlv_attr *a;
   hncp_t_assigned_prefix_header ah;
-  hncp_link l;
+  dncp_link l;
   struct prefix p;
 
   L_DEBUG("_update_a_local_links");
-  hncp_for_each_node(o, n)
+  dncp_for_each_node(o, n)
     {
       /* apparently own node's AP is called something else, so skip */
       if (n == o->own_node)
         continue;
-      hncp_node_for_each_tlv_with_type(n, a, HNCP_T_ASSIGNED_PREFIX)
+      dncp_node_for_each_tlv_with_type(n, a, HNCP_T_ASSIGNED_PREFIX)
         {
-          if (!(ah = hncp_tlv_ap(a)))
+          if (!(ah = dncp_tlv_ap(a)))
             continue;
           memset(&p, 0, sizeof(p));
           p.plen = ah->prefix_length_bits;
@@ -395,21 +395,21 @@ static void _update_a_local_links(hncp_glue g)
     }
 }
 
-static void _tlv_cb(hncp_subscriber s,
-                    hncp_node n, struct tlv_attr *tlv, bool add)
+static void _tlv_cb(dncp_subscriber s,
+                    dncp_node n, struct tlv_attr *tlv, bool add)
 {
   hncp_glue g = container_of(s, hncp_glue_s, subscriber);
 
   L_NOTICE("[pa]_tlv_cb %s %s %s",
            add ? "add" : "remove",
-           n == g->hncp->own_node ? "local" : HNCP_NODE_REPR(n),
+           n == g->dncp->own_node ? "local" : DNCP_NODE_REPR(n),
            TLV_REPR(tlv));
 
   /* Local TLV changes should be mostly handled by PA code already.
    * The exception is DNCP_T_NODE_DATA_NEIGHBOR which may cause local
    * or remote connectivity changes.
   */
-  if (hncp_node_is_self(n) && tlv_id(tlv) != DNCP_T_NODE_DATA_NEIGHBOR)
+  if (dncp_node_is_self(n) && tlv_id(tlv) != DNCP_T_NODE_DATA_NEIGHBOR)
     {
       return;
     }
@@ -442,7 +442,7 @@ static void _tlv_cb(hncp_subscriber s,
       break;
     case HNCP_T_ROUTER_ADDRESS:
       {
-        hncp_t_router_address ra = hncp_tlv_router_address(tlv);
+        hncp_t_router_address ra = dncp_tlv_router_address(tlv);
         if (ra)
         {
           _update_pa_eaa(g->pa_data, &ra->address,
@@ -485,8 +485,8 @@ do                                              \
 
 static void _refresh_ec(hncp_glue g, bool publish)
 {
-  hncp o = g->hncp;
-  hnetd_time_t now = hncp_time(o);
+  dncp o = g->dncp;
+  hnetd_time_t now = dncp_time(o);
   hncp_dp dp, dp2;
   int flen, plen;
   struct tlv_attr *st;
@@ -497,7 +497,7 @@ static void _refresh_ec(hncp_glue g, bool publish)
   hncp_external_link el;
 
   if (publish)
-    hncp_remove_tlvs_by_type(o, HNCP_T_EXTERNAL_CONNECTION);
+    dncp_remove_tlvs_by_type(o, HNCP_T_EXTERNAL_CONNECTION);
 
   /* This is very brute force. Oh well. (O(N^2) to # of delegated
      prefixes. Most likely it's small enough not to matter.)*/
@@ -563,10 +563,10 @@ static void _refresh_ec(hncp_glue g, bool publish)
                      tlv_data(st), tlv_len(st));
         }
       if (publish)
-	hncp_add_tlv_attr(o, tb.head, 0);
+	dncp_add_tlv_attr(o, tb.head, 0);
       tlv_buf_free(&tb);
     }
-  hncp_node n;
+  dncp_node n;
   struct tlv_attr *a, *a2;
 
   /* add the SD domain always to search path (if present) */
@@ -595,10 +595,10 @@ static void _refresh_ec(hncp_glue g, bool publish)
         }
     }
 
-  hncp_for_each_node(o, n)
+  dncp_for_each_node(o, n)
     {
       if (n != o->own_node)
-        hncp_node_for_each_tlv_with_type(n, a, HNCP_T_EXTERNAL_CONNECTION)
+        dncp_node_for_each_tlv_with_type(n, a, HNCP_T_EXTERNAL_CONNECTION)
           {
             tlv_for_each_attr(a2, a)
               if (tlv_id(a2) == HNCP_T_DHCPV6_OPTIONS)
@@ -612,7 +612,7 @@ static void _refresh_ec(hncp_glue g, bool publish)
                              tlv_data(a2), tlv_len(a2));
                 }
           }
-      hncp_node_for_each_tlv_with_type(n, a, HNCP_T_DNS_DELEGATED_ZONE)
+      dncp_node_for_each_tlv_with_type(n, a, HNCP_T_DNS_DELEGATED_ZONE)
         {
           hncp_t_dns_delegated_zone ddz = tlv_data(a);
           if (ddz->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_SEARCH)
@@ -652,7 +652,7 @@ static void _refresh_ec(hncp_glue g, bool publish)
     free(dhcp_options);
 }
 
-static void _republish_cb(hncp_subscriber s)
+static void _republish_cb(dncp_subscriber s)
 {
   _refresh_ec(container_of(s, hncp_glue_s, subscriber), true);
 }
@@ -735,7 +735,7 @@ static void hncp_pa_cps(struct pa_data_user *user, struct pa_cp *cp, uint32_t fl
 		char *ifname = NULL;
 		if(cp->type == PA_CPT_L) /* For now, only type cp_la has an interface */
 			ifname = _pa_cpl(cp)->iface->ifname;
-		hncp_tlv_ap_update(g->hncp, &cp->prefix, ifname,
+		dncp_tlv_ap_update(g->dncp, &cp->prefix, ifname,
 				cp->authoritative, cp->priority, !(flags & PADF_CP_TODELETE) && cp->advertised);
 	}
 }
@@ -760,17 +760,17 @@ static void hncp_pa_aas(struct pa_data_user *user, struct pa_aa *aa, uint32_t fl
 		struct pa_laa *laa = container_of(aa, struct pa_laa, aa);
 		if(!laa->cpl)
 			return;
-		hncp_link l = hncp_find_link_by_name(g->hncp, laa->cpl->iface->ifname, false);
+		dncp_link l = dncp_find_link_by_name(g->dncp, laa->cpl->iface->ifname, false);
 		if (!l)
 			return;
-		hncp_tlv_ra_update(g->hncp, l->iid, &aa->address, (flags & PADF_AA_CREATED));
+		dncp_tlv_ra_update(g->dncp, l->iid, &aa->address, (flags & PADF_AA_CREATED));
 	}
 }
 
-static void _node_change_cb(hncp_subscriber s, hncp_node n, bool add)
+static void _node_change_cb(dncp_subscriber s, dncp_node n, bool add)
 {
   hncp_glue g = container_of(s, hncp_glue_s, subscriber);
-  hncp o = g->hncp;
+  dncp o = g->dncp;
 
   /* We're only interested about own node change. That's same as
    * router ID changing, and notable thing then is that own_node is
@@ -791,7 +791,7 @@ static void _ap_if_update_timeout_cb(struct uloop_timeout *to)
   _update_a_local_links(g);
 }
 
-hncp_glue hncp_pa_glue_create(hncp o, struct pa_data *pa_data)
+hncp_glue hncp_pa_glue_create(dncp o, struct pa_data *pa_data)
 {
   struct pa_rid *rid = (struct pa_rid *)&o->own_node->node_identifier;
   hncp_glue g = calloc(1, sizeof(*g));
@@ -806,7 +806,7 @@ hncp_glue hncp_pa_glue_create(hncp o, struct pa_data *pa_data)
   g->subscriber.republish_callback = _republish_cb;
   g->pa_data = pa_data;
   g->subscriber.node_change_callback = _node_change_cb;
-  g->hncp = o;
+  g->dncp = o;
   memset(&g->data_user, 0, sizeof(g->data_user));
   g->data_user.cps = hncp_pa_cps;
   g->data_user.dps = hncp_pa_dps;
@@ -820,7 +820,7 @@ hncp_glue hncp_pa_glue_create(hncp o, struct pa_data *pa_data)
   /* And let the floodgates open. pa SHOULD NOT call anything yet, as
    * it isn't started. hncp, on the other hand, most likely will. */
   pa_data_subscribe(pa_data, &g->data_user);
-  hncp_subscribe(o, &g->subscriber);
+  dncp_subscribe(o, &g->subscriber);
 
   return g;
 }

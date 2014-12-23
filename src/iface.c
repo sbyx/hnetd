@@ -45,7 +45,7 @@ static bool iface_discover_border(struct iface *c);
 static struct list_head interfaces = LIST_HEAD_INIT(interfaces);
 static struct list_head users = LIST_HEAD_INIT(users);
 static struct pa *pa_p = NULL;
-static hncp hncp_p = NULL;
+static dncp hncp_p = NULL;
 static hncp_sd hncp_sd_p = NULL;
 static struct pa_data_user pa_data_cb = {
 	.cps = iface_pa_cps,
@@ -330,7 +330,7 @@ void iface_set_unreachable_route(const struct prefix *p, bool enable)
 
 #endif /* __linux__ */
 
-int iface_init(hncp hncp, hncp_sd sd, struct pa *pa, const char *pd_socket)
+int iface_init(dncp hncp, hncp_sd sd, struct pa *pa, const char *pd_socket)
 {
 #ifdef __linux__
 	rtnl_fd.fd = socket(AF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, NETLINK_ROUTE);
@@ -370,7 +370,7 @@ void iface_unregister_user(struct iface_user *user)
 
 char* iface_get_fqdn(const char *ifname, char *buf, size_t len)
 {
-	hncp_link link = hncp_find_link_by_name(hncp_p, ifname, false);
+	dncp_link link = dncp_find_link_by_name(hncp_p, ifname, false);
 	if (!link)
 		return NULL;
 

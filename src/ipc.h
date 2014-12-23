@@ -20,4 +20,4 @@ int ipc_ifupdown(int argc, char *argv[]);
 // IPC dump client
 int ipc_dump(void);
 
-void ipc_conf(hncp hncp);
+void ipc_conf(dncp hncp);

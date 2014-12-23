@@ -142,8 +142,8 @@ bool net_sim_is_busy(net_sim s)
 void test_hncp_sd(void)
 {
   net_sim_s s;
-  hncp n1, n2, n3;
-  hncp_link l1, l2, l21 __unused, l3;
+  dncp n1, n2, n3;
+  dncp_link l1, l2, l21 __unused, l3;
   net_node node1, node2, node3;
   struct prefix p;
   bool rv;
@@ -154,12 +154,12 @@ void test_hncp_sd(void)
   net_sim_init(&s);
   n1 = net_sim_find_hncp(&s, "n1");
   node1 = container_of(n1, net_node_s, n);
-  l1 = net_sim_hncp_find_link_by_name(n1, "eth0.0");
+  l1 = net_sim_dncp_find_link_by_name(n1, "eth0.0");
   strcpy(l1->conf->dnsname, "label");
   sput_fail_unless(prefix_pton("2001:dead:beef::/64", &p), "prefix_pton");
-  hncp_tlv_ap_update(n1, &p, "eth0.0", false, 0, true);
+  dncp_tlv_ap_update(n1, &p, "eth0.0", false, 0, true);
   sput_fail_unless(prefix_pton("2001:dead:beef::1/128", &p), "prefix_pton");
-  hncp_tlv_ra_update(n1, 0, &p.prefix, true);
+  dncp_tlv_ra_update(n1, 0, &p.prefix, true);
 
   /* Make sure .home shows up even with zero conf and no TLV traffic */
   SIM_WHILE(&s, 100, !net_sim_is_converged(&s));
@@ -170,18 +170,18 @@ void test_hncp_sd(void)
 
   n2 = net_sim_find_hncp(&s, "n2");
   node2 = container_of(n2, net_node_s, n);
-  l2 = net_sim_hncp_find_link_by_name(n2, "eth1");
-  l21 = net_sim_hncp_find_link_by_name(n2, "eth2");
+  l2 = net_sim_dncp_find_link_by_name(n2, "eth1");
+  l21 = net_sim_dncp_find_link_by_name(n2, "eth2");
   strcpy(l21->conf->dnsname, "fqdn.");
   net_sim_set_connected(l1, l2, true);
   net_sim_set_connected(l2, l1, true);
 
   sput_fail_unless(prefix_pton("1.2.3.4/24", &p), "prefix_pton");
   sput_fail_unless(prefix_is_ipv4(&p), "IPv4 prefix parsing failed");
-  hncp_tlv_ap_update(n1, &p, "eth0.0", false, 0, true);
-  hncp_tlv_ra_update(n1, 1, &p.prefix, true);
+  dncp_tlv_ap_update(n1, &p, "eth0.0", false, 0, true);
+  dncp_tlv_ra_update(n1, 1, &p.prefix, true);
   sput_fail_unless(prefix_pton("2001:feed:beef::/64", &p), "prefix_pton");
-  hncp_tlv_ap_update(n2, &p, "eth2", false, 0, true);
+  dncp_tlv_ap_update(n2, &p, "eth2", false, 0, true);
   SIM_WHILE(&s, 100, !net_sim_is_converged(&s)
             || fu_timeouts()>2);
   sput_fail_unless(strcmp(node1->sd->router_name, node2->sd->router_name),
@@ -279,7 +279,7 @@ void test_hncp_sd(void)
   };
   node3->sd = hncp_sd_create(&node3->n, &sd_params);
   s.disable_sd = false;
-  l3 = net_sim_hncp_find_link_by_name(n3, "eth0");
+  l3 = net_sim_dncp_find_link_by_name(n3, "eth0");
   net_sim_set_connected(l2, l3, true);
   net_sim_set_connected(l3, l2, true);
   SIM_WHILE(&s, 1000, net_sim_is_busy(&s) || !net_sim_is_converged(&s));

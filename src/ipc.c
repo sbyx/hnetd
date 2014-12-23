@@ -29,7 +29,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events);
 static struct uloop_fd ipcsock = { .cb = ipc_handle };
 static const char *ipcpath = "/var/run/hnetd.sock";
 static const char *ipcpath_client = "/var/run/hnetd-client%d.sock";
-static hncp ipchncp = NULL;
+static dncp ipchncp = NULL;
 
 enum ipc_option {
 	OPT_COMMAND,
@@ -101,7 +101,7 @@ int ipc_init(void)
 	return 0;
 }
 
-void ipc_conf(hncp hncp)
+void ipc_conf(dncp hncp)
 {
 	ipchncp = hncp;
 }
@@ -359,14 +359,14 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 				iface->ip4_plen = ip4_plen;
 			}
 
-			hncp_link_conf conf;
-			if(c && tb[OPT_KEEPALIVE_INTERVAL] && (conf = hncp_if_find_conf_by_name(ipchncp, c->ifname))) {
+			dncp_link_conf conf;
+			if(c && tb[OPT_KEEPALIVE_INTERVAL] && (conf = dncp_if_find_conf_by_name(ipchncp, c->ifname))) {
 				conf->keepalive_interval = (((hnetd_time_t) blobmsg_get_u32(tb[OPT_KEEPALIVE_INTERVAL])) * HNETD_TIME_PER_SECOND) / 1000;
 			}
 
-			if(c && tb[OPT_TRICKLE_K] && (conf = hncp_if_find_conf_by_name(ipchncp, c->ifname)))
+			if(c && tb[OPT_TRICKLE_K] && (conf = dncp_if_find_conf_by_name(ipchncp, c->ifname)))
 				conf->trickle_k = (int) blobmsg_get_u32(tb[OPT_TRICKLE_K]);
-			if(c && tb[OPT_DNSNAME] && (conf = hncp_if_find_conf_by_name(ipchncp, c->ifname)))
+			if(c && tb[OPT_DNSNAME] && (conf = dncp_if_find_conf_by_name(ipchncp, c->ifname)))
 				strncpy(conf->dnsname, blobmsg_get_string(tb[OPT_DNSNAME]), sizeof(conf->dnsname));
 
 		} else if (!c) {

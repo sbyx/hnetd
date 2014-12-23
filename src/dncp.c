@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Dec 23 18:10:57 2014 mstenber
- * Edit time:     824 min
+ * Last modified: Tue Dec 23 18:57:41 2014 mstenber
+ * Edit time:     827 min
  *
  */
 
@@ -16,7 +16,7 @@
 #include <net/ethernet.h>
 #include <arpa/inet.h>
 
-int hncp_node_cmp(hncp_node n1, hncp_node n2)
+int dncp_node_cmp(dncp_node n1, dncp_node n2)
 {
   return memcmp(&n1->node_identifier, &n2->node_identifier, DNCP_NI_LEN);
 }
@@ -24,32 +24,32 @@ int hncp_node_cmp(hncp_node n1, hncp_node n2)
 static int
 compare_nodes(const void *a, const void *b, void *ptr __unused)
 {
-  hncp_node n1 = (hncp_node) a, n2 = (hncp_node) b;
+  dncp_node n1 = (dncp_node) a, n2 = (dncp_node) b;
 
-  return hncp_node_cmp(n1, n2);
+  return dncp_node_cmp(n1, n2);
 }
 
-void hncp_schedule(hncp o)
+void dncp_schedule(dncp o)
 {
   if (o->io_init_done)
     {
       if (o->immediate_scheduled)
         return;
-      hncp_io_schedule(o, 0);
+      dncp_io_schedule(o, 0);
       o->immediate_scheduled = true;
     }
   else
     o->should_schedule = true;
 }
 
-void hncp_node_set(hncp_node n, uint32_t update_number,
+void dncp_node_set(dncp_node n, uint32_t update_number,
                    hnetd_time_t t, struct tlv_attr *a)
 {
   struct tlv_attr *a_valid = a;
   bool node_hash_changed = true;
   bool should_schedule = false;
 
-  L_DEBUG("hncp_node_set %s update #%d %p (@%lld (-%lld))",
+  L_DEBUG("dncp_node_set %s update #%d %p (@%lld (-%lld))",
           DNCP_NODE_REPR(n), (int) update_number, a,
           (long long)t, (long long)(hnetd_time()-t));
 
@@ -71,7 +71,7 @@ void hncp_node_set(hncp_node n, uint32_t update_number,
         {
           a_valid = dncp_profile_node_validate_data(n, a);
         }
-      n->hncp->graph_dirty = true;
+      n->dncp->graph_dirty = true;
       should_schedule = true;
     }
 
@@ -89,8 +89,8 @@ void hncp_node_set(hncp_node n, uint32_t update_number,
   /* Replace data (if it is a different pointer) */
   if (n->tlv_container != a)
     {
-      if (n->last_reachable_prune == n->hncp->last_prune)
-        hncp_notify_subscribers_tlvs_changed(n, n->tlv_container_valid,
+      if (n->last_reachable_prune == n->dncp->last_prune)
+        dncp_notify_subscribers_tlvs_changed(n, n->tlv_container_valid,
                                              a_valid);
       if (n->tlv_container)
         free(n->tlv_container);
@@ -100,16 +100,16 @@ void hncp_node_set(hncp_node n, uint32_t update_number,
     }
 
   /* If something that affects network hash has changed,
-   * set various flags + schedule hncp_run. */
+   * set various flags + schedule dncp_run. */
   if (node_hash_changed)
     {
       n->node_data_hash_dirty = true;
-      n->hncp->network_hash_dirty = true;
+      n->dncp->network_hash_dirty = true;
       should_schedule = true;
     }
 
   if (should_schedule)
-    hncp_schedule(n->hncp);
+    dncp_schedule(n->dncp);
 }
 
 
@@ -117,15 +117,15 @@ static void update_node(__unused struct vlist_tree *t,
                         struct vlist_node *node_new,
                         struct vlist_node *node_old)
 {
-  hncp o = container_of(t, hncp_s, nodes);
-  hncp_node n_old = container_of(node_old, hncp_node_s, in_nodes);
-  __unused hncp_node n_new = container_of(node_new, hncp_node_s, in_nodes);
+  dncp o = container_of(t, dncp_s, nodes);
+  dncp_node n_old = container_of(node_old, dncp_node_s, in_nodes);
+  __unused dncp_node n_new = container_of(node_new, dncp_node_s, in_nodes);
 
   if (n_old == n_new)
     return;
   if (n_old)
     {
-      hncp_node_set(n_old, 0, 0, NULL);
+      dncp_node_set(n_old, 0, 0, NULL);
       if (n_old->tlv_index)
         free(n_old->tlv_index);
       free(n_old);
@@ -139,14 +139,14 @@ static void update_node(__unused struct vlist_tree *t,
     }
   o->network_hash_dirty = true;
   o->graph_dirty = true;
-  hncp_schedule(o);
+  dncp_schedule(o);
 }
 
 
 static int
 compare_tlvs(const void *a, const void *b, void *ptr __unused)
 {
-  hncp_tlv t1 = (hncp_tlv) a, t2 = (hncp_tlv) b;
+  dncp_tlv t1 = (dncp_tlv) a, t2 = (dncp_tlv) b;
 
   return tlv_attr_cmp(&t1->tlv, &t2->tlv);
 }
@@ -155,26 +155,26 @@ static void update_tlv(struct vlist_tree *t,
                        struct vlist_node *node_new,
                        struct vlist_node *node_old)
 {
-  hncp o = container_of(t, hncp_s, tlvs);
-  hncp_tlv t_old = container_of(node_old, hncp_tlv_s, in_tlvs);
-  __unused hncp_tlv t_new = container_of(node_new, hncp_tlv_s, in_tlvs);
+  dncp o = container_of(t, dncp_s, tlvs);
+  dncp_tlv t_old = container_of(node_old, dncp_tlv_s, in_tlvs);
+  __unused dncp_tlv t_new = container_of(node_new, dncp_tlv_s, in_tlvs);
 
   if (t_old)
     {
-      hncp_notify_subscribers_local_tlv_changed(o, &t_old->tlv, false);
+      dncp_notify_subscribers_local_tlv_changed(o, &t_old->tlv, false);
       free(t_old);
     }
   if (t_new)
-    hncp_notify_subscribers_local_tlv_changed(o, &t_new->tlv, true);
+    dncp_notify_subscribers_local_tlv_changed(o, &t_new->tlv, true);
 
   o->tlvs_dirty = true;
-  hncp_schedule(o);
+  dncp_schedule(o);
 }
 
 static int
 compare_links(const void *a, const void *b, void *ptr __unused)
 {
-  hncp_link t1 = (hncp_link) a, t2 = (hncp_link) b;
+  dncp_link t1 = (dncp_link) a, t2 = (dncp_link) b;
 
   return strcmp(t1->ifname, t2->ifname);
 }
@@ -183,21 +183,21 @@ static void update_link(struct vlist_tree *t,
                         struct vlist_node *node_new,
                         struct vlist_node *node_old)
 {
-  hncp o = container_of(t, hncp_s, links);
-  hncp_link t_old = container_of(node_old, hncp_link_s, in_links);
-  hncp_link t_new = container_of(node_new, hncp_link_s, in_links);
+  dncp o = container_of(t, dncp_s, links);
+  dncp_link t_old = container_of(node_old, dncp_link_s, in_links);
+  dncp_link t_new = container_of(node_new, dncp_link_s, in_links);
 
   if (t_old)
     {
       if (!t_new && o->io_init_done)
-        hncp_io_set_ifname_enabled(o, t_old->ifname, false);
-      hncp_tlv t, t2;
-      hncp_for_each_local_tlv_safe(o, t, t2)
+        dncp_io_set_ifname_enabled(o, t_old->ifname, false);
+      dncp_tlv t, t2;
+      dncp_for_each_local_tlv_safe(o, t, t2)
         if (tlv_id(&t->tlv) == DNCP_T_NODE_DATA_NEIGHBOR)
           {
-            hncp_t_node_data_neighbor ne = tlv_data(&t->tlv);
+            dncp_t_node_data_neighbor ne = tlv_data(&t->tlv);
             if (ne->link_id == t_old->iid)
-              hncp_remove_tlv(o, t);
+              dncp_remove_tlv(o, t);
           }
       free(t_old);
     }
@@ -205,24 +205,24 @@ static void update_link(struct vlist_tree *t,
     {
       t_new->join_failed_time = 1;
     }
-  hncp_schedule(o);
+  dncp_schedule(o);
 }
 
-void hncp_calculate_hash(const void *buf, int len, hncp_hash dest)
+void dncp_calculate_hash(const void *buf, int len, dncp_hash dest)
 {
   md5_ctx_t ctx;
 
   md5_begin(&ctx);
   md5_hash(buf, len, &ctx);
-  hncp_md5_end(dest, &ctx);
+  dncp_md5_end(dest, &ctx);
 }
 
 
-hncp_node
-hncp_find_node_by_node_identifier(hncp o, hncp_node_identifier ni, bool create)
+dncp_node
+dncp_find_node_by_node_identifier(dncp o, dncp_node_identifier ni, bool create)
 {
-  hncp_node ch = container_of(ni, hncp_node_s, node_identifier);
-  hncp_node n = vlist_find(&o->nodes, ch, ch, in_nodes);
+  dncp_node ch = container_of(ni, dncp_node_s, node_identifier);
+  dncp_node n = vlist_find(&o->nodes, ch, ch, in_nodes);
 
   if (n)
     return n;
@@ -232,15 +232,15 @@ hncp_find_node_by_node_identifier(hncp o, hncp_node_identifier ni, bool create)
   if (!n)
     return false;
   n->node_identifier = *ni;
-  n->hncp = o;
+  n->dncp = o;
   n->tlv_index_dirty = true;
   vlist_add(&o->nodes, &n->in_nodes, n);
   return n;
 }
 
-bool dncp_init(hncp o, const void *node_identifier, int len)
+bool dncp_init(dncp o, const void *node_identifier, int len)
 {
-  hncp_hash_s h;
+  dncp_hash_s h;
 
   memset(o, 0, sizeof(*o));
   INIT_LIST_HEAD(&o->subscribers);
@@ -249,21 +249,21 @@ bool dncp_init(hncp o, const void *node_identifier, int len)
   vlist_init(&o->tlvs, compare_tlvs, update_tlv);
   vlist_init(&o->links, compare_links, update_link);
   INIT_LIST_HEAD(&o->link_confs);
-  hncp_calculate_hash(node_identifier, len, &h);
+  dncp_calculate_hash(node_identifier, len, &h);
   o->first_free_iid = 1;
   o->last_prune = 1;
   /* this way new nodes with last_prune=0 won't be reachable */
-  return hncp_set_own_node_identifier(o, (hncp_node_identifier)&h);
+  return dncp_set_own_node_identifier(o, (dncp_node_identifier)&h);
 }
 
-bool hncp_set_own_node_identifier(hncp o, hncp_node_identifier ni)
+bool dncp_set_own_node_identifier(dncp o, dncp_node_identifier ni)
 {
   if (o->own_node)
     {
       vlist_delete(&o->nodes, &o->own_node->in_nodes);
       o->own_node = NULL;
     }
-  hncp_node n = hncp_find_node_by_node_identifier(o, ni, true);
+  dncp_node n = dncp_find_node_by_node_identifier(o, ni, true);
   if (!n)
     {
       L_ERR("unable to create own node");
@@ -272,31 +272,31 @@ bool hncp_set_own_node_identifier(hncp o, hncp_node_identifier ni)
   o->own_node = n;
   o->tlvs_dirty = true; /* by default, they are, even if no neighbors yet. */
   n->last_reachable_prune = o->last_prune; /* we're always reachable */
-  hncp_schedule(o);
+  dncp_schedule(o);
   return true;
 }
 
-hncp dncp_create(void)
+dncp dncp_create(void)
 {
-  hncp o;
+  dncp o;
   unsigned char buf[ETHER_ADDR_LEN * 2], *c = buf;
 
   /* dncp_init does memset 0 -> we can just malloc here. */
   o = malloc(sizeof(*o));
   if (!o)
     return NULL;
-  c += hncp_io_get_hwaddrs(buf, sizeof(buf));
+  c += dncp_io_get_hwaddrs(buf, sizeof(buf));
   if (c == buf) {
     L_ERR("no hardware address available, fatal error");
     goto err;
   }
   if (!dncp_init(o, buf, c-buf))
     goto err;
-  if (!hncp_io_init(o))
+  if (!dncp_io_init(o))
     goto err2;
   o->io_init_done = true;
   if (o->should_schedule)
-    hncp_schedule(o);
+    dncp_schedule(o);
 
   return o;
  err2:
@@ -306,7 +306,7 @@ hncp dncp_create(void)
   return NULL;
 }
 
-void dncp_uninit(hncp o)
+void dncp_uninit(dncp o)
 {
   o->io_init_done = false; /* cannot schedule anything anymore after this. */
 
@@ -331,32 +331,32 @@ void dncp_uninit(hncp o)
     free(o->tlv_type_to_index);
 }
 
-void hncp_destroy(hncp o)
+void dncp_destroy(dncp o)
 {
   if (!o) return;
-  hncp_io_uninit(o);
+  dncp_io_uninit(o);
   dncp_uninit(o);
   free(o);
 }
 
-hncp_node hncp_get_first_node(hncp o)
+dncp_node dncp_get_first_node(dncp o)
 {
-  hncp_node n;
+  dncp_node n;
 
   if (avl_is_empty(&o->nodes.avl))
     return NULL;
   n = avl_first_element(&o->nodes.avl, n, in_nodes.avl);
   if (n->last_reachable_prune == o->last_prune)
     return n;
-  return hncp_node_get_next(n);
+  return dncp_node_get_next(n);
 }
 
-hncp_tlv
-hncp_add_tlv(hncp o, uint16_t type, void *data, uint16_t len, int extra_bytes)
+dncp_tlv
+dncp_add_tlv(dncp o, uint16_t type, void *data, uint16_t len, int extra_bytes)
 {
   int plen = TLV_SIZE +
     (len + TLV_ATTR_ALIGN - 1) & ~(TLV_ATTR_ALIGN - 1);
-  hncp_tlv t = calloc(1, sizeof(*t) + plen + extra_bytes);
+  dncp_tlv t = calloc(1, sizeof(*t) + plen + extra_bytes);
 
   if (!t)
     return NULL;
@@ -367,30 +367,30 @@ hncp_add_tlv(hncp o, uint16_t type, void *data, uint16_t len, int extra_bytes)
   return t;
 }
 
-void hncp_remove_tlv(hncp o, hncp_tlv tlv)
+void dncp_remove_tlv(dncp o, dncp_tlv tlv)
 {
   if (!tlv)
     return;
   vlist_delete(&o->tlvs, &tlv->in_tlvs);
 }
 
-int hncp_remove_tlvs_by_type(hncp o, int type)
+int dncp_remove_tlvs_by_type(dncp o, int type)
 {
-  hncp_tlv t, t2;
+  dncp_tlv t, t2;
   int c = 0;
 
   avl_for_each_element_safe(&o->tlvs.avl, t, in_tlvs.avl, t2)
     {
       if ((int)tlv_id(&t->tlv) == type)
         {
-          hncp_remove_tlv(o, t);
+          dncp_remove_tlv(o, t);
           c++;
         }
     }
   return c;
 }
 
-static void hncp_link_conf_set_default(hncp_link_conf conf, const char *ifname)
+static void dncp_link_conf_set_default(dncp_link_conf conf, const char *ifname)
 {
   conf->trickle_imin = DNCP_TRICKLE_IMIN;
   conf->trickle_imax = DNCP_TRICKLE_IMAX;
@@ -400,26 +400,26 @@ static void hncp_link_conf_set_default(hncp_link_conf conf, const char *ifname)
   strncpy(conf->ifname, ifname, sizeof(conf->ifname));
 }
 
-hncp_link_conf hncp_if_find_conf_by_name(hncp o, const char *ifname)
+dncp_link_conf dncp_if_find_conf_by_name(dncp o, const char *ifname)
 {
-  hncp_link_conf conf;
+  dncp_link_conf conf;
   list_for_each_entry(conf, &o->link_confs, in_link_confs) {
     if(!strcmp(ifname, conf->ifname))
       return conf;
   }
 
-  if(!(conf = malloc(sizeof(hncp_link_conf_s))))
+  if(!(conf = malloc(sizeof(dncp_link_conf_s))))
     return NULL;
 
-  hncp_link_conf_set_default(conf, ifname);
+  dncp_link_conf_set_default(conf, ifname);
   list_add(&conf->in_link_confs, &o->link_confs);
   return conf;
 }
 
-hncp_link hncp_find_link_by_name(hncp o, const char *ifname, bool create)
+dncp_link dncp_find_link_by_name(dncp o, const char *ifname, bool create)
 {
-  hncp_link cl = container_of(ifname, hncp_link_s, ifname[0]);
-  hncp_link l;
+  dncp_link cl = container_of(ifname, dncp_link_s, ifname[0]);
+  dncp_link l;
 
   if (!ifname || !*ifname)
     return NULL;
@@ -428,15 +428,15 @@ hncp_link hncp_find_link_by_name(hncp o, const char *ifname, bool create)
 
   if (create && !l)
     {
-      l = (hncp_link) calloc(1, sizeof(*l));
+      l = (dncp_link) calloc(1, sizeof(*l));
       if (!l)
         return NULL;
-      l->conf = hncp_if_find_conf_by_name(o, ifname);
+      l->conf = dncp_if_find_conf_by_name(o, ifname);
       if(!l->conf) {
         free(l);
         return NULL;
       }
-      l->hncp = o;
+      l->dncp = o;
       l->iid = o->first_free_iid++;
       strcpy(l->ifname, ifname);
       vlist_add(&o->links, &l->in_links, l);
@@ -444,9 +444,9 @@ hncp_link hncp_find_link_by_name(hncp o, const char *ifname, bool create)
   return l;
 }
 
-hncp_link hncp_find_link_by_id(hncp o, uint32_t link_id)
+dncp_link dncp_find_link_by_id(dncp o, uint32_t link_id)
 {
-  hncp_link l;
+  dncp_link l;
   /* XXX - this could be also made more efficient. Oh well. */
   vlist_for_each_element(&o->links, l, in_links)
     if (l->iid == link_id)
@@ -454,38 +454,38 @@ hncp_link hncp_find_link_by_id(hncp o, uint32_t link_id)
   return NULL;
 }
 
-bool hncp_if_set_enabled(hncp o, const char *ifname, bool enabled)
+bool dncp_if_set_enabled(dncp o, const char *ifname, bool enabled)
 {
-  hncp_link l = hncp_find_link_by_name(o, ifname, false);
+  dncp_link l = dncp_find_link_by_name(o, ifname, false);
 
-  L_DEBUG("hncp_if_set_enabled %s %s",
+  L_DEBUG("dncp_if_set_enabled %s %s",
           ifname, enabled ? "enabled" : "disabled");
   if (!enabled)
     {
       if (!l)
         return false;
-      hncp_notify_subscribers_link_changed(l);
+      dncp_notify_subscribers_link_changed(l);
       vlist_delete(&o->links, &l->in_links);
       return true;
     }
   if (l)
     return false;
-  l = hncp_find_link_by_name(o, ifname, true);
+  l = dncp_find_link_by_name(o, ifname, true);
   if (l)
-    hncp_notify_subscribers_link_changed(l);
+    dncp_notify_subscribers_link_changed(l);
   return l != NULL;
 }
 
 
-bool hncp_node_is_self(hncp_node n)
+bool dncp_node_is_self(dncp_node n)
 {
-  return n->hncp->own_node == n;
+  return n->dncp->own_node == n;
 }
 
-hncp_node hncp_node_get_next(hncp_node n)
+dncp_node dncp_node_get_next(dncp_node n)
 {
-  hncp o = n->hncp;
-  hncp_node last = avl_last_element(&o->nodes.avl, n, in_nodes.avl);
+  dncp o = n->dncp;
+  dncp_node last = avl_last_element(&o->nodes.avl, n, in_nodes.avl);
 
   if (!n || n == last)
     return NULL;
@@ -499,16 +499,16 @@ hncp_node hncp_node_get_next(hncp_node n)
     }
 }
 
-static struct tlv_attr *_produce_new_tlvs(hncp_node n)
+static struct tlv_attr *_produce_new_tlvs(dncp_node n)
 {
   struct tlv_buf tb;
-  hncp o = n->hncp;
-  hncp_tlv t;
+  dncp o = n->dncp;
+  dncp_tlv t;
 
   if (!o->tlvs_dirty)
     return NULL;
 
-  /* Dump the contents of hncp->tlvs to single tlv_buf. */
+  /* Dump the contents of dncp->tlvs to single tlv_buf. */
   /* Based on whether or not that would cause change in things, 'do stuff'. */
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
@@ -517,7 +517,7 @@ static struct tlv_attr *_produce_new_tlvs(hncp_node n)
       struct tlv_attr *a = tlv_put_raw(&tb, &t->tlv, tlv_pad_len(&t->tlv));
       if (!a)
         {
-          L_ERR("hncp_self_flush: tlv_put_raw failed?!?");
+          L_ERR("dncp_self_flush: tlv_put_raw failed?!?");
           tlv_buf_free(&tb);
           return NULL;
         }
@@ -536,19 +536,19 @@ static struct tlv_attr *_produce_new_tlvs(hncp_node n)
   return tb.head;
 }
 
-void hncp_self_flush(hncp_node n)
+void dncp_self_flush(dncp_node n)
 {
-  hncp o = n->hncp;
+  dncp o = n->dncp;
   struct tlv_attr *a, *a2;
 
   if (!(a = _produce_new_tlvs(n)) && !o->republish_tlvs)
     {
-      L_DEBUG("hncp_self_flush: state did not change -> nothing to flush");
+      L_DEBUG("dncp_self_flush: state did not change -> nothing to flush");
       return;
     }
 
-  L_DEBUG("hncp_self_flush: notify about to republish tlvs");
-  hncp_notify_subscribers_about_to_republish_tlvs(n);
+  L_DEBUG("dncp_self_flush: notify about to republish tlvs");
+  dncp_notify_subscribers_about_to_republish_tlvs(n);
 
   o->republish_tlvs = false;
   a2 = _produce_new_tlvs(n);
@@ -558,23 +558,23 @@ void hncp_self_flush(hncp_node n)
         free(a);
       a = a2;
     }
-  hncp_node_set(n, ++n->update_number, hncp_time(o),
+  dncp_node_set(n, ++n->update_number, dncp_time(o),
                 a ? a : n->tlv_container);
 }
 
-struct tlv_attr *hncp_node_get_tlvs(hncp_node n)
+struct tlv_attr *dncp_node_get_tlvs(dncp_node n)
 {
   return n->tlv_container_valid;
 }
 
 
-void hncp_calculate_node_data_hash(hncp_node n)
+void dncp_calculate_node_data_hash(dncp_node n)
 {
   md5_ctx_t ctx;
   int l;
-  unsigned char buf[TLV_SIZE + sizeof(hncp_t_node_data_header_s)];
+  unsigned char buf[TLV_SIZE + sizeof(dncp_t_node_data_header_s)];
   struct tlv_attr *h = (struct tlv_attr *)buf;
-  hncp_t_node_data_header ndh = tlv_data(h);
+  dncp_t_node_data_header ndh = tlv_data(h);
 
   if (!n->node_data_hash_dirty)
     return;
@@ -587,40 +587,40 @@ void hncp_calculate_node_data_hash(hncp_node n)
   md5_hash(buf, sizeof(buf), &ctx);
   if (l)
     md5_hash(tlv_data(n->tlv_container), l, &ctx);
-  hncp_md5_end(&n->node_data_hash, &ctx);
+  dncp_md5_end(&n->node_data_hash, &ctx);
   n->node_data_hash_dirty = false;
-  L_DEBUG("hncp_calculate_node_data_hash @%p %s=%llx%s",
-          n->hncp, DNCP_NODE_REPR(n),
-          hncp_hash64(&n->node_data_hash),
-          n == n->hncp->own_node ? " [self]" : "");
+  L_DEBUG("dncp_calculate_node_data_hash @%p %s=%llx%s",
+          n->dncp, DNCP_NODE_REPR(n),
+          dncp_hash64(&n->node_data_hash),
+          n == n->dncp->own_node ? " [self]" : "");
 }
 
-void hncp_calculate_network_hash(hncp o)
+void dncp_calculate_network_hash(dncp o)
 {
-  hncp_node n;
+  dncp_node n;
   md5_ctx_t ctx;
 
   if (!o->network_hash_dirty)
     return;
   md5_begin(&ctx);
-  hncp_for_each_node(o, n)
+  dncp_for_each_node(o, n)
     {
-      hncp_calculate_node_data_hash(n);
+      dncp_calculate_node_data_hash(n);
       md5_hash(&n->node_data_hash, DNCP_HASH_LEN, &ctx);
     }
-  hncp_md5_end(&o->network_hash, &ctx);
-  L_DEBUG("hncp_calculate_network_hash @%p =%llx",
-          o, hncp_hash64(&o->network_hash));
+  dncp_md5_end(&o->network_hash, &ctx);
+  L_DEBUG("dncp_calculate_network_hash @%p =%llx",
+          o, dncp_hash64(&o->network_hash));
   o->network_hash_dirty = false;
 }
 
 bool
-hncp_get_ipv6_address(hncp o, char *prefer_ifname, struct in6_addr *addr)
+dncp_get_ipv6_address(dncp o, char *prefer_ifname, struct in6_addr *addr)
 {
-  hncp_link l = NULL;
+  dncp_link l = NULL;
 
   if (prefer_ifname)
-    l = hncp_find_link_by_name(o, prefer_ifname, false);
+    l = dncp_find_link_by_name(o, prefer_ifname, false);
   if (!l || !l->has_ipv6_address)
     {
       /* Iterate through the links in order, stopping at one with IPv6
@@ -637,13 +637,13 @@ hncp_get_ipv6_address(hncp o, char *prefer_ifname, struct in6_addr *addr)
   return false;
 }
 
-bool hncp_add_tlv_index(hncp o, uint16_t type)
+bool dncp_add_tlv_index(dncp o, uint16_t type)
 {
   if (type < o->tlv_type_to_index_length)
     {
       if (o->tlv_type_to_index[type])
         {
-          L_DEBUG("hncp_add_tlv_index called for existing index (type %d)",
+          L_DEBUG("dncp_add_tlv_index called for existing index (type %d)",
                   (int)type);
           return true;
         }
@@ -660,15 +660,15 @@ bool hncp_add_tlv_index(hncp o, uint16_t type)
       memset((void *)ni + old_size, 0, new_size - old_size);
       o->tlv_type_to_index = ni;
       o->tlv_type_to_index_length = new_len;
-      L_DEBUG("hncp_add_tlv_index grew tlv_type_to_index to %d", new_len);
+      L_DEBUG("dncp_add_tlv_index grew tlv_type_to_index to %d", new_len);
     }
 
-  L_DEBUG("hncp_add_tlv_index: type #%d = index #%d", type, o->num_tlv_indexes);
+  L_DEBUG("dncp_add_tlv_index: type #%d = index #%d", type, o->num_tlv_indexes);
   o->tlv_type_to_index[type] = ++o->num_tlv_indexes;
 
   /* Free existing indexes */
-  hncp_node n;
-  hncp_for_each_node_including_unreachable(o, n)
+  dncp_node n;
+  dncp_for_each_node_including_unreachable(o, n)
     {
       if (n->tlv_index)
         {
@@ -683,7 +683,7 @@ bool hncp_add_tlv_index(hncp o, uint16_t type)
 
 
 void
-hncp_link_set_ipv6_address(hncp_link l, const struct in6_addr *addr)
+dncp_link_set_ipv6_address(dncp_link l, const struct in6_addr *addr)
 {
   bool has_addr = addr != NULL;
 
@@ -696,19 +696,19 @@ hncp_link_set_ipv6_address(hncp_link l, const struct in6_addr *addr)
   if (has_addr)
     {
       l->ipv6_address = *addr;
-      L_DEBUG("hncp_link_set_ipv6_address: address on %s: %s",
+      L_DEBUG("dncp_link_set_ipv6_address: address on %s: %s",
               l->ifname, ADDR_REPR(addr));
     }
   else
     {
-      L_DEBUG("hncp_link_set_ipv6_address: no %s any more", l->ifname);
+      L_DEBUG("dncp_link_set_ipv6_address: no %s any more", l->ifname);
     }
-  hncp_notify_subscribers_link_changed(l);
+  dncp_notify_subscribers_link_changed(l);
 }
 
-bool hncp_if_has_highest_id(hncp o, const char *ifname)
+bool dncp_if_has_highest_id(dncp o, const char *ifname)
 {
-  hncp_link l = hncp_find_link_by_name(o, ifname, false);
+  dncp_link l = dncp_find_link_by_name(o, ifname, false);
 
   /* Who knows if link is not enabled.. e.g. guest mode require us to
    * return true here, though. */
@@ -717,10 +717,10 @@ bool hncp_if_has_highest_id(hncp o, const char *ifname)
 
   uint32_t iid = l->iid;
   struct tlv_attr *a;
-  hncp_t_node_data_neighbor nh;
+  dncp_t_node_data_neighbor nh;
 
-  hncp_node_for_each_tlv_with_type(o->own_node, a, DNCP_T_NODE_DATA_NEIGHBOR)
-    if ((nh = hncp_tlv_neighbor(a)))
+  dncp_node_for_each_tlv_with_type(o->own_node, a, DNCP_T_NODE_DATA_NEIGHBOR)
+    if ((nh = dncp_tlv_neighbor(a)))
       {
         if (nh->link_id != iid)
           continue;
@@ -733,16 +733,16 @@ bool hncp_if_has_highest_id(hncp o, const char *ifname)
 
 
 void
-hncp_if_set_ipv6_address(hncp o, const char *ifname, const struct in6_addr *a)
+dncp_if_set_ipv6_address(dncp o, const char *ifname, const struct in6_addr *a)
 {
-  hncp_link l = hncp_find_link_by_name(o, ifname, false);
+  dncp_link l = dncp_find_link_by_name(o, ifname, false);
   if (l)
-    hncp_link_set_ipv6_address(l, a);
+    dncp_link_set_ipv6_address(l, a);
 }
 
-void hncp_node_recalculate_index(hncp_node n)
+void dncp_node_recalculate_index(dncp_node n)
 {
-  int size = n->hncp->num_tlv_indexes * 2 * sizeof(n->tlv_index[0]);
+  int size = n->dncp->num_tlv_indexes * 2 * sizeof(n->tlv_index[0]);
 
   assert(n->tlv_index_dirty);
   if (!n->tlv_index)
@@ -756,7 +756,7 @@ void hncp_node_recalculate_index(hncp_node n)
       memset(n->tlv_index, 0, size);
     }
 
-  hncp o = n->hncp;
+  dncp o = n->dncp;
   struct tlv_attr *a;
   int type = -1;
   int idx = 0;
@@ -764,7 +764,7 @@ void hncp_node_recalculate_index(hncp_node n)
   /* Note: This algorithm isn't particularly clever - while linear in
    * speed (O(# of indexes + # of entries in tlv_container), it has bit
    * too significant constant factor for comfort. */
-  hncp_node_for_each_tlv(n, a)
+  dncp_node_for_each_tlv(n, a)
     {
       if ((int)tlv_id(a) != type)
         {
@@ -775,7 +775,7 @@ void hncp_node_recalculate_index(hncp_node n)
           if (!(idx = o->tlv_type_to_index[type]))
             continue;
           n->tlv_index[2 * idx - 2] = a;
-          assert(idx <= n->hncp->num_tlv_indexes);
+          assert(idx <= n->dncp->num_tlv_indexes);
         }
       if (idx)
         n->tlv_index[2 * idx - 1] = tlv_next(a);
@@ -783,12 +783,12 @@ void hncp_node_recalculate_index(hncp_node n)
   n->tlv_index_dirty = false;
 }
 
-hncp_tlv hncp_find_tlv(hncp o, uint16_t type, void *data, uint16_t len)
+dncp_tlv dncp_find_tlv(dncp o, uint16_t type, void *data, uint16_t len)
 {
   /* This is actually slower than list iteration if publishing only
    * 'some' data. Oh well. I suppose the better performance for 'large
    * N' cases is more useful. */
-  hncp_tlv dt = alloca(sizeof(hncp_tlv_s) + len);
+  dncp_tlv dt = alloca(sizeof(dncp_tlv_s) + len);
   if (!dt)
     return NULL;
   tlv_init(&dt->tlv, type, len + TLV_SIZE);
@@ -797,7 +797,7 @@ hncp_tlv hncp_find_tlv(hncp o, uint16_t type, void *data, uint16_t len)
   return vlist_find(&o->tlvs, dt, dt, in_tlvs);
 }
 
-void *hncp_tlv_get_extra(hncp_tlv t)
+void *dncp_tlv_get_extra(dncp_tlv t)
 {
   unsigned int ofs = tlv_pad_len(&t->tlv);
   return ((unsigned char *)t + sizeof(*t) + ofs);

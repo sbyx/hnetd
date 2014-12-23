@@ -6,13 +6,12 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:33:03 2014 mstenber
- * Last modified: Tue Dec 23 18:13:03 2014 mstenber
- * Edit time:     7 min
+ * Last modified: Tue Dec 23 18:47:41 2014 mstenber
+ * Edit time:     8 min
  *
  */
 
-#ifndef HNCP_I_H
-#define HNCP_I_H
+#pragma once
 
 #include "dncp_i.h"
 #include "hncp.h"
@@ -28,7 +27,7 @@
 #include "prefix_utils.h"
 
 static inline hncp_t_assigned_prefix_header
-hncp_tlv_ap(const struct tlv_attr *a)
+dncp_tlv_ap(const struct tlv_attr *a)
 {
   hncp_t_assigned_prefix_header ah;
 
@@ -42,7 +41,7 @@ hncp_tlv_ap(const struct tlv_attr *a)
 }
 
 static inline hncp_t_delegated_prefix_header
-hncp_tlv_dp(const struct tlv_attr *a)
+dncp_tlv_dp(const struct tlv_attr *a)
 {
   hncp_t_delegated_prefix_header dh;
 
@@ -56,7 +55,7 @@ hncp_tlv_dp(const struct tlv_attr *a)
 }
 
 static inline hncp_t_router_address
-hncp_tlv_router_address(const struct tlv_attr *a)
+dncp_tlv_router_address(const struct tlv_attr *a)
 {
   if (tlv_id(a) != HNCP_T_ROUTER_ADDRESS
       || tlv_len(a) != sizeof(hncp_t_router_address_s))
@@ -64,19 +63,14 @@ hncp_tlv_router_address(const struct tlv_attr *a)
   return tlv_data(a);
 }
 
-void hncp_tlv_ap_update(hncp o,
+void dncp_tlv_ap_update(dncp o,
                         const struct prefix *prefix,
                         const char *ifname,
                         bool authoritative,
                         unsigned int preference,
                         bool add);
 
-void hncp_tlv_ra_update(hncp o,
+void dncp_tlv_ra_update(dncp o,
                         uint32_t lid,
                         const struct in6_addr *address,
                         bool add);
-
-bool hncp_init(hncp o, const void *node_identifier, int len);
-void hncp_uninit(hncp o);
-
-#endif /* HNCP_I_H */

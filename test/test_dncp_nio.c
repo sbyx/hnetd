@@ -11,7 +11,7 @@
  *
  */
 
-/* This test code assumes that we have wrapped hncp_io to produce fake
+/* This test code assumes that we have wrapped dncp_io to produce fake
  * input+output, as well as fake hnetd_time to produce fake time
  * signal. With those, we can prod the state machine(s) as much as we
  * want to without actually needing to have real sockets or wait for
@@ -49,30 +49,30 @@ int want_send;
 hnetd_time_t current_hnetd_time;
 
 /* Fake version of the I/O interface. */
-bool hncp_io_init(hncp o)
+bool dncp_io_init(dncp o)
 {
   o->udp_socket = 1;
   sput_fail_unless(o, "hncp");
   o->disable_prune = true;
   return smock_pull_bool("init_result");
 }
-void hncp_io_uninit(hncp o)
+void dncp_io_uninit(dncp o)
 {
   o->udp_socket = 0;
   sput_fail_unless(o, "hncp");
   smock_pull("uninit");
 }
 
-bool hncp_io_set_ifname_enabled(hncp o, const char *ifname, bool enabled)
+bool dncp_io_set_ifname_enabled(dncp o, const char *ifname, bool enabled)
 {
   sput_fail_unless(o, "hncp");
-  sput_fail_unless(o && o->udp_socket == 1, "hncp_io ready");
+  sput_fail_unless(o && o->udp_socket == 1, "dncp_io ready");
   smock_pull_string_is("set_enable_ifname", ifname);
   smock_pull_bool_is("set_enable_enabled", enabled);
   return smock_pull_bool("set_enable_result");
 }
 
-int hncp_io_get_hwaddrs(unsigned char *buf, int buf_left)
+int dncp_io_get_hwaddrs(unsigned char *buf, int buf_left)
 {
   unsigned char *r = smock_pull("get_hwaddrs_buf");
   int r_len = smock_pull_int("get_hwaddrs_len");
@@ -82,12 +82,12 @@ int hncp_io_get_hwaddrs(unsigned char *buf, int buf_left)
   return r_len;
 }
 
-void hncp_io_schedule(hncp o, int msecs)
+void dncp_io_schedule(dncp o, int msecs)
 {
   if (check_timing)
     {
       sput_fail_unless(o, "hncp");
-      sput_fail_unless(o && o->udp_socket == 1, "hncp_io ready");
+      sput_fail_unless(o && o->udp_socket == 1, "dncp_io ready");
       smock_pull_int_is("schedule", msecs);
     }
   else
@@ -96,7 +96,7 @@ void hncp_io_schedule(hncp o, int msecs)
     }
 }
 
-ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
+ssize_t dncp_io_recvfrom(dncp o, void *buf, size_t len,
                          char *ifname,
                          struct sockaddr_in6 *src,
                          struct in6_addr *dst)
@@ -108,7 +108,7 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
   smock_pull_string_is("recvfrom_ifname", ifname);
 
   sput_fail_unless(o, "hncp");
-  sput_fail_unless(o && o->udp_socket == 1, "hncp_io_schedule valid");
+  sput_fail_unless(o && o->udp_socket == 1, "dncp_io_schedule valid");
   sput_fail_unless(r_len <= ((int) len), "result length reasonable");
   *src = *r_src;
   *dst = *r_dst;
@@ -116,13 +116,13 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
   return r_len;
 }
 
-ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
+ssize_t dncp_io_sendto(dncp o, void *buf, size_t len,
                        const struct sockaddr_in6 *dst)
 {
   if (check_send)
     {
       sput_fail_unless(o, "hncp");
-      sput_fail_unless(o && o->udp_socket == 1, "hncp_io ready");
+      sput_fail_unless(o && o->udp_socket == 1, "dncp_io ready");
       struct sockaddr_in6 *e_dst = smock_pull("sendto_dst");
       sput_fail_unless(e_dst && memcmp(e_dst, dst, sizeof(*dst)) == 0, "dst match");
       /* Two optional verification steps.. */
@@ -145,7 +145,7 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
     }
 }
 
-hnetd_time_t hncp_io_time(hncp o __unused)
+hnetd_time_t dncp_io_time(dncp o __unused)
 {
   if (check_timing)
     return smock_pull_int("time");
@@ -162,14 +162,14 @@ static int random_mock(void)
 
 /************************************************************* Dummy profile */
 
-struct tlv_attr *dncp_profile_node_validate_data(hncp_node n __unused,
+struct tlv_attr *dncp_profile_node_validate_data(dncp_node n __unused,
                                                  struct tlv_attr *a)
 {
   return a;
 }
 
 /* Profile-specific method of sending keep-alive on a link. */
-void dncp_profile_link_send_network_state(hncp_link l)
+void dncp_profile_link_send_network_state(dncp_link l)
 {
   struct sockaddr_in6 dst =
     { .sin6_family = AF_INET6,
@@ -177,11 +177,11 @@ void dncp_profile_link_send_network_state(hncp_link l)
       .sin6_port = htons(FIXED_PORT),
       .sin6_scope_id = FIXED_IF_INDEX
     };
-  hncp_link_send_network_state(l, &dst, 0);
+  dncp_link_send_network_state(l, &dst, 0);
 }
 
 /* Profile hook to allow overriding collision handling. */
-bool dncp_profile_handle_collision(hncp o __unused)
+bool dncp_profile_handle_collision(dncp o __unused)
 {
   return false;
 }
@@ -189,8 +189,8 @@ bool dncp_profile_handle_collision(hncp o __unused)
 
 /********************************************************** Fake subscribers */
 
-static void dummy_tlv_cb(hncp_subscriber s,
-                         hncp_node n, struct tlv_attr *tlv, bool add)
+static void dummy_tlv_cb(dncp_subscriber s,
+                         dncp_node n, struct tlv_attr *tlv, bool add)
 {
   sput_fail_unless(s, "subscriber provided");
   sput_fail_unless(s->tlv_change_callback == dummy_tlv_cb, "tlv cb set");
@@ -202,7 +202,7 @@ static void dummy_tlv_cb(hncp_subscriber s,
   smock_pull_int_is("tlv_callback", exp_v);
 }
 
-static void dummy_local_tlv_cb(hncp_subscriber s,
+static void dummy_local_tlv_cb(dncp_subscriber s,
                                struct tlv_attr *tlv, bool add)
 {
   sput_fail_unless(s, "subscriber provided");
@@ -214,7 +214,7 @@ static void dummy_local_tlv_cb(hncp_subscriber s,
   smock_pull_int_is("local_tlv_callback", exp_v);
 }
 
-static void dummy_node_cb(hncp_subscriber s, hncp_node n, bool add)
+static void dummy_node_cb(dncp_subscriber s, dncp_node n, bool add)
 {
   L_NOTICE("node callback %s %s",
            DNCP_NODE_REPR(n), add ? "add" : "remove");
@@ -224,26 +224,26 @@ static void dummy_node_cb(hncp_subscriber s, hncp_node n, bool add)
   smock_pull_bool_is("node_callback", add);
 }
 
-static void dummy_republish_cb(hncp_subscriber s __unused)
+static void dummy_republish_cb(dncp_subscriber s __unused)
 {
   L_NOTICE("republish callback");
   smock_pull("republish_callback");
 }
 
-static hncp_subscriber_s dummy_subscriber_1 = {
+static dncp_subscriber_s dummy_subscriber_1 = {
   .tlv_change_callback = dummy_tlv_cb
 };
 
-static hncp_subscriber_s dummy_subscriber_2 = {
+static dncp_subscriber_s dummy_subscriber_2 = {
   .node_change_callback = dummy_node_cb
 };
 
-static hncp_subscriber_s dummy_subscriber_3 = {
+static dncp_subscriber_s dummy_subscriber_3 = {
   .republish_callback = dummy_republish_cb
 };
 
 
-static hncp_subscriber_s dummy_subscriber_4 = {
+static dncp_subscriber_s dummy_subscriber_4 = {
   .local_tlv_change_callback = dummy_local_tlv_cb
 };
 
@@ -258,7 +258,7 @@ static void hncp_init_no_hwaddr(void)
   smock_push("get_hwaddrs_buf", NULL);
   smock_push_int("get_hwaddrs_len", 0);
 
-  hncp o = dncp_create();
+  dncp o = dncp_create();
   sput_fail_unless(!o, "dncp_create -> !hncp");
   smock_is_empty();
 }
@@ -274,12 +274,12 @@ static void hncp_init_iofail(void)
   /* io init succeeds */
   smock_push_bool("init_result", false);
 
-  hncp o = dncp_create();
+  dncp o = dncp_create();
   sput_fail_unless(!o, "dncp_create -> !hncp");
   smock_is_empty();
 }
 
-static hncp create_hncp(void)
+static dncp create_hncp(void)
 {
   char buf[4] = "foo";
 
@@ -293,7 +293,7 @@ static hncp create_hncp(void)
   /* schedule happens _once_ */
   smock_push("schedule", NULL);
 
-  hncp o = dncp_create();
+  dncp o = dncp_create();
   sput_fail_unless(o, "dncp_create -> hncp");
   smock_is_empty();
 
@@ -301,28 +301,28 @@ static hncp create_hncp(void)
   smock_push_int("time", 0);
   /* second one occurs from originating us (no caching due to 0 return value) */
   smock_push_int("time", 0);
-  hncp_run(o);
+  dncp_run(o);
   smock_is_empty();
 
   /* Disable keep-alives; this is essentially Trickle-only test
    * set. */
-  hncp_link_conf conf = hncp_if_find_conf_by_name(o, dummy_ifname);
+  dncp_link_conf conf = dncp_if_find_conf_by_name(o, dummy_ifname);
   conf->keepalive_interval = 0;
 
   return o;
 }
 
-static void destroy_hncp(hncp o)
+static void destroy_hncp(dncp o)
 {
   smock_push("uninit", NULL);
-  hncp_destroy(o);
+  dncp_destroy(o);
   smock_is_empty();
 }
 
 
 static void hncp_ok_minimal(void)
 {
-  hncp o = create_hncp();
+  dncp o = create_hncp();
   destroy_hncp(o);
 }
 
@@ -335,27 +335,27 @@ static void one_join(bool ok)
 
 static void hncp_rejoin_works(void)
 {
-  hncp o = create_hncp();
+  dncp o = create_hncp();
   int t = 123000;
 
 
   /* we'll try to join dummy_ifname; however, it fails. */
   smock_is_empty();
   smock_push_int("schedule", 0);
-  hncp_if_set_enabled(o, dummy_ifname, true);
+  dncp_if_set_enabled(o, dummy_ifname, true);
   smock_is_empty();
 
   one_join(false);
   smock_push_int("schedule", DNCP_REJOIN_INTERVAL);
   smock_push_int("time", t);
-  hncp_run(o);
+  dncp_run(o);
   smock_is_empty();
 
   /* make sure next timeout before DNCP_REJOIN_INTERVAL just re-schedules. */
   t += DNCP_REJOIN_INTERVAL / 2;
   smock_push_int("time", t);
   smock_push_int("schedule", DNCP_REJOIN_INTERVAL / 2);
-  hncp_run(o);
+  dncp_run(o);
   smock_is_empty();
 
   /* now that the time _has_ expired, we should try joining.. fail again. */
@@ -363,7 +363,7 @@ static void hncp_rejoin_works(void)
   smock_push_int("time", t);
   smock_push_int("schedule", DNCP_REJOIN_INTERVAL);
   one_join(false);
-  hncp_run(o);
+  dncp_run(o);
   smock_is_empty();
 
   /* again try after DNCP_REJOIN_INTERVAL, it should work. trickle
@@ -373,7 +373,7 @@ static void hncp_rejoin_works(void)
   smock_push_int("random", 0);
   smock_push_int("schedule", DNCP_TRICKLE_IMIN / 2);
   one_join(true);
-  hncp_run(o);
+  dncp_run(o);
   smock_is_empty();
 
   /* no unregisters at end, as we first kill io, and then flush
@@ -384,7 +384,7 @@ static void hncp_rejoin_works(void)
 
 static void hncp_ok(void)
 {
-  hncp o = create_hncp();
+  dncp o = create_hncp();
   int t = 123000;
   int i;
 
@@ -393,14 +393,14 @@ static void hncp_ok(void)
   /* Pushing in a new subscriber should result in us being called. */
   smock_is_empty();
   smock_push_bool("node_callback", true);
-  hncp_subscribe(o, &dummy_subscriber_1);
-  hncp_subscribe(o, &dummy_subscriber_2);
-  hncp_subscribe(o, &dummy_subscriber_3);
-  hncp_subscribe(o, &dummy_subscriber_4);
+  dncp_subscribe(o, &dummy_subscriber_1);
+  dncp_subscribe(o, &dummy_subscriber_2);
+  dncp_subscribe(o, &dummy_subscriber_3);
+  dncp_subscribe(o, &dummy_subscriber_4);
 
   smock_is_empty();
   smock_push_int("schedule", 0);
-  hncp_if_set_enabled(o, dummy_ifname, true);
+  dncp_if_set_enabled(o, dummy_ifname, true);
   smock_is_empty();
 
   /* The join really happens within _run. */
@@ -410,13 +410,13 @@ static void hncp_ok(void)
   smock_push_int("time", t);
   smock_push_int("random", 0);
   smock_push_int("schedule", DNCP_TRICKLE_IMIN / 2);
-  hncp_run(o);
+  dncp_run(o);
   smock_is_empty();
 
   t += DNCP_TRICKLE_IMIN / 2 - 1;
   smock_push_int("time", t);
   smock_push_int("schedule", 1);
-  hncp_run(o);
+  dncp_run(o);
   smock_is_empty();
 
   t += 1;
@@ -434,7 +434,7 @@ static void hncp_ok(void)
 
   /* And schedule next one (=end of interval). */
   smock_push_int("schedule", DNCP_TRICKLE_IMIN / 2);
-  hncp_run(o);
+  dncp_run(o);
   smock_is_empty();
 
   /* overshoot what we were asked for.. shouldn't be a problem. */
@@ -443,7 +443,7 @@ static void hncp_ok(void)
   /* should be queueing next send, and now we go for 'max' value. */
   smock_push_int("random", 999);
   smock_push_int("schedule", 2 * DNCP_TRICKLE_IMIN * (1000 + 999) / 2000);
-  hncp_run(o);
+  dncp_run(o);
   smock_is_empty();
 
   /* run the clock until we hit DNCP_TRICKLE_IMAX/2 delay; or we run
@@ -456,7 +456,7 @@ static void hncp_ok(void)
     {
       current_hnetd_time = t;
       want_schedule = 0;
-      hncp_run(o);
+      dncp_run(o);
       if (want_schedule >= (DNCP_TRICKLE_IMAX / 2))
         {
           sput_fail_unless(want_schedule <= DNCP_TRICKLE_IMAX, "reasonable timeout");
@@ -473,7 +473,7 @@ static void hncp_ok(void)
     {
       current_hnetd_time = t;
       want_schedule = 0;
-      hncp_run(o);
+      dncp_run(o);
       sput_fail_unless(want_schedule <= DNCP_TRICKLE_IMAX, "reasonable timeout");
       t += want_schedule;
       current_hnetd_time += want_schedule;
@@ -492,13 +492,13 @@ static void hncp_ok(void)
 #define TLV_ID_D 124
   smock_push_int("schedule", 0);
   smock_push_int("local_tlv_callback", TLV_ID_A);
-  hncp_add_tlv(o, TLV_ID_A, NULL, 0, 0);
+  dncp_add_tlv(o, TLV_ID_A, NULL, 0, 0);
   smock_is_empty();
 
   L_NOTICE("add tlv b");
   /* should NOT cause extra schedule! */
   smock_push_int("local_tlv_callback", TLV_ID_B);
-  hncp_add_tlv(o, TLV_ID_B, NULL, 0, 0);
+  dncp_add_tlv(o, TLV_ID_B, NULL, 0, 0);
   smock_is_empty();
 
   L_NOTICE("running.");
@@ -511,7 +511,7 @@ static void hncp_ok(void)
   smock_push_int("tlv_callback", TLV_ID_A);
   smock_push_int("tlv_callback", TLV_ID_B);
   smock_push_bool("republish_callback", true);
-  hncp_run(o);
+  dncp_run(o);
   smock_is_empty();
 
   /* Adding / removing last entry have special handling. So let's
@@ -525,31 +525,31 @@ static void hncp_ok(void)
   /* So, let's add one more TLV. Make sure we get notification about it. */
   L_NOTICE("add tlv c");
   smock_push_int("local_tlv_callback", TLV_ID_C);
-  hncp_add_tlv(o, TLV_ID_C, NULL, 0, 0);
+  dncp_add_tlv(o, TLV_ID_C, NULL, 0, 0);
   smock_is_empty();
   smock_push_int("tlv_callback", TLV_ID_C);
   smock_push_bool("republish_callback", true);
-  hncp_run(o);
+  dncp_run(o);
   smock_is_empty();
 
   /* Remove it. */
   L_NOTICE("remove tlv c");
   smock_push_int("local_tlv_callback", -TLV_ID_C);
-  hncp_remove_tlv_matching(o, TLV_ID_C, NULL, 0);
+  dncp_remove_tlv_matching(o, TLV_ID_C, NULL, 0);
   smock_is_empty();
   smock_push_int("tlv_callback", -TLV_ID_C);
   smock_push_bool("republish_callback", true);
-  hncp_run(o);
+  dncp_run(o);
   smock_is_empty();
 
   /* Add TLV D in the middle. */
   L_NOTICE("add tlv d");
   smock_push_int("local_tlv_callback", TLV_ID_D);
-  hncp_add_tlv(o, TLV_ID_D, NULL, 0, 0);
+  dncp_add_tlv(o, TLV_ID_D, NULL, 0, 0);
   smock_is_empty();
   smock_push_int("tlv_callback", TLV_ID_D);
   smock_push_bool("republish_callback", true);
-  hncp_run(o);
+  dncp_run(o);
   smock_is_empty();
 
   /* Unsubscribing should result in callbacks too. */
@@ -561,10 +561,10 @@ static void hncp_ok(void)
   smock_push_int("tlv_callback", -TLV_ID_D);
   smock_push_int("tlv_callback", -TLV_ID_B);
   smock_push_bool("node_callback", false);
-  hncp_unsubscribe(o, &dummy_subscriber_1);
-  hncp_unsubscribe(o, &dummy_subscriber_2);
-  hncp_unsubscribe(o, &dummy_subscriber_3);
-  hncp_unsubscribe(o, &dummy_subscriber_4);
+  dncp_unsubscribe(o, &dummy_subscriber_1);
+  dncp_unsubscribe(o, &dummy_subscriber_2);
+  dncp_unsubscribe(o, &dummy_subscriber_3);
+  dncp_unsubscribe(o, &dummy_subscriber_4);
   smock_is_empty();
 
   /* Re-enable checks */
@@ -579,7 +579,7 @@ static void hncp_ok(void)
 static void hncp_49d_republish()
 {
 
-  hncp o = create_hncp();
+  dncp o = create_hncp();
 
   check_timing = false;
   check_random = false;
@@ -588,11 +588,11 @@ static void hncp_49d_republish()
   current_hnetd_time = 123000;
 
   int i;
-  hncp_link_conf lc = hncp_if_find_conf_by_name(o, dummy_ifname);
+  dncp_link_conf lc = dncp_if_find_conf_by_name(o, dummy_ifname);
   lc->trickle_imax = HNETD_TIME_PER_SECOND * 86400;
   lc->keepalive_interval = 0;
 
-  hncp_if_set_enabled(o, dummy_ifname, true);
+  dncp_if_set_enabled(o, dummy_ifname, true);
   smock_is_empty();
 
   /* The join really happens within _run. */
@@ -604,7 +604,7 @@ static void hncp_49d_republish()
   for (i = 0 ; i < 200 ; i++)
     {
       want_schedule = 0;
-      hncp_run(o);
+      dncp_run(o);
       current_hnetd_time += want_schedule;
     }
   sput_fail_unless(current_hnetd_time  >

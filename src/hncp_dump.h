@@ -6,8 +6,8 @@
  * HNCP database dump tool.
  *
  */
-#ifndef HNCP_DUMP_H_
-#define HNCP_DUMP_H_
+
+#pragma once
 
 //#include <libubox/blob.h>
 #include <libubox/blobmsg.h>
@@ -95,6 +95,4 @@
  * }
  *
  */
-int hncp_dump(struct blob_buf *b, hncp o);
-
-#endif /* HNCP_DUMP_H_ */
+int hncp_dump(struct blob_buf *b, dncp o);

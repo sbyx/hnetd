@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 09:56:00 2014 mstenber
- * Last modified: Wed Nov 19 12:45:18 2014 mstenber
- * Edit time:     31 min
+ * Last modified: Tue Dec 23 18:42:32 2014 mstenber
+ * Edit time:     32 min
  *
  */
 
@@ -16,7 +16,7 @@
  * packets back and forth. */
 
 #include "dncp_i.h"
-#define hncp_find_link_by_name(o,n,c) NULL
+#define dncp_find_link_by_name(o,n,c) NULL
 #include "hncp_io.c"
 #include "sput.h"
 #include "smock.h"
@@ -34,14 +34,14 @@ int log_level = LOG_DEBUG;
 
 
 
-void hncp_run(hncp o)
+void dncp_run(dncp o)
 {
-  smock_pull("hncp_run");
+  smock_pull("dncp_run");
 }
 
 int pending_poll = 0;
 
-void hncp_poll(hncp o)
+void dncp_poll(dncp o)
 {
   char buf[1024];
   size_t len = sizeof(buf);
@@ -50,14 +50,14 @@ void hncp_poll(hncp o)
   struct sockaddr_in6 srcsa;
   struct in6_addr dst;
 
-  r = hncp_io_recvfrom(o, buf, len, ifname, &srcsa, &dst);
-  smock_pull_int_is("hncp_poll_io_recvfrom", r);
+  r = dncp_io_recvfrom(o, buf, len, ifname, &srcsa, &dst);
+  smock_pull_int_is("dncp_poll_io_recvfrom", r);
   if (r >= 0)
     {
-      void *b = smock_pull("hncp_poll_io_recvfrom_buf");
-      char *ifn = smock_pull("hncp_poll_io_recvfrom_ifname");
-      struct sockaddr_in6 *sa = smock_pull("hncp_poll_io_recvfrom_src");
-      struct in6_addr *d = smock_pull("hncp_poll_io_recvfrom_dst");
+      void *b = smock_pull("dncp_poll_io_recvfrom_buf");
+      char *ifn = smock_pull("dncp_poll_io_recvfrom_ifname");
+      struct sockaddr_in6 *sa = smock_pull("dncp_poll_io_recvfrom_src");
+      struct in6_addr *d = smock_pull("dncp_poll_io_recvfrom_dst");
 
       sput_fail_unless(memcmp(b, buf, r)==0, "buf mismatch");
       sput_fail_unless(strcmp(ifn, ifname) == 0, "ifname mismatch");
@@ -68,9 +68,9 @@ void hncp_poll(hncp o)
     uloop_end();
 }
 
-static void hncp_io_basic_2()
+static void dncp_io_basic_2()
 {
-  hncp_s h1, h2;
+  dncp_s h1, h2;
   bool r;
   int rv;
   struct in6_addr a;
@@ -82,10 +82,10 @@ static void hncp_io_basic_2()
   memset(&h2, 0, sizeof(h2));
   h1.udp_port = 62000;
   h2.udp_port = 62001;
-  r = hncp_io_init(&h1);
-  sput_fail_unless(r, "hncp_io_init h1");
-  r = hncp_io_init(&h2);
-  sput_fail_unless(r, "hncp_io_init h2");
+  r = dncp_io_init(&h1);
+  sput_fail_unless(r, "dncp_io_init h1");
+  r = dncp_io_init(&h2);
+  sput_fail_unless(r, "dncp_io_init h2");
 
   /* Send a packet to ourselves */
   (void)inet_pton(AF_INET6, "::1", &a);
@@ -105,32 +105,32 @@ static void hncp_io_basic_2()
 #ifdef __APPLE__
   dst.sin6_len = sizeof(dst);
 #endif /* __APPLE__ */
-  smock_push_int("hncp_poll_io_recvfrom", 3);
-  smock_push_int("hncp_poll_io_recvfrom_src", &src);
-  smock_push_int("hncp_poll_io_recvfrom_dst", &a);
-  smock_push_int("hncp_poll_io_recvfrom_buf", msg);
-  smock_push_int("hncp_poll_io_recvfrom_ifname", ifname);
-  rv = hncp_io_sendto(&h1, msg, strlen(msg), &dst);
+  smock_push_int("dncp_poll_io_recvfrom", 3);
+  smock_push_int("dncp_poll_io_recvfrom_src", &src);
+  smock_push_int("dncp_poll_io_recvfrom_dst", &a);
+  smock_push_int("dncp_poll_io_recvfrom_buf", msg);
+  smock_push_int("dncp_poll_io_recvfrom_ifname", ifname);
+  rv = dncp_io_sendto(&h1, msg, strlen(msg), &dst);
   L_DEBUG("got %d", rv);
   sput_fail_unless(rv == 3, "sendto failed?");
   pending_poll++;
 
   uloop_run();
 
-  hncp_io_uninit(&h1);
-  hncp_io_uninit(&h2);
+  dncp_io_uninit(&h1);
+  dncp_io_uninit(&h2);
 }
 
 int main(int argc, char **argv)
 {
   setbuf(stdout, NULL); /* so that it's in sync with stderr when redirected */
-  openlog("test_hncp_io", LOG_CONS | LOG_PERROR, LOG_DAEMON);
+  openlog("test_dncp_io", LOG_CONS | LOG_PERROR, LOG_DAEMON);
   sput_start_testing();
-  sput_enter_suite("hncp_io"); /* optional */
+  sput_enter_suite("dncp_io"); /* optional */
   argc -= 1;
   argv += 1;
 
-  sput_maybe_run_test(hncp_io_basic_2, do {} while(0));
+  sput_maybe_run_test(dncp_io_basic_2, do {} while(0));
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();

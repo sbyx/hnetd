@@ -991,8 +991,8 @@ static void platform_update(void *data, size_t len)
 			c->ip4_plen = ip4_plen;
 		}
 
-		hncp_link_conf conf;
-		if(c && dtb[DATA_ATTR_PING_INTERVAL] && (conf = hncp_if_find_conf_by_name(p_hncp, c->ifname))) {
+		dncp_link_conf conf;
+		if(c && dtb[DATA_ATTR_PING_INTERVAL] && (conf = dncp_if_find_conf_by_name(p_hncp, c->ifname))) {
 			conf->ping_worried_t = (((hnetd_time_t) blobmsg_get_u32(dtb[DATA_ATTR_PING_INTERVAL])) * HNETD_TIME_PER_SECOND) / 1000;
 			conf->ping_retry_base_t = conf->ping_worried_t / 8;
 			if(conf->ping_retry_base_t < 100)
@@ -1000,10 +1000,10 @@ static void platform_update(void *data, size_t len)
 			conf->ping_retries = 3;
 		}
 
-		if(c && dtb[DATA_ATTR_TRICKLE_K] && (conf = hncp_if_find_conf_by_name(p_hncp, c->ifname)))
+		if(c && dtb[DATA_ATTR_TRICKLE_K] && (conf = dncp_if_find_conf_by_name(p_hncp, c->ifname)))
 			conf->trickle_k = (int) blobmsg_get_u32(dtb[DATA_ATTR_TRICKLE_K]);
 
-		if(c && dtb[DATA_ATTR_DNSNAME] && (conf = hncp_if_find_conf_by_name(p_hncp, c->ifname)))
+		if(c && dtb[DATA_ATTR_DNSNAME] && (conf = dncp_if_find_conf_by_name(p_hncp, c->ifname)))
 			strncpy(conf->dnsname, blobmsg_get_string(dtb[DATA_ATTR_DNSNAME]), sizeof(conf->dnsname));;
 
 	}

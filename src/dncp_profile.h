@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 12:50:58 2014 mstenber
- * Last modified: Tue Dec 23 15:31:51 2014 mstenber
- * Edit time:     19 min
+ * Last modified: Tue Dec 23 18:55:46 2014 mstenber
+ * Edit time:     21 min
  *
  */
 
@@ -17,11 +17,9 @@
 #include "dtls.h"
 #endif /* DTLS */
 
-#include "hncp.h"
-
 /* Profile API refers to links; however, try to avoid importing
  * definition of _i.h unless it is really needed. */
-typedef struct hncp_link_struct hncp_link_s, *hncp_link;
+typedef struct dncp_link_struct dncp_link_s, *dncp_link;
 
 /* These are the DNCP profile specific definitions. The values used
  * here are for HNCP (and obviously if doing some other protocol, feel
@@ -87,21 +85,52 @@ struct dncp_profile_data_struct
   dtls d;
 
   /* Trust consensus model of authz for DTLS is _not_ here; see
-   * hncp_trust.[ch]. */
+   * dncp_trust.[ch]. */
 #endif /* DTLS */
+};
+
+struct hncp_bfs_head {
+  /* List head for implementing BFS */
+  struct list_head head;
+
+  /* Next-hop in path (also used to mark visited nodes) */
+  const struct in6_addr *next_hop;
+  const struct in6_addr *next_hop4;
+  const char *ifname;
+  unsigned hopcount;
 };
 
 struct dncp_profile_node_data_struct
 {
   uint32_t version;
+
+  /* iterator to do bfs-traversal */
+  struct hncp_bfs_head bfs;
 };
 
 /* Profile-specific validation that the data is valid.*/
-struct tlv_attr *dncp_profile_node_validate_data(hncp_node n,
+struct tlv_attr *dncp_profile_node_validate_data(dncp_node n,
                                                  struct tlv_attr *a);
 
 /* Profile-specific method of sending keep-alive on a link. */
-void dncp_profile_link_send_network_state(hncp_link l);
+void dncp_profile_link_send_network_state(dncp_link l);
 
 /* Profile hook to allow overriding collision handling. */
-bool dncp_profile_handle_collision(hncp o);
+bool dncp_profile_handle_collision(dncp o);
+
+/************************************************** I/O abstraction for DNCP */
+/* (c.f. hncp_io) */
+
+bool dncp_io_init(dncp o);
+void dncp_io_uninit(dncp o);
+bool dncp_io_set_ifname_enabled(dncp o, const char *ifname, bool enabled);
+int dncp_io_get_hwaddrs(unsigned char *buf, int buf_left);
+void dncp_io_schedule(dncp o, int msecs);
+hnetd_time_t dncp_io_time(dncp o);
+
+ssize_t dncp_io_recvfrom(dncp o, void *buf, size_t len,
+                         char *ifname,
+                         struct sockaddr_in6 *src,
+                         struct in6_addr *dst);
+ssize_t dncp_io_sendto(dncp o, void *buf, size_t len,
+                       const struct sockaddr_in6 *dst);

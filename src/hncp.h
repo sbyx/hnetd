@@ -6,13 +6,12 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:30:01 2014 mstenber
- * Last modified: Tue Dec 23 18:09:09 2014 mstenber
+ * Last modified: Tue Dec 23 19:00:32 2014 mstenber
  * Edit time:     4 min
  *
  */
 
-#ifndef HNCP_H
-#define HNCP_H
+#pragma once
 
 #include "dncp.h"
 #include "dncp_profile.h"
@@ -35,7 +34,7 @@
 /**
  * Set IPv6 address for given interface.
  */
-void hncp_if_set_ipv6_address(hncp o,
+void dncp_if_set_ipv6_address(dncp o,
                               const char *ifname, const struct in6_addr *a);
 
 #ifdef DTLS
@@ -43,14 +42,15 @@ void hncp_if_set_ipv6_address(hncp o,
 /**
  * Set the dtls instance to be used for securing HNCP traffic.
  */
-void hncp_set_dtls(hncp o, dtls d);
+void hncp_set_dtls(dncp o, dtls d);
 #endif /* DTLS */
 
 /**
  * Create HNCP instance
  */
-hncp hncp_create(void);
+dncp hncp_create(void);
 
-bool hncp_init(hncp o, const void *node_identifier, int len);
 
-#endif /* HNCP_H */
+bool hncp_init(dncp o, const void *node_identifier, int len);
+void hncp_uninit(dncp o);
+

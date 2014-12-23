@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue Dec 23 15:18:53 2014 mstenber
+ * Last modified: Tue Dec 23 18:50:01 2014 mstenber
  * Edit time:     660 min
  *
  */
@@ -21,10 +21,10 @@
 
 /***************************************************** Low-level TLV pushing */
 
-static bool _push_node_state_tlv(struct tlv_buf *tb, hncp_node n)
+static bool _push_node_state_tlv(struct tlv_buf *tb, dncp_node n)
 {
-  hnetd_time_t now = hncp_time(n->hncp);
-  hncp_t_node_state s;
+  hnetd_time_t now = dncp_time(n->dncp);
+  dncp_t_node_state s;
   struct tlv_attr *a = tlv_new(tb, DNCP_T_NODE_STATE, sizeof(*s));
 
   if (!a)
@@ -37,10 +37,10 @@ static bool _push_node_state_tlv(struct tlv_buf *tb, hncp_node n)
   return true;
 }
 
-static bool _push_node_data_tlv(struct tlv_buf *tb, hncp_node n)
+static bool _push_node_data_tlv(struct tlv_buf *tb, dncp_node n)
 {
   int s = n->tlv_container ? tlv_len(n->tlv_container) : 0;
-  hncp_t_node_data_header h;
+  dncp_t_node_data_header h;
   struct tlv_attr *a = tlv_new(tb, DNCP_T_NODE_DATA, sizeof(*h) + s);
 
   if (!a)
@@ -52,7 +52,7 @@ static bool _push_node_data_tlv(struct tlv_buf *tb, hncp_node n)
   return true;
 }
 
-static bool _push_network_state_tlv(struct tlv_buf *tb, hncp o)
+static bool _push_network_state_tlv(struct tlv_buf *tb, dncp o)
 {
   struct tlv_attr *a = tlv_new(tb, DNCP_T_NETWORK_HASH, DNCP_HASH_LEN);
   unsigned char *c;
@@ -64,15 +64,15 @@ static bool _push_network_state_tlv(struct tlv_buf *tb, hncp o)
   return true;
 }
 
-static bool _push_link_id_tlv(struct tlv_buf *tb, hncp_link l)
+static bool _push_link_id_tlv(struct tlv_buf *tb, dncp_link l)
 {
-  struct tlv_attr *a = tlv_new(tb, DNCP_T_LINK_ID, sizeof(hncp_t_link_id_s));
-  hncp_t_link_id lid;
+  struct tlv_attr *a = tlv_new(tb, DNCP_T_LINK_ID, sizeof(dncp_t_link_id_s));
+  dncp_t_link_id lid;
 
   if (!a)
     return false;
   lid = tlv_data(a);
-  lid->node_identifier = l->hncp->own_node->node_identifier;
+  lid->node_identifier = l->dncp->own_node->node_identifier;
   lid->link_id = l->iid;
   return true;
 }
@@ -89,31 +89,31 @@ static bool _push_keepalive_interval_tlv(struct tlv_buf *tb, uint32_t value)
 
 /****************************************** Actual payload sending utilities */
 
-void hncp_link_send_network_state(hncp_link l,
+void dncp_link_send_network_state(dncp_link l,
                                   struct sockaddr_in6 *dst,
                                   size_t maximum_size)
 {
   struct tlv_buf tb;
-  hncp o = l->hncp;
+  dncp o = l->dncp;
   int nn = 0;
-  hncp_node n;
+  dncp_node n;
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
   if (!_push_link_id_tlv(&tb, l))
     goto done;
-  hncp_calculate_network_hash(o);
+  dncp_calculate_network_hash(o);
   if (!_push_network_state_tlv(&tb, o))
     goto done;
-  hncp_for_each_node(o, n)
+  dncp_for_each_node(o, n)
     if (!o->graph_dirty || n == o->own_node)
       nn++;
   if (!maximum_size
       || maximum_size >= (tlv_len(tb.head)
                           + 8 /* optional keep-alive interval */
-                          + nn * (4 + sizeof(hncp_t_node_state_s))))
+                          + nn * (4 + sizeof(dncp_t_node_state_s))))
     {
-      hncp_for_each_node(o, n)
+      dncp_for_each_node(o, n)
         {
           if (!o->graph_dirty || n == o->own_node)
             if (!_push_node_state_tlv(&tb, n))
@@ -125,16 +125,16 @@ void hncp_link_send_network_state(hncp_link l,
       goto done;
   if (maximum_size && tlv_len(tb.head) > maximum_size)
     goto done;
-  L_DEBUG("hncp_link_send_network_state -> " SA6_F "%%" DNCP_LINK_F,
+  L_DEBUG("dncp_link_send_network_state -> " SA6_F "%%" DNCP_LINK_F,
           SA6_D(dst), DNCP_LINK_D(l));
-  hncp_io_sendto(o, tlv_data(tb.head), tlv_len(tb.head), dst);
+  dncp_io_sendto(o, tlv_data(tb.head), tlv_len(tb.head), dst);
  done:
   tlv_buf_free(&tb);
 }
 
-void hncp_link_send_node_data(hncp_link l,
+void dncp_link_send_node_data(dncp_link l,
                               struct sockaddr_in6 *dst,
-                              hncp_node n)
+                              dncp_node n)
 {
   /* Send two things:
      - node state tlv
@@ -148,14 +148,14 @@ void hncp_link_send_node_data(hncp_link l,
       && _push_node_state_tlv(&tb, n)
       && _push_node_data_tlv(&tb, n))
     {
-      L_DEBUG("hncp_link_send_node_state %s -> " SA6_F " %%" DNCP_LINK_F,
+      L_DEBUG("dncp_link_send_node_state %s -> " SA6_F " %%" DNCP_LINK_F,
               DNCP_NODE_REPR(n), SA6_D(dst), DNCP_LINK_D(l));
-      hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head), dst);
+      dncp_io_sendto(l->dncp, tlv_data(tb.head), tlv_len(tb.head), dst);
     }
   tlv_buf_free(&tb);
 }
 
-void hncp_link_send_req_network_state(hncp_link l,
+void dncp_link_send_req_network_state(dncp_link l,
                                       struct sockaddr_in6 *dst)
 {
   struct tlv_buf tb;
@@ -165,16 +165,16 @@ void hncp_link_send_req_network_state(hncp_link l,
   if (_push_link_id_tlv(&tb, l)
       && tlv_new(&tb, DNCP_T_REQ_NET_HASH, 0))
     {
-      L_DEBUG("hncp_link_send_req_network_state -> " SA6_F "%%" DNCP_LINK_F,
+      L_DEBUG("dncp_link_send_req_network_state -> " SA6_F "%%" DNCP_LINK_F,
               SA6_D(dst), DNCP_LINK_D(l));
-      hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head), dst);
+      dncp_io_sendto(l->dncp, tlv_data(tb.head), tlv_len(tb.head), dst);
     }
   tlv_buf_free(&tb);
 }
 
-void hncp_link_send_req_node_data(hncp_link l,
+void dncp_link_send_req_node_data(dncp_link l,
                                   struct sockaddr_in6 *dst,
-                                  hncp_t_node_state ns)
+                                  dncp_t_node_state ns)
 {
   struct tlv_buf tb;
   struct tlv_attr *a;
@@ -184,39 +184,39 @@ void hncp_link_send_req_node_data(hncp_link l,
   if (_push_link_id_tlv(&tb, l)
       && (a = tlv_new(&tb, DNCP_T_REQ_NODE_DATA, DNCP_HASH_LEN)))
     {
-      L_DEBUG("hncp_link_send_req_node_state -> " SA6_F "%%" DNCP_LINK_F,
+      L_DEBUG("dncp_link_send_req_node_state -> " SA6_F "%%" DNCP_LINK_F,
               SA6_D(dst), DNCP_LINK_D(l));
       memcpy(tlv_data(a), &ns->node_identifier, DNCP_NI_LEN);
-      hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head), dst);
+      dncp_io_sendto(l->dncp, tlv_data(tb.head), tlv_len(tb.head), dst);
     }
   tlv_buf_free(&tb);
 }
 
 /************************************************************ Input handling */
 
-static hncp_neighbor
-_heard(hncp_link l, hncp_t_link_id lid, struct sockaddr_in6 *src,
+static dncp_neighbor
+_heard(dncp_link l, dncp_t_link_id lid, struct sockaddr_in6 *src,
        bool multicast)
 {
-  hncp_t_node_data_neighbor_s np = {
+  dncp_t_node_data_neighbor_s np = {
     .neighbor_node_identifier = lid->node_identifier,
     .neighbor_link_id = lid->link_id,
     .link_id = l->iid
   };
 
-  hncp_neighbor n = hncp_link_find_neighbor_for_tlv(l, &np);
+  dncp_neighbor n = dncp_link_find_neighbor_for_tlv(l, &np);
   if (!n)
     {
       /* Doing add based on multicast is relatively insecure. */
       if (multicast)
         return NULL;
-      hncp_tlv t =
-        hncp_add_tlv(l->hncp, DNCP_T_NODE_DATA_NEIGHBOR, &np, sizeof(np),
+      dncp_tlv t =
+        dncp_add_tlv(l->dncp, DNCP_T_NODE_DATA_NEIGHBOR, &np, sizeof(np),
                      sizeof(*n));
       if (!t)
         return NULL;
-      n = hncp_tlv_get_extra(t);
-      n->last_sync = hncp_time(l->hncp);
+      n = dncp_tlv_get_extra(t);
+      n->last_sync = dncp_time(l->dncp);
       n->keepalive_interval = DNCP_KEEPALIVE_INTERVAL;
       L_DEBUG(DNCP_NEIGH_F " added on " DNCP_LINK_F,
               DNCP_NEIGH_D(n), DNCP_LINK_D(l));
@@ -229,20 +229,20 @@ _heard(hncp_link l, hncp_t_link_id lid, struct sockaddr_in6 *src,
 
 /* Handle a single received message. */
 static void
-handle_message(hncp_link l,
+handle_message(dncp_link l,
                struct sockaddr_in6 *src,
                unsigned char *data, ssize_t len,
                bool multicast)
 {
-  hncp o = l->hncp;
+  dncp o = l->dncp;
   struct tlv_attr *a;
-  hncp_node n;
-  hncp_t_link_id lid = NULL;
+  dncp_node n;
+  dncp_t_link_id lid = NULL;
   unsigned char *nethash = NULL;
   int nodestates = 0;
-  hncp_neighbor ne = NULL;
-  hncp_t_node_state ns;
-  hncp_t_node_data_header nd;
+  dncp_neighbor ne = NULL;
+  dncp_t_node_state ns;
+  dncp_t_node_data_header nd;
   unsigned char *nd_data = NULL;
   int nd_len = 0;
   struct tlv_buf tb;
@@ -320,7 +320,7 @@ handle_message(hncp_link l,
               L_INFO("ignoring req-net-hash in multicast");
               return;
             }
-          hncp_link_send_network_state(l, src, 0);
+          dncp_link_send_network_state(l, src, 0);
           return;
         case DNCP_T_REQ_NODE_DATA:
           /* Ignore if in multicast. */
@@ -337,7 +337,7 @@ handle_message(hncp_link l,
                   int len = tlv_len(a);
                   if (!len || tlv_len(a) != DNCP_HASH_LEN)
                     continue;
-                  n = hncp_find_node_by_node_identifier(o, p, false);
+                  n = dncp_find_node_by_node_identifier(o, p, false);
                   if (!n)
                     continue;
                   if (n != o->own_node)
@@ -354,7 +354,7 @@ handle_message(hncp_link l,
                           continue;
                         }
                     }
-                  hncp_link_send_node_data(l, src, n);
+                  dncp_link_send_node_data(l, src, n);
                 }
             }
           return;
@@ -387,14 +387,14 @@ handle_message(hncp_link l,
           if (ne)
             {
               l->trickle_c++;
-              ne->last_sync = hncp_time(l->hncp);
+              ne->last_sync = dncp_time(l->dncp);
             }
           else if (memcmp(&lid->node_identifier, &o->own_node->node_identifier,
                           DNCP_NI_LEN) != 0)
             {
               /* Send an unicast request, to potentially set up the
                * peer structure. */
-              hncp_link_send_req_network_state(l, src);
+              dncp_link_send_req_network_state(l, src);
             }
           return;
         }
@@ -411,7 +411,7 @@ handle_message(hncp_link l,
       if (!nodestates)
         {
           if (multicast)
-            hncp_link_send_req_network_state(l, src);
+            dncp_link_send_req_network_state(l, src);
           else
             L_INFO("unicast short form network status received - ignoring");
           return;
@@ -422,13 +422,13 @@ handle_message(hncp_link l,
       tlv_for_each_in_buf(a, data, len)
         if (tlv_id(a) == DNCP_T_NODE_STATE)
           {
-            if (tlv_len(a) != sizeof(hncp_t_node_state_s))
+            if (tlv_len(a) != sizeof(dncp_t_node_state_s))
               {
                 L_INFO("invalid length node state TLV received - ignoring");
                 return;
               }
             ns = tlv_data(a);
-            n = hncp_find_node_by_node_identifier(o, &ns->node_identifier,
+            n = dncp_find_node_by_node_identifier(o, &ns->node_identifier,
                                                   false);
             new_update_number = be32_to_cpu(ns->update_number);
             bool interesting = !n
@@ -441,7 +441,7 @@ handle_message(hncp_link l,
               {
                 L_DEBUG("saw something new for %s/%p (update number %d)",
                         DNCP_NODE_REPR(ns), n, new_update_number);
-                hncp_link_send_req_node_data(l, src, ns);
+                dncp_link_send_req_node_data(l, src, ns);
               }
             else
               {
@@ -470,7 +470,7 @@ handle_message(hncp_link l,
             L_INFO("received multiple node state TLVs, ignoring");
             return;
           }
-        if (tlv_len(a) != sizeof(hncp_t_node_state_s))
+        if (tlv_len(a) != sizeof(dncp_t_node_state_s))
           {
             L_INFO("received invalid node state TLVs, ignoring");
             return;
@@ -483,14 +483,14 @@ handle_message(hncp_link l,
             L_INFO("received multiple node data TLVs, ignoring");
             return;
           }
-        nd_len = tlv_len(a) - sizeof(hncp_t_node_data_header_s);
+        nd_len = tlv_len(a) - sizeof(dncp_t_node_data_header_s);
         if (nd_len < 0)
           {
             L_INFO("received invalid node data TLV, ignoring");
             return;
           }
         nd = tlv_data(a);
-        nd_data = (unsigned char *)nd + sizeof(hncp_t_node_data_header_s);
+        nd_data = (unsigned char *)nd + sizeof(dncp_t_node_data_header_s);
         break;
       }
   if (!ns || !nd)
@@ -511,7 +511,7 @@ handle_message(hncp_link l,
       return;
     }
   /* Let's see if it's more recent. */
-  n = hncp_find_node_by_node_identifier(o, &ns->node_identifier, true);
+  n = dncp_find_node_by_node_identifier(o, &ns->node_identifier, true);
   if (!n)
     return;
   new_update_number = be32_to_cpu(ns->update_number);
@@ -525,7 +525,7 @@ handle_message(hncp_link l,
               new_update_number, n->update_number);
       return;
     }
-  if (hncp_node_is_self(n))
+  if (dncp_node_is_self(n))
     {
       L_DEBUG("received %d update number from network, own %d",
               new_update_number, n->update_number);
@@ -538,7 +538,7 @@ handle_message(hncp_link l,
         o->collided = true;
       n->update_number = new_update_number;
       o->republish_tlvs = true;
-      hncp_schedule(o);
+      dncp_schedule(o);
       return;
     }
   /* Ok. nd contains more recent TLV data than what we have
@@ -547,8 +547,8 @@ handle_message(hncp_link l,
   tlv_buf_init(&tb, 0); /* not passed anywhere */
   if (tlv_put_raw(&tb, nd_data, nd_len))
     {
-      hncp_node_set(n, new_update_number,
-                    hncp_time(o) - be32_to_cpu(ns->ms_since_origination),
+      dncp_node_set(n, new_update_number,
+                    dncp_time(o) - be32_to_cpu(ns->ms_since_origination),
                     tb.head);
     }
   else
@@ -559,19 +559,19 @@ handle_message(hncp_link l,
 }
 
 
-void hncp_poll(hncp o)
+void dncp_poll(dncp o)
 {
   unsigned char buf[DNCP_MAXIMUM_PAYLOAD_SIZE];
   ssize_t read;
   char srcif[IFNAMSIZ];
   struct sockaddr_in6 src;
   struct in6_addr dst;
-  hncp_link l;
+  dncp_link l;
 
-  while ((read = hncp_io_recvfrom(o, buf, sizeof(buf), srcif, &src, &dst)) > 0)
+  while ((read = dncp_io_recvfrom(o, buf, sizeof(buf), srcif, &src, &dst)) > 0)
     {
       /* First off. If it's off some link we aren't supposed to use, ignore. */
-      l = hncp_find_link_by_name(o, srcif, false);
+      l = dncp_find_link_by_name(o, srcif, false);
       if (!l)
         continue;
       /* If it's multicast, it's valid if and only if it's aimed at
