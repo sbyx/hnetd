@@ -12,7 +12,7 @@
 //#include <libubox/blob.h>
 #include <libubox/blobmsg.h>
 
-#include "hncp.h"
+#include "dncp.h"
 
 /* Returns a blob buffer containing hncp data or NULL in case of error.
  * Dump format is the following (Will be updated as new elements are added).

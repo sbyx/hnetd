@@ -15,7 +15,7 @@
  * interface seems to work correctly, _and_ that we can use it to send
  * packets back and forth. */
 
-#include "hncp_i.h"
+#include "dncp_i.h"
 #define hncp_find_link_by_name(o,n,c) NULL
 #include "hncp_io.c"
 #include "sput.h"

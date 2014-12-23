@@ -1,17 +1,17 @@
 /*
- * $Id: hncp.c $
+ * $Id: dncp.c $
  *
  * Author: Markus Stenberg <markus stenberg@iki.fi>
  *
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Dec 18 13:55:47 2014 mstenber
- * Edit time:     819 min
+ * Last modified: Tue Dec 23 15:38:23 2014 mstenber
+ * Edit time:     821 min
  *
  */
 
-#include "hncp_i.h"
+#include "dncp_i.h"
 #include <libubox/md5.h>
 #include <net/ethernet.h>
 #include <arpa/inet.h>
@@ -50,7 +50,7 @@ void hncp_node_set(hncp_node n, uint32_t update_number,
   bool should_schedule = false;
 
   L_DEBUG("hncp_node_set %s update #%d %p (@%lld (-%lld))",
-          HNCP_NODE_REPR(n), (int) update_number, a,
+          DNCP_NODE_REPR(n), (int) update_number, a,
           (long long)t, (long long)(hnetd_time()-t));
 
   /* If new data is set, consider if similar, and if not,
@@ -69,40 +69,7 @@ void hncp_node_set(hncp_node n, uint32_t update_number,
         }
       else
         {
-          uint8_t version = 0;
-#if L_LEVEL >= LOG_ERR
-          const char *agent = NULL;
-          int agent_len = 0;
-#endif /* L_LEVEL >= LOG_ERR */
-          struct tlv_attr *va;
-          hncp_node on = n->hncp->own_node;
-
-          tlv_for_each_attr(va, a)
-            {
-              if (tlv_id(va) == HNCP_T_VERSION &&
-                  tlv_len(va) >= sizeof(hncp_t_version_s))
-                {
-                  hncp_t_version v = tlv_data(va);
-                  version = v->version;
-#if L_LEVEL >= LOG_ERR
-                  agent = v->user_agent;
-                  agent_len = tlv_len(va) - sizeof(hncp_t_version_s);
-#endif /* L_LEVEL >= LOG_ERR */
-                  break;
-                }
-            }
-          if (on && on != n && on->version && version != on->version)
-            a_valid = NULL;
-          if (a && n->version != version)
-            {
-              if (!a_valid)
-                L_ERR("Incompatible node: %s version %u (%.*s) != %u",
-                      HNCP_NODE_REPR(n), version, agent_len, agent, on->version);
-              else if (!n->version)
-                L_INFO("%s runs %.*s",
-                       HNCP_NODE_REPR(n), agent_len, agent);
-              n->version = version;
-            }
+          a_valid = dncp_profile_node_validate_data(n, a);
         }
       n->hncp->graph_dirty = true;
       should_schedule = true;
@@ -226,7 +193,7 @@ static void update_link(struct vlist_tree *t,
         hncp_io_set_ifname_enabled(o, t_old->ifname, false);
       hncp_tlv t, t2;
       hncp_for_each_local_tlv_safe(o, t, t2)
-        if (tlv_id(&t->tlv) == HNCP_T_NODE_DATA_NEIGHBOR)
+        if (tlv_id(&t->tlv) == DNCP_T_NODE_DATA_NEIGHBOR)
           {
             hncp_t_node_data_neighbor ne = tlv_data(&t->tlv);
             if (ne->link_id == t_old->iid)
@@ -283,10 +250,6 @@ bool hncp_init(hncp o, const void *node_identifier, int len)
   vlist_init(&o->links, compare_links, update_link);
   INIT_LIST_HEAD(&o->link_confs);
   hncp_calculate_hash(node_identifier, len, &h);
-  if (inet_pton(AF_INET6, HNCP_MCAST_GROUP, &o->multicast_address) < 1) {
-    L_ERR("unable to inet_pton multicast group address");
-    return false;
-  }
   o->first_free_iid = 1;
   o->last_prune = 1;
   /* this way new nodes with last_prune=0 won't be reachable */
@@ -313,7 +276,7 @@ bool hncp_set_own_node_identifier(hncp o, hncp_node_identifier ni)
   return true;
 }
 
-hncp hncp_create(void)
+hncp dncp_create(void)
 {
   hncp o;
   unsigned char buf[ETHER_ADDR_LEN * 2], *c = buf;
@@ -334,19 +297,6 @@ hncp hncp_create(void)
   o->io_init_done = true;
   if (o->should_schedule)
     hncp_schedule(o);
-
-  struct __packed {
-    hncp_t_version_s h;
-    char agent[32];
-  } data;
-  memset(&data, 0, sizeof(data));
-  data.h.version = HNCP_VERSION;
-  int alen = snprintf(data.agent, sizeof(data.agent),
-                      "hnetd-%s", STR(HNETD_VERSION));
-  if (alen == sizeof(data.agent))
-    alen = sizeof(data.agent) - 1;
-  data.agent[alen] = 0;
-  hncp_add_tlv(o, HNCP_T_VERSION, &data, sizeof(data.h) + alen + 1, 0);
 
   return o;
  err2:
@@ -442,9 +392,9 @@ int hncp_remove_tlvs_by_type(hncp o, int type)
 
 static void hncp_link_conf_set_default(hncp_link_conf conf, const char *ifname)
 {
-  conf->trickle_imin = HNCP_TRICKLE_IMIN;
-  conf->trickle_imax = HNCP_TRICKLE_IMAX;
-  conf->trickle_k = HNCP_TRICKLE_K;
+  conf->trickle_imin = DNCP_TRICKLE_IMIN;
+  conf->trickle_imax = DNCP_TRICKLE_IMAX;
+  conf->trickle_k = DNCP_TRICKLE_K;
   conf->keepalive_interval = DNCP_KEEPALIVE_INTERVAL;
   strncpy(conf->dnsname, ifname, sizeof(conf->ifname));
   strncpy(conf->ifname, ifname, sizeof(conf->ifname));
@@ -630,7 +580,7 @@ void hncp_calculate_node_data_hash(hncp_node n)
     return;
 
   l = n->tlv_container ? tlv_len(n->tlv_container) : 0;
-  tlv_init(h, HNCP_T_NODE_DATA, sizeof(buf) + l);
+  tlv_init(h, DNCP_T_NODE_DATA, sizeof(buf) + l);
   ndh->node_identifier = n->node_identifier;
   ndh->update_number = cpu_to_be32(n->update_number);
   md5_begin(&ctx);
@@ -640,7 +590,7 @@ void hncp_calculate_node_data_hash(hncp_node n)
   hncp_md5_end(&n->node_data_hash, &ctx);
   n->node_data_hash_dirty = false;
   L_DEBUG("hncp_calculate_node_data_hash @%p %s=%llx%s",
-          n->hncp, HNCP_NODE_REPR(n),
+          n->hncp, DNCP_NODE_REPR(n),
           hncp_hash64(&n->node_data_hash),
           n == n->hncp->own_node ? " [self]" : "");
 }
@@ -656,7 +606,7 @@ void hncp_calculate_network_hash(hncp o)
   hncp_for_each_node(o, n)
     {
       hncp_calculate_node_data_hash(n);
-      md5_hash(&n->node_data_hash, HNCP_HASH_LEN, &ctx);
+      md5_hash(&n->node_data_hash, DNCP_HASH_LEN, &ctx);
     }
   hncp_md5_end(&o->network_hash, &ctx);
   L_DEBUG("hncp_calculate_network_hash @%p =%llx",
@@ -769,7 +719,7 @@ bool hncp_if_has_highest_id(hncp o, const char *ifname)
   struct tlv_attr *a;
   hncp_t_node_data_neighbor nh;
 
-  hncp_node_for_each_tlv_with_type(o->own_node, a, HNCP_T_NODE_DATA_NEIGHBOR)
+  hncp_node_for_each_tlv_with_type(o->own_node, a, DNCP_T_NODE_DATA_NEIGHBOR)
     if ((nh = hncp_tlv_neighbor(a)))
       {
         if (nh->link_id != iid)

@@ -8,8 +8,8 @@
 #define _IFACE_H
 
 #include "hnetd.h"
-#include "hncp.h"
-#include "hncp_i.h"
+#include "dncp.h"
+#include "dncp_i.h"
 #include "hncp_sd.h"
 #include "prefix_utils.h"
 

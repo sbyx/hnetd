@@ -17,7 +17,7 @@
 #include <libubox/uloop.h>
 #include <stdint.h>
 
-#include "hncp.h"
+#include "dncp.h"
 
 #include "pa_core.h"
 #include "pa_data.h"

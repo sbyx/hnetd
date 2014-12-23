@@ -1,26 +1,20 @@
 /*
- * $Id: hncp.h $
+ * $Id: dncp.h $
  *
  * Author: Markus Stenberg <markus stenberg@iki.fi>
  *
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Sun Dec 14 18:38:23 2014 mstenber
- * Edit time:     139 min
+ * Last modified: Tue Dec 23 15:38:14 2014 mstenber
+ * Edit time:     145 min
  *
  */
 
-#ifndef HNCP_H
-#define HNCP_H
+#pragma once
 
 #include "hnetd.h"
 #include "tlv.h"
-#include "hncp_proto.h"
-
-#ifdef DTLS
-#include "dtls.h"
-#endif /* DTLS */
 
 /* in6_addr */
 #include <netinet/in.h>
@@ -157,22 +151,15 @@ bool hncp_if_has_highest_id(hncp o, const char *ifname);
  */
 bool hncp_if_set_enabled(hncp o, const char *ifname, bool enabled);
 
-/**
- * Set IPv6 address for given interface.
- */
-void hncp_if_set_ipv6_address(hncp o,
-                              const char *ifname, const struct in6_addr *a);
-
-
 /************************************************ API for whole hncp instance */
 
 /**
- * Create HNCP instance.
+ * Create DNCP instance.
  *
  * This call will create the hncp object, and register it to uloop. In
  * case of error, NULL is returned.
  */
-hncp hncp_create(void);
+hncp dncp_create(void);
 
 /**
  * Destroy HNCP instance
@@ -249,13 +236,6 @@ void hncp_run(hncp o);
  */
 void hncp_poll(hncp o);
 
-#ifdef DTLS
-/**
- * Set the dtls instance to be used for securing HNCP traffic.
- */
-void hncp_set_dtls(hncp o, dtls d);
-#endif /* DTLS */
-
 /************************************************************** Per-node API */
 
 /**
@@ -289,5 +269,3 @@ struct tlv_attr *hncp_node_get_tlvs(hncp_node n);
  * return value may already be invalid.
  */
 void *hncp_tlv_get_extra(hncp_tlv tlv);
-
-#endif /* HNCP_H */

@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Nov 19 17:34:25 2014 mstenber
- * Last modified: Sun Dec 14 17:14:07 2014 mstenber
- * Edit time:     156 min
+ * Last modified: Tue Dec 23 15:29:35 2014 mstenber
+ * Edit time:     157 min
  *
  */
 
@@ -52,8 +52,8 @@
  * manipulate configured trust
  */
 
-#include "hncp_trust.h"
-#include "hncp_i.h"
+#include "dncp_trust.h"
+#include "dncp_i.h"
 
 #include <libubox/md5.h>
 #include <openssl/sha.h>
@@ -121,7 +121,7 @@ static void _trust_calculate_hash(hncp_trust t, hncp_hash h)
   md5_begin(&ctx);
   vlist_for_each_element(&t->tree, tn, in_tree)
     {
-      if (tn->stored.tlv.verdict == HNCP_VERDICT_NEUTRAL)
+      if (tn->stored.tlv.verdict == DNCP_VERDICT_NEUTRAL)
         continue;
       md5_hash(&tn->stored, sizeof(tn->stored), &ctx);
     }
@@ -201,7 +201,7 @@ static void _trust_save(hncp_trust t)
     }
   vlist_for_each_element(&t->tree, tn, in_tree)
     {
-      if (tn->stored.tlv.verdict == HNCP_VERDICT_NEUTRAL)
+      if (tn->stored.tlv.verdict == DNCP_VERDICT_NEUTRAL)
         continue;
       if (fwrite(&tn->stored, sizeof(tn->stored), 1, f) != sizeof(tn->stored))
         {
@@ -244,7 +244,7 @@ static int _trust_node_remote_verdict(hncp_trust t, hncp_trust_node n)
 
   hncp_for_each_node(o, node)
     if (node != o->own_node)
-      hncp_node_for_each_tlv_with_type(node, a, HNCP_T_TRUST_VERDICT)
+      hncp_node_for_each_tlv_with_type(node, a, DNCP_T_TRUST_VERDICT)
         if ((tv = hncp_tlv_trust_verdict(a)))
           {
             if (memcmp(&tv->sha256_hash, &n->stored.tlv.sha256_hash,
@@ -282,7 +282,7 @@ static hncp_trust_node _trust_node_find(hncp_trust t,
 static int _hash_verdict(hncp_trust t, hncp_sha256 h)
 {
   hncp_trust_node tn = _trust_node_find(t, h);
-  return tn ? _trust_node_verdict(t, tn) : HNCP_VERDICT_NONE;
+  return tn ? _trust_node_verdict(t, tn) : DNCP_VERDICT_NONE;
 }
 
 static void _trust_publish_maybe(hncp_trust t, hncp_trust_node n)
@@ -303,7 +303,7 @@ static void _trust_publish_maybe(hncp_trust t, hncp_trust_node n)
       || (remote_verdict == n->stored.tlv.verdict
           && (hncp_node_cmp(n->remote_node, t->hncp->own_node) > 0)))
     {
-      n->tlv = hncp_add_tlv(t->hncp, HNCP_T_TRUST_VERDICT, &n->stored, len, 0);
+      n->tlv = hncp_add_tlv(t->hncp, DNCP_T_TRUST_VERDICT, &n->stored, len, 0);
       n->tlv_time = hnetd_time();
     }
 }
@@ -335,14 +335,14 @@ static int _remote_to_local_verdict(int v)
 {
   switch (v)
     {
-    case HNCP_VERDICT_CACHED_POSITIVE: /* TBD - valid? */
-    case HNCP_VERDICT_CONFIGURED_POSITIVE:
-      return HNCP_VERDICT_CACHED_POSITIVE;
-    case HNCP_VERDICT_CACHED_NEGATIVE: /* TBD - valid? */
-    case HNCP_VERDICT_CONFIGURED_NEGATIVE:
-      return HNCP_VERDICT_CACHED_NEGATIVE;
+    case DNCP_VERDICT_CACHED_POSITIVE: /* TBD - valid? */
+    case DNCP_VERDICT_CONFIGURED_POSITIVE:
+      return DNCP_VERDICT_CACHED_POSITIVE;
+    case DNCP_VERDICT_CACHED_NEGATIVE: /* TBD - valid? */
+    case DNCP_VERDICT_CONFIGURED_NEGATIVE:
+      return DNCP_VERDICT_CACHED_NEGATIVE;
     default:
-      return HNCP_VERDICT_NONE;
+      return DNCP_VERDICT_NONE;
     }
 }
 
@@ -366,7 +366,7 @@ static void _tlv_cb(hncp_subscriber s,
   int local_verdict = _remote_to_local_verdict(tv->verdict);
   if (!tn)
     {
-      if (local_verdict == HNCP_VERDICT_NONE)
+      if (local_verdict == DNCP_VERDICT_NONE)
         return;
       hncp_trust_set(t,
                      &tv->sha256_hash,
@@ -434,13 +434,13 @@ static bool _dtls_unknown_callback(dtls d __unused,
 
   int verdict = _hash_verdict(t, &h);
   if (verdict >= 0)
-    return verdict == HNCP_VERDICT_CACHED_POSITIVE ||
-      verdict == HNCP_VERDICT_CONFIGURED_POSITIVE;
-  char cbuf[HNCP_T_TRUST_VERDICT_CNAME_LEN];
+    return verdict == DNCP_VERDICT_CACHED_POSITIVE ||
+      verdict == DNCP_VERDICT_CONFIGURED_POSITIVE;
+  char cbuf[DNCP_T_TRUST_VERDICT_CNAME_LEN];
   X509_NAME_oneline(X509_get_subject_name(cert),
                     cbuf,
                     sizeof(cbuf));
-  hncp_trust_set(t, &h, HNCP_VERDICT_NEUTRAL, cbuf);
+  hncp_trust_set(t, &h, DNCP_VERDICT_NEUTRAL, cbuf);
   return false;
 }
 
@@ -461,8 +461,10 @@ hncp_trust hncp_trust_create(hncp o, const char *filename)
   _trust_load(t);
   _trust_calculate_hash(t, &t->file_hash);
   hncp_subscribe(o, &t->subscriber);
-  if (o->d)
-    dtls_set_unknown_cert_callback(o->d, _dtls_unknown_callback, t);
+  /* TBD - refactor profile_data reference from common code? */
+  if (o->profile_data.d)
+    dtls_set_unknown_cert_callback(o->profile_data.d,
+                                   _dtls_unknown_callback, t);
   return t;
 }
 
@@ -470,8 +472,9 @@ void hncp_trust_destroy(hncp_trust t)
 {
   hncp o = t->hncp;
 
-  if (o->d)
-    dtls_set_unknown_cert_callback(o->d, NULL, NULL);
+  /* TBD - refactor profile_data reference from common code? */
+  if (o->profile_data.d)
+    dtls_set_unknown_cert_callback(o->profile_data.d, NULL, NULL);
   _trust_save(t);
   hncp_unsubscribe(o, &t->subscriber);
   vlist_flush_all(&t->tree);

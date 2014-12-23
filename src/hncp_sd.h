@@ -14,8 +14,8 @@
 #ifndef HNCP_SD_H
 #define HNCP_SD_H
 
-#include "hncp.h"
-#include "hncp_i.h"
+#include "dncp.h"
+#include "dncp_i.h"
 
 typedef struct hncp_sd_struct hncp_sd_s, *hncp_sd;
 

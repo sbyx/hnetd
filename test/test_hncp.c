@@ -1,17 +1,18 @@
 /*
- * $Id: test_hncp.c $
+ * $Id: test_dncp.c $
  *
  * Author: Markus Stenberg <mstenber@cisco.com>
  *
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Sun Dec 14 18:54:52 2014 mstenber
+ * Last modified: Tue Dec 23 15:41:43 2014 mstenber
  * Edit time:     86 min
  *
  */
 
 #include "hncp.h"
+#include "hncp_proto.h"
 #include "sput.h"
 #include "smock.h"
 
@@ -117,7 +118,7 @@ void hncp_ext(void)
   tlv_buf_free(&tb);
 }
 
-#include "hncp_i.h"
+#include "dncp_i.h"
 
 void hncp_int(void)
 {

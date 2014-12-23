@@ -24,6 +24,7 @@
 #include "hncp_pa.h"
 #include "hncp_sd.h"
 #include "hncp_routing.h"
+#include "hncp_proto.h"
 #include "ipc.h"
 #include "platform.h"
 #include "pa.h"

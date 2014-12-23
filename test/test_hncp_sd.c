@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Thu Dec  4 21:11:59 2014 mstenber
- * Edit time:     121 min
+ * Last modified: Tue Dec 23 15:57:14 2014 mstenber
+ * Edit time:     122 min
  *
  */
 
@@ -189,7 +189,7 @@ void test_hncp_sd(void)
   smock_is_empty();
 
   /* Play with dnsmasq utilities */
-  memset(&node1->sd->dnsmasq_state, 0, HNCP_HASH_LEN);
+  memset(&node1->sd->dnsmasq_state, 0, DNCP_HASH_LEN);
   rv = hncp_sd_write_dnsmasq_conf(node1->sd, "/tmp/n1.conf");
   sput_fail_unless(rv, "write 1 works");
   smock_is_empty();
@@ -200,7 +200,7 @@ void test_hncp_sd(void)
   sput_fail_unless(!rv, "write 1 'fails'");
   smock_is_empty();
 
-  memset(&node2->sd->dnsmasq_state, 0, HNCP_HASH_LEN);
+  memset(&node2->sd->dnsmasq_state, 0, DNCP_HASH_LEN);
   rv = hncp_sd_write_dnsmasq_conf(node2->sd, "/tmp/n2.conf");
   sput_fail_unless(rv, "write 2 works");
   smock_is_empty();
@@ -223,7 +223,7 @@ void test_hncp_sd(void)
   smock_push("execv_arg", "-p");
   smock_push("execv_arg", "54");
   smock_push("execv_arg", "eth0.0=label.r.home.");
-  memset(&node1->sd->ohp_state, 0, HNCP_HASH_LEN);
+  memset(&node1->sd->ohp_state, 0, DNCP_HASH_LEN);
   rv = hncp_sd_reconfigure_ohp(node1->sd);
   sput_fail_unless(rv, "reconfigure ohp works");
   smock_is_empty();
@@ -242,7 +242,7 @@ void test_hncp_sd(void)
   smock_push("execv_arg", "54");
   smock_push("execv_arg", "eth1=eth1.r1.home.");
   smock_push("execv_arg", "eth2=fqdn.");
-  memset(&node2->sd->ohp_state, 0, HNCP_HASH_LEN);
+  memset(&node2->sd->ohp_state, 0, DNCP_HASH_LEN);
   rv = hncp_sd_reconfigure_ohp(node2->sd);
   sput_fail_unless(rv, "reconfigure ohp works");
   smock_is_empty();
@@ -256,7 +256,7 @@ void test_hncp_sd(void)
   debug_exec = true;
   /* Play with PCP - due to dynamic addresses, unfortunately unable to
    * check arguments. */
-  memset(&node2->sd->pcp_state, 0, HNCP_HASH_LEN);
+  memset(&node2->sd->pcp_state, 0, DNCP_HASH_LEN);
   rv = hncp_sd_reconfigure_pcp(node2->sd);
   sput_fail_unless(rv, "reconfigure pcp works (1)");
 
@@ -284,7 +284,7 @@ void test_hncp_sd(void)
   net_sim_set_connected(l3, l2, true);
   SIM_WHILE(&s, 1000, net_sim_is_busy(&s) || !net_sim_is_converged(&s));
 
-  memset(&node1->sd->dnsmasq_state, 0, HNCP_HASH_LEN);
+  memset(&node1->sd->dnsmasq_state, 0, DNCP_HASH_LEN);
   rv = hncp_sd_write_dnsmasq_conf(node1->sd, "/tmp/n12.conf");
   sput_fail_unless(rv, "write 12 works");
   smock_is_empty();

@@ -1,22 +1,22 @@
 /*
- * $Id: hncp_proto.c $
+ * $Id: dncp_proto.c $
  *
  * Author: Markus Stenberg <mstenber@cisco.com>
  *
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Mon Dec 15 17:40:06 2014 mstenber
- * Edit time:     653 min
+ * Last modified: Tue Dec 23 15:18:53 2014 mstenber
+ * Edit time:     660 min
  *
  */
 
-#include "hncp_i.h"
+#include "dncp_i.h"
 
 /*
  * This module contains the logic to handle receiving and sending of
  * traffic from single- or multicast sources. The actual low-level IO
- * is performed in hncp_io.
+ * is performed in <profile>_io.
  */
 
 /***************************************************** Low-level TLV pushing */
@@ -25,7 +25,7 @@ static bool _push_node_state_tlv(struct tlv_buf *tb, hncp_node n)
 {
   hnetd_time_t now = hncp_time(n->hncp);
   hncp_t_node_state s;
-  struct tlv_attr *a = tlv_new(tb, HNCP_T_NODE_STATE, sizeof(*s));
+  struct tlv_attr *a = tlv_new(tb, DNCP_T_NODE_STATE, sizeof(*s));
 
   if (!a)
     return false;
@@ -41,7 +41,7 @@ static bool _push_node_data_tlv(struct tlv_buf *tb, hncp_node n)
 {
   int s = n->tlv_container ? tlv_len(n->tlv_container) : 0;
   hncp_t_node_data_header h;
-  struct tlv_attr *a = tlv_new(tb, HNCP_T_NODE_DATA, sizeof(*h) + s);
+  struct tlv_attr *a = tlv_new(tb, DNCP_T_NODE_DATA, sizeof(*h) + s);
 
   if (!a)
     return false;
@@ -54,19 +54,19 @@ static bool _push_node_data_tlv(struct tlv_buf *tb, hncp_node n)
 
 static bool _push_network_state_tlv(struct tlv_buf *tb, hncp o)
 {
-  struct tlv_attr *a = tlv_new(tb, HNCP_T_NETWORK_HASH, HNCP_HASH_LEN);
+  struct tlv_attr *a = tlv_new(tb, DNCP_T_NETWORK_HASH, DNCP_HASH_LEN);
   unsigned char *c;
 
   if (!a)
     return false;
   c = tlv_data(a);
-  memcpy(c, &o->network_hash, HNCP_HASH_LEN);
+  memcpy(c, &o->network_hash, DNCP_HASH_LEN);
   return true;
 }
 
 static bool _push_link_id_tlv(struct tlv_buf *tb, hncp_link l)
 {
-  struct tlv_attr *a = tlv_new(tb, HNCP_T_LINK_ID, sizeof(hncp_t_link_id_s));
+  struct tlv_attr *a = tlv_new(tb, DNCP_T_LINK_ID, sizeof(hncp_t_link_id_s));
   hncp_t_link_id lid;
 
   if (!a)
@@ -125,8 +125,8 @@ void hncp_link_send_network_state(hncp_link l,
       goto done;
   if (maximum_size && tlv_len(tb.head) > maximum_size)
     goto done;
-  L_DEBUG("hncp_link_send_network_state -> " SA6_F "%%" HNCP_LINK_F,
-          SA6_D(dst), HNCP_LINK_D(l));
+  L_DEBUG("hncp_link_send_network_state -> " SA6_F "%%" DNCP_LINK_F,
+          SA6_D(dst), DNCP_LINK_D(l));
   hncp_io_sendto(o, tlv_data(tb.head), tlv_len(tb.head), dst);
  done:
   tlv_buf_free(&tb);
@@ -148,8 +148,8 @@ void hncp_link_send_node_data(hncp_link l,
       && _push_node_state_tlv(&tb, n)
       && _push_node_data_tlv(&tb, n))
     {
-      L_DEBUG("hncp_link_send_node_state %s -> " SA6_F " %%" HNCP_LINK_F,
-              HNCP_NODE_REPR(n), SA6_D(dst), HNCP_LINK_D(l));
+      L_DEBUG("hncp_link_send_node_state %s -> " SA6_F " %%" DNCP_LINK_F,
+              DNCP_NODE_REPR(n), SA6_D(dst), DNCP_LINK_D(l));
       hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head), dst);
     }
   tlv_buf_free(&tb);
@@ -163,10 +163,10 @@ void hncp_link_send_req_network_state(hncp_link l,
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
   if (_push_link_id_tlv(&tb, l)
-      && tlv_new(&tb, HNCP_T_REQ_NET_HASH, 0))
+      && tlv_new(&tb, DNCP_T_REQ_NET_HASH, 0))
     {
-      L_DEBUG("hncp_link_send_req_network_state -> " SA6_F "%%" HNCP_LINK_F,
-              SA6_D(dst), HNCP_LINK_D(l));
+      L_DEBUG("hncp_link_send_req_network_state -> " SA6_F "%%" DNCP_LINK_F,
+              SA6_D(dst), DNCP_LINK_D(l));
       hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head), dst);
     }
   tlv_buf_free(&tb);
@@ -182,10 +182,10 @@ void hncp_link_send_req_node_data(hncp_link l,
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
   if (_push_link_id_tlv(&tb, l)
-      && (a = tlv_new(&tb, HNCP_T_REQ_NODE_DATA, HNCP_HASH_LEN)))
+      && (a = tlv_new(&tb, DNCP_T_REQ_NODE_DATA, DNCP_HASH_LEN)))
     {
-      L_DEBUG("hncp_link_send_req_node_state -> " SA6_F "%%" HNCP_LINK_F,
-              SA6_D(dst), HNCP_LINK_D(l));
+      L_DEBUG("hncp_link_send_req_node_state -> " SA6_F "%%" DNCP_LINK_F,
+              SA6_D(dst), DNCP_LINK_D(l));
       memcpy(tlv_data(a), &ns->node_identifier, DNCP_NI_LEN);
       hncp_io_sendto(l->hncp, tlv_data(tb.head), tlv_len(tb.head), dst);
     }
@@ -211,51 +211,21 @@ _heard(hncp_link l, hncp_t_link_id lid, struct sockaddr_in6 *src,
       if (multicast)
         return NULL;
       hncp_tlv t =
-        hncp_add_tlv(l->hncp, HNCP_T_NODE_DATA_NEIGHBOR, &np, sizeof(np),
+        hncp_add_tlv(l->hncp, DNCP_T_NODE_DATA_NEIGHBOR, &np, sizeof(np),
                      sizeof(*n));
       if (!t)
         return NULL;
       n = hncp_tlv_get_extra(t);
       n->last_sync = hncp_time(l->hncp);
       n->keepalive_interval = DNCP_KEEPALIVE_INTERVAL;
-      L_DEBUG(HNCP_NEIGH_F " added on " HNCP_LINK_F,
-              HNCP_NEIGH_D(n), HNCP_LINK_D(l));
+      L_DEBUG(DNCP_NEIGH_F " added on " DNCP_LINK_F,
+              DNCP_NEIGH_D(n), DNCP_LINK_D(l));
     }
 
   if (!multicast)
     n->last_sa6 = *src;
   return n;
 }
-
-static bool
-_handle_collision(hncp o)
-{
-  /* XXX - consider also case where security is enabled; for now,
-   * we just handle collisions insecurely. */
-  int delta = hncp_io_time(o) - o->collisions[o->last_collision];
-  if (delta < HNCP_UPDATE_COLLISION_N)
-    {
-      L_ERR("%d node id conflicts encountered in %.3fs - changing own id",
-            HNCP_UPDATE_COLLISIONS_IN_N,
-            1.0 * delta / HNETD_TIME_PER_SECOND);
-      hncp_node_identifier_s ni;
-      int i;
-
-      for (i = 0; i < DNCP_NI_LEN; i++)
-        ni.buf[i] = random() % 256;
-      hncp_set_own_node_identifier(o, &ni);
-      return true;
-    }
-  else
-    {
-      int c = o->last_collision;
-      o->collisions[c] = hncp_io_time(o);
-      c = (c + 1) % HNCP_UPDATE_COLLISIONS_IN_N;
-      o->last_collision = c;
-    }
-  return false;
-}
-
 
 /* Handle a single received message. */
 static void
@@ -280,7 +250,7 @@ handle_message(hncp_link l,
 
   /* Validate that link id exists. */
   tlv_for_each_in_buf(a, data, len)
-    if (tlv_id(a) == HNCP_T_LINK_ID)
+    if (tlv_id(a) == DNCP_T_LINK_ID)
       {
         /* Error to have multiple top level link id's. */
         if (lid)
@@ -327,8 +297,8 @@ handle_message(hncp_link l,
     {
       switch (tlv_id(a))
         {
-        case HNCP_T_NETWORK_HASH:
-          if (tlv_len(a) != HNCP_HASH_LEN)
+        case DNCP_T_NETWORK_HASH:
+          if (tlv_len(a) != DNCP_HASH_LEN)
             {
               L_DEBUG("got invalid network hash length: %d", tlv_len(a));
               return;
@@ -340,10 +310,10 @@ handle_message(hncp_link l,
             }
           nethash = tlv_data(a);
           break;
-        case HNCP_T_NODE_STATE:
+        case DNCP_T_NODE_STATE:
           nodestates++;
           break;
-        case HNCP_T_REQ_NET_HASH:
+        case DNCP_T_REQ_NET_HASH:
           /* Ignore if in multicast. */
           if (multicast)
             {
@@ -352,7 +322,7 @@ handle_message(hncp_link l,
             }
           hncp_link_send_network_state(l, src, 0);
           return;
-        case HNCP_T_REQ_NODE_DATA:
+        case DNCP_T_REQ_NODE_DATA:
           /* Ignore if in multicast. */
           if (multicast)
             {
@@ -361,11 +331,11 @@ handle_message(hncp_link l,
             }
           tlv_for_each_in_buf(a, data, len)
             {
-              if (tlv_id(a) == HNCP_T_REQ_NODE_DATA)
+              if (tlv_id(a) == DNCP_T_REQ_NODE_DATA)
                 {
                   void *p = tlv_data(a);
                   int len = tlv_len(a);
-                  if (!len || tlv_len(a) != HNCP_HASH_LEN)
+                  if (!len || tlv_len(a) != DNCP_HASH_LEN)
                     continue;
                   n = hncp_find_node_by_node_identifier(o, p, false);
                   if (!n)
@@ -397,8 +367,8 @@ handle_message(hncp_link l,
    * recently. */
   if (!multicast)
     {
-      L_DEBUG("unicast received from %s on " HNCP_LINK_F,
-              HNCP_NODE_REPR(lid), HNCP_LINK_D(l));
+      L_DEBUG("unicast received from %s on " DNCP_LINK_F,
+              DNCP_NODE_REPR(lid), DNCP_LINK_D(l));
     }
 
   /* Three different cases to be handled for solicited/unsolicited responses:
@@ -409,7 +379,7 @@ handle_message(hncp_link l,
   if (nethash)
     {
       /* We don't care, if network hash state IS same. */
-      if (memcmp(nethash, &o->network_hash, HNCP_HASH_LEN) == 0)
+      if (memcmp(nethash, &o->network_hash, DNCP_HASH_LEN) == 0)
         {
           L_DEBUG("received network state which is consistent");
 
@@ -433,8 +403,8 @@ handle_message(hncp_link l,
         {
           /* No need to reset Trickle anymore, but log the fact */
           L_DEBUG("received inconsistent multicast network state %s != %s",
-                  HEX_REPR(nethash, HNCP_HASH_LEN),
-                  HEX_REPR(&o->network_hash, HNCP_HASH_LEN));
+                  HEX_REPR(nethash, DNCP_HASH_LEN),
+                  HEX_REPR(&o->network_hash, DNCP_HASH_LEN));
         }
 
       /* Short form (raw network hash) */
@@ -450,7 +420,7 @@ handle_message(hncp_link l,
       /* The exercise becomes just to ask for any node state that
        * differs from local and is more recent. */
       tlv_for_each_in_buf(a, data, len)
-        if (tlv_id(a) == HNCP_T_NODE_STATE)
+        if (tlv_id(a) == DNCP_T_NODE_STATE)
           {
             if (tlv_len(a) != sizeof(hncp_t_node_state_s))
               {
@@ -462,8 +432,7 @@ handle_message(hncp_link l,
                                                   false);
             new_update_number = be32_to_cpu(ns->update_number);
             bool interesting = !n
-              || (update_number_second_greater(n->update_number,
-                                               new_update_number)
+              || (dncp_update_number_gt(n->update_number, new_update_number)
                   || (new_update_number == n->update_number
                       && memcmp(&n->node_data_hash,
                                 &ns->node_data_hash,
@@ -471,13 +440,13 @@ handle_message(hncp_link l,
             if (interesting)
               {
                 L_DEBUG("saw something new for %s/%p (update number %d)",
-                        HNCP_NODE_REPR(ns), n, new_update_number);
+                        DNCP_NODE_REPR(ns), n, new_update_number);
                 hncp_link_send_req_node_data(l, src, ns);
               }
             else
               {
                 L_DEBUG("saw something old for %s/%p (update number %d)",
-                        HNCP_NODE_REPR(ns), n, new_update_number);
+                        DNCP_NODE_REPR(ns), n, new_update_number);
               }
           }
       return;
@@ -495,7 +464,7 @@ handle_message(hncp_link l,
   tlv_for_each_in_buf(a, data, len)
     switch(tlv_id(a))
       {
-      case HNCP_T_NODE_STATE:
+      case DNCP_T_NODE_STATE:
         if (ns)
           {
             L_INFO("received multiple node state TLVs, ignoring");
@@ -508,7 +477,7 @@ handle_message(hncp_link l,
           }
         ns = tlv_data(a);
         break;
-      case HNCP_T_NODE_DATA:
+      case DNCP_T_NODE_DATA:
         if (nd)
           {
             L_INFO("received multiple node data TLVs, ignoring");
@@ -546,7 +515,7 @@ handle_message(hncp_link l,
   if (!n)
     return;
   new_update_number = be32_to_cpu(ns->update_number);
-  if (update_number_second_greater(new_update_number, n->update_number)
+  if (dncp_update_number_gt(new_update_number, n->update_number)
       || (n->update_number == new_update_number
           && !memcmp(&n->node_data_hash,
                      &ns->node_data_hash,
@@ -560,8 +529,13 @@ handle_message(hncp_link l,
     {
       L_DEBUG("received %d update number from network, own %d",
               new_update_number, n->update_number);
-      if (_handle_collision(o))
-        return;
+      if (o->collided)
+        {
+          if (dncp_profile_handle_collision(o))
+            return;
+        }
+      else
+        o->collided = true;
       n->update_number = new_update_number;
       o->republish_tlvs = true;
       hncp_schedule(o);
@@ -587,7 +561,7 @@ handle_message(hncp_link l,
 
 void hncp_poll(hncp o)
 {
-  unsigned char buf[HNCP_MAXIMUM_PAYLOAD_SIZE];
+  unsigned char buf[DNCP_MAXIMUM_PAYLOAD_SIZE];
   ssize_t read;
   char srcif[IFNAMSIZ];
   struct sockaddr_in6 src;
@@ -604,8 +578,13 @@ void hncp_poll(hncp o)
        * the multicast address. */
       if (IN6_IS_ADDR_MULTICAST(&dst))
         {
+#if 0
+          /* XXX - should we care about this? if so, should hook it up
+           * somewhere profile specific. */
           if (memcmp(&dst, &o->multicast_address, sizeof(dst)) != 0)
             continue;
+#endif /* 0 */
+
           /* XXX - should we care about source address too? */
           handle_message(l, &src, buf, read, true);
           continue;
@@ -617,48 +596,3 @@ void hncp_poll(hncp o)
     }
 }
 
-/* Utilities for formatting TLVs. */
-void hncp_tlv_ra_update(hncp o,
-                        uint32_t lid,
-                        const struct in6_addr *address,
-                        bool add)
-{
-  hncp_t_router_address_s ra;
-
-  ra.link_id = lid;
-  ra.address = *address;
-  hncp_update_tlv(o, HNCP_T_ROUTER_ADDRESS, &ra, sizeof(ra), 0, add);
-}
-
-
-void hncp_tlv_ap_update(hncp o,
-                        const struct prefix *prefix,
-                        const char *ifname,
-                        bool authoritative,
-                        unsigned int preference,
-                        bool add)
-{
-  struct prefix p;
-  int mlen = sizeof(hncp_t_assigned_prefix_header_s) + 16 + 3;
-  unsigned char buf[mlen];
-  int plen = ROUND_BITS_TO_BYTES(prefix->plen);
-  int flen = sizeof(hncp_t_delegated_prefix_header_s) + plen;
-  hncp_t_assigned_prefix_header ah;
-  hncp_link l;
-
-  memset(buf, 0, sizeof(buf));
-  p = *prefix;
-  prefix_canonical(&p, &p);
-  /* XXX - what if links renumber? let's hope they don't */
-  ah = (void *)buf;
-  l = hncp_find_link_by_name(o, ifname, false);
-  if (l)
-    ah->link_id = l->iid;
-  ah->flags =
-    HNCP_T_ASSIGNED_PREFIX_FLAG_PREFERENCE(preference)
-    | (authoritative ? HNCP_T_ASSIGNED_PREFIX_FLAG_AUTHORITATIVE : 0);
-  ah->prefix_length_bits = p.plen;
-  ah++;
-  memcpy(ah, &p, plen);
-  hncp_update_tlv(o, HNCP_T_ASSIGNED_PREFIX, buf, flen, 0, add);
-}

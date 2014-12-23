@@ -6,7 +6,7 @@
 
 #pragma once
 #include "hnetd.h"
-#include "hncp.h"
+#include "dncp.h"
 
 // IPC init
 int ipc_init();

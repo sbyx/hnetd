@@ -6,13 +6,12 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:50:18 2014 mstenber
- * Last modified: Wed Nov 19 17:46:40 2014 mstenber
+ * Last modified: Tue Dec 23 15:27:36 2014 mstenber
  * Edit time:     35 min
  *
  */
 
-#ifndef DTLS_H
-#define DTLS_H
+#pragma once
 
 #include "hnetd.h"
 
@@ -122,6 +121,3 @@ ssize_t dtls_sendto(dtls o, void *buf, size_t len,
 bool dtls_cert_to_pem_buf(dtls_cert cert, char *buf, int buf_len);
 int dtls_cert_to_der_buf(dtls_cert cert, unsigned char *buf, int buf_len);
 void dtls_cert_hash_sha256(dtls_cert cert, unsigned char *buf);
-
-
-#endif /* DTLS_H */

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Thu Oct 23 19:50:45 2014 mstenber
- * Edit time:     293 min
+ * Last modified: Tue Dec 23 15:23:53 2014 mstenber
+ * Edit time:     294 min
  *
  */
 
@@ -148,7 +148,7 @@ bool hncp_io_set_ifname_enabled(hncp o,
 {
   struct ipv6_mreq val;
 
-  val.ipv6mr_multiaddr = o->multicast_address;
+  val.ipv6mr_multiaddr = o->profile_data.multicast_address;
   L_DEBUG("hncp_io_set_ifname_enabled %s %s",
           ifname, enabled ? "enabled" : "disabled");
   uint32_t ifindex = 0;
@@ -197,9 +197,9 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
   while (1)
     {
 #ifdef DTLS
-      if (o->d)
+      if (o->profile_data.d)
         {
-          l = dtls_recvfrom(o->d, buf, len, src);
+          l = dtls_recvfrom(o->profile_data.d, buf, len, src);
           if (l > 0)
             {
               if (!IN6_IS_ADDR_LINKLOCAL(&src->sin6_addr))
@@ -255,7 +255,7 @@ ssize_t hncp_io_recvfrom(hncp o, void *buf, size_t len,
           continue;
         }
 #ifdef DTLS
-      if (o->d && !IN6_IS_ADDR_MULTICAST(dst))
+      if (o->profile_data.d && !IN6_IS_ADDR_MULTICAST(dst))
         {
           L_ERR("plaintext unicast received when in dtls mode - skip");
           continue;
@@ -274,7 +274,7 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
   ssize_t r;
 
 #ifdef DTLS
-  if (o->d && !IN6_IS_ADDR_MULTICAST(&dst->sin6_addr))
+  if (o->profile_data.d && !IN6_IS_ADDR_MULTICAST(&dst->sin6_addr))
     {
       /* Change destination port to DTLS server port too if it is the
        * default port. Otherwise answer on the different port (which
@@ -283,7 +283,7 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
       struct sockaddr_in6 rdst = *dst;
       if (rdst.sin6_port == htons(HNCP_PORT))
         rdst.sin6_port = htons(HNCP_DTLS_SERVER_PORT);
-      r = dtls_sendto(o->d, buf, len, &rdst);
+      r = dtls_sendto(o->profile_data.d, buf, len, &rdst);
     }
   else
 #endif /* DTLS */
@@ -318,7 +318,7 @@ void _dtls_readable_callback(dtls d __unused, void *context)
 
 void hncp_set_dtls(hncp o, dtls d)
 {
-  o->d = d;
+  o->profile_data.d = d;
   dtls_set_readable_callback(d, _dtls_readable_callback, o);
 }
 

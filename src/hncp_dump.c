@@ -6,8 +6,8 @@
 
 #define hd_a(test, err) do{if(!(test)) {err;}}while(0)
 
-static char __hexhash[HNCP_HASH_LEN*2 + 1];
-#define hd_hash_to_hex(hash) hexlify(__hexhash, (hash)->buf, HNCP_HASH_LEN)
+static char __hexhash[DNCP_HASH_LEN*2 + 1];
+#define hd_hash_to_hex(hash) hexlify(__hexhash, (hash)->buf, DNCP_HASH_LEN)
 #define hd_ni_to_hex(hash) hexlify(__hexhash, (hash)->buf, DNCP_NI_LEN)
 
 static hnetd_time_t hd_now; //time hncp_dump is called
@@ -208,7 +208,7 @@ static int hd_node(hncp o, hncp_node n, struct blob_buf *b)
 			case HNCP_T_ASSIGNED_PREFIX:
 				hd_do_in_table(&prefixes, NULL, hd_node_prefix(tlv, &prefixes), goto err);
 				break;
-			case HNCP_T_NODE_DATA_NEIGHBOR:
+			case DNCP_T_NODE_DATA_NEIGHBOR:
 				hd_do_in_table(&neighbors, NULL, hd_node_neighbor(tlv, &neighbors), goto err);
 				break;
 			case HNCP_T_EXTERNAL_CONNECTION:

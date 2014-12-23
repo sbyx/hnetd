@@ -1,20 +1,21 @@
 /*
- * $Id: hncp_trust.h $
+ * $Id: dncp_trust.h $
  *
  * Author: Markus Stenberg <markus stenberg@iki.fi>
  *
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Nov 20 11:46:44 2014 mstenber
- * Last modified: Thu Nov 20 14:39:29 2014 mstenber
+ * Last modified: Tue Dec 23 15:28:14 2014 mstenber
  * Edit time:     10 min
  *
  */
 
-#ifndef HNCP_TRUST_H
-#define HNCP_TRUST_H
+#ifndef DNCP_TRUST_H
+#define DNCP_TRUST_H
 
-#include "hncp.h"
+#include "dncp.h"
+#include "dncp_proto.h"
 
 typedef struct hncp_trust_struct hncp_trust_s, *hncp_trust;
 
@@ -34,4 +35,4 @@ int hncp_trust_get_verdict(hncp_trust t, const hncp_sha256 h);
 void hncp_trust_set(hncp_trust t, const hncp_sha256 h,
                     uint8_t verdict, const char *cname);
 
-#endif /* HNCP_TRUST_H */
+#endif /* DNCP_TRUST_H */

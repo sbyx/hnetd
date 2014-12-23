@@ -6,13 +6,12 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan  8 11:41:22 2014 mstenber
- * Last modified: Fri Jan 17 10:41:28 2014 mstenber
- * Edit time:     64 min
+ * Last modified: Tue Dec 23 15:27:09 2014 mstenber
+ * Edit time:     65 min
  *
  */
 
-#ifndef DNS_UTIL_H
-#define DNS_UTIL_H
+#pragma once
 
 #include <stdint.h>
 #include <ctype.h>
@@ -258,5 +257,3 @@ int ll2escaped(const uint8_t *ll, int ll_left, char *escaped, int escaped_left)
 }
 
 #undef PUSH_CHAR
-
-#endif /* DNS_UTIL_H */

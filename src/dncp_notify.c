@@ -1,5 +1,5 @@
 /*
- * $Id: hncp_notify.c $
+ * $Id: dncp_notify.c $
  *
  * Author: Markus Stenberg <markus stenberg@iki.fi>
  *
@@ -15,7 +15,7 @@
  * This module implements the HNCP subscription API.
  */
 
-#include "hncp_i.h"
+#include "dncp_i.h"
 
 #define NODE_CHANGE_CALLBACK(s, n, add)         \
   if (s->node_change_callback)                  \

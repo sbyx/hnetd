@@ -247,7 +247,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 
 	while (!list_empty(&queue)) {
 		c = container_of(list_first_entry(&queue, struct hncp_bfs_head, head), hncp_node_s, bfs);
-		L_WARN("Router %s", HNCP_NODE_REPR(c));
+		L_WARN("Router %s", DNCP_NODE_REPR(c));
 
 		struct tlv_attr *a, *a2;
 		hncp_node_for_each_tlv(c, a) {

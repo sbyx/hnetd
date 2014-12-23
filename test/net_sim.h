@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu Dec 18 15:37:01 2014 mstenber
- * Edit time:     201 min
+ * Last modified: Tue Dec 23 15:56:20 2014 mstenber
+ * Edit time:     203 min
  *
  */
 
@@ -225,7 +225,7 @@ bool net_sim_is_converged(net_sim s)
               return false;
             }
           if (memcmp(&n2->n.own_node->node_data_hash,
-                     &hn->node_data_hash, HNCP_HASH_LEN))
+                     &hn->node_data_hash, DNCP_HASH_LEN))
             {
               L_DEBUG("node data hash mismatch w/ network hash in sync %s @%s",
                       n2->name, n->name);
@@ -259,7 +259,7 @@ void net_sim_local_tlv_callback(hncp_subscriber sub,
   net_sim s = n->s;
 
   if (s->should_be_stable_topology)
-    if (tlv_id(tlv) == HNCP_T_NODE_DATA_NEIGHBOR)
+    if (tlv_id(tlv) == DNCP_T_NODE_DATA_NEIGHBOR)
       {
         sput_fail_unless(false, "got change when topology stable");
       }
@@ -316,7 +316,7 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
   s->node_count++;
   hncp_subscribe(&n->n, &n->debug_subscriber);
   L_DEBUG("[%s] %s net_sim_find_hncp added",
-          HNCP_NODE_REPR(n->n.own_node), n->name);
+          DNCP_NODE_REPR(n->n.own_node), n->name);
   return &n->n;
 }
 
@@ -345,7 +345,7 @@ hncp_link net_sim_hncp_find_link_by_name(hncp o, const char *name)
       hncp_calculate_hash(name, strlen(name), &h1);
       hncp_calculate_hash(n->name, strlen(n->name), &h2);
 
-      int bytes = HNCP_HASH_LEN;
+      int bytes = DNCP_HASH_LEN;
       if (bytes > 8)
         bytes = 8;
       memset(buf, 0, sizeof(buf));
@@ -596,7 +596,7 @@ sanity_check_buf(void *buf, size_t len)
       /* XXX - some better way to determine recursion? */
       switch (tlv_id(a))
         {
-        case HNCP_T_NODE_DATA:
+        case DNCP_T_NODE_DATA:
           sanity_check_buf(tlv_data(a)+dhs, tlv_len(a)-dhs);
           break;
         }
@@ -642,7 +642,8 @@ void _sendto(net_sim s, void *buf, size_t len, hncp_link sl, hncp_link dl,
   hncp o = dl->hncp;
   net_node node1 = container_of(sl->hncp, net_node_s, n);
   net_node node2 = container_of(dl->hncp, net_node_s, n);
-  bool is_multicast = memcmp(dst, &o->multicast_address, sizeof(*dst)) == 0;
+  bool is_multicast = memcmp(dst, &o->profile_data.multicast_address,
+                             sizeof(*dst)) == 0;
   L_DEBUG("sendto: %s/%s -> %s/%s (%d bytes %s)",
           node1->name, sl->ifname, node2->name, dl->ifname, (int)len,
           is_multicast ? "multicast" : "unicast");
@@ -656,7 +657,7 @@ ssize_t hncp_io_sendto(hncp o, void *buf, size_t len,
   net_sim s = node->s;
   sput_fail_unless(dst->sin6_scope_id, "scope id must be set");
   hncp_link l = hncp_find_link_by_id(o, dst->sin6_scope_id);
-  bool is_multicast = memcmp(&dst->sin6_addr, &o->multicast_address, sizeof(o->multicast_address)) == 0;
+  bool is_multicast = memcmp(&dst->sin6_addr, &o->profile_data.multicast_address, sizeof(o->profile_data.multicast_address)) == 0;
   net_neigh n;
 
   if (!l)

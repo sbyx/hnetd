@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Sun Dec 14 18:04:45 2014 mstenber
+ * Last modified: Tue Dec 23 15:58:53 2014 mstenber
  * Edit time:     569 min
  *
  */
@@ -535,7 +535,7 @@ bool hncp_sd_reconfigure_pcp(hncp_sd sd)
               if (!a4 && !a6)
                 {
                   L_DEBUG("no address at all found for %s",
-                          HNCP_NODE_REPR(n));
+                          DNCP_NODE_REPR(n));
                   break;
                 }
             }
@@ -729,7 +729,7 @@ static void _tlv_cb(hncp_subscriber s,
 
   L_NOTICE("[sd]_tlv_cb %s %s %s",
            add ? "add" : "remove",
-           n == o->own_node ? "local" : HNCP_NODE_REPR(n),
+           n == o->own_node ? "local" : DNCP_NODE_REPR(n),
            TLV_REPR(tlv));
   switch (tlv_id(tlv))
     {

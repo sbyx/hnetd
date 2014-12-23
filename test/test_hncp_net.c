@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Thu Dec 18 14:28:18 2014 mstenber
+ * Last modified: Tue Dec 23 15:44:48 2014 mstenber
  * Edit time:     560 min
  *
  */
@@ -69,7 +69,7 @@ bool link_has_neighbors(hncp_link l)
 
   hncp_for_each_local_tlv(l->hncp, t)
     {
-      if (tlv_id(&t->tlv) == HNCP_T_NODE_DATA_NEIGHBOR)
+      if (tlv_id(&t->tlv) == DNCP_T_NODE_DATA_NEIGHBOR)
         {
           hncp_t_node_data_neighbor ne = tlv_data(&t->tlv);
           if (ne->link_id == l->iid)
@@ -140,7 +140,7 @@ void hncp_two(void)
   /* n1 will keep getting stuff from n2, so it's sometimes alive,
    * sometimes not.. However, network hashes should be again
    * different. */
-  sput_fail_unless(memcmp(&n1->network_hash, &n2->network_hash, HNCP_HASH_LEN),
+  sput_fail_unless(memcmp(&n1->network_hash, &n2->network_hash, DNCP_HASH_LEN),
                    "hashes different");
 
   /* Should also have done the necessary purging of nodes due to lack
@@ -419,7 +419,7 @@ hncp_t_node_data_neighbor monkey_neighbor(hncp n1, hncp_link l1,
   struct tlv_attr *a;
 
   hncp_node_for_each_tlv_with_type(n1->own_node, a,
-                                   HNCP_T_NODE_DATA_NEIGHBOR)
+                                   DNCP_T_NODE_DATA_NEIGHBOR)
     if ((nh = hncp_tlv_neighbor(a)))
       {
         if (nh->link_id != l1->iid)

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Sun Dec 14 18:03:29 2014 mstenber
- * Edit time:     493 min
+ * Last modified: Tue Dec 23 15:20:18 2014 mstenber
+ * Edit time:     494 min
  *
  */
 
@@ -188,7 +188,7 @@ static hncp_link _find_local_link(hncp_node onode, uint32_t olink_no)
   /* We're lazy and just compare published information; we _could_
    * of course also look at per-link and per-neighbor structures,
    * but this is simpler.. */
-  hncp_node_for_each_tlv_with_type(o->own_node, a, HNCP_T_NODE_DATA_NEIGHBOR)
+  hncp_node_for_each_tlv_with_type(o->own_node, a, DNCP_T_NODE_DATA_NEIGHBOR)
     if ((nh = hncp_tlv_neighbor(a)))
       {
         if (nh->neighbor_link_id != olink_no)
@@ -406,10 +406,10 @@ static void _tlv_cb(hncp_subscriber s,
            TLV_REPR(tlv));
 
   /* Local TLV changes should be mostly handled by PA code already.
-   * The exception is HNCP_T_NODE_DATA_NEIGHBOR which may cause local
+   * The exception is DNCP_T_NODE_DATA_NEIGHBOR which may cause local
    * or remote connectivity changes.
   */
-  if (hncp_node_is_self(n) && tlv_id(tlv) != HNCP_T_NODE_DATA_NEIGHBOR)
+  if (hncp_node_is_self(n) && tlv_id(tlv) != DNCP_T_NODE_DATA_NEIGHBOR)
     {
       return;
     }
@@ -455,7 +455,7 @@ static void _tlv_cb(hncp_subscriber s,
         }
       }
       break;
-    case HNCP_T_NODE_DATA_NEIGHBOR:
+    case DNCP_T_NODE_DATA_NEIGHBOR:
       {
         uloop_timeout_set(&g->ap_if_update_timeout, HNCP_PA_AP_LINK_UPDATE_MS);
       }

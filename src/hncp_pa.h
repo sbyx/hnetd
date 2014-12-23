@@ -14,7 +14,7 @@
 #ifndef HNCP_PA_H
 #define HNCP_PA_H
 
-#include "hncp.h"
+#include "dncp.h"
 #include "pa_data.h"
 
 #define HNCP_DELAY    3000

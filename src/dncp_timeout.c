@@ -1,25 +1,25 @@
 /*
- * $Id: hncp_timeout.c $
+ * $Id: dncp_timeout.c $
  *
  * Author: Markus Stenberg <mstenber@cisco.com>
  *
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Mon Dec 15 17:02:09 2014 mstenber
- * Edit time:     384 min
+ * Last modified: Tue Dec 23 15:11:49 2014 mstenber
+ * Edit time:     389 min
  *
  */
 
-#include "hncp_i.h"
+#include "dncp_i.h"
 
 static void trickle_set_i(hncp_link l, int i)
 {
   hnetd_time_t now = hncp_time(l->hncp);
   int imin = l->conf->trickle_imin;
-  if (!imin) imin = HNCP_TRICKLE_IMIN;
+  if (!imin) imin = DNCP_TRICKLE_IMIN;
   int imax = l->conf->trickle_imax;
-  if (!imax) imax = HNCP_TRICKLE_IMAX;
+  if (!imax) imax = DNCP_TRICKLE_IMAX;
 
   i = i < imin ? imin : i > imax ? imax : i;
   l->trickle_i = i;
@@ -27,7 +27,7 @@ static void trickle_set_i(hncp_link l, int i)
   l->trickle_send_time = now + t;
   l->trickle_interval_end_time = now + i;
   l->trickle_c = 0;
-  L_DEBUG(HNCP_LINK_F " trickle set to %d/%d", HNCP_LINK_D(l), t, i);
+  L_DEBUG(DNCP_LINK_F " trickle set to %d/%d", DNCP_LINK_D(l), t, i);
 }
 
 static void trickle_upgrade(hncp_link l)
@@ -39,17 +39,7 @@ static void trickle_send_nocheck(hncp_link l)
 {
   l->num_trickle_sent++;
   l->last_trickle_sent = hncp_time(l->hncp);
-  struct sockaddr_in6 dst = { .sin6_family = AF_INET6,
-                              .sin6_addr = l->hncp->multicast_address,
-                              .sin6_port = htons(l->hncp->udp_port)
-  };
-  if (!(dst.sin6_scope_id = l->ifindex))
-    if (!(dst.sin6_scope_id = if_nametoindex(l->ifname)))
-      {
-        L_ERR("Unable to find index for " HNCP_LINK_F, HNCP_LINK_D(l));
-        return;
-      }
-  hncp_link_send_network_state(l, &dst, HNCP_MAXIMUM_MULTICAST_SIZE);
+  dncp_profile_link_send_network_state(l);
   if (l->conf->keepalive_interval)
     l->next_keepalive_time = l->last_trickle_sent + l->conf->keepalive_interval;
 }
@@ -63,8 +53,8 @@ static void trickle_send(hncp_link l)
   else
     {
       l->num_trickle_skipped++;
-      L_DEBUG(HNCP_LINK_F " trickle already has c=%d >= k=%d, not sending",
-              HNCP_LINK_D(l), l->trickle_c, l->conf->trickle_k);
+      L_DEBUG(DNCP_LINK_F " trickle already has c=%d >= k=%d, not sending",
+              DNCP_LINK_D(l), l->trickle_c, l->conf->trickle_k);
     }
   l->trickle_send_time = 0;
 }
@@ -107,7 +97,7 @@ static void hncp_prune_rec(hncp_node n)
   tlvs = hncp_node_get_tlvs(n);
 
   L_DEBUG("hncp_prune_rec %s / %p = %p",
-          HNCP_NODE_REPR(n), n, tlvs);
+          DNCP_NODE_REPR(n), n, tlvs);
 
   /* No TLVs? No point recursing, unless the node is us (we have to
    * visit it always in any case). */
@@ -132,7 +122,7 @@ static void hncp_prune_rec(hncp_node n)
 static void hncp_prune(hncp o)
 {
   hnetd_time_t now = hncp_time(o);
-  hnetd_time_t grace_after = now - HNCP_PRUNE_GRACE_PERIOD;
+  hnetd_time_t grace_after = now - DNCP_PRUNE_GRACE_PERIOD;
 
   /* Logic fails if time isn't moving forward-ish */
   assert(now != o->last_prune);
@@ -154,7 +144,7 @@ static void hncp_prune(hncp o)
       if (n->last_reachable_prune < grace_after)
         continue;
       next_time = TMIN(next_time,
-                       n->last_reachable_prune + HNCP_PRUNE_GRACE_PERIOD + 1);
+                       n->last_reachable_prune + DNCP_PRUNE_GRACE_PERIOD + 1);
       vlist_add(&o->nodes, &n->in_nodes, n);
       _node_set_reachable(n, false);
     }
@@ -196,7 +186,7 @@ void hncp_run(hncp o)
   if (!o->disable_prune)
     {
       if (o->graph_dirty)
-        o->next_prune = HNCP_MINIMUM_PRUNE_INTERVAL + o->last_prune;
+        o->next_prune = DNCP_MINIMUM_PRUNE_INTERVAL + o->last_prune;
 
       if (o->next_prune && o->next_prune <= now)
         {
@@ -223,7 +213,7 @@ void hncp_run(hncp o)
       hncp_hash_s old_hash = o->network_hash;
 
       hncp_calculate_network_hash(o);
-      if (memcmp(&old_hash, &o->network_hash, HNCP_HASH_LEN))
+      if (memcmp(&old_hash, &o->network_hash, DNCP_HASH_LEN))
         {
           /* Shocker. The network hash changed -> reset _every_
            * trickle (that is actually running; join_pending ones
@@ -236,11 +226,11 @@ void hncp_run(hncp o)
   vlist_for_each_element(&o->links, l, in_links)
     {
       /* If we're in join pending state, we retry every
-       * HNCP_REJOIN_INTERVAL if necessary. */
+       * DNCP_REJOIN_INTERVAL if necessary. */
       if (l->join_failed_time)
         {
           hnetd_time_t next_time =
-            l->join_failed_time + HNCP_REJOIN_INTERVAL;
+            l->join_failed_time + DNCP_REJOIN_INTERVAL;
           if (next_time <= now)
             {
               if (!hncp_io_set_ifname_enabled(o, l->ifname, true))
@@ -265,7 +255,7 @@ void hncp_run(hncp o)
             {
               /* join_failed_time may have changed.. */
               hnetd_time_t next_time =
-                l->join_failed_time + HNCP_REJOIN_INTERVAL;
+                l->join_failed_time + DNCP_REJOIN_INTERVAL;
               next = TMIN(next, next_time);
               continue;
             }
@@ -290,7 +280,7 @@ void hncp_run(hncp o)
   /* Look at neighbors we should be worried about.. */
   /* vlist_for_each_element(&l->neighbors, n, in_neighbors) */
   hncp_for_each_local_tlv_safe(o, t, t2)
-    if (tlv_id(&t->tlv) == HNCP_T_NODE_DATA_NEIGHBOR)
+    if (tlv_id(&t->tlv) == DNCP_T_NODE_DATA_NEIGHBOR)
       {
         hncp_neighbor n = hncp_tlv_get_extra(t);
         hnetd_time_t next_time;
@@ -306,8 +296,8 @@ void hncp_run(hncp o)
           }
 
         /* Zap the neighbor */
-        L_DEBUG(HNCP_NEIGH_F " gone on " HNCP_LINK_F,
-                HNCP_NEIGH_D(n), HNCP_LINK_D(l));
+        L_DEBUG(DNCP_NEIGH_F " gone on " DNCP_LINK_F,
+                DNCP_NEIGH_D(n), DNCP_LINK_D(l));
         hncp_remove_tlv(o, t);
     }
 
