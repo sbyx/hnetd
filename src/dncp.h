@@ -110,11 +110,12 @@ struct dncp_subscriber_struct {
    * Some link-specific information changed.
    *
    * This is called whenever a link's preferred address changes, or
-   * set of links itself changes.  (Link omitted because it's assumed
-   * this is just general reconfiguration signal. name or index is
-   * trivial to add later on if needed, though).
+   * set of links itself changes.
+   *
+   * @param ifname The link which is being added, removed or modified.
+   * @param enabled Flag which indicates whether the link was added or updated.
    */
-  void (*link_change_callback)(dncp_subscriber s);
+  void (*link_change_callback)(dncp_subscriber s, const char *ifname, bool enabled);
 };
 
 /********************************************* API for handling single links */

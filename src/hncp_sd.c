@@ -842,7 +842,8 @@ static void _republish_cb(dncp_subscriber s)
   _publish_ddzs(sd);
 }
 
-static void _force_republish_cb(dncp_subscriber s)
+static void _force_republish_cb(dncp_subscriber s,
+		const char *ifname __unused, bool enabled __unused)
 {
   hncp_sd sd = container_of(s, hncp_sd_s, subscriber);
 

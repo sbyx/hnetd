@@ -295,7 +295,7 @@ void dncp_notify_subscribers_about_to_republish_tlvs(dncp_node n);
 void dncp_notify_subscribers_local_tlv_changed(dncp o,
                                                struct tlv_attr *a,
                                                bool add);
-void dncp_notify_subscribers_link_changed(dncp_link l);
+void dncp_notify_subscribers_link_changed(dncp_link l, bool enabled);
 
 /* Inlined utilities. */
 static inline hnetd_time_t dncp_time(dncp o)
