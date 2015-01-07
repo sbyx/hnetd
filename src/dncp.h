@@ -39,6 +39,13 @@ typedef struct dncp_struct dncp_s, *dncp;
  * (after a delay). */
 typedef struct dncp_node_struct dncp_node_s, *dncp_node;
 
+/* generic subscriber event enum */
+enum dncp_subscriber_event {
+	DNCP_EVENT_REMOVE,
+	DNCP_EVENT_ADD,
+	DNCP_EVENT_UPDATE
+};
+
 /* A single, local published TLV.*/
 typedef struct dncp_tlv_struct dncp_tlv_s, *dncp_tlv;
 
@@ -113,9 +120,10 @@ struct dncp_subscriber_struct {
    * set of links itself changes.
    *
    * @param ifname The link which is being added, removed or modified.
-   * @param enabled Flag which indicates whether the link was added or updated.
+   * @param event indicates whether the link was added, removed or updated.
    */
-  void (*link_change_callback)(dncp_subscriber s, const char *ifname, bool enabled);
+  void (*link_change_callback)(dncp_subscriber s, const char *ifname,
+		  enum dncp_subscriber_event event);
 };
 
 /********************************************* API for handling single links */

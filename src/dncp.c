@@ -464,7 +464,7 @@ bool dncp_if_set_enabled(dncp o, const char *ifname, bool enabled)
     {
       if (!l)
         return false;
-      dncp_notify_subscribers_link_changed(l, false);
+      dncp_notify_subscribers_link_changed(l, DNCP_EVENT_REMOVE);
       vlist_delete(&o->links, &l->in_links);
       return true;
     }
@@ -472,7 +472,7 @@ bool dncp_if_set_enabled(dncp o, const char *ifname, bool enabled)
     return false;
   l = dncp_find_link_by_name(o, ifname, true);
   if (l)
-    dncp_notify_subscribers_link_changed(l, true);
+    dncp_notify_subscribers_link_changed(l, DNCP_EVENT_ADD);
   return l != NULL;
 }
 
@@ -703,7 +703,7 @@ dncp_link_set_ipv6_address(dncp_link l, const struct in6_addr *addr)
     {
       L_DEBUG("dncp_link_set_ipv6_address: no %s any more", l->ifname);
     }
-  dncp_notify_subscribers_link_changed(l, true);
+  dncp_notify_subscribers_link_changed(l, DNCP_EVENT_UPDATE);
 }
 
 bool dncp_if_has_highest_id(dncp o, const char *ifname)

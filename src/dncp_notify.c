@@ -219,11 +219,11 @@ void dncp_notify_subscribers_about_to_republish_tlvs(dncp_node n)
 }
 
 
-void dncp_notify_subscribers_link_changed(dncp_link l, bool enabled)
+void dncp_notify_subscribers_link_changed(dncp_link l, enum dncp_subscriber_event event)
 {
   dncp_subscriber s;
 
   list_for_each_entry(s, &l->dncp->subscribers, lh)
     if (s->link_change_callback)
-      s->link_change_callback(s, l->ifname, enabled);
+      s->link_change_callback(s, l->ifname, event);
 }
