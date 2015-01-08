@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 14:50:58 2014 mstenber
- * Last modified: Tue Dec 23 19:01:55 2014 mstenber
- * Edit time:     9 min
+ * Last modified: Thu Jan  8 14:56:00 2015 mstenber
+ * Edit time:     11 min
  *
  */
 
@@ -134,10 +134,8 @@ void dncp_tlv_ap_update(dncp o,
   dncp_update_tlv(o, HNCP_T_ASSIGNED_PREFIX, buf, flen, 0, add);
 }
 
-bool hncp_init(dncp o, const void *node_identifier, int len)
+static bool _hncp_init(dncp o)
 {
-  if (!dncp_init(o, node_identifier, len))
-    return false;
   if (inet_pton(AF_INET6, HNCP_MCAST_GROUP,
                 &o->profile_data.multicast_address) < 1)
     {
@@ -145,6 +143,13 @@ bool hncp_init(dncp o, const void *node_identifier, int len)
       return false;
     }
   return true;
+}
+
+bool hncp_init(dncp o, const void *node_identifier, int len)
+{
+  if (!dncp_init(o, node_identifier, len))
+    return false;
+  return _hncp_init(o);
 }
 
 void hncp_uninit(dncp o)
@@ -158,6 +163,11 @@ dncp hncp_create(void)
   dncp o = dncp_create();
   if (!o)
     return NULL;
+  if (!_hncp_init(o))
+    {
+      dncp_destroy(o);
+      return NULL;
+    }
   struct __packed {
     hncp_t_version_s h;
     char agent[32];
