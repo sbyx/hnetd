@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:52:55 2014 mstenber
- * Last modified: Tue Dec 23 15:35:19 2014 mstenber
- * Edit time:     3 min
+ * Last modified: Thu Jan  8 14:31:24 2015 mstenber
+ * Edit time:     4 min
  *
  */
 
@@ -30,7 +30,9 @@ enum {
   HNCP_T_DNS_ROUTER_NAME = 41, /* router name (moderately optional) */
   HNCP_T_MANAGED_PSK = 42,
 
-  HNCP_T_ROUTING_PROTOCOL = 60
+  HNCP_T_ROUTING_PROTOCOL = 199 /* RP election (for now) from
+                                   'implementation specific reserved
+                                   space waiting for RP choice */
 };
 
 /* HNCP_T_VERSION */

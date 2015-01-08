@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 12:50:58 2014 mstenber
- * Last modified: Tue Dec 23 18:55:46 2014 mstenber
+ * Last modified: Thu Jan  8 14:29:46 2015 mstenber
  * Edit time:     21 min
  *
  */
@@ -53,7 +53,7 @@ typedef struct dncp_profile_node_data_struct *dncp_profile_node_data, dncp_profi
 
 /* How many keep-alive periods can be missed until peer is declared M.I.A. */
 /* (Note: This CANNOT be configured) */
-#define DNCP_KEEPALIVE_MULTIPLIER 5/2
+#define DNCP_KEEPALIVE_MULTIPLIER 21/10
 
 /* Let's assume we use 64-bit version of MD5 for the time being.. */
 #define DNCP_HASH_LEN 8

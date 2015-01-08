@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Tue Dec 23 18:56:03 2014 mstenber
- * Edit time:     105 min
+ * Last modified: Thu Jan  8 14:32:54 2015 mstenber
+ * Edit time:     106 min
  *
  */
 
@@ -29,14 +29,16 @@ enum {
   DNCP_T_REQ_NET_HASH = 2, /* empty */
   DNCP_T_REQ_NODE_DATA = 3, /* = just normal hash */
 
-  DNCP_T_NETWORK_HASH = 4, /* = just normal hash, accumulated from node states so sensible to send later */
-  DNCP_T_NODE_STATE = 5,
+  /* 4-9 reserved for profile use */
 
-  DNCP_T_NODE_DATA = 6,
-  DNCP_T_NODE_DATA_NEIGHBOR = 7,
-  DNCP_T_KEEPALIVE_INTERVAL = 8,
-  DNCP_T_CUSTOM = 9, /* not implemented */
-  DNCP_T_TRUST_VERDICT = 10
+  DNCP_T_NETWORK_HASH = 10, /* = just normal hash, accumulated from node states so sensible to send later */
+  DNCP_T_NODE_STATE = 11,
+
+  DNCP_T_NODE_DATA = 12,
+  DNCP_T_NODE_DATA_NEIGHBOR = 13,
+  DNCP_T_KEEPALIVE_INTERVAL = 14,
+  DNCP_T_CUSTOM = 15, /* not implemented */
+  DNCP_T_TRUST_VERDICT = 16
 };
 
 #define TLV_SIZE sizeof(struct tlv_attr)
