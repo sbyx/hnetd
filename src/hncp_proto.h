@@ -36,7 +36,8 @@ enum {
 /* HNCP_T_VERSION */
 typedef struct __packed {
   uint8_t version;
-  uint8_t reserved[3];
+  uint8_t reserved;
+  uint16_t capabilities;
   char user_agent[];
 } hncp_t_version_s, *hncp_t_version;
 

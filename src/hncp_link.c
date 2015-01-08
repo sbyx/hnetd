@@ -3,8 +3,9 @@
 #include <stdbool.h>
 #include <net/if.h>
 
-#include "hncp_link.h"
 #include "dncp_i.h"
+#include "hncp_proto.h"
+#include "hncp_link.h"
 
 struct hncp_link {
 	dncp dncp;
@@ -12,12 +13,17 @@ struct hncp_link {
 	struct list_head users;
 };
 
-static void notify(struct hncp_link *l, const char *ifname, dncp_t_link_id ids, size_t cnt)
+static void notify(struct hncp_link *l, const char *ifname, dncp_t_link_id ids, size_t cnt,
+		enum hncp_link_elected elected)
 {
 	struct hncp_link_user *u;
-	list_for_each_entry(u, &l->users, head)
+	list_for_each_entry(u, &l->users, head) {
 		if (u->cb_link)
 			u->cb_link(u, ifname, ids, cnt);
+
+		if (u->cb_elected)
+			u->cb_elected(u, ifname, elected);
+	}
 }
 
 static void cb_link(dncp_subscriber s, const char *ifname, enum dncp_subscriber_event event)
@@ -25,7 +31,8 @@ static void cb_link(dncp_subscriber s, const char *ifname, enum dncp_subscriber_
 	struct hncp_link *l = container_of(s, struct hncp_link, subscr);
 
 	if (event == DNCP_EVENT_ADD || event == DNCP_EVENT_REMOVE)
-		notify(l, ifname, (event == DNCP_EVENT_ADD) ? (void*)1 : NULL, 0);
+		notify(l, ifname, (event == DNCP_EVENT_ADD) ? (void*)1 : NULL, 0,
+				(event == DNCP_EVENT_ADD) ? HNCP_LINK_ALL : HNCP_LINK_NONE);
 }
 
 static void cb_tlv(dncp_subscriber s, dncp_node n,
@@ -48,21 +55,22 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 		return;
 
 	bool unique = true;
-	dncp_t_link_id ids = NULL;
-	size_t idcnt = 0, idpos = 0;
+	enum hncp_link_elected elected = HNCP_LINK_ALL;
+	hncp_t_version ourversion = NULL;
+	dncp_t_link_id peers = NULL;
+	size_t peercnt = 0, peerpos = 0;
 
 	struct tlv_attr *c;
 	dncp_node_for_each_tlv(l->dncp->own_node, c) {
-		dncp_t_node_data_neighbor cn = dncp_tlv_neighbor(c);
-
-		if (!cn)
-			continue;
-
-		++idcnt;
+		if (tlv_id(c) == HNCP_T_VERSION &&
+				tlv_len(c) > sizeof(*ourversion))
+			ourversion = tlv_data(c);
+		else if (dncp_tlv_neighbor(c))
+			++peercnt;
 	}
 
-	if (idcnt)
-		ids = malloc(sizeof(*ids) * idcnt);
+	if (peercnt)
+		peers = malloc(sizeof(*peers) * peercnt);
 
 	dncp_node_for_each_tlv(l->dncp->own_node, c) {
 		dncp_t_node_data_neighbor cn = dncp_tlv_neighbor(c);
@@ -76,8 +84,15 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 		if (!peer)
 			continue;
 
+		bool mutual = false;
+		hncp_t_version peerversion = NULL;
+
 		struct tlv_attr *pc;
 		dncp_node_for_each_tlv(peer, pc) {
+			if (tlv_id(pc) == HNCP_T_VERSION &&
+					tlv_len(pc) > sizeof(*peerversion))
+				peerversion = tlv_data(pc);
+
 			dncp_t_node_data_neighbor pn = dncp_tlv_neighbor(pc);
 			if (!pn || pn->link_id != cn->neighbor_link_id ||
 					memcmp(&pn->neighbor_node_identifier,
@@ -86,14 +101,12 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 
 			if (pn->neighbor_link_id == link->iid) {
 				// Matching reverse neighbor entry
-				ids[idpos].node_identifier = peer->node_identifier;
-				ids[idpos].link_id = pn->link_id;
-				++idpos;
+				mutual = true;
+				peers[peerpos].node_identifier = peer->node_identifier;
+				peers[peerpos].link_id = pn->link_id;
+				++peerpos;
 			} else if (pn->neighbor_link_id < link->iid) {
 				// Two of our links seem to be connected
-				free(ids);
-				ids = NULL;
-				idpos = 0;
 				unique = false;
 				break;
 			}
@@ -101,10 +114,37 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 
 		if (!unique)
 			break;
+
+		// Capability election
+		if (ourversion && peerversion) {
+			uint16_t ourv = be16_to_cpu(ourversion->capabilities);
+			uint16_t peerv = be16_to_cpu(peerversion->capabilities);
+
+			// M-Flag
+			if ((((ourv >> 12) & 0xf) < ((peerv >> 12) & 0xf)) ||
+					((((ourv >> 12) & 0xf) == ((peerv >> 12) & 0xf)) && ourv < peerv))
+				elected &= ~HNCP_LINK_MDNSPROXY;
+
+			// P-Flag
+			if ((((ourv >> 8) & 0xf) < ((peerv >> 8) & 0xf)) ||
+					((((ourv >> 8) & 0xf) == ((peerv >> 8) & 0xf)) && ourv < peerv))
+				elected &= ~HNCP_LINK_PREFIXDEL;
+
+			// H-Flag
+			if ((((ourv >> 4) & 0xf) < ((peerv >> 4) & 0xf)) ||
+					((((ourv >> 4) & 0xf) == ((peerv >> 4) & 0xf)) && ourv < peerv))
+				elected &= ~HNCP_LINK_HOSTNAMES;
+
+			// L-Flag
+			if ((((ourv >> 0) & 0xf) < ((peerv >> 0) & 0xf)) ||
+					((((ourv >> 0) & 0xf) == ((peerv >> 0) & 0xf)) && ourv < peerv))
+				elected &= ~HNCP_LINK_LEGACY;
+		}
 	}
 
-	notify(l, link->ifname, (ids) ? ids : unique ? (void*)1 : NULL, idpos);
-	free(ids);
+	notify(l, link->ifname, (!unique) ? NULL : (peers) ? peers : (void*)1,
+			(unique) ? peerpos : 0, unique ? elected : HNCP_LINK_NONE);
+	free(peers);
 }
 
 struct hncp_link* hncp_link_create(dncp dncp)
