@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Tue Dec 23 18:51:26 2014 mstenber
- * Edit time:     560 min
+ * Last modified: Thu Jan  8 14:41:02 2015 mstenber
+ * Edit time:     561 min
  *
  */
 
@@ -530,7 +530,7 @@ void monkey_debug_print(net_sim s, int *ma)
   int r1, r2, p1, p2;
   for (r1 = 0 ; r1 < NUM_MONKEY_ROUTERS ; r1++)
     {
-      hncp n1 = net_sim_find_hncp_n(s, r1);
+      dncp n1 = net_sim_find_hncp_n(s, r1);
       for (p1 = 0 ; p1 < NUM_MONKEY_PORTS ; p1++)
         {
           dncp_link l1 = net_sim_dncp_find_link_n(n1, p1);
@@ -544,13 +544,13 @@ void monkey_debug_print(net_sim s, int *ma)
     }
   for (r1 = 0 ; r1 < NUM_MONKEY_ROUTERS ; r1++)
     {
-      hncp n1 = net_sim_find_hncp_n(s, r1);
+      dncp n1 = net_sim_find_hncp_n(s, r1);
       for (p1 = 0 ; p1 < NUM_MONKEY_PORTS ; p1++)
         {
           dncp_link l1 = net_sim_dncp_find_link_n(n1, p1);
           for (r2 = r1+1 ; r2 < NUM_MONKEY_ROUTERS ; r2++)
             {
-              hncp n2 = net_sim_find_hncp_n(s, r2);
+              dncp n2 = net_sim_find_hncp_n(s, r2);
               for (p2 = 0 ; p2 < NUM_MONKEY_PORTS ; p2++)
                 {
                   dncp_link l2 = net_sim_dncp_find_link_n(n2, p2);

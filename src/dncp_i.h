@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Dec 23 18:53:55 2014 mstenber
+ * Last modified: Thu Jan  8 14:40:30 2015 mstenber
  * Edit time:     317 min
  *
  */
@@ -18,6 +18,9 @@
 #include "dncp_profile.h"
 
 #include "dns_util.h"
+
+/* ADDR_REPR etc. */
+#include "prefix_utils.h"
 
 #include <assert.h>
 
