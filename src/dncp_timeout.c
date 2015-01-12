@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Mon Jan 12 12:45:17 2015 mstenber
- * Edit time:     425 min
+ * Last modified: Mon Jan 12 13:17:48 2015 mstenber
+ * Edit time:     443 min
  *
  */
 
@@ -196,14 +196,14 @@ void dncp_run(dncp o)
   o->immediate_scheduled = true;
 
   /* Handle the own TLV roll-over first. */
-  if (!o->tlvs_dirty)
+  if (!o->tlvs_dirty && !o->republish_tlvs)
     {
-      next = o->own_node->origination_time + (1LL << 32) - (1LL << 16);
-      if (next <= now)
-        {
-          o->republish_tlvs = true;
-          next = 0;
-        }
+      hnetd_time_t next_time =
+        o->own_node->origination_time + (1LL << 32) - (1LL << 16);
+      if (next_time <= now)
+        o->republish_tlvs = true;
+      else
+        SET_NEXT(next_time, "roll-over");
     }
 
   /* Refresh locally originated data; by doing this, we can avoid
@@ -329,8 +329,13 @@ void dncp_run(dncp o)
 
   if (next && !o->immediate_scheduled)
     {
-      dncp_io_schedule(o, next - now);
-      L_DEBUG("next scheduled in %d", (int) (next-now));
+      hnetd_time_t delta = next - now;
+      if (delta < 0)
+        delta = 0;
+      else if (delta > (1 << 16))
+        delta = 1 << 16;
+      dncp_io_schedule(o, delta);
+      L_DEBUG("next scheduled in %d", (int)delta);
     }
 
   /* Clear the cached time, it's most likely no longer valid. */
