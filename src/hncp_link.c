@@ -116,7 +116,7 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 			break;
 
 		// Capability election
-		if (ourversion && peerversion) {
+		if (mutual && ourversion && peerversion) {
 			uint16_t ourv = be16_to_cpu(ourversion->capabilities);
 			uint16_t peerv = be16_to_cpu(peerversion->capabilities);
 
