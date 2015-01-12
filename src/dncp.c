@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Dec 23 18:57:41 2014 mstenber
- * Edit time:     827 min
+ * Last modified: Mon Jan 12 11:07:18 2015 mstenber
+ * Edit time:     831 min
  *
  */
 
@@ -354,8 +354,8 @@ dncp_node dncp_get_first_node(dncp o)
 dncp_tlv
 dncp_add_tlv(dncp o, uint16_t type, void *data, uint16_t len, int extra_bytes)
 {
-  int plen = TLV_SIZE +
-    (len + TLV_ATTR_ALIGN - 1) & ~(TLV_ATTR_ALIGN - 1);
+  int plen =
+    (TLV_SIZE + len + TLV_ATTR_ALIGN - 1) & ~(TLV_ATTR_ALIGN - 1);
   dncp_tlv t = calloc(1, sizeof(*t) + plen + extra_bytes);
 
   if (!t)
