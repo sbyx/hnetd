@@ -30,7 +30,7 @@ static struct ubus_context *ubus = NULL;
 static struct ubus_subscriber netifd;
 static uint32_t ubus_network_interface = 0;
 static struct pa_data *pa_data = NULL;
-static hncp p_hncp = NULL;
+static dncp p_dncp = NULL;
 
 static int handle_update(__unused struct ubus_context *ctx,
 		__unused struct ubus_object *obj, __unused struct ubus_request_data *req,
@@ -109,7 +109,7 @@ static void handle_event(__unused struct ubus_context *ctx, __unused struct ubus
 static struct ubus_event_handler event_handler = { .cb = handle_event };
 static const char *hnetd_pd_socket = NULL;
 
-int platform_init(hncp hncp, struct pa_data *data, const char *pd_socket)
+int platform_init(dncp dncp, struct pa_data *data, const char *pd_socket)
 {
 	if (!(ubus = ubus_connect(NULL))) {
 		L_ERR("Failed to connect to ubus: %s", strerror(errno));
@@ -127,7 +127,7 @@ int platform_init(hncp hncp, struct pa_data *data, const char *pd_socket)
 
 	hnetd_pd_socket = pd_socket;
 	pa_data = data;
-	p_hncp = hncp;
+	p_dncp = dncp;
 	return 0;
 }
 
@@ -678,7 +678,7 @@ enum {
 	DATA_ATTR_DISABLE_PA,
 	DATA_ATTR_PASSTHRU,
 	DATA_ATTR_ULA_DEFAULT_ROUTER,
-	DATA_ATTR_PING_INTERVAL,
+	DATA_ATTR_KEEPALIVE_INTERVAL,
 	DATA_ATTR_TRICKLE_K,
 	DATA_ATTR_DNSNAME,
 	DATA_ATTR_CREATED,
@@ -715,7 +715,7 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_DISABLE_PA] = { .name = "disable_pa", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_PASSTHRU] = { .name = "passthru", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_ULA_DEFAULT_ROUTER] = { .name = "ula_default_router", .type = BLOBMSG_TYPE_BOOL },
-	[DATA_ATTR_PING_INTERVAL] = { .name = "ping_interval", .type = BLOBMSG_TYPE_INT32 },
+	[DATA_ATTR_KEEPALIVE_INTERVAL] = { .name = "keepalive_interval", .type = BLOBMSG_TYPE_INT32 },
 	[DATA_ATTR_TRICKLE_K] = { .name = "trickle_k", .type = BLOBMSG_TYPE_INT32 },
 	[DATA_ATTR_DNSNAME] = { .name = "dnsname", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_CREATED] = { .name = "created", .type = BLOBMSG_TYPE_BOOL },
@@ -992,18 +992,13 @@ static void platform_update(void *data, size_t len)
 		}
 
 		dncp_link_conf conf;
-		if(c && dtb[DATA_ATTR_PING_INTERVAL] && (conf = dncp_if_find_conf_by_name(p_hncp, c->ifname))) {
-			conf->ping_worried_t = (((hnetd_time_t) blobmsg_get_u32(dtb[DATA_ATTR_PING_INTERVAL])) * HNETD_TIME_PER_SECOND) / 1000;
-			conf->ping_retry_base_t = conf->ping_worried_t / 8;
-			if(conf->ping_retry_base_t < 100)
-				conf->ping_retry_base_t = 100;
-			conf->ping_retries = 3;
-		}
+		if(c && dtb[DATA_ATTR_KEEPALIVE_INTERVAL] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))
+			conf->keepalive_interval = (hnetd_time_t) blobmsg_get_u32(dtb[DATA_ATTR_KEEPALIVE_INTERVAL]);
 
-		if(c && dtb[DATA_ATTR_TRICKLE_K] && (conf = dncp_if_find_conf_by_name(p_hncp, c->ifname)))
+		if(c && dtb[DATA_ATTR_TRICKLE_K] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))
 			conf->trickle_k = (int) blobmsg_get_u32(dtb[DATA_ATTR_TRICKLE_K]);
 
-		if(c && dtb[DATA_ATTR_DNSNAME] && (conf = dncp_if_find_conf_by_name(p_hncp, c->ifname)))
+		if(c && dtb[DATA_ATTR_DNSNAME] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))
 			strncpy(conf->dnsname, blobmsg_get_string(dtb[DATA_ATTR_DNSNAME]), sizeof(conf->dnsname));;
 
 	}
@@ -1137,7 +1132,7 @@ static int hnet_dump(struct ubus_context *ctx, __unused struct ubus_object *obj,
 {
 	struct blob_buf b = {NULL, NULL, 0, NULL};
 	blob_buf_init(&b, 0);
-	hncp_dump(&b, p_hncp);
+	hncp_dump(&b, p_dncp);
 	ubus_send_reply(ctx, req, b.head);
 	blob_buf_free(&b);
 	return 0;
