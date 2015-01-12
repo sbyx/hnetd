@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Tue Dec 23 18:58:01 2014 mstenber
- * Edit time:     389 min
+ * Last modified: Mon Jan 12 12:45:17 2015 mstenber
+ * Edit time:     425 min
  *
  */
 
@@ -153,6 +153,33 @@ static void dncp_prune(dncp o)
   o->last_prune = now;
 }
 
+#if L_LEVEL >= 7
+
+#define SET_NEXT(_v, reason)                                    \
+do {                                                            \
+  hnetd_time_t v = _v;                                          \
+  if (v)                                                        \
+    {                                                           \
+      if (v < now)                                              \
+        {                                                       \
+          L_DEBUG("invalid value due to %s: %d in past",        \
+                  reason, (int)(now-v));                        \
+        }                                                       \
+      else if (!next || next > v)                               \
+        {                                                       \
+          L_DEBUG("setting next to %d due to %s",               \
+                  (int)(v-now), reason);                        \
+          next = v;                                             \
+        }                                                       \
+    }                                                           \
+ } while(0)
+
+#else
+
+#define SET_NEXT(v, reason) next = TMIN(next, v)
+
+#endif /* L_LEVEL >= 7 */
+
 void dncp_run(dncp o)
 {
   hnetd_time_t next = 0;
@@ -196,7 +223,7 @@ void dncp_run(dncp o)
 
       /* next_prune may be set _by_ dncp_prune, therefore redundant
        * looking check */
-      next = TMIN(next, o->next_prune);
+      SET_NEXT(o->next_prune, "next_prune");
     }
 
   /* Release the flag to allow more change-triggered zero timeouts to
@@ -256,7 +283,7 @@ void dncp_run(dncp o)
               /* join_failed_time may have changed.. */
               hnetd_time_t next_time =
                 l->join_failed_time + DNCP_REJOIN_INTERVAL;
-              next = TMIN(next, next_time);
+              SET_NEXT(next_time, "rejoin");
               continue;
             }
         }
@@ -272,9 +299,9 @@ void dncp_run(dncp o)
           /* Do not increment Trickle i, but set next t to i/2 .. i */
           trickle_set_i(l, l->trickle_i);
         }
-      next = TMIN(next, l->trickle_interval_end_time);
-      next = TMIN(next, l->trickle_send_time);
-      next = TMIN(next, l->next_keepalive_time);
+      SET_NEXT(l->trickle_interval_end_time, "trickle_interval_end_time");
+      SET_NEXT(l->trickle_send_time, "trickle_send_time");
+      SET_NEXT(l->next_keepalive_time, "next_keepalive_time");
     }
 
   /* Look at neighbors we should be worried about.. */
@@ -283,15 +310,14 @@ void dncp_run(dncp o)
     if (tlv_id(&t->tlv) == DNCP_T_NODE_DATA_NEIGHBOR)
       {
         dncp_neighbor n = dncp_tlv_get_extra(t);
-        hnetd_time_t next_time;
-
-        next_time = n->last_sync +
+        hnetd_time_t next_time =
+          n->last_sync +
           n->keepalive_interval * DNCP_KEEPALIVE_MULTIPLIER;
 
         /* No cause to do anything right now. */
         if (next_time > now)
           {
-            next = TMIN(next, next_time);
+            SET_NEXT(next_time, "neighbor validity");
             continue;
           }
 
@@ -302,7 +328,10 @@ void dncp_run(dncp o)
     }
 
   if (next && !o->immediate_scheduled)
-    dncp_io_schedule(o, next - now);
+    {
+      dncp_io_schedule(o, next - now);
+      L_DEBUG("next scheduled in %d", (int) (next-now));
+    }
 
   /* Clear the cached time, it's most likely no longer valid. */
   o->now = 0;
