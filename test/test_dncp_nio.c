@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Tue Dec 23 16:00:54 2014 mstenber
- * Edit time:     230 min
+ * Last modified: Mon Jan 12 13:21:39 2015 mstenber
+ * Edit time:     231 min
  *
  */
 
@@ -599,9 +599,11 @@ static void hncp_49d_republish()
   one_join(true);
 
   /* Set Trickle maximum interval to a day, so we don't have to do
-   * zillion iterations to hit 49d.. */
+   * zillion iterations to hit 49d.. Unfortunately,
+   * post-timeout-kludge, we _will_ have timeout every minute or so
+   * (65.x seconds). */
 
-  for (i = 0 ; i < 200 ; i++)
+  for (i = 0 ; i < (1 << 17) ; i++)
     {
       want_schedule = 0;
       dncp_run(o);
