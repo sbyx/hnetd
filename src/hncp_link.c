@@ -55,18 +55,32 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 		return;
 
 	bool unique = true;
-	enum hncp_link_elected elected = HNCP_LINK_ALL;
-	hncp_t_version ourversion = NULL;
+	uint16_t ourver = 0;
+	enum hncp_link_elected elected = HNCP_LINK_NONE;
 	dncp_t_link_id peers = NULL;
 	size_t peercnt = 0, peerpos = 0;
 
 	struct tlv_attr *c;
 	dncp_node_for_each_tlv(l->dncp->own_node, c) {
 		if (tlv_id(c) == HNCP_T_VERSION &&
-				tlv_len(c) > sizeof(*ourversion))
-			ourversion = tlv_data(c);
-		else if (dncp_tlv_neighbor(c))
+				tlv_len(c) > sizeof(hncp_t_version_s)) {
+			hncp_t_version ourvertlv = tlv_data(c);
+			ourver = be16_to_cpu(ourvertlv->capabilities);
+
+			if ((ourver >> 12) & 0xf)
+				elected |= HNCP_LINK_MDNSPROXY;
+
+			if ((ourver >> 8) & 0xf)
+				elected |= HNCP_LINK_PREFIXDEL;
+
+			if ((ourver >> 4) & 0xf)
+				elected |= HNCP_LINK_HOSTNAMES;
+
+			if ((ourver >> 0) & 0xf)
+				elected |= HNCP_LINK_LEGACY;
+		} else if (dncp_tlv_neighbor(c)) {
 			++peercnt;
+		}
 	}
 
 	if (peercnt)
@@ -85,13 +99,13 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 			continue;
 
 		bool mutual = false;
-		hncp_t_version peerversion = NULL;
+		hncp_t_version peervertlv = NULL;
 
 		struct tlv_attr *pc;
 		dncp_node_for_each_tlv(peer, pc) {
 			if (tlv_id(pc) == HNCP_T_VERSION &&
-					tlv_len(pc) > sizeof(*peerversion))
-				peerversion = tlv_data(pc);
+					tlv_len(pc) > sizeof(*peervertlv))
+				peervertlv = tlv_data(pc);
 
 			dncp_t_node_data_neighbor pn = dncp_tlv_neighbor(pc);
 			if (!pn || pn->link_id != cn->neighbor_link_id ||
@@ -116,28 +130,27 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 			break;
 
 		// Capability election
-		if (mutual && ourversion && peerversion) {
-			uint16_t ourv = be16_to_cpu(ourversion->capabilities);
-			uint16_t peerv = be16_to_cpu(peerversion->capabilities);
+		if (mutual && ourver && peervertlv) {
+			uint16_t peerver = be16_to_cpu(peervertlv->capabilities);
 
 			// M-Flag
-			if ((((ourv >> 12) & 0xf) < ((peerv >> 12) & 0xf)) ||
-					((((ourv >> 12) & 0xf) == ((peerv >> 12) & 0xf)) && ourv < peerv))
+			if ((((ourver >> 12) & 0xf) < ((peerver >> 12) & 0xf)) ||
+					((((ourver >> 12) & 0xf) == ((peerver >> 12) & 0xf)) && ourver < peerver))
 				elected &= ~HNCP_LINK_MDNSPROXY;
 
 			// P-Flag
-			if ((((ourv >> 8) & 0xf) < ((peerv >> 8) & 0xf)) ||
-					((((ourv >> 8) & 0xf) == ((peerv >> 8) & 0xf)) && ourv < peerv))
+			if ((((ourver >> 8) & 0xf) < ((peerver >> 8) & 0xf)) ||
+					((((ourver >> 8) & 0xf) == ((peerver >> 8) & 0xf)) && ourver < peerver))
 				elected &= ~HNCP_LINK_PREFIXDEL;
 
 			// H-Flag
-			if ((((ourv >> 4) & 0xf) < ((peerv >> 4) & 0xf)) ||
-					((((ourv >> 4) & 0xf) == ((peerv >> 4) & 0xf)) && ourv < peerv))
+			if ((((ourver >> 4) & 0xf) < ((peerver >> 4) & 0xf)) ||
+					((((ourver >> 4) & 0xf) == ((peerver >> 4) & 0xf)) && ourver < peerver))
 				elected &= ~HNCP_LINK_HOSTNAMES;
 
 			// L-Flag
-			if ((((ourv >> 0) & 0xf) < ((peerv >> 0) & 0xf)) ||
-					((((ourv >> 0) & 0xf) == ((peerv >> 0) & 0xf)) && ourv < peerv))
+			if ((((ourver >> 0) & 0xf) < ((peerver >> 0) & 0xf)) ||
+					((((ourver >> 0) & 0xf) == ((peerver >> 0) & 0xf)) && ourver < peerver))
 				elected &= ~HNCP_LINK_LEGACY;
 		}
 	}
