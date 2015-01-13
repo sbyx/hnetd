@@ -39,7 +39,10 @@ enum {
 typedef struct __packed {
   uint8_t version;
   uint8_t reserved;
-  uint16_t capabilities;
+  unsigned int cap_mdnsproxy:4;
+  unsigned int cap_prefixdel:4;
+  unsigned int cap_hostnames:4;
+  unsigned int cap_legacy:4;
   char user_agent[];
 } hncp_t_version_s, *hncp_t_version;
 

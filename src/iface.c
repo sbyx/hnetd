@@ -39,6 +39,8 @@ void iface_pa_ifs(struct pa_data_user *, struct pa_iface *, uint32_t flags);
 void iface_pa_cps(struct pa_data_user *, struct pa_cp *, uint32_t flags);
 void iface_pa_aas(struct pa_data_user *, struct pa_aa *, uint32_t flags);
 void iface_pa_dps(struct pa_data_user *, struct pa_dp *, uint32_t flags);
+void iface_link_cb(struct hncp_link_user *user, const char *ifname,
+		enum hncp_link_elected elected);
 
 static bool iface_discover_border(struct iface *c);
 
@@ -53,6 +55,18 @@ static struct pa_data_user pa_data_cb = {
 	.ifs = iface_pa_ifs,
 	.dps = iface_pa_dps
 };
+static struct hncp_link_user link_cb = {
+	.cb_elected = iface_link_cb,
+};
+
+void iface_link_cb(struct hncp_link_user *user __unused, const char *ifname,
+		enum hncp_link_elected elected)
+{
+	struct iface *c = iface_get(ifname);
+	if (c) {
+		// TODO: propagate DHCPv6, PD and DHCPv4 election
+	}
+}
 
 void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 		struct pa_dp *dp, uint32_t flags)
@@ -330,7 +344,7 @@ void iface_set_unreachable_route(const struct prefix *p, bool enable)
 
 #endif /* __linux__ */
 
-int iface_init(dncp hncp, hncp_sd sd, struct pa *pa, const char *pd_socket)
+int iface_init(dncp hncp, hncp_sd sd, struct pa *pa, struct hncp_link *link, const char *pd_socket)
 {
 #ifdef __linux__
 	rtnl_fd.fd = socket(AF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, NETLINK_ROUTE);
@@ -348,6 +362,7 @@ int iface_init(dncp hncp, hncp_sd sd, struct pa *pa, const char *pd_socket)
 	uloop_fd_add(&rtnl_fd, ULOOP_READ | ULOOP_EDGE_TRIGGER);
 #endif /* __linux__ */
 
+	hncp_link_register(link, &link_cb);
 	pa_data_subscribe(&pa->data, &pa_data_cb);
 	pa_p = pa;
 	hncp_p = hncp;

@@ -3,6 +3,7 @@
 
 #include "dncp.h"
 #include "dncp_proto.h"
+#include "hncp_proto.h"
 
 struct hncp_link;
 
@@ -16,6 +17,15 @@ enum hncp_link_elected {
 							HNCP_LINK_PREFIXDEL | HNCP_LINK_MDNSPROXY,
 };
 
+struct hncp_link_config {
+	int version;
+	int cap_mdnsproxy;
+	int cap_prefixdel;
+	int cap_hostnames;
+	int cap_legacy;
+	char agent[32];
+};
+
 struct hncp_link_user {
 	struct list_head head;
 	void (*cb_link)(struct hncp_link_user*, const char *ifname,
@@ -24,6 +34,10 @@ struct hncp_link_user {
 			enum hncp_link_elected elected);
 };
 
-struct hncp_link* hncp_link_new(dncp dncp);
+struct hncp_link* hncp_link_create(dncp dncp, const struct hncp_link_config *conf);
+void hncp_link_destroy(struct hncp_link *l);
+
+void hncp_link_register(struct hncp_link *l, struct hncp_link_user *user);
+void hncp_link_unregister(struct hncp_link_user *user);
 
 #endif /* SRC_HNCP_LINK_H_ */

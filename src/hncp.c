@@ -168,18 +168,6 @@ dncp hncp_create(void)
       dncp_destroy(o);
       return NULL;
     }
-  struct __packed {
-    hncp_t_version_s h;
-    char agent[32];
-  } data;
-  memset(&data, 0, sizeof(data));
-  data.h.version = HNCP_VERSION;
-  int alen = snprintf(data.agent, sizeof(data.agent),
-                      "hnetd-%s", STR(HNETD_VERSION));
-  if (alen == sizeof(data.agent))
-    alen = sizeof(data.agent) - 1;
-  data.agent[alen] = 0;
-  dncp_add_tlv(o, HNCP_T_VERSION, &data, sizeof(data.h) + alen + 1, 0);
   return o;
 }
 

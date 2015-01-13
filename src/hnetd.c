@@ -25,6 +25,7 @@
 #include "hncp_sd.h"
 #include "hncp_routing.h"
 #include "hncp_proto.h"
+#include "hncp_link.h"
 #include "ipc.h"
 #include "platform.h"
 #include "pa.h"
@@ -128,8 +129,10 @@ int main(__unused int argc, char *argv[])
 	hncp_iface_user_s hiu;
 	hncp_glue hg;
 	hncp_sd_params_s sd_params;
+	struct hncp_link_config link_config = {HNCP_VERSION, 0, 0, 0, 0, ""};
 
 	memset(&sd_params, 0, sizeof(sd_params));
+
 	if (strstr(argv[0], "hnet-ifresolve")) {
 		if (!argv[1])
 			return 1;
@@ -306,6 +309,13 @@ int main(__unused int argc, char *argv[])
 		}
 	}
 
+	if (sd_params.dnsmasq_script && sd_params.dnsmasq_bonus_file && sd_params.ohp_script)
+		link_config.cap_mdnsproxy = 4;
+
+	link_config.cap_prefixdel = link_config.cap_hostnames = link_config.cap_legacy = 4;
+	snprintf(link_config.agent, sizeof(link_config.agent), "hnetd/%s", STR(HNETD_VERSION));
+
+
 	h = hncp_create();
 	if (!h) {
 		L_ERR("Unable to initialize HNCP");
@@ -342,8 +352,10 @@ int main(__unused int argc, char *argv[])
 	if (routing_script)
 		hncp_routing_create(h, routing_script);
 
+	struct hncp_link *link = hncp_link_create(h, &link_config);
+
 	/* Init ipc */
-	iface_init(h, sd, &pa, pd_socket_path);
+	iface_init(h, sd, &pa, link, pd_socket_path);
 
 	/* Glue together HNCP, PA-glue and and iface */
 	hncp_iface_glue(&hiu, h, hg);

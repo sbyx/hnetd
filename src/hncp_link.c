@@ -1,3 +1,10 @@
+/*
+ * Author: Steven Barth <steven@midlink.org>
+ *
+ * Copyright (c) 2015 cisco Systems, Inc.
+ */
+
+
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -9,6 +16,7 @@
 
 struct hncp_link {
 	dncp dncp;
+	dncp_tlv versiontlv;
 	dncp_subscriber_s subscr;
 	struct list_head users;
 };
@@ -26,57 +34,33 @@ static void notify(struct hncp_link *l, const char *ifname, dncp_t_link_id ids, 
 	}
 }
 
-static void cb_link(dncp_subscriber s, const char *ifname, enum dncp_subscriber_event event)
+static void calculate_link(struct hncp_link *l, dncp_link link)
 {
-	struct hncp_link *l = container_of(s, struct hncp_link, subscr);
-
-	if (event == DNCP_EVENT_ADD || event == DNCP_EVENT_REMOVE)
-		notify(l, ifname, (event == DNCP_EVENT_ADD) ? (void*)1 : NULL, 0,
-				(event == DNCP_EVENT_ADD) ? HNCP_LINK_ALL : HNCP_LINK_NONE);
-}
-
-static void cb_tlv(dncp_subscriber s, dncp_node n,
-		struct tlv_attr *tlv, bool add __unused)
-{
-	struct hncp_link *l = container_of(s, struct hncp_link, subscr);
-	dncp_t_node_data_neighbor ne = dncp_tlv_neighbor(tlv);
-	dncp_link link = NULL;
-
-	if (ne) {
-		if (dncp_node_is_self(n))
-			link = dncp_find_link_by_id(l->dncp, ne->link_id);
-		else if (!memcmp(&ne->neighbor_node_identifier,
-				&l->dncp->own_node->node_identifier, DNCP_NI_LEN))
-			link = dncp_find_link_by_id(l->dncp, ne->neighbor_link_id);
-	}
-
-
-	if (!link)
-		return;
-
 	bool unique = true;
-	uint16_t ourver = 0;
+	hncp_t_version ourvertlv = NULL;
 	enum hncp_link_elected elected = HNCP_LINK_NONE;
 	dncp_t_link_id peers = NULL;
 	size_t peercnt = 0, peerpos = 0;
+
+	if (!link)
+		return;
 
 	struct tlv_attr *c;
 	dncp_node_for_each_tlv(l->dncp->own_node, c) {
 		if (tlv_id(c) == HNCP_T_VERSION &&
 				tlv_len(c) > sizeof(hncp_t_version_s)) {
-			hncp_t_version ourvertlv = tlv_data(c);
-			ourver = be16_to_cpu(ourvertlv->capabilities);
+			ourvertlv = tlv_data(c);
 
-			if ((ourver >> 12) & 0xf)
+			if (ourvertlv->cap_mdnsproxy)
 				elected |= HNCP_LINK_MDNSPROXY;
 
-			if ((ourver >> 8) & 0xf)
+			if (ourvertlv->cap_prefixdel)
 				elected |= HNCP_LINK_PREFIXDEL;
 
-			if ((ourver >> 4) & 0xf)
+			if (ourvertlv->cap_hostnames)
 				elected |= HNCP_LINK_HOSTNAMES;
 
-			if ((ourver >> 0) & 0xf)
+			if (ourvertlv->cap_legacy)
 				elected |= HNCP_LINK_LEGACY;
 		} else if (dncp_tlv_neighbor(c)) {
 			++peercnt;
@@ -130,28 +114,42 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 			break;
 
 		// Capability election
-		if (mutual && ourver && peervertlv) {
-			uint16_t peerver = be16_to_cpu(peervertlv->capabilities);
+		if (mutual && ourvertlv && peervertlv) {
+			int ourcaps = ourvertlv->cap_mdnsproxy << 12 |
+					ourvertlv->cap_prefixdel << 8 |
+					ourvertlv->cap_hostnames << 4 |
+					ourvertlv->cap_legacy;
+			int peercaps = peervertlv->cap_mdnsproxy << 12 |
+					peervertlv->cap_prefixdel << 8 |
+					peervertlv->cap_hostnames << 4 |
+					peervertlv->cap_legacy;
 
-			// M-Flag
-			if ((((ourver >> 12) & 0xf) < ((peerver >> 12) & 0xf)) ||
-					((((ourver >> 12) & 0xf) == ((peerver >> 12) & 0xf)) && ourver < peerver))
+			if (ourvertlv->cap_mdnsproxy < peervertlv->cap_mdnsproxy)
 				elected &= ~HNCP_LINK_MDNSPROXY;
 
-			// P-Flag
-			if ((((ourver >> 8) & 0xf) < ((peerver >> 8) & 0xf)) ||
-					((((ourver >> 8) & 0xf) == ((peerver >> 8) & 0xf)) && ourver < peerver))
+			if (ourvertlv->cap_prefixdel < peervertlv->cap_prefixdel)
 				elected &= ~HNCP_LINK_PREFIXDEL;
 
-			// H-Flag
-			if ((((ourver >> 4) & 0xf) < ((peerver >> 4) & 0xf)) ||
-					((((ourver >> 4) & 0xf) == ((peerver >> 4) & 0xf)) && ourver < peerver))
+			if (ourvertlv->cap_hostnames < peervertlv->cap_hostnames)
 				elected &= ~HNCP_LINK_HOSTNAMES;
 
-			// L-Flag
-			if ((((ourver >> 0) & 0xf) < ((peerver >> 0) & 0xf)) ||
-					((((ourver >> 0) & 0xf) == ((peerver >> 0) & 0xf)) && ourver < peerver))
+			if (ourvertlv->cap_legacy < peervertlv->cap_legacy)
 				elected &= ~HNCP_LINK_LEGACY;
+
+			if (ourcaps < peercaps || (ourcaps == peercaps &&
+					memcmp(&l->dncp->own_node->node_identifier, &peer->node_identifier, DNCP_NI_LEN) < 0)) {
+				if (ourvertlv->cap_mdnsproxy == peervertlv->cap_mdnsproxy)
+					elected &= ~HNCP_LINK_MDNSPROXY;
+
+				if (ourvertlv->cap_prefixdel == peervertlv->cap_prefixdel)
+					elected &= ~HNCP_LINK_PREFIXDEL;
+
+				if (ourvertlv->cap_hostnames == peervertlv->cap_hostnames)
+					elected &= ~HNCP_LINK_HOSTNAMES;
+
+				if (ourvertlv->cap_legacy == peervertlv->cap_legacy)
+					elected &= ~HNCP_LINK_LEGACY;
+			}
 		}
 	}
 
@@ -160,7 +158,34 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 	free(peers);
 }
 
-struct hncp_link* hncp_link_create(dncp dncp)
+static void cb_link(dncp_subscriber s, const char *ifname, enum dncp_subscriber_event event)
+{
+	struct hncp_link *l = container_of(s, struct hncp_link, subscr);
+	if (event == DNCP_EVENT_ADD)
+		calculate_link(l, dncp_find_link_by_name(l->dncp, ifname, false));
+	else if (event == DNCP_EVENT_REMOVE)
+		notify(l, ifname, NULL, 0, HNCP_LINK_NONE);
+}
+
+static void cb_tlv(dncp_subscriber s, dncp_node n,
+		struct tlv_attr *tlv, bool add __unused)
+{
+	struct hncp_link *l = container_of(s, struct hncp_link, subscr);
+	dncp_t_node_data_neighbor ne = dncp_tlv_neighbor(tlv);
+	dncp_link link = NULL;
+
+	if (ne) {
+		if (dncp_node_is_self(n))
+			link = dncp_find_link_by_id(l->dncp, ne->link_id);
+		else if (!memcmp(&ne->neighbor_node_identifier,
+				&l->dncp->own_node->node_identifier, DNCP_NI_LEN))
+			link = dncp_find_link_by_id(l->dncp, ne->neighbor_link_id);
+	}
+
+	calculate_link(l, link);
+}
+
+struct hncp_link* hncp_link_create(dncp dncp, const struct hncp_link_config *conf)
 {
 	struct hncp_link *l = calloc(1, sizeof(*l));
 	if (l) {
@@ -170,6 +195,20 @@ struct hncp_link* hncp_link_create(dncp dncp)
 		l->subscr.link_change_callback = cb_link;
 		l->subscr.tlv_change_callback = cb_tlv;
 		dncp_subscribe(dncp, &l->subscr);
+
+		if (conf) {
+			struct __packed {
+				hncp_t_version_s version;
+				char agent[sizeof(conf->agent)];
+			} data = {
+				{conf->version, 0, conf->cap_mdnsproxy, conf->cap_prefixdel,
+						conf->cap_hostnames, conf->cap_legacy}, {0}
+			};
+			memcpy(data.agent, conf->agent, sizeof(data.agent));
+
+			l->versiontlv = dncp_add_tlv(dncp, HNCP_T_VERSION, &data,
+					sizeof(hncp_t_version_s) + strlen(conf->agent) + 1, 0);
+		}
 	}
 	return l;
 }
@@ -179,6 +218,7 @@ void hncp_link_destroy(struct hncp_link *l)
 	while (!list_empty(&l->users))
 		list_del(l->users.next);
 
+	dncp_remove_tlv(l->dncp, l->versiontlv);
 	dncp_unsubscribe(l->dncp, &l->subscr);
 	free(l);
 }

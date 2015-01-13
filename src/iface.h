@@ -11,6 +11,7 @@
 #include "dncp.h"
 #include "dncp_i.h"
 #include "hncp_sd.h"
+#include "hncp_link.h"
 #include "prefix_utils.h"
 
 #include <libubox/list.h>
@@ -167,7 +168,7 @@ struct iface {
 #include "pa.h"
 
 // Generic initializer to be called by main()
-int iface_init(dncp hncp, hncp_sd sd, struct pa *pa, const char *pd_socket);
+int iface_init(dncp hncp, hncp_sd sd, struct pa *pa, struct hncp_link *link, const char *pd_socket);
 
 // Get an interface by name
 struct iface* iface_get(const char *ifname);
