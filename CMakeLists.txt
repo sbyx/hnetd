@@ -130,6 +130,12 @@ if(${DTLS})
   target_link_libraries(test_dtls ${DTLS_LINK} ubox ${BACKEND_LINK} blobmsg_json)
   add_test(dtls test_dtls)
   add_dependencies(check test_dtls)
+
+  add_executable(test_dncp_trust test/test_dncp_trust.c ${HNCP_WITH_GLUE} ${BT} ${TRUST_SOURCE} src/dtls.c)
+  target_link_libraries(test_dncp_trust ${DTLS_LINK} ubox ${BACKEND_LINK} blobmsg_json)
+
+  add_test(dncp_trust test_dncp_trust)
+  add_dependencies(check test_dncp_trust)
 endif(${DTLS})
 
 add_executable(test_hncp_net test/test_hncp_net.c ${HNCP_WITH_GLUE} ${BT})
