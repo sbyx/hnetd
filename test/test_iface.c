@@ -39,6 +39,7 @@ void platform_restart_dhcpv4(__unused struct iface *c) {}
 void platform_set_snat(__unused struct iface *c, __unused const struct prefix *p) {}
 void hncp_sd_dump_link_fqdn(__unused hncp_sd sd, __unused dncp_link l, __unused char *buf, __unused size_t buf_len) {}
 dncp_link dncp_find_link_by_name(__unused dncp h, __unused const char *ifname, __unused bool create) { return NULL; }
+void hncp_link_register(__unused struct hncp_link *c, __unused struct hncp_link_user *u) {}
 
 void intiface_mock(__unused struct iface_user *u, __unused const char *ifname, bool enabled)
 {

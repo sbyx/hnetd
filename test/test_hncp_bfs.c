@@ -7,6 +7,7 @@
 #include "../src/hncp_routing.c"
 #include "../src/iface.c"
 #include "../src/dncp_proto.c"
+#include "../src/hncp_link.c"
 
 #include "sput.h"
 #include "smock.h"
