@@ -52,7 +52,6 @@ static hncp_sd hncp_sd_p = NULL;
 static struct pa_data_user pa_data_cb = {
 	.cps = iface_pa_cps,
 	.aas = iface_pa_aas,
-	.ifs = iface_pa_ifs,
 	.dps = iface_pa_dps
 };
 static struct hncp_link_user link_cb = {
@@ -63,8 +62,12 @@ void iface_link_cb(struct hncp_link_user *user __unused, const char *ifname,
 		enum hncp_link_elected elected)
 {
 	struct iface *c = iface_get(ifname);
-	if (c) {
-		// TODO: propagate DHCPv6, PD and DHCPv4 election
+	elected &= HNCP_LINK_HOSTNAMES | HNCP_LINK_LEGACY |
+			HNCP_LINK_PREFIXDEL | HNCP_LINK_STATELESS;
+
+	if (c && c->elected != elected && strcmp(c->ifname, "lo")) {
+		platform_set_dhcp(c, elected);
+		c->elected = elected;
 	}
 }
 
@@ -134,24 +137,6 @@ void iface_pa_dps(__attribute__((unused))struct pa_data_user *user,
 	}
 }
 
-void iface_pa_ifs(__attribute__((unused))struct pa_data_user *user,
-		struct pa_iface *iface, uint32_t flags)
-{
-	if(flags & (PADF_IF_DODHCP | PADF_IF_TODELETE)) {
-		struct iface *c = iface_get(iface->ifname);
-		if(!c)
-			return;
-		assert(c->platform != NULL);
-
-		bool owner = !(flags & PADF_IF_TODELETE)
-			&& iface->do_dhcp
-			&& strncmp(c->ifname, "lo", 2);
-		if (owner != c->linkowner) {
-			c->linkowner = owner;
-			platform_set_owner(c, owner);
-		}
-	}
-}
 
 /* todo: Te new pa algorithm also selects the chosen address. But this address
  * is provided asynchronously with the prefix. As a trick for fast integration,

@@ -190,10 +190,18 @@ void platform_set_route(struct iface *c, struct iface_route *route, bool enable)
 }
 
 
-void platform_set_owner(struct iface *c, bool enable)
+void platform_set_dhcp(struct iface *c, enum hncp_link_elected elected)
 {
-	char *argv[] = {backend, (enable) ? "startdhcp" : "stopdhcp", c->ifname, (char*)hnetd_pd_socket, NULL};
-	platform_call(argv);
+	if (elected & (HNCP_LINK_LEGACY | HNCP_LINK_PREFIXDEL | HNCP_LINK_HOSTNAMES | HNCP_LINK_STATELESS)) {
+		char *argv[] = {backend, "startdhcp", c->ifname,
+				(elected & HNCP_LINK_LEGACY) ? "1" : "",
+				(elected & (HNCP_LINK_PREFIXDEL | HNCP_LINK_HOSTNAMES)) ? "1" : "",
+				(elected & HNCP_LINK_PREFIXDEL) ? (char*)hnetd_pd_socket : "", NULL};
+		platform_call(argv);
+	} else {
+		char *argv[] = {backend, "stopdhcp", c->ifname, NULL};
+		platform_call(argv);
+	}
 }
 
 

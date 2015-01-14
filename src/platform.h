@@ -26,7 +26,7 @@ void platform_set_address(struct iface *c, struct iface_addr *addr, bool enable)
 void platform_set_route(struct iface *c, struct iface_route *route, bool enable);
 
 // Set owner status
-void platform_set_owner(struct iface *c, bool enable);
+void platform_set_dhcp(struct iface *c, enum hncp_link_elected elected);
 
 // Restart dhcpv4 client
 void platform_restart_dhcpv4(struct iface *c);

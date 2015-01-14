@@ -27,7 +27,7 @@ void pa_core_iface_addr_init(__unused struct pa_iface_addr *addr, __unused const
 		__unused struct in6_addr *address, __unused uint8_t mask, __unused struct prefix *filter) {}
 void pa_core_iface_addr_add(__unused struct pa_core *core, __unused struct pa_iface_addr *addr) {}
 void pa_core_iface_addr_del(__unused struct pa_core *core, __unused struct pa_iface_addr *addr) {}
-void platform_set_owner(__unused struct iface *c, __unused bool enable) {}
+void platform_set_dhcp(__unused struct iface *c, __unused enum hncp_link_elected elected) {}
 int platform_init(__unused dncp hncp, __unused struct pa_data *data, __unused const char *pd_socket) { return 0; }
 void platform_set_address(__unused struct iface *c, __unused struct iface_addr *addr, __unused bool enable) {}
 void platform_set_route(__unused struct iface *c, __unused struct iface_route *addr, __unused bool enable) {}

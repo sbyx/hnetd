@@ -188,8 +188,8 @@ void platform_set_route(struct iface *c,
 }
 
 
-void platform_set_owner(struct iface *c,
-		__unused bool enable)
+void platform_set_dhcp(struct iface *c,
+		__unused enum hncp_link_elected elected)
 {
 	platform_set_internal(c, false);
 }
@@ -469,15 +469,19 @@ static void platform_commit(struct uloop_timeout *t)
 	k = blobmsg_open_table(&b, "data");
 	blobmsg_add_u8(&b, "created", 0);
 
-	const char *service = (c->internal && c->linkowner && strncmp(c->ifname, "lo", 2)
-			&& (avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr))
-					? "server" : "disabled";
-	blobmsg_add_string(&b, "ra", service);
-	blobmsg_add_string(&b, "dhcpv4", service);
-	blobmsg_add_string(&b, "dhcpv6", service);
-	blobmsg_add_u32(&b, "ra_management", 1);
+	if (c->internal && c->elected && (avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr)) {
+		blobmsg_add_string(&b, "ra", "server");
+		blobmsg_add_string(&b, "dhcpv4", (c->elected & HNCP_LINK_LEGACY) ? "server" : "disabled");
+		blobmsg_add_string(&b, "dhcpv6", (c->elected & (HNCP_LINK_PREFIXDEL | HNCP_LINK_HOSTNAMES)) ?
+				"server" : "disabled");
+		blobmsg_add_u32(&b, "ra_management", (c->elected & (HNCP_LINK_PREFIXDEL | HNCP_LINK_HOSTNAMES)));
+	} else {
+		blobmsg_add_string(&b, "ra", "disabled");
+		blobmsg_add_string(&b, "dhcpv4", "disabled");
+		blobmsg_add_string(&b, "dhcpv6", "disabled");
+	}
 
-	if (c->internal && c->linkowner) {
+	if (c->internal && c->elected) {
 		char *dst = blobmsg_alloc_string_buffer(&b, "dhcpv6_raw", c->dhcpv6_len_out * 2 + 1);
 		dst[0] = 0;
 
@@ -490,18 +494,18 @@ static void platform_commit(struct uloop_timeout *t)
 
 		blobmsg_add_u32(&b, "ra_default", (c->flags & IFACE_FLAG_ULA_DEFAULT) ? 1 : 0);
 		blobmsg_add_string(&b, "filter_class", "HOMENET");
+
+		if (hnetd_pd_socket && (c->elected & HNCP_LINK_PREFIXDEL))
+			blobmsg_add_string(&b, "pd_manager", hnetd_pd_socket);
 	}
 
-
-	if (c->internal && c->linkowner)
-		blobmsg_add_string(&b, "pd_manager", hnetd_pd_socket);
 
 	const char *zone = (c->internal) ? "lan" : "wan";
 	blobmsg_add_string(&b, "zone", zone);
 
 	L_DEBUG("	RA/DHCP/DHCPv6: %s, Zone: %s", service, zone);
 
-	if (domain_cnt && c->internal && c->linkowner) {
+	if (domain_cnt && c->internal && c->elected) {
 		char fqdnbuf[256];
 		char *fqdn = iface_get_fqdn(c->ifname, fqdnbuf, sizeof(fqdnbuf));
 

@@ -114,7 +114,6 @@ struct iface {
 
 	// Interface status
 	bool unused;
-	bool linkowner;
 	bool internal;
 	bool carrier;
 	bool designatedv4;
@@ -122,6 +121,7 @@ struct iface {
 	bool had_ipv6_uplink;
 
 	// Flags
+	enum hncp_link_elected elected;
 	iface_flags flags;
 
 	// LL-address

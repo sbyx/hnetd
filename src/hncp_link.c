@@ -11,6 +11,7 @@
 #include <net/if.h>
 
 #include "dncp_i.h"
+#include "hncp_i.h"
 #include "hncp_proto.h"
 #include "hncp_link.h"
 
@@ -64,6 +65,10 @@ static void calculate_link(struct hncp_link *l, dncp_link link)
 				elected |= HNCP_LINK_LEGACY;
 		} else if (dncp_tlv_neighbor(c)) {
 			++peercnt;
+		} else if (tlv_id(c) == HNCP_T_ASSIGNED_PREFIX) {
+			hncp_t_assigned_prefix_header ah = dncp_tlv_ap(c);
+			if (ah && ah->link_id == link->iid)
+				elected |= HNCP_LINK_STATELESS;
 		}
 	}
 
@@ -131,23 +136,27 @@ static void calculate_link(struct hncp_link *l, dncp_link link)
 				elected &= ~HNCP_LINK_PREFIXDEL;
 
 			if (ourvertlv->cap_hostnames < peervertlv->cap_hostnames)
-				elected &= ~HNCP_LINK_HOSTNAMES;
+				elected &= ~(HNCP_LINK_HOSTNAMES | HNCP_LINK_STATELESS);
 
 			if (ourvertlv->cap_legacy < peervertlv->cap_legacy)
 				elected &= ~HNCP_LINK_LEGACY;
 
 			if (ourcaps < peercaps || (ourcaps == peercaps &&
 					memcmp(&l->dncp->own_node->node_identifier, &peer->node_identifier, DNCP_NI_LEN) < 0)) {
-				if (ourvertlv->cap_mdnsproxy == peervertlv->cap_mdnsproxy)
+				if (peervertlv->cap_mdnsproxy &&
+						ourvertlv->cap_mdnsproxy == peervertlv->cap_mdnsproxy)
 					elected &= ~HNCP_LINK_MDNSPROXY;
 
-				if (ourvertlv->cap_prefixdel == peervertlv->cap_prefixdel)
+				if (peervertlv->cap_prefixdel &&
+						ourvertlv->cap_prefixdel == peervertlv->cap_prefixdel)
 					elected &= ~HNCP_LINK_PREFIXDEL;
 
-				if (ourvertlv->cap_hostnames == peervertlv->cap_hostnames)
-					elected &= ~HNCP_LINK_HOSTNAMES;
+				if (peervertlv->cap_hostnames &&
+						ourvertlv->cap_hostnames == peervertlv->cap_hostnames)
+					elected &= ~(HNCP_LINK_HOSTNAMES | HNCP_LINK_STATELESS);
 
-				if (ourvertlv->cap_legacy == peervertlv->cap_legacy)
+				if (peervertlv->cap_legacy &&
+						ourvertlv->cap_legacy == peervertlv->cap_legacy)
 					elected &= ~HNCP_LINK_LEGACY;
 			}
 		}
