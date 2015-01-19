@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Nov 19 17:34:25 2014 mstenber
- * Last modified: Tue Jan 13 15:47:18 2015 mstenber
- * Edit time:     261 min
+ * Last modified: Mon Jan 19 15:27:27 2015 mstenber
+ * Edit time:     275 min
  *
  */
 
@@ -152,7 +152,7 @@ static void _trust_load(dncp_trust t)
       L_INFO("wrong version # -> skipping");
       goto done;
     }
-  while ((r = fread(buf, sizeof(buf), 1, f)))
+  while ((r = fread(buf, 1, sizeof(buf), f)))
     {
       if (r != sizeof(buf))
         {
@@ -204,7 +204,7 @@ static void _trust_save(dncp_trust t)
     {
       if (tn->stored.tlv.verdict == DNCP_VERDICT_NEUTRAL)
         continue;
-      if (fwrite(&tn->stored, sizeof(tn->stored), 1, f) != sizeof(tn->stored))
+      if (fwrite(&tn->stored, 1, sizeof(tn->stored), f) != sizeof(tn->stored))
         {
           L_ERR("trust save - error writing block");
           goto done;
@@ -316,7 +316,7 @@ static void _trust_publish_maybe(dncp_trust t, dncp_trust_node n)
         }
       dncp_local_tlv_extra le;
       int elen = sizeof(*le);
-      dncp_add_tlv(t->dncp, DNCP_T_TRUST_VERDICT, &n->stored, len, elen);
+      tlv = dncp_add_tlv(t->dncp, DNCP_T_TRUST_VERDICT, &n->stored, len, elen);
       le = dncp_tlv_get_extra(tlv);
       le->tlv_time = hnetd_time();
     }
@@ -366,7 +366,10 @@ static bool _trust_set(dncp_trust t, const dncp_sha256 h,
                        uint8_t verdict, const char *cname)
 {
   dncp_trust_node tn = _trust_node_find(t, h);
+  static char empty[1] = {0};
 
+  if (!cname)
+    cname = empty;
   if (tn)
     {
       if (tn->stored.tlv.verdict == verdict
@@ -556,11 +559,15 @@ void dncp_trust_destroy(dncp_trust t)
   /* TBD - refactor profile_data reference from common code? */
   if (o->profile_data.d)
     dtls_set_unknown_cert_callback(o->profile_data.d, NULL, NULL);
-  _trust_save(t);
+  if (t->filename)
+    {
+      /* Save the data if and only if it has changed (reduce writes..) */
+      if (t->timeout.pending)
+        _trust_save(t);
+      free(t->filename);
+    }
   dncp_unsubscribe(o, &t->subscriber);
   vlist_flush_all(&t->tree);
   uloop_timeout_cancel(&t->timeout);
-  if (t->filename)
-    free(t->filename);
   free(t);
 }
