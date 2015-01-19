@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Tue Dec 23 18:41:10 2014 mstenber
- * Edit time:     88 min
+ * Last modified: Mon Jan 19 14:52:01 2015 mstenber
+ * Edit time:     94 min
  *
  */
 
@@ -49,7 +49,7 @@ void hncp_ext(void)
   dncp_node n;
   bool r;
   struct tlv_buf tb;
-  struct tlv_attr *t, *v = NULL;
+  struct tlv_attr *t;
 
   sput_fail_if(!o, "create works");
   n = dncp_get_first_node(o);
@@ -63,11 +63,6 @@ void hncp_ext(void)
   dncp_self_flush(n);
   sput_fail_unless(dncp_node_get_tlvs(n), "should have tlvs");
 
-  tlv_for_each_attr(v, dncp_node_get_tlvs(n))
-    break;
-  sput_fail_unless(v && tlv_id(v) == HNCP_T_VERSION, "no version tlv");
-
-  tlv_put(&tb, HNCP_T_VERSION, tlv_data(v), tlv_len(v));
   tlv_put(&tb, 123, NULL, 0);
 
   /* Put the 123 type length = 0 TLV as TLV to hncp. */
