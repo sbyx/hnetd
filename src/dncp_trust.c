@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Nov 19 17:34:25 2014 mstenber
- * Last modified: Mon Jan 19 15:27:27 2015 mstenber
- * Edit time:     275 min
+ * Last modified: Tue Jan 20 16:49:43 2015 mstenber
+ * Edit time:     190 min
  *
  */
 
@@ -44,13 +44,14 @@
  * pa_store) or not. This write is not atomic, nor does it handle
  * errors gracefully..
  *
- * TBD: unit tests
- *
  * TBD: hnetd.c argument to enable this + some command-line way to
  * manipulate configured trust
  *
  * TBD: make CA hierarchy work too; now this deals with just
  * (self-signed/user) certs
+ *
+ * TBD: make sure 'neutral' remotely received state is purged
+ * eventually.
  */
 
 #include "dncp_trust.h"
@@ -232,7 +233,8 @@ _compare_trust_node(const void *a, const void *b, void *ptr __unused)
 }
 
 static int _trust_get_remote_verdict(dncp_trust t, dncp_sha256 h,
-                                      dncp_node *remote_node_return)
+                                     dncp_node *remote_node_return,
+                                     char *cname)
 {
   int remote_verdict = DNCP_VERDICT_NONE;
   dncp_node remote_node = NULL;
@@ -241,6 +243,8 @@ static int _trust_get_remote_verdict(dncp_trust t, dncp_sha256 h,
   dncp_t_trust_verdict tv;
   dncp o = t->dncp;
 
+  if (cname)
+    *cname = 0;
   dncp_for_each_node(o, node)
     if (node != o->own_node)
       dncp_node_for_each_tlv_with_type(node, a, DNCP_T_TRUST_VERDICT)
@@ -252,6 +256,8 @@ static int _trust_get_remote_verdict(dncp_trust t, dncp_sha256 h,
                   {
                     remote_verdict = tv->verdict;
                     remote_node = node;
+                    if (cname)
+                      strcpy(cname, tv->cname);
                   }
               }
           }
@@ -269,12 +275,16 @@ static dncp_trust_node _trust_node_find(dncp_trust t,
   return vlist_find(&t->tree, cn, cn, in_tree);
 }
 
-int dncp_trust_get_verdict(dncp_trust t, const dncp_sha256 h)
+int dncp_trust_get_verdict(dncp_trust t, const dncp_sha256 h, char *cname)
 {
   dncp_trust_node tn = _trust_node_find(t, h);
   int verdict2 = tn ? tn->stored.tlv.verdict : DNCP_VERDICT_NONE;
-  int verdict = _trust_get_remote_verdict(t, h, NULL);
-  return verdict > verdict2 ? verdict : verdict2;
+  int verdict = _trust_get_remote_verdict(t, h, NULL, cname);
+  if (verdict > verdict2)
+    return verdict;
+  if (tn && cname)
+    strcpy(cname, tn->stored.tlv.cname);
+  return verdict2;
 }
 
 static dncp_tlv _find_local_tlv(dncp d, dncp_sha256 hash)
@@ -296,7 +306,7 @@ static void _trust_publish_maybe(dncp_trust t, dncp_trust_node n)
   int len = sizeof(n->stored.tlv) + strlen(n->stored.cname) + 1;
   dncp_node rn;
   int remote_verdict =
-    _trust_get_remote_verdict(t, &n->stored.tlv.sha256_hash, &rn);
+    _trust_get_remote_verdict(t, &n->stored.tlv.sha256_hash, &rn, NULL);
   dncp_tlv tlv = _find_local_tlv(t->dncp, &n->stored.tlv.sha256_hash);
 
   /*
@@ -346,19 +356,6 @@ static void _update_trust_node(struct vlist_tree *tr,
       if (t_old->stored.tlv.verdict == DNCP_VERDICT_NEUTRAL)
         t->num_neutral--;
       free(t_old);
-    }
-}
-
-static int _remote_to_local_verdict(int v)
-{
-  switch (v)
-    {
-    case DNCP_VERDICT_CONFIGURED_POSITIVE:
-      return DNCP_VERDICT_CACHED_POSITIVE;
-    case DNCP_VERDICT_CONFIGURED_NEGATIVE:
-      return DNCP_VERDICT_CACHED_NEGATIVE;
-    default:
-      return DNCP_VERDICT_NONE;
     }
 }
 
@@ -412,30 +409,24 @@ static void _tlv_cb(dncp_subscriber s,
   if (n == t->dncp->own_node)
     return;
   dncp_trust_node tn = _trust_node_find(t, &tv->sha256_hash);
-  int local_verdict = _remote_to_local_verdict(tv->verdict);
+  int local_verdict = DNCP_VERDICT_NEUTRAL;
+  if (tv->verdict == DNCP_VERDICT_CONFIGURED_POSITIVE)
+    local_verdict = DNCP_VERDICT_CACHED_POSITIVE;
+  else if (tv->verdict == DNCP_VERDICT_CONFIGURED_NEGATIVE)
+    local_verdict = DNCP_VERDICT_CACHED_NEGATIVE;
 
-  /* No local state -> just store the local_verdict, if it is
-   * interesting, but no need for publish. */
-  if (!tn)
+  /* Either no local state, or local state strictly inferior. */
+  if (!tn || tn->stored.tlv.verdict < local_verdict)
     {
-      if (local_verdict == DNCP_VERDICT_NONE)
-        return;
       if (!_trust_set(t,
                       &tv->sha256_hash,
                       local_verdict,
-                      &tv->cname[0]))
+                      tv->cname))
         return;
-      tn = _trust_node_find(t, &tv->sha256_hash);
-    }
-  else if (tn->stored.tlv.verdict < local_verdict)
-    {
-      /* Had local state, but it is strictly inferior to what we
-       * received from the remote party. Replace it. */
-      if (!_trust_set(t,
-                      &tn->stored.tlv.sha256_hash,
-                      local_verdict,
-                      tn->stored.cname))
+      if (local_verdict == DNCP_VERDICT_NEUTRAL)
         return;
+      if (!tn)
+        tn = _trust_node_find(t, &tv->sha256_hash);
     }
 
   _trust_publish_maybe(t, tn);
@@ -466,7 +457,7 @@ static int _trust_get_cert_verdict(dncp_trust t, dtls_cert cert)
   SHA256_Update(&ctx, buf, r);
   SHA256_Final(h.buf, &ctx);
 
-  int verdict = dncp_trust_get_verdict(t, &h);
+  int verdict = dncp_trust_get_verdict(t, &h, NULL);
   if (verdict != DNCP_VERDICT_NONE)
     return verdict;
 
@@ -482,7 +473,7 @@ void dncp_trust_request_verdict(dncp_trust t,
                                 const dncp_sha256 h,
                                 const char *cname)
 {
-  if (dncp_trust_get_verdict(t, h) > DNCP_VERDICT_NEUTRAL)
+  if (dncp_trust_get_verdict(t, h, NULL) > DNCP_VERDICT_NEUTRAL)
     return;
   dncp_trust_set(t, h, DNCP_VERDICT_NEUTRAL, cname);
   while (t->num_neutral > NEUTRAL_MAXIMUM)
@@ -570,4 +561,25 @@ void dncp_trust_destroy(dncp_trust t)
   vlist_flush_all(&t->tree);
   uloop_timeout_cancel(&t->timeout);
   free(t);
+}
+
+dncp_sha256 dncp_trust_next_hash(dncp_trust t, const dncp_sha256 prev)
+{
+  dncp_trust_node n;
+
+  if (!prev)
+    {
+      if (avl_is_empty(&t->tree.avl))
+        return NULL;
+      n = avl_first_element(&t->tree.avl, n, in_tree.avl);
+    }
+  else
+    {
+      dncp_trust_node last = avl_last_element(&t->tree.avl, n, in_tree.avl);
+      n = _trust_node_find(t, prev);
+      if (n == last)
+        return NULL;
+      n = avl_next_element(n, in_tree.avl);
+    }
+  return &n->stored.tlv.sha256_hash;
 }

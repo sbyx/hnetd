@@ -6,8 +6,8 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Tue Jan 13 15:03:51 2015 mstenber
- * Last modified: Mon Jan 19 15:44:06 2015 mstenber
- * Edit time:     35 min
+ * Last modified: Tue Jan 20 16:52:34 2015 mstenber
+ * Edit time:     47 min
  *
  */
 
@@ -42,19 +42,21 @@ int pa_update_eaa(net_node node, const struct in6_addr *addr,
 
 void dncp_trust_base()
 {
-  dncp_sha256_s h[3];
-  int v[3] = { DNCP_VERDICT_NONE, DNCP_VERDICT_NEUTRAL, DNCP_VERDICT_CONFIGURED_POSITIVE };
-  memset(&h[0], 42, sizeof(h[0]));
-  memset(&h[1], 7, sizeof(h[0]));
-  memset(&h[2], 3, sizeof(h[0]));
+  dncp_sha256_s ha[3];
+  int v[3] = { DNCP_VERDICT_NONE,
+               DNCP_VERDICT_NEUTRAL,
+               DNCP_VERDICT_CONFIGURED_POSITIVE };
+  memset(&ha[0], 42, sizeof(ha[0]));
+  memset(&ha[1], 7, sizeof(ha[0]));
+  memset(&ha[2], 3, sizeof(ha[0]));
 
   net_sim_s s;
   net_sim_init(&s);
 
   /* 3 different cases (before sync)
-  - nonexistent hash (h[0])
-  - requested hash (h[1])
-  - set hash (h[2]) */
+  - nonexistent hash (ha[0])
+  - requested hash (ha[1])
+  - set hash (ha[2]) */
   dncp d1 = net_sim_find_hncp(&s, "x");
   dncp_trust dt1 = dncp_trust_create(d1, NULL);
 
@@ -67,8 +69,8 @@ void dncp_trust_base()
   net_sim_set_connected(l1, l2, true);
   net_sim_set_connected(l2, l1, true);
 
-  dncp_trust_request_verdict(dt1, &h[1], NULL);
-  dncp_trust_set(dt1, &h[2], DNCP_VERDICT_CONFIGURED_POSITIVE, NULL);
+  dncp_trust_request_verdict(dt1, &ha[1], "bar");
+  dncp_trust_set(dt1, &ha[2], DNCP_VERDICT_CONFIGURED_POSITIVE, "foo");
 
   SIM_WHILE(&s, 100000, !net_sim_is_converged(&s));
 
@@ -77,18 +79,32 @@ void dncp_trust_base()
   int i;
   for (i = 0 ; i < 3 ; i++)
     {
-      int v1 = dncp_trust_get_verdict(dt1, &h[i]);
-      int v2 = dncp_trust_get_verdict(dt2, &h[i]);
+      int v1 = dncp_trust_get_verdict(dt1, &ha[i], NULL);
+      int v2 = dncp_trust_get_verdict(dt2, &ha[i], NULL);
       sput_fail_unless(v1 == v[i], "verdict1 expected");
       sput_fail_unless(v2 == v[i], "verdict2 expected");
 
     }
-  sput_fail_unless(dncp_trust_get_verdict(dt2, &h[0]) == DNCP_VERDICT_NONE,
-                   "none");
-  sput_fail_unless(dncp_trust_get_verdict(dt2, &h[1]) == DNCP_VERDICT_NEUTRAL,
-                   "neutral");
-  sput_fail_unless(dncp_trust_get_verdict(dt2, &h[2]) == DNCP_VERDICT_CONFIGURED_POSITIVE,
-                   "conf-pos");
+  char buf[DNCP_T_TRUST_VERDICT_CNAME_LEN];
+  dncp_trust_get_verdict(dt1, &ha[2], buf);
+  sput_fail_unless(strcmp(buf, "foo")==0, "local cname foo");
+  dncp_trust_get_verdict(dt2, &ha[2], buf);
+  sput_fail_unless(strcmp(buf, "foo")==0, "remote cname foo");
+  dncp_trust_get_verdict(dt2, &ha[1], buf);
+  sput_fail_unless(strcmp(buf, "bar")==0, "cname bar");
+
+  i = 0;
+  dncp_sha256 h;
+  dncp_trust_for_each_hash(dt1, h)
+    i++;
+  L_DEBUG("dt1 i=%d", i);
+  sput_fail_unless(i == 2, "dt1 have data for ha[1]+ha[2]");
+
+  i = 0;
+  dncp_trust_for_each_hash(dt2, h)
+    i++;
+  L_DEBUG("dt2 i=%d", i);
+  sput_fail_unless(i == 2, "dt2 have data for ha[1]+ha[2]");
 
   dncp_trust_destroy(dt1);
   dncp_trust_destroy(dt2);
@@ -110,15 +126,17 @@ void dncp_trust_io()
   sput_fail_unless(d, "dncp_create");
   dncp_trust dt = dncp_trust_create(d, TESTFILENAME);
   sput_fail_unless(dt, "dncp_trust_create");
-  sput_fail_unless(dncp_trust_get_verdict(dt, &h) == DNCP_VERDICT_NONE,
+  sput_fail_unless(dncp_trust_get_verdict(dt, &h, NULL) == DNCP_VERDICT_NONE,
                    "verdict none");
-  dncp_trust_set(dt, &h, DNCP_VERDICT_CONFIGURED_POSITIVE, NULL);
+  dncp_trust_set(dt, &h, DNCP_VERDICT_CONFIGURED_POSITIVE, "foo");
   dncp_trust_destroy(dt);
 
   dt = dncp_trust_create(d, TESTFILENAME);
   sput_fail_unless(dt, "dncp_trust_create 2");
-  sput_fail_unless(dncp_trust_get_verdict(dt, &h) == DNCP_VERDICT_CONFIGURED_POSITIVE,
+  char buf[DNCP_T_TRUST_VERDICT_CNAME_LEN];
+  sput_fail_unless(dncp_trust_get_verdict(dt, &h, buf) == DNCP_VERDICT_CONFIGURED_POSITIVE,
                    "verdict none");
+  sput_fail_unless(strcmp(buf, "foo")==0, "cname foo");
   dncp_trust_destroy(dt);
 
   net_sim_uninit(&s);
