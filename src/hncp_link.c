@@ -25,6 +25,8 @@ struct hncp_link {
 static void notify(struct hncp_link *l, const char *ifname, dncp_t_link_id ids, size_t cnt,
 		enum hncp_link_elected elected)
 {
+	L_DEBUG("hncp_link_notify: %s neighbors: %d elected(SMPHL): %x", ifname, (int)cnt, elected);
+
 	struct hncp_link_user *u;
 	list_for_each_entry(u, &l->users, head) {
 		if (u->cb_link)
@@ -72,6 +74,9 @@ static void calculate_link(struct hncp_link *l, dncp_link link)
 		}
 	}
 
+	L_DEBUG("hncp_link_calculate: %s peer-candidates: %d preelected(SMPHL): %x",
+			link->ifname, (int)peercnt, elected);
+
 	if (peercnt)
 		peers = malloc(sizeof(*peers) * peercnt);
 
@@ -109,6 +114,9 @@ static void calculate_link(struct hncp_link *l, dncp_link link)
 				peers[peerpos].link_id = pn->link_id;
 				++peerpos;
 			} else if (pn->neighbor_link_id < link->iid) {
+				L_WARN("hncp_link_calculate: %s links %d and %d appear to be connected",
+						link->ifname, link->iid, pn->neighbor_link_id);
+
 				// Two of our links seem to be connected
 				unique = false;
 				break;
@@ -159,6 +167,9 @@ static void calculate_link(struct hncp_link *l, dncp_link link)
 						ourvertlv->cap_legacy == peervertlv->cap_legacy)
 					elected &= ~HNCP_LINK_LEGACY;
 			}
+
+			L_DEBUG("hncp_link_calculate: %s peer: %x peer-caps: %x ourcaps: %x pre-elected(SMPHL): %x",
+					link->ifname, *((uint32_t*)&peer->node_identifier), peercaps, ourcaps, elected);
 		}
 	}
 

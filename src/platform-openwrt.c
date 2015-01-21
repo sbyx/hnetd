@@ -503,7 +503,7 @@ static void platform_commit(struct uloop_timeout *t)
 	const char *zone = (c->internal) ? "lan" : "wan";
 	blobmsg_add_string(&b, "zone", zone);
 
-	L_DEBUG("	Elected (SMPHL): %x, Zone: %s", c->internal ? c->elected : 0, zone);
+	L_DEBUG("	Elected(SMPHL): %x, Zone: %s", c->internal ? c->elected : 0, zone);
 
 	if (domain_cnt && c->internal && c->elected) {
 		char fqdnbuf[256];
