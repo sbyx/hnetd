@@ -6,13 +6,16 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:31 2014 mstenber
- * Last modified: Wed Nov 19 17:22:56 2014 mstenber
- * Edit time:     121 min
+ * Last modified: Wed Jan 21 14:26:30 2015 mstenber
+ * Edit time:     122 min
  *
  */
 
 /*
  * TBD: Write some tests that ensure the handling of limits is sane.
+ *
+ * TBD: Write test which makes sure that e.g. 3rd connection attempt
+ * can still change the verdict for a cert.
  */
 
 #include "dtls.c"

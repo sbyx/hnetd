@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Thu Nov 20 11:31:38 2014 mstenber
- * Edit time:     618 min
+ * Last modified: Wed Jan 21 14:24:52 2015 mstenber
+ * Edit time:     292 min
  *
  */
 
@@ -316,21 +316,20 @@ static bool _connection_poll_write(dtls_connection dc)
 
 static bool _connection_poll_read(dtls_connection dc);
 
-static void _connection_shutdown(dtls_connection dc)
+static bool _connection_shutdown(dtls_connection dc)
 {
-  if (dc->state != STATE_SHUTDOWN)
-    {
-      if (dc->state == STATE_DATA)
-        dc->d->num_data_connections--;
-      else
-        dc->d->num_non_data_connections--;
-      dc->state = STATE_SHUTDOWN;
-      /* The SSL_shutdown needs to be called 2+ times; first time, it
-       * does local bookkeeping, and second time confirms receipt of
-       * ack from remote side (eventually). */
-       (void)SSL_shutdown(dc->ssl);
-    }
-  _connection_poll_read(dc);
+  if (dc->state == STATE_SHUTDOWN)
+    return true;
+  if (dc->state == STATE_DATA)
+    dc->d->num_data_connections--;
+  else
+    dc->d->num_non_data_connections--;
+  dc->state = STATE_SHUTDOWN;
+  /* The SSL_shutdown needs to be called 2+ times; first time, it
+   * does local bookkeeping, and second time confirms receipt of
+   * ack from remote side (eventually). */
+  (void)SSL_shutdown(dc->ssl);
+  return _connection_poll_read(dc);
 }
 
 static void _connection_drop(dtls d, bool is_data)
@@ -421,10 +420,7 @@ static bool _connection_poll_read(dtls_connection dc)
         {
           L_DEBUG("nothing in queue according to SSL_peek");
           if (SSL_get_shutdown(dc->ssl) == SSL_RECEIVED_SHUTDOWN)
-            {
-              _connection_shutdown(dc);
-              return false;
-            }
+            return _connection_shutdown(dc);
           return true;
         }
       dc->d->readable = true;
@@ -451,8 +447,21 @@ static bool _connection_poll_read(dtls_connection dc)
     }
   /* Non-0, but probably timeout */
   int err = SSL_get_error(dc->ssl, rv);
+  _drain_errors();
   if (err != SSL_ERROR_WANT_READ)
-    _drain_errors();
+    {
+      if (dc->state != STATE_SHUTDOWN)
+        {
+          L_DEBUG("shutting down connection due to error");
+          return _connection_shutdown(dc);
+        }
+      else
+        {
+          /* Shutdown itself failed somehow. Just pretend it succeeded. */
+          _connection_free(dc);
+          return false;
+        }
+    }
 
   /* Handle the timeout here too */
   struct timeval tv = { 0, 0 };
