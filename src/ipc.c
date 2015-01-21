@@ -244,6 +244,8 @@ int ipc_ifupdown(int argc, char *argv[])
 	return ipc_client(blobmsg_format_json(b.head, true));
 }
 
+#ifdef DTLS
+
 static void _trust_help(const char *prog)
 {
 	fprintf(stderr, "usage:\n");
@@ -280,6 +282,7 @@ int ipc_trust(int argc, char *argv[])
 	_trust_help(argv[0]);
 	return -1; /* not reached but.. */
 }
+#endif /* DTLS */
 
 struct prefix zeros_64_prefix = { .prefix = { .s6_addr = {}}, .plen = 64 } ;
 
@@ -315,9 +318,10 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 		if (!strcmp(cmd, "trust-list")) {
 			struct blob_buf b = {NULL, NULL, 0, NULL};
 			blob_buf_init(&b, 0);
-
+#ifdef DTLS
 			if (ipc_dtrust)
 				(void)dncp_trust_list(ipc_dtrust, &b);
+#endif /* DTLS */
 			sendto(fd->fd, blob_data(b.head), blob_len(b.head),
 					MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
 
@@ -327,6 +331,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 
 
 		if (!strcmp(cmd, "trust-set") && tb[OPT_HASH] && tb[OPT_VERDICT] && ipc_dtrust) {
+#ifdef DTLS
 			const char *hs = blobmsg_get_string(tb[OPT_HASH]);
 			dncp_sha256_s h;
 			if (unhexlify((uint8_t *)&h, sizeof(h), hs) == sizeof(h)) {
@@ -334,6 +339,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			} else {
 				L_ERR("invalid hash: %s", hs);
 			}
+#endif /* DTLS */
 			sendto(fd->fd, NULL, 0, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
 			continue;
 		}
