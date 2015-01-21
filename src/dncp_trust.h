@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Nov 20 11:46:44 2014 mstenber
- * Last modified: Tue Jan 20 15:25:17 2015 mstenber
- * Edit time:     21 min
+ * Last modified: Wed Jan 21 12:38:28 2015 mstenber
+ * Edit time:     31 min
  *
  */
 
@@ -15,6 +15,9 @@
 
 #include "dncp.h"
 #include "dncp_proto.h"
+
+//#include <libubox/blob.h>
+#include <libubox/blobmsg.h>
 
 typedef struct dncp_trust_struct dncp_trust_s, *dncp_trust;
 
@@ -52,3 +55,21 @@ dncp_sha256 dncp_trust_next_hash(dncp_trust t, const dncp_sha256 prev);
 
 #define dncp_trust_for_each_hash(t, h) \
   for (h = dncp_trust_next_hash(t, NULL) ; h ; h = dncp_trust_next_hash(t, h))
+
+/*
+ * Dump contents of the trust (hash, verdict, cname) as an array of dicts.
+ */
+bool dncp_trust_list(dncp_trust o, struct blob_buf *b);
+
+/*
+ * Parse trust verdict (printable form) to value, if any.
+ *
+ * This is the interface given to clients; therefore, this set may not
+ * be complete set of supported verdicts..
+ */
+int dncp_trust_verdict_from_string(const char *verdict);
+
+/*
+ * Get printable representation of a trust verdict.
+ */
+const char *dncp_trust_verdict_to_string(int verdict);

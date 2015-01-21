@@ -7,6 +7,7 @@
 #pragma once
 #include "hnetd.h"
 #include "dncp.h"
+#include "dncp_trust.h"
 
 // IPC init
 int ipc_init();
@@ -20,4 +21,7 @@ int ipc_ifupdown(int argc, char *argv[]);
 // IPC dump client
 int ipc_dump(void);
 
-void ipc_conf(dncp hncp);
+// IPC trust client (to deal with dncp_trust)
+int ipc_trust(int argc, char *argv[]);
+
+void ipc_conf(dncp hncp, dncp_trust trust);

@@ -117,6 +117,12 @@ int usage() {
 	 "\t--ulaprefix v:x:y:z::/prefix\n"
 	 "\t--ulamode [on,off,ifnov6]\n"
 	 "\t--loglevel [0-9]\n"
+	 "\t--password <DTLS password for auth>\n"
+	 "\t--certificate <(DTLS) path to local certificate>\n"
+	 "\t--privatekey <(DTLS) path to local private key>\n"
+	 "\t--trust <(DTLS) path to trust consensus store file>\n"
+	 "\t--verify-path <(DTLS) path to trusted cert file>\n"
+	 "\t--verify-dir <(DTLS) path to trusted cert directory>\n"
 	 );
     return(3);
 }
@@ -129,6 +135,7 @@ int main(__unused int argc, char *argv[])
 	hncp_iface_user_s hiu;
 	hncp_glue hg;
 	hncp_sd_params_s sd_params;
+	dncp_trust dt = NULL;
 	struct hncp_link_config link_config = {HNCP_VERSION, 0, 0, 0, 0, ""};
 
 	memset(&sd_params, 0, sizeof(sd_params));
@@ -152,6 +159,10 @@ int main(__unused int argc, char *argv[])
 		return ipc_client(argv[1]);
 	} else if (strstr(argv[0], "hnet-dump")) {
 		return ipc_dump();
+#ifdef DTLS
+	} else if (strstr(argv[0], "hnet-trust")) {
+		return ipc_trust(argc, argv);
+#endif /* DTLS */
 	} else if ((strstr(argv[0], "hnet-ifup") || strstr(argv[0], "hnet-ifdown"))) {
 		if(argc < 2)
 			return 3;
@@ -189,6 +200,11 @@ int main(__unused int argc, char *argv[])
 	const char *pa_ulaprefix = NULL;
 	const char *pa_ulamode = NULL;
 	const char *dtls_password = NULL;
+	const char *dtls_trust = NULL;
+	const char *dtls_cert = NULL;
+	const char *dtls_key = NULL;
+	const char *dtls_path = NULL;
+	const char *dtls_dir = NULL;
 
 	enum {
 		GOL_IPPREFIX = 1000,
@@ -196,6 +212,11 @@ int main(__unused int argc, char *argv[])
 		GOL_ULAMODE,
 		GOL_LOGLEVEL,
 		GOL_PASSWORD, /* DTLS password */
+		GOL_CERT, /* DTLS certificate */
+		GOL_KEY, /* DTLS (private) key */
+		GOL_TRUST, /* DTLS trust cache filename */
+		GOL_DIR, /* DTLS trusted cert dir */
+		GOL_PATH, /* DTLS trusted cert file path */
 	};
 
 	struct option longopts[] = {
@@ -205,6 +226,11 @@ int main(__unused int argc, char *argv[])
 			{ "ulamode",     required_argument,      NULL,           GOL_ULAMODE },
 			{ "loglevel",    required_argument,      NULL,           GOL_LOGLEVEL },
 			{ "password",    required_argument,      NULL,           GOL_PASSWORD },
+			{ "trust",    required_argument,      NULL,           GOL_TRUST },
+			{ "certificate",    required_argument,      NULL,           GOL_CERT },
+			{ "privatekey",    required_argument,      NULL,           GOL_KEY },
+			{ "verifydir",    required_argument,      NULL,           GOL_DIR },
+			{ "verifypath",    required_argument,      NULL,           GOL_PATH },
 			{ "help",	 no_argument,		 NULL,           '?' },
 			{ NULL,          0,                      NULL,           0 }
 	};
@@ -252,6 +278,21 @@ int main(__unused int argc, char *argv[])
 			break;
 		case GOL_PASSWORD:
 			dtls_password = optarg;
+			break;
+		case GOL_TRUST:
+			dtls_trust = optarg;
+			break;
+		case GOL_DIR:
+			dtls_dir = optarg;
+			break;
+		case GOL_PATH:
+			dtls_path = optarg;
+			break;
+		case GOL_KEY:
+			dtls_key = optarg;
+			break;
+		case GOL_CERT:
+			dtls_cert = optarg;
 			break;
 		default:
 			L_ERR("Unrecognized option");
@@ -322,18 +363,39 @@ int main(__unused int argc, char *argv[])
 		return 42;
 	}
 
-	if (dtls_password) {
+	if (dtls_password || dtls_trust || dtls_dir || dtls_path) {
 #ifdef DTLS
 		dtls d;
 		if (!(d = dtls_create(HNCP_DTLS_SERVER_PORT))) {
 			L_ERR("Unable to create dtls");
 			return 13;
 		}
-		if (!(dtls_set_psk(d, dtls_password, strlen(dtls_password)))) {
-			L_ERR("Unable to set dtls password");
-			return 13;
+		if (dtls_key && dtls_cert) {
+				if (!dtls_set_local_cert(d, dtls_cert, dtls_key)) {
+						L_ERR("Unable to set certificate+key");
+						return 13;
+				}
+		}
+		if (dtls_dir || dtls_path) {
+				if (!dtls_set_verify_locations(d, dtls_path, dtls_dir)) {
+						L_ERR("Unable to set verify locations");
+						return 13;
+				}
 		}
 		hncp_set_dtls(h, d);
+		if (dtls_password) {
+				if (!(dtls_set_psk(d,
+								   dtls_password, strlen(dtls_password)))) {
+						L_ERR("Unable to set dtls password");
+						return 13;
+				}
+		} else {
+				dt = dncp_trust_create(h, dtls_trust);
+				if (!dt) {
+						L_ERR("Unable to create dncp trust module");
+						return 13;
+				}
+		}
 		dtls_start(d);
 #endif /* DTLS */
 	}
@@ -369,7 +431,7 @@ int main(__unused int argc, char *argv[])
 
 #ifdef WITH_IPC
 	/* Configure ipc */
-	ipc_conf(h);
+	ipc_conf(h, dt);
 #endif
 
 	uloop_run();

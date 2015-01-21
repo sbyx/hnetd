@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Thu Jan  8 14:32:54 2015 mstenber
- * Edit time:     106 min
+ * Last modified: Wed Jan 21 11:35:48 2015 mstenber
+ * Edit time:     108 min
  *
  */
 
@@ -96,7 +96,8 @@ typedef enum {
   DNCP_VERDICT_CACHED_POSITIVE = 1,
   DNCP_VERDICT_CACHED_NEGATIVE = 2,
   DNCP_VERDICT_CONFIGURED_POSITIVE = 3,
-  DNCP_VERDICT_CONFIGURED_NEGATIVE = 4
+  DNCP_VERDICT_CONFIGURED_NEGATIVE = 4,
+  NUM_DNCP_VERDICT = 5
 } dncp_trust_verdict;
 
 #define DNCP_T_TRUST_VERDICT_CNAME_LEN 64

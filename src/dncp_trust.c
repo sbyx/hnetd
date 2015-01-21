@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Nov 19 17:34:25 2014 mstenber
- * Last modified: Tue Jan 20 16:49:43 2015 mstenber
- * Edit time:     190 min
+ * Last modified: Wed Jan 21 13:20:24 2015 mstenber
+ * Edit time:     213 min
  *
  */
 
@@ -390,7 +390,8 @@ static bool _trust_set(dncp_trust t, const dncp_sha256 h,
   tn->stored.tlv.verdict = verdict;
   if (verdict == DNCP_VERDICT_NEUTRAL)
     t->num_neutral++;
-  strcpy(tn->stored.cname, cname);
+  if (*cname)
+    strcpy(tn->stored.cname, cname);
   uloop_timeout_set(&t->timeout, SAVE_INTERVAL);
   return true;
 }
@@ -459,12 +460,16 @@ static int _trust_get_cert_verdict(dncp_trust t, dtls_cert cert)
 
   int verdict = dncp_trust_get_verdict(t, &h, NULL);
   if (verdict != DNCP_VERDICT_NONE)
-    return verdict;
+    {
+      L_DEBUG("_trust_get_cert_verdict got %d verdict", verdict);
+      return verdict;
+    }
 
   char cbuf[DNCP_T_TRUST_VERDICT_CNAME_LEN];
   X509_NAME_oneline(X509_get_subject_name(cert),
                     cbuf,
                     sizeof(cbuf));
+  L_DEBUG("_trust_get_cert_verdict requesting verdict");
   dncp_trust_request_verdict(t, &h, cbuf);
   return DNCP_VERDICT_NEUTRAL;
 }
@@ -538,8 +543,11 @@ dncp_trust dncp_trust_create(dncp o, const char *filename)
   dncp_subscribe(o, &t->subscriber);
   /* TBD - refactor profile_data reference from common code? */
   if (o->profile_data.d)
-    dtls_set_unknown_cert_callback(o->profile_data.d,
-                                   _dtls_unknown_callback, t);
+    {
+      L_DEBUG("dncp_trust_create setting unknown_cert_callback");
+      dtls_set_unknown_cert_callback(o->profile_data.d,
+                                     _dtls_unknown_callback, t);
+    }
   return t;
 }
 
@@ -549,7 +557,10 @@ void dncp_trust_destroy(dncp_trust t)
 
   /* TBD - refactor profile_data reference from common code? */
   if (o->profile_data.d)
-    dtls_set_unknown_cert_callback(o->profile_data.d, NULL, NULL);
+    {
+      L_DEBUG("dncp_trust_destroy clearing unknown_cert_callback");
+      dtls_set_unknown_cert_callback(o->profile_data.d, NULL, NULL);
+    }
   if (t->filename)
     {
       /* Save the data if and only if it has changed (reduce writes..) */
@@ -582,4 +593,61 @@ dncp_sha256 dncp_trust_next_hash(dncp_trust t, const dncp_sha256 prev)
       n = avl_next_element(n, in_tree.avl);
     }
   return &n->stored.tlv.sha256_hash;
+}
+
+const char *dncp_trust_verdict_to_string(int verdict)
+{
+  switch (verdict)
+    {
+    case DNCP_VERDICT_NONE:
+      return "none";
+    case DNCP_VERDICT_NEUTRAL:
+      return "neutral";
+    case DNCP_VERDICT_CACHED_POSITIVE:
+      return "cached-positive";
+    case DNCP_VERDICT_CACHED_NEGATIVE:
+      return "cached-negative";
+    case DNCP_VERDICT_CONFIGURED_POSITIVE:
+      return "positive";
+    case DNCP_VERDICT_CONFIGURED_NEGATIVE:
+      return "negative";
+    }
+  return "unknown";
+}
+
+int dncp_trust_verdict_from_string(const char *verdict)
+{
+  /* Convenience - 1 = trust, 0 = no trust */
+  if (strcmp(verdict, "1")==0)
+    return DNCP_VERDICT_CONFIGURED_POSITIVE;
+  if (strcmp(verdict, "0")==0)
+    return DNCP_VERDICT_CONFIGURED_NEGATIVE;
+  /* Allow direct use of returned strings too. */
+  int i;
+  for (i = -1 ; i < NUM_DNCP_VERDICT ; i++)
+    if (strcmp(verdict, dncp_trust_verdict_to_string(i))==0)
+      return i;
+  return DNCP_VERDICT_NONE;
+}
+
+#define T_A(x) if (!(x)) return false
+
+bool dncp_trust_list(dncp_trust o, struct blob_buf *b)
+{
+  /* Make blob_buf dict, with keys the hashes, and the values verdict
+   * + cname. */
+  dncp_sha256 h;
+  char cname[DNCP_T_TRUST_VERDICT_CNAME_LEN];
+
+  dncp_trust_for_each_hash(o, h)
+    {
+      int v = dncp_trust_get_verdict(o, h, cname);
+      char buf[sizeof(*h)*2+1];
+      void *t;
+      T_A((t=blobmsg_open_table(b, hexlify(buf, (uint8_t *)h, sizeof(*h)))));
+      T_A(!blobmsg_add_string(b, "cname", cname));
+      T_A(!blobmsg_add_string(b, "verdict", dncp_trust_verdict_to_string(v)));
+      blobmsg_close_table(b, t);
+    }
+  return true;
 }

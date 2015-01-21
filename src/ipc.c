@@ -24,12 +24,14 @@
 #include "dhcpv6.h"
 #include "prefix_utils.h"
 #include "hncp_dump.h"
+#include "dncp_trust.h"
 
 static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events);
 static struct uloop_fd ipcsock = { .cb = ipc_handle };
 static const char *ipcpath = "/var/run/hnetd.sock";
 static const char *ipcpath_client = "/var/run/hnetd-client%d.sock";
-static dncp ipchncp = NULL;
+static dncp ipc_hncp = NULL;
+static dncp_trust ipc_dtrust = NULL;
 
 enum ipc_option {
 	OPT_COMMAND,
@@ -48,7 +50,9 @@ enum ipc_option {
 	OPT_ULA_DEFAULT_ROUTER,
 	OPT_KEEPALIVE_INTERVAL,
 	OPT_TRICKLE_K,
-        OPT_DNSNAME,
+	OPT_DNSNAME,
+	OPT_HASH,
+	OPT_VERDICT,
 	OPT_MAX
 };
 
@@ -69,7 +73,9 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_ULA_DEFAULT_ROUTER] = {"ula_default_router", BLOBMSG_TYPE_BOOL},
 	[OPT_KEEPALIVE_INTERVAL] = { .name = "keepalive_interval", .type = BLOBMSG_TYPE_INT32 },
 	[OPT_TRICKLE_K] = { .name = "trickle_k", .type = BLOBMSG_TYPE_INT32 },
-        [OPT_DNSNAME] = { .name = "dnsname", .type = BLOBMSG_TYPE_STRING},
+	[OPT_DNSNAME] = { .name = "dnsname", .type = BLOBMSG_TYPE_STRING},
+	[OPT_HASH] = { .name = "hash", .type = BLOBMSG_TYPE_STRING},
+	[OPT_VERDICT] = { .name = "verdict", .type = BLOBMSG_TYPE_INT8 },
 };
 
 enum ipc_prefix_option {
@@ -101,9 +107,10 @@ int ipc_init(void)
 	return 0;
 }
 
-void ipc_conf(dncp hncp)
+void ipc_conf(dncp hncp, dncp_trust trust)
 {
-	ipchncp = hncp;
+	ipc_hncp = hncp;
+	ipc_dtrust = trust;
 }
 
 // CLI JSON->IPC TLV converter for 3rd party dhcp client integration
@@ -237,6 +244,43 @@ int ipc_ifupdown(int argc, char *argv[])
 	return ipc_client(blobmsg_format_json(b.head, true));
 }
 
+static void _trust_help(const char *prog)
+{
+	fprintf(stderr, "usage:\n");
+	fprintf(stderr, "\t%s\n", prog);
+	fprintf(stderr, "\t\tlist\n");
+	fprintf(stderr, "\t\tset <hash> <value>\n");
+	exit(1);
+}
+
+int ipc_trust(int argc, char *argv[])
+{
+	if (argc > 1) {
+		if (strcmp(argv[1], "list") == 0) {
+			return ipc_client("{\"command\": \"trust-list\"}");
+		} else if (strcmp(argv[1], "set") == 0) {
+			if (argc != 4)
+				_trust_help(argv[0]);
+			struct blob_buf b = {NULL, NULL, 0, NULL};
+			blob_buf_init(&b, 0);
+			blobmsg_add_string(&b, "command", "trust-set");
+			blobmsg_add_string(&b, "hash", argv[2]);
+			int verdict = dncp_trust_verdict_from_string(argv[3]);
+			if (verdict < 0) {
+				L_ERR("invalid verdict: %s"
+				      " (try e.g. 0, 1 or returned values)",
+				      argv[3]);
+			} else {
+				blobmsg_add_u8(&b, "verdict", verdict);
+				return ipc_client(blobmsg_format_json(b.head,
+								      true));
+			}
+		}
+	}
+	_trust_help(argv[0]);
+	return -1; /* not reached but.. */
+}
+
 struct prefix zeros_64_prefix = { .prefix = { .s6_addr = {}}, .plen = 64 } ;
 
 // Handle internal IPC message
@@ -260,11 +304,37 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			struct blob_buf b = {NULL, NULL, 0, NULL};
 			blob_buf_init(&b, 0);
 
-			hncp_dump(&b, ipchncp);
+			hncp_dump(&b, ipc_hncp);
 			sendto(fd->fd, blob_data(b.head), blob_len(b.head),
 					MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
 
 			blob_buf_free(&b);
+			continue;
+		}
+
+		if (!strcmp(cmd, "trust-list")) {
+			struct blob_buf b = {NULL, NULL, 0, NULL};
+			blob_buf_init(&b, 0);
+
+			if (ipc_dtrust)
+				(void)dncp_trust_list(ipc_dtrust, &b);
+			sendto(fd->fd, blob_data(b.head), blob_len(b.head),
+					MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
+
+			blob_buf_free(&b);
+			continue;
+		}
+
+
+		if (!strcmp(cmd, "trust-set") && tb[OPT_HASH] && tb[OPT_VERDICT] && ipc_dtrust) {
+			const char *hs = blobmsg_get_string(tb[OPT_HASH]);
+			dncp_sha256_s h;
+			if (unhexlify((uint8_t *)&h, sizeof(h), hs) == sizeof(h)) {
+				dncp_trust_set(ipc_dtrust, &h, blobmsg_get_u8(tb[OPT_VERDICT]), NULL);
+			} else {
+				L_ERR("invalid hash: %s", hs);
+			}
+			sendto(fd->fd, NULL, 0, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
 			continue;
 		}
 
@@ -347,26 +417,26 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 
 			unsigned ip6_plen;
 			if(iface && tb[OPT_IP6_PLEN]
-			               && sscanf(blobmsg_get_string(tb[OPT_IP6_PLEN]), "%u", &ip6_plen) == 1
-			               && ip6_plen <= 128) {
+				       && sscanf(blobmsg_get_string(tb[OPT_IP6_PLEN]), "%u", &ip6_plen) == 1
+				       && ip6_plen <= 128) {
 				iface->ip6_plen = ip6_plen;
 			}
 
 			unsigned ip4_plen;
 			if(iface && tb[OPT_IP4_PLEN]
-			               && sscanf(blobmsg_get_string(tb[OPT_IP4_PLEN]), "%u", &ip4_plen) == 1
-			               && ip4_plen <= 128) {
+				       && sscanf(blobmsg_get_string(tb[OPT_IP4_PLEN]), "%u", &ip4_plen) == 1
+				       && ip4_plen <= 128) {
 				iface->ip4_plen = ip4_plen;
 			}
 
 			dncp_link_conf conf;
-			if(c && tb[OPT_KEEPALIVE_INTERVAL] && (conf = dncp_if_find_conf_by_name(ipchncp, c->ifname))) {
+			if(c && tb[OPT_KEEPALIVE_INTERVAL] && (conf = dncp_if_find_conf_by_name(ipc_hncp, c->ifname))) {
 				conf->keepalive_interval = (((hnetd_time_t) blobmsg_get_u32(tb[OPT_KEEPALIVE_INTERVAL])) * HNETD_TIME_PER_SECOND) / 1000;
 			}
 
-			if(c && tb[OPT_TRICKLE_K] && (conf = dncp_if_find_conf_by_name(ipchncp, c->ifname)))
+			if(c && tb[OPT_TRICKLE_K] && (conf = dncp_if_find_conf_by_name(ipc_hncp, c->ifname)))
 				conf->trickle_k = (int) blobmsg_get_u32(tb[OPT_TRICKLE_K]);
-			if(c && tb[OPT_DNSNAME] && (conf = dncp_if_find_conf_by_name(ipchncp, c->ifname)))
+			if(c && tb[OPT_DNSNAME] && (conf = dncp_if_find_conf_by_name(ipc_hncp, c->ifname)))
 				strncpy(conf->dnsname, blobmsg_get_string(tb[OPT_DNSNAME]), sizeof(conf->dnsname));
 
 		} else if (!c) {
