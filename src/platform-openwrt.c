@@ -474,7 +474,7 @@ static void platform_commit(struct uloop_timeout *t)
 		blobmsg_add_string(&b, "dhcpv4", (c->elected & HNCP_LINK_LEGACY) ? "server" : "disabled");
 		blobmsg_add_string(&b, "dhcpv6", (c->elected & (HNCP_LINK_PREFIXDEL | HNCP_LINK_HOSTNAMES)) ?
 				"server" : "disabled");
-		blobmsg_add_u32(&b, "ra_management", (c->elected & (HNCP_LINK_PREFIXDEL | HNCP_LINK_HOSTNAMES)));
+		blobmsg_add_u32(&b, "ra_management", !!(c->elected & (HNCP_LINK_PREFIXDEL | HNCP_LINK_HOSTNAMES)));
 	} else {
 		blobmsg_add_string(&b, "ra", "disabled");
 		blobmsg_add_string(&b, "dhcpv4", "disabled");
