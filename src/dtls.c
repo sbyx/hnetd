@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Wed Jan 21 14:24:52 2015 mstenber
- * Edit time:     292 min
+ * Last modified: Mon Jan 26 15:50:03 2015 mstenber
+ * Edit time:     297 min
  *
  */
 
@@ -329,7 +329,10 @@ static bool _connection_shutdown(dtls_connection dc)
    * does local bookkeeping, and second time confirms receipt of
    * ack from remote side (eventually). */
   (void)SSL_shutdown(dc->ssl);
-  return _connection_poll_read(dc);
+
+  /* Initially write the shutdown, and then wait for it to complete if
+   * we feel like it. */
+  return _connection_poll_write(dc) && _connection_poll_read(dc);
 }
 
 static void _connection_drop(dtls d, bool is_data)
