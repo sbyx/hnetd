@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Nov 19 17:34:25 2014 mstenber
- * Last modified: Wed Jan 21 13:20:24 2015 mstenber
- * Edit time:     213 min
+ * Last modified: Mon Jan 26 17:43:17 2015 mstenber
+ * Edit time:     226 min
  *
  */
 
@@ -371,7 +371,8 @@ static bool _trust_set(dncp_trust t, const dncp_sha256 h,
     {
       if (tn->stored.tlv.verdict == verdict
           && (cname == tn->stored.cname
-              || strcmp(tn->stored.cname, cname) == 0))
+              || strcmp(tn->stored.cname, cname) == 0
+              || !*cname))
         return false;
       if (tn->stored.tlv.verdict == DNCP_VERDICT_NEUTRAL)
         t->num_neutral--;
@@ -436,8 +437,13 @@ static void _tlv_cb(dncp_subscriber s,
 void dncp_trust_set(dncp_trust t, const dncp_sha256 h,
                     uint8_t verdict, const char *cname)
 {
+  L_DEBUG("dncp_trust_set %s/%s %d",
+          HEX_REPR(h, sizeof(*h)), cname ? cname : "-", (int)verdict);
   if (!_trust_set(t, h, verdict, cname))
-    return;
+    {
+      L_DEBUG(" already set");
+      return;
+    }
   dncp_trust_node tn = _trust_node_find(t, h);
   _trust_publish_maybe(t, tn);
 }
@@ -595,7 +601,7 @@ dncp_sha256 dncp_trust_next_hash(dncp_trust t, const dncp_sha256 prev)
   return &n->stored.tlv.sha256_hash;
 }
 
-const char *dncp_trust_verdict_to_string(int verdict)
+const char *dncp_trust_verdict_to_string(dncp_trust_verdict verdict)
 {
   switch (verdict)
     {
@@ -611,11 +617,12 @@ const char *dncp_trust_verdict_to_string(int verdict)
       return "positive";
     case DNCP_VERDICT_CONFIGURED_NEGATIVE:
       return "negative";
+    default:
+      return "unknown";
     }
-  return "unknown";
 }
 
-int dncp_trust_verdict_from_string(const char *verdict)
+dncp_trust_verdict dncp_trust_verdict_from_string(const char *verdict)
 {
   /* Convenience - 1 = trust, 0 = no trust */
   if (strcmp(verdict, "1")==0)
