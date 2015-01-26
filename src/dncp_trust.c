@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Nov 19 17:34:25 2014 mstenber
- * Last modified: Mon Jan 26 17:43:17 2015 mstenber
- * Edit time:     226 min
+ * Last modified: Mon Jan 26 19:03:12 2015 mstenber
+ * Edit time:     234 min
  *
  */
 
@@ -93,6 +93,9 @@ struct dncp_trust_struct {
 
   /* Number of neutral verdicts we have published. */
   int num_neutral;
+
+  /* Until what point in time default verdict is configured-positive. */
+  hnetd_time_t trust_until;
 };
 
 typedef struct __packed {
@@ -465,16 +468,25 @@ static int _trust_get_cert_verdict(dncp_trust t, dtls_cert cert)
   SHA256_Final(h.buf, &ctx);
 
   int verdict = dncp_trust_get_verdict(t, &h, NULL);
+
+  char cbuf[DNCP_T_TRUST_VERDICT_CNAME_LEN];
+  X509_NAME_oneline(X509_get_subject_name(cert),
+                    cbuf,
+                    sizeof(cbuf));
+
+  if (verdict < DNCP_VERDICT_CONFIGURED_POSITIVE
+      && hnetd_time() <= t->trust_until)
+    {
+      dncp_trust_set(t, &h, DNCP_VERDICT_CONFIGURED_POSITIVE, cbuf);
+      verdict = DNCP_VERDICT_CONFIGURED_POSITIVE;
+    }
+
   if (verdict != DNCP_VERDICT_NONE)
     {
       L_DEBUG("_trust_get_cert_verdict got %d verdict", verdict);
       return verdict;
     }
 
-  char cbuf[DNCP_T_TRUST_VERDICT_CNAME_LEN];
-  X509_NAME_oneline(X509_get_subject_name(cert),
-                    cbuf,
-                    sizeof(cbuf));
   L_DEBUG("_trust_get_cert_verdict requesting verdict");
   dncp_trust_request_verdict(t, &h, cbuf);
   return DNCP_VERDICT_NEUTRAL;
@@ -652,9 +664,15 @@ bool dncp_trust_list(dncp_trust o, struct blob_buf *b)
       char buf[sizeof(*h)*2+1];
       void *t;
       T_A((t=blobmsg_open_table(b, hexlify(buf, (uint8_t *)h, sizeof(*h)))));
-      T_A(!blobmsg_add_string(b, "cname", cname));
+      if (*cname)
+        T_A(!blobmsg_add_string(b, "cname", cname));
       T_A(!blobmsg_add_string(b, "verdict", dncp_trust_verdict_to_string(v)));
       blobmsg_close_table(b, t);
     }
   return true;
+}
+
+void dncp_trust_set_timer(dncp_trust t, uint32_t seconds)
+{
+  t->trust_until = hnetd_time() + seconds * HNETD_TIME_PER_SECOND;
 }

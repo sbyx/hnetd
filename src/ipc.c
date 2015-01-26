@@ -53,6 +53,7 @@ enum ipc_option {
 	OPT_DNSNAME,
 	OPT_HASH,
 	OPT_VERDICT,
+	OPT_TIMER_VALUE,
 	OPT_MAX
 };
 
@@ -75,7 +76,8 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_TRICKLE_K] = { .name = "trickle_k", .type = BLOBMSG_TYPE_INT32 },
 	[OPT_DNSNAME] = { .name = "dnsname", .type = BLOBMSG_TYPE_STRING},
 	[OPT_HASH] = { .name = "hash", .type = BLOBMSG_TYPE_STRING},
-	[OPT_VERDICT] = { .name = "verdict", .type = BLOBMSG_TYPE_INT8 },
+	[OPT_VERDICT] = { .name = "verdict", .type = BLOBMSG_TYPE_INT32 },
+	[OPT_TIMER_VALUE] = { .name = "timer_value", .type = BLOBMSG_TYPE_INT32 },
 };
 
 enum ipc_prefix_option {
@@ -252,18 +254,20 @@ static void _trust_help(const char *prog)
 	fprintf(stderr, "\t%s\n", prog);
 	fprintf(stderr, "\t\tlist\n");
 	fprintf(stderr, "\t\tset <hash> <value>\n");
+	fprintf(stderr, "\t\tset-trust-timer <value-in-seconds>\n");
 	exit(1);
 }
 
 int ipc_trust(int argc, char *argv[])
 {
+	struct blob_buf b = {NULL, NULL, 0, NULL};
+
 	if (argc > 1) {
 		if (strcmp(argv[1], "list") == 0) {
 			return ipc_client("{\"command\": \"trust-list\"}");
 		} else if (strcmp(argv[1], "set") == 0) {
 			if (argc != 4)
 				_trust_help(argv[0]);
-			struct blob_buf b = {NULL, NULL, 0, NULL};
 			blob_buf_init(&b, 0);
 			blobmsg_add_string(&b, "command", "trust-set");
 			blobmsg_add_string(&b, "hash", argv[2]);
@@ -273,9 +277,19 @@ int ipc_trust(int argc, char *argv[])
 				      " (try e.g. 0, 1 or returned values)",
 				      argv[3]);
 			} else {
-				blobmsg_add_u8(&b, "verdict", verdict);
+				blobmsg_add_u32(&b, "verdict", verdict);
 				return ipc_client(blobmsg_format_json(b.head,
 								      true));
+			}
+		} else if (strcmp(argv[1], "set-trust-timer") == 0) {
+			if (argc == 3) {
+				int value = atoi(argv[2]);
+				if (value >= 0) {
+					blob_buf_init(&b, 0);
+					blobmsg_add_string(&b, "command", "trust-set-timer");
+					blobmsg_add_u32(&b, "timer_value", value);
+					return ipc_client(blobmsg_format_json(b.head, true));
+				}
 			}
 		}
 	}
@@ -335,10 +349,19 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			const char *hs = blobmsg_get_string(tb[OPT_HASH]);
 			dncp_sha256_s h;
 			if (unhexlify((uint8_t *)&h, sizeof(h), hs) == sizeof(h)) {
-				dncp_trust_set(ipc_dtrust, &h, blobmsg_get_u8(tb[OPT_VERDICT]), NULL);
+				dncp_trust_set(ipc_dtrust, &h, blobmsg_get_u32(tb[OPT_VERDICT]), NULL);
 			} else {
 				L_ERR("invalid hash: %s", hs);
 			}
+#endif /* DTLS */
+			sendto(fd->fd, NULL, 0, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
+			continue;
+		}
+
+		if (!strcmp(cmd, "trust-set-timer") && tb[OPT_TIMER_VALUE]) {
+#ifdef DTLS
+			uint32_t value = blobmsg_get_u32(tb[OPT_TIMER_VALUE]);
+			dncp_trust_set_timer(ipc_dtrust, value);
 #endif /* DTLS */
 			sendto(fd->fd, NULL, 0, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
 			continue;

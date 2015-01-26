@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Nov 20 11:46:44 2014 mstenber
- * Last modified: Mon Jan 26 17:42:49 2015 mstenber
- * Edit time:     31 min
+ * Last modified: Mon Jan 26 18:27:23 2015 mstenber
+ * Edit time:     32 min
  *
  */
 
@@ -46,6 +46,12 @@ void dncp_trust_request_verdict(dncp_trust t,
  */
 void dncp_trust_set(dncp_trust t, const dncp_sha256 h,
                     uint8_t verdict, const char *cname);
+
+/*
+ * Set timer during which all (non-configured-negative) new contact
+ * attempts will be automatically configured-positive.
+ */
+void dncp_trust_set_timer(dncp_trust t, uint32_t seconds);
 
 /*
  * Find next hash available. NULL's next is first hash, so this is a
