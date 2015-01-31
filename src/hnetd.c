@@ -26,10 +26,12 @@
 #include "hncp_routing.h"
 #include "hncp_proto.h"
 #include "hncp_link.h"
-#include "ipc.h"
+#include "hncp_dump.h"
 #include "platform.h"
 #include "pa.h"
 #include "pd.h"
+#include "dncp_trust.h"
+
 #ifdef DTLS
 #include "dtls.h"
 #endif /* DTLS */
@@ -140,36 +142,6 @@ int main(__unused int argc, char *argv[])
 
 	memset(&sd_params, 0, sizeof(sd_params));
 
-	if (strstr(argv[0], "hnet-ifresolve")) {
-		if (!argv[1])
-			return 1;
-
-		int ifindex = if_nametoindex(argv[1]);
-		if (ifindex) {
-			printf("%i\n", ifindex);
-			return 0;
-		} else {
-			return 2;
-		}
-	}
-#ifdef WITH_IPC
-	else if (strstr(argv[0], "hnet-call")) {
-		if(argc < 2)
-			return 3;
-		return ipc_client(argv[1]);
-	} else if (strstr(argv[0], "hnet-dump")) {
-		return ipc_dump();
-#ifdef DTLS
-	} else if (strstr(argv[0], "hnet-trust")) {
-		return ipc_trust(argc, argv);
-#endif /* DTLS */
-	} else if ((strstr(argv[0], "hnet-ifup") || strstr(argv[0], "hnet-ifdown"))) {
-		if(argc < 2)
-			return 3;
-		return ipc_ifupdown(argc, argv);
-	}
-#endif
-
 	openlog("hnetd", LOG_PERROR | LOG_PID, LOG_DAEMON);
 	uloop_init();
 
@@ -178,12 +150,15 @@ int main(__unused int argc, char *argv[])
 		return 2;
 	}
 
-#ifdef WITH_IPC
-	if (ipc_init()) {
-		L_ERR("Failed to init IPC: %s", strerror(errno));
-		return 5;
-	}
+	// Register multicalls
+	hd_register_rpc();
+#ifdef DTLS
+	dncp_trust_register_multicall();
 #endif
+
+	int ret = platform_rpc_multicall(argc, argv);
+	if (ret >= 0)
+		return ret;
 
 	int urandom_fd;
 	if ((urandom_fd = open("/dev/urandom", O_CLOEXEC | O_RDONLY)) >= 0) {
@@ -302,6 +277,13 @@ int main(__unused int argc, char *argv[])
 		}
 	}
 
+	h = hncp_create();
+	if (!h) {
+		L_ERR("Unable to initialize HNCP");
+		return 42;
+	}
+
+	hd_init(h);
 	pa_init(&pa, NULL);
 	if(pa_store_file)
 		pa_store_setfile(&pa.store, pa_store_file);
@@ -356,13 +338,6 @@ int main(__unused int argc, char *argv[])
 	link_config.cap_prefixdel = link_config.cap_hostnames = link_config.cap_legacy = 4;
 	snprintf(link_config.agent, sizeof(link_config.agent), "hnetd/%s", STR(HNETD_VERSION));
 
-
-	h = hncp_create();
-	if (!h) {
-		L_ERR("Unable to initialize HNCP");
-		return 42;
-	}
-
 	if (dtls_password || dtls_trust || dtls_dir || dtls_path) {
 #ifdef DTLS
 		dtls d;
@@ -416,7 +391,7 @@ int main(__unused int argc, char *argv[])
 
 	struct hncp_link *link = hncp_link_create(h, &link_config);
 
-	/* Init ipc */
+	/* Init ipc (no RPC-registrations after this point!) */
 	iface_init(h, sd, &pa, link, pd_socket_path);
 
 	/* Glue together HNCP, PA-glue and and iface */
@@ -428,11 +403,6 @@ int main(__unused int argc, char *argv[])
 
 	/* Fire up the prefix assignment code. */
 	pa_start(&pa);
-
-#ifdef WITH_IPC
-	/* Configure ipc */
-	ipc_conf(h, dt);
-#endif
 
 	uloop_run();
 	return 0;
