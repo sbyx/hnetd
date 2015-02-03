@@ -95,9 +95,12 @@ int platform_rpc_cli(const char *method, struct blob_attr *in)
 	blobmsg_for_each_attr(a, in, rem)
 		blobmsg_add_blob(&b, a);
 
+	hnetd_time_t start = hnetd_time();
+	do {
+		ret = connect(sock, (struct sockaddr *)&serveraddr, sizeof(serveraddr));
+	} while (ret && errno == ENOENT && hnetd_time() - start < 5000 && usleep(100000) <= 0);
 
-	if (sendto(sock, blob_data(b.head), blob_len(b.head), 0,
-			(struct sockaddr *)&serveraddr, sizeof(serveraddr)) > 0) {
+	if (!ret && send(sock, blob_data(b.head), blob_len(b.head), 0) > 0) {
 		struct __packed {
 			struct blob_attr hdr;
 			uint8_t buf[1024*128];
