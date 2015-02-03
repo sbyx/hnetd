@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Nov 19 17:34:25 2014 mstenber
- * Last modified: Mon Jan 26 19:03:12 2015 mstenber
- * Edit time:     234 min
+ * Last modified: Tue Feb  3 19:58:06 2015 mstenber
+ * Edit time:     235 min
  *
  */
 
@@ -641,7 +641,7 @@ dncp_trust dncp_trust_create(dncp o, const char *filename)
     }
 
   t->rpc_trust_set_timer.cb = _rpc_set_timer;
-  t->rpc_trust_set_timer.name = "set-trust-timer";
+  t->rpc_trust_set_timer.name = "trust-set-timer";
   t->rpc_trust_list.cb = _rpc_list;
   t->rpc_trust_list.name = "trust-list";
   t->rpc_trust_set.cb = _rpc_set;
