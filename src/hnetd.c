@@ -180,6 +180,7 @@ int main(__unused int argc, char *argv[])
 	const char *dtls_key = NULL;
 	const char *dtls_path = NULL;
 	const char *dtls_dir = NULL;
+	const char *pidfile = NULL;
 
 	enum {
 		GOL_IPPREFIX = 1000,
@@ -210,8 +211,11 @@ int main(__unused int argc, char *argv[])
 			{ NULL,          0,                      NULL,           0 }
 	};
 
-	while ((c = getopt_long(argc, argv, "?d:f:o:n:r:s:p:m:c:", longopts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "?b::d:f:o:n:r:s:p:m:c:", longopts, NULL)) != -1) {
 		switch (c) {
+		case 'b':
+			pidfile = (optarg && optarg[0]) ? optarg : "/var/run/hnetd.pid";
+			break;
 		case 'd':
 			sd_params.dnsmasq_script = optarg;
 			break;
@@ -404,6 +408,20 @@ int main(__unused int argc, char *argv[])
 	/* Fire up the prefix assignment code. */
 	pa_start(&pa);
 
+	if (pidfile && !daemon(0, 0)) {
+		FILE *fp = fopen(pidfile, "w");
+		if (fp) {
+			fprintf(fp, "%d\n", getpid());
+			fclose(fp);
+		}
+
+		closelog();
+		openlog("hnetd", LOG_PID, LOG_DAEMON);
+	}
+
 	uloop_run();
+
+	if (pidfile)
+		unlink(pidfile);
 	return 0;
 }
