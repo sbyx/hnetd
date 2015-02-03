@@ -74,6 +74,7 @@ int platform_rpc_cli(const char *method, struct blob_attr *in)
 {
 	char sockaddr[108]; //Client address
 	struct sockaddr_un serveraddr; //Server sockaddr
+	int ret = 0;
 	serveraddr.sun_family = AF_UNIX;
 	strcpy(serveraddr.sun_path, ipcpath);
 
@@ -85,7 +86,7 @@ int platform_rpc_cli(const char *method, struct blob_attr *in)
 		return 2;
 	}
 
-	struct blob_buf b;
+	struct blob_buf b = {NULL, NULL, 0, NULL};
 	blob_buf_init(&b, 0);
 	blobmsg_add_string(&b, "command", method);
 
@@ -105,22 +106,28 @@ int platform_rpc_cli(const char *method, struct blob_attr *in)
 		struct timeval tv = {3, 0};
 		setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
+		ret = 4;
 		ssize_t rcvlen = recv(sock, resp.buf, sizeof(resp.buf), 0);
 		if (rcvlen >= 0) {
+			resp.hdr.id_len = 0;
 			blob_set_raw_len(&resp.hdr, rcvlen + sizeof(resp.hdr));
 			char *json = blobmsg_format_json_indent(&resp.hdr, true, true);
 			if (json) {
 				puts(json);
-				return 0;
+				ret = 0;
 			}
 		}
 
-		perror("Failed to retrieve from hnetd");
-		return 4;
+		if (ret > 0)
+			perror("Failed to retrieve from hnetd");
+
 	} else {
 		perror("Failed to send to hnetd");
-		return 3;
+		ret = 3;
 	}
+
+	unlink(sockaddr);
+	return ret;
 }
 
 int platform_rpc_multicall(int argc, char *const argv[])
