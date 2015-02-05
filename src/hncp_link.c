@@ -144,7 +144,7 @@ static void calculate_link(struct hncp_link *l, dncp_link link)
 				elected &= ~HNCP_LINK_PREFIXDEL;
 
 			if (ourvertlv->cap_hostnames < peervertlv->cap_hostnames)
-				elected &= ~(HNCP_LINK_HOSTNAMES | HNCP_LINK_STATELESS);
+				elected = (elected & ~HNCP_LINK_HOSTNAMES) | HNCP_LINK_OTHERMNGD;
 
 			if (ourvertlv->cap_legacy < peervertlv->cap_legacy)
 				elected &= ~HNCP_LINK_LEGACY;
@@ -161,7 +161,7 @@ static void calculate_link(struct hncp_link *l, dncp_link link)
 
 				if (peervertlv->cap_hostnames &&
 						ourvertlv->cap_hostnames == peervertlv->cap_hostnames)
-					elected &= ~(HNCP_LINK_HOSTNAMES | HNCP_LINK_STATELESS);
+					elected = (elected & ~HNCP_LINK_HOSTNAMES) | HNCP_LINK_OTHERMNGD;
 
 				if (peervertlv->cap_legacy &&
 						ourvertlv->cap_legacy == peervertlv->cap_legacy)
