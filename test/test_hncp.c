@@ -41,6 +41,10 @@ void iface_all_set_dhcp_send(const void *dhcpv6_data, size_t dhcpv6_len,
 {
 }
 
+int iface_get_preferred_address(struct in6_addr *foo, bool v4)
+{
+  return -1;
+}
 
 int platform_rpc_register(struct platform_rpc_method *m)
 {

@@ -803,4 +803,10 @@ void iface_all_set_dhcp_send(const void *dhcpv6_data, size_t dhcpv6_len,
 {
 }
 
+int iface_get_preferred_address(struct in6_addr *foo, bool v4)
+{
+  inet_pton(AF_INET6, (v4) ? "::ffff:192.168.1.2" : "2001:db8::f00:1", foo);
+  return 0;
+}
+
 #endif /* NET_SIM_H */

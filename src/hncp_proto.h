@@ -95,7 +95,11 @@ typedef struct __packed {
 
 /* HNCP_T_DNS_DOMAIN_NAME has just DNS label sequence */
 
-/* HNCP_T_DNS_ROUTER_NAME has just variable length string. */
+/* HNCP_T_DNS_ROUTER_NAME */
+typedef struct __packed {
+  struct in6_addr address;
+  char name[];
+} hncp_t_dns_router_name_s, *hncp_t_dns_router_name;
 
 /* HNCP_T_ROUTING_PROTOCOL */
 typedef struct __packed {
