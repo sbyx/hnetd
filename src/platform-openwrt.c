@@ -115,6 +115,8 @@ int platform_init(dncp dncp, struct pa_data *data, const char *pd_socket)
 	}
 
 	ubus_add_uloop(ubus);
+
+	hnet_object_type.n_methods = main_object.n_methods;
 	ubus_add_object(ubus, &main_object);
 
 	netifd.cb = handle_update;
