@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Tue Dec 23 18:51:06 2014 mstenber
- * Edit time:     203 min
+ * Last modified: Mon Feb  9 09:52:04 2015 mstenber
+ * Edit time:     205 min
  *
  */
 
@@ -807,6 +807,16 @@ int iface_get_preferred_address(struct in6_addr *foo, bool v4)
 {
   inet_pton(AF_INET6, (v4) ? "::ffff:192.168.1.2" : "2001:db8::f00:1", foo);
   return 0;
+}
+
+struct iface_user;
+
+void iface_register_user(struct iface_user *user)
+{
+}
+
+void iface_unregister_user(struct iface_user *user)
+{
 }
 
 #endif /* NET_SIM_H */

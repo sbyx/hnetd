@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Tue Dec 23 18:50:49 2014 mstenber
- * Edit time:     569 min
+ * Last modified: Mon Feb  9 09:52:35 2015 mstenber
+ * Edit time:     578 min
  *
  */
 
@@ -52,8 +52,9 @@
 /* TLVs to be updated (and possibly other internal state) */
 #define UPDATE_FLAG_DDZ     0x10
 #define UPDATE_FLAG_DOMAIN  0x20
+#define UPDATE_FLAG_RNAME   0x40
 
-#define UPDATE_FLAG_ALL     0x37
+#define UPDATE_FLAG_ALL     0x77
 
 /* How long a timeout we schedule for the actual update (that occurs
  * in a timeout). This effectively sets an upper bound on how
@@ -87,6 +88,8 @@ struct hncp_sd_struct
   dncp_hash_s dnsmasq_state;
   dncp_hash_s ohp_state;
   dncp_hash_s pcp_state;
+
+  struct iface_user iface;
 };
 
 
@@ -726,6 +729,15 @@ static void _refresh_domain(hncp_sd sd)
     }
 }
 
+static void _refresh_rname(hncp_sd sd)
+{
+  if (!(sd->should_update & UPDATE_FLAG_RNAME))
+    return;
+  sd->should_update &= ~UPDATE_FLAG_RNAME;
+  L_DEBUG("_refresh_rname");
+  _set_router_name(sd);
+}
+
 static void _tlv_cb(dncp_subscriber s,
                     dncp_node n, struct tlv_attr *tlv, bool add)
 {
@@ -797,11 +809,13 @@ static void _tlv_cb(dncp_subscriber s,
     }
 }
 
+
 void hncp_sd_update(hncp_sd sd)
 {
   L_DEBUG("hncp_sd_update:%d", sd->should_update);
 
   /* First the always present, internal state mutating things.. */
+  _refresh_rname(sd);
   _refresh_domain(sd);
   _publish_ddzs(sd);
 
@@ -855,6 +869,16 @@ static void _force_republish_cb(dncp_subscriber s,
   _should_update(sd, UPDATE_FLAG_ALL);
 }
 
+static void _intaddr_cb(struct iface_user *u, __unused const char *ifname,
+                        __unused const struct prefix *addr6,
+                        __unused const struct prefix *addr4)
+{
+  hncp_sd sd = container_of(u, hncp_sd_s, iface);
+
+  _should_update(sd, UPDATE_FLAG_RNAME);
+}
+
+
 hncp_sd hncp_sd_create(dncp h, hncp_sd_params p)
 {
   hncp_sd sd = calloc(1, sizeof(*sd));
@@ -865,6 +889,8 @@ hncp_sd hncp_sd_create(dncp h, hncp_sd_params p)
   if (!sd)
     return NULL;
 
+  sd->iface.cb_intaddr = _intaddr_cb;
+  iface_register_user(&sd->iface);
   /* Handle domain name */
   if (p->domain_name)
     {
@@ -903,6 +929,7 @@ hncp_sd hncp_sd_create(dncp h, hncp_sd_params p)
 
 void hncp_sd_destroy(hncp_sd sd)
 {
+  iface_unregister_user(&sd->iface);
   uloop_timeout_cancel(&sd->timeout);
   dncp_unsubscribe(sd->dncp, &sd->subscriber);
   free(sd);
