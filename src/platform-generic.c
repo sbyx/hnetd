@@ -643,8 +643,8 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			blob_buf_init(&b, 0);
 
 			int ret = hnet_rpc_methods[i]->cb(hnet_rpc_methods[i], &req.hdr, &b);
-			if (ret)
-				blobmsg_add_u32(&b, "error", ret);
+			if (ret < 0)
+				blobmsg_add_u32(&b, "error", -ret);
 
 			sendto(fd->fd, blob_data(b.head), blob_len(b.head), MSG_DONTWAIT,
 					(struct sockaddr *)&sender, sender_len);

@@ -569,7 +569,7 @@ int _rpc_list(struct platform_rpc_method *m, __unused const struct blob_attr *in
       T_A(!blobmsg_add_string(b, "verdict", dncp_trust_verdict_to_string(v)));
       blobmsg_close_table(b, t);
     }
-  return 0;
+  return 1;
 }
 
 int _rpc_set_timer(struct platform_rpc_method *m, const struct blob_attr *in, __unused struct blob_buf *out)

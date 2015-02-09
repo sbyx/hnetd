@@ -318,7 +318,7 @@ int hd_cb(struct platform_rpc_method *method, __unused const struct blob_attr *i
 	hd_a(!hd_info(m->dncp, b), return -1);
 	hd_do_in_table(b, "links", hd_links(m->dncp, b), return -1);
 	hd_do_in_table(b, "nodes", hd_nodes(m->dncp, b), return -1);
-	return 0;
+	return 1;
 }
 
 void hd_register_rpc(void)
