@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue Dec 23 18:50:01 2014 mstenber
- * Edit time:     660 min
+ * Last modified: Tue Feb 10 19:27:56 2015 mstenber
+ * Edit time:     668 min
  *
  */
 
@@ -77,13 +77,18 @@ static bool _push_link_id_tlv(struct tlv_buf *tb, dncp_link l)
   return true;
 }
 
-static bool _push_keepalive_interval_tlv(struct tlv_buf *tb, uint32_t value)
+static bool _push_keepalive_interval_tlv(struct tlv_buf *tb,
+                                         uint32_t link_id,
+                                         uint32_t value)
 {
-  struct tlv_attr *a = tlv_new(tb, DNCP_T_KEEPALIVE_INTERVAL, 4);
+  dncp_t_keepalive_interval ki;
+  struct tlv_attr *a = tlv_new(tb, DNCP_T_KEEPALIVE_INTERVAL, sizeof(*ki));
 
   if (!a)
     return false;
-  *((uint32_t *)tlv_data(a)) = cpu_to_be32(value);
+  ki = tlv_data(a);
+  ki->link_id = link_id;
+  ki->interval_in_ms = cpu_to_be32(value);
   return true;
 }
 
@@ -121,7 +126,7 @@ void dncp_link_send_network_state(dncp_link l,
         }
     }
   if (l->conf->keepalive_interval != DNCP_KEEPALIVE_INTERVAL)
-    if (!_push_keepalive_interval_tlv(&tb, l->conf->keepalive_interval))
+    if (!_push_keepalive_interval_tlv(&tb, l->iid, l->conf->keepalive_interval))
       goto done;
   if (maximum_size && tlv_len(tb.head) > maximum_size)
     goto done;
@@ -282,13 +287,25 @@ handle_message(dncp_link l,
 
   if (ne)
     {
+      dncp_t_keepalive_interval ki, best_ki = NULL;
       tlv_for_each_in_buf(a, data, len)
         if (tlv_id(a) == DNCP_T_KEEPALIVE_INTERVAL
-            && tlv_len(a) == 4)
+            && tlv_len(a) == sizeof(*ki))
           {
-            uint32_t interval = be32_to_cpu(*((uint32_t *)tlv_data(a)));
-            ne->keepalive_interval = interval;
+            ki = tlv_data(a);
+            if ((!ki->link_id || ki->link_id == lid->link_id)
+                && (!best_ki || !best_ki->link_id))
+              best_ki = ki;
           }
+      if (best_ki)
+        {
+          ne->keepalive_interval = be32_to_cpu(best_ki->interval_in_ms)
+            * HNETD_TIME_PER_SECOND / 1000;
+        }
+      else
+        {
+          ne->keepalive_interval = DNCP_KEEPALIVE_INTERVAL;
+        }
     }
 
   /* Estimates what's in the payload + handles the few

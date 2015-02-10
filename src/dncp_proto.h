@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Wed Jan 21 11:35:48 2015 mstenber
- * Edit time:     108 min
+ * Last modified: Tue Feb 10 19:19:21 2015 mstenber
+ * Edit time:     110 min
  *
  */
 
@@ -80,6 +80,12 @@ typedef struct __packed {
   dncp_node_identifier_s node_identifier;
   uint32_t update_number;
 } dncp_t_node_data_header_s, *dncp_t_node_data_header;
+
+/* DNCP_T_KEEPALIVE_INTERVAL */
+typedef struct __packed {
+  uint32_t link_id;
+  uint32_t interval_in_ms;
+} dncp_t_keepalive_interval_s, *dncp_t_keepalive_interval;
 
 /* DNCP_T_NODE_DATA_NEIGHBOR */
 typedef struct __packed {
