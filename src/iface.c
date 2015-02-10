@@ -864,6 +864,27 @@ static void iface_announce_preferred(struct uloop_timeout *t)
 			u->cb_intaddr(u, c->ifname, pref6 ? &pref6->prefix : NULL, pref4 ? &pref4->prefix: NULL);
 }
 
+int iface_get_preferred_address(struct in6_addr *addr, bool v4)
+{
+	hnetd_time_t now = hnetd_time();
+	struct iface_addr *pref = NULL;
+	struct iface *c;
+
+	list_for_each_entry(c, &interfaces, head) {
+		struct iface_addr *a;
+		vlist_for_each_element(&c->assigned, a, node) {
+			if (v4 == IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix) &&
+					(v4 || a->preferred_until > now) &&
+					(!pref || a->preferred_until > pref->preferred_until))
+				pref = a;
+		}
+	}
+
+	if (pref)
+		*addr = pref->prefix.prefix;
+
+	return -!pref;
+}
 
 static bool iface_discover_border(struct iface *c)
 {

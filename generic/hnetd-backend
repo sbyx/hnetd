@@ -89,7 +89,7 @@ startdhcp)
 
 	[ -n "$3" ] && dhcpv4=server
 	[ -n "$4" ] && stateful=1
-	[ -n "$3" ] && dhcpv6=server
+	[ -n "$5" ] && dhcpv6=server
 
 	uci batch <<-EOF
 	set dhcp.$2=dhcp
@@ -97,7 +97,7 @@ startdhcp)
 	set dhcp.$2.ra=server
 	set dhcp.$2.dhcpv4=$dhcpv4
 	set dhcp.$2.dhcpv6=$dhcpv6
-	set dhcp.$2.pd_manager=$5
+	set dhcp.$2.pd_manager=$6
 	set dhcp.$2.ra_management=$stateful
 	set dhcp.$2.filter_class=HOMENET
 	commit dhcp

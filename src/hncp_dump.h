@@ -95,4 +95,5 @@
  * }
  *
  */
-int hncp_dump(struct blob_buf *b, dncp o);
+void hd_init(dncp o);
+void hd_register_rpc(void);

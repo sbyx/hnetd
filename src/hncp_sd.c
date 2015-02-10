@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Tue Dec 23 18:50:49 2014 mstenber
- * Edit time:     569 min
+ * Last modified: Mon Feb  9 09:52:35 2015 mstenber
+ * Edit time:     578 min
  *
  */
 
@@ -32,6 +32,7 @@
 #include "hncp_sd.h"
 #include "hncp_i.h"
 #include "dns_util.h"
+#include "iface.h"
 
 #define DNS_PORT 53
 
@@ -51,8 +52,9 @@
 /* TLVs to be updated (and possibly other internal state) */
 #define UPDATE_FLAG_DDZ     0x10
 #define UPDATE_FLAG_DOMAIN  0x20
+#define UPDATE_FLAG_RNAME   0x40
 
-#define UPDATE_FLAG_ALL     0x37
+#define UPDATE_FLAG_ALL     0x77
 
 /* How long a timeout we schedule for the actual update (that occurs
  * in a timeout). This effectively sets an upper bound on how
@@ -86,6 +88,8 @@ struct hncp_sd_struct
   dncp_hash_s dnsmasq_state;
   dncp_hash_s ohp_state;
   dncp_hash_s pcp_state;
+
+  struct iface_user iface;
 };
 
 
@@ -317,7 +321,7 @@ static void _publish_ddzs(hncp_sd sd)
 bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
 {
   dncp_node n;
-  struct tlv_attr *a, *a2;
+  struct tlv_attr *a;
   FILE *f = fopen(filename, "w");
   md5_ctx_t ctx;
 
@@ -343,25 +347,17 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
   md5_hash(sd->dncp->domain, strlen(sd->dncp->domain), &ctx);
   dncp_for_each_node(sd->dncp, n)
     {
-      dncp_node_for_each_tlv_with_type(n, a, HNCP_T_DNS_ROUTER_NAME)
-        if (tlv_len(a) <= DNS_MAX_L_LEN)
+      dncp_node_for_each_tlv_with_type(n, a, HNCP_T_DNS_ROUTER_NAME) {
+        int namelen = tlv_len(a) - sizeof(hncp_t_dns_router_name_s);
+        if (namelen > 0 && namelen <= DNS_MAX_L_LEN)
           {
-            char router_name[DNS_MAX_L_LEN+1];
-            hncp_t_router_address ra;
-
-            memcpy(router_name, tlv_data(a), tlv_len(a));
-            router_name[tlv_len(a)] = 0;
-            md5_hash(router_name, strlen(router_name), &ctx);
-            dncp_node_for_each_tlv_with_type(n, a2, HNCP_T_ROUTER_ADDRESS)
-              if ((ra = dncp_tlv_router_address(a2)))
-              {
-                md5_hash(ra, sizeof(*ra), &ctx);
-                fprintf(f, "host-record=%s.%s,%s\n",
-                        router_name, sd->dncp->domain,
-                        ADDR_REPR(&ra->address));
-              }
-            break;
+            hncp_t_dns_router_name rname = tlv_data(a);
+            md5_hash(rname, tlv_len(a), &ctx);
+            fprintf(f, "host-record=%.*s.%s,%s\n",
+              namelen, rname->name, sd->dncp->domain,
+              ADDR_REPR(&rname->address));
           }
+      }
 
       dncp_node_for_each_tlv_with_type(n, a, HNCP_T_DNS_DELEGATED_ZONE)
         {
@@ -585,9 +581,19 @@ bool hncp_sd_reconfigure_pcp(hncp_sd sd)
 static void
 _set_router_name(hncp_sd sd)
 {
+  size_t namelen = strlen(sd->router_name);
+  hncp_t_dns_router_name rname = alloca(sizeof(*rname) + namelen);
+  memcpy(rname->name, sd->router_name, namelen);
+
   dncp_remove_tlvs_by_type(sd->dncp, HNCP_T_DNS_ROUTER_NAME);
-  dncp_add_tlv(sd->dncp, HNCP_T_DNS_ROUTER_NAME,
-               sd->router_name, strlen(sd->router_name), 0);
+
+  if (!iface_get_preferred_address(&rname->address, false))
+    dncp_add_tlv(sd->dncp, HNCP_T_DNS_ROUTER_NAME,
+      rname, sizeof(*rname) + namelen, 0);
+
+  if (!iface_get_preferred_address(&rname->address, true))
+    dncp_add_tlv(sd->dncp, HNCP_T_DNS_ROUTER_NAME,
+      rname, sizeof(*rname) + namelen, 0);
 }
 
 static bool
@@ -595,8 +601,10 @@ _tlv_router_name_matches(hncp_sd sd, struct tlv_attr *a)
 {
   if (tlv_id(a) == HNCP_T_DNS_ROUTER_NAME)
     {
-      if (tlv_len(a) == strlen(sd->router_name)
-          && strncmp(tlv_data(a), sd->router_name, tlv_len(a)) == 0)
+	  hncp_t_dns_router_name rname = tlv_data(a);
+	  int namelen = tlv_len(a) - sizeof(*rname);
+      if (namelen == (int)strlen(sd->router_name)
+          && memcmp(rname->name, sd->router_name, namelen) == 0)
         return true;
     }
   return false;
@@ -721,6 +729,15 @@ static void _refresh_domain(hncp_sd sd)
     }
 }
 
+static void _refresh_rname(hncp_sd sd)
+{
+  if (!(sd->should_update & UPDATE_FLAG_RNAME))
+    return;
+  sd->should_update &= ~UPDATE_FLAG_RNAME;
+  L_DEBUG("_refresh_rname");
+  _set_router_name(sd);
+}
+
 static void _tlv_cb(dncp_subscriber s,
                     dncp_node n, struct tlv_attr *tlv, bool add)
 {
@@ -792,11 +809,13 @@ static void _tlv_cb(dncp_subscriber s,
     }
 }
 
+
 void hncp_sd_update(hncp_sd sd)
 {
   L_DEBUG("hncp_sd_update:%d", sd->should_update);
 
   /* First the always present, internal state mutating things.. */
+  _refresh_rname(sd);
   _refresh_domain(sd);
   _publish_ddzs(sd);
 
@@ -850,6 +869,16 @@ static void _force_republish_cb(dncp_subscriber s,
   _should_update(sd, UPDATE_FLAG_ALL);
 }
 
+static void _intaddr_cb(struct iface_user *u, __unused const char *ifname,
+                        __unused const struct prefix *addr6,
+                        __unused const struct prefix *addr4)
+{
+  hncp_sd sd = container_of(u, hncp_sd_s, iface);
+
+  _should_update(sd, UPDATE_FLAG_RNAME);
+}
+
+
 hncp_sd hncp_sd_create(dncp h, hncp_sd_params p)
 {
   hncp_sd sd = calloc(1, sizeof(*sd));
@@ -860,6 +889,8 @@ hncp_sd hncp_sd_create(dncp h, hncp_sd_params p)
   if (!sd)
     return NULL;
 
+  sd->iface.cb_intaddr = _intaddr_cb;
+  iface_register_user(&sd->iface);
   /* Handle domain name */
   if (p->domain_name)
     {
@@ -898,6 +929,7 @@ hncp_sd hncp_sd_create(dncp h, hncp_sd_params p)
 
 void hncp_sd_destroy(hncp_sd sd)
 {
+  iface_unregister_user(&sd->iface);
   uloop_timeout_cancel(&sd->timeout);
   dncp_unsubscribe(sd->dncp, &sd->subscriber);
   free(sd);

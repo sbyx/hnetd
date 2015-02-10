@@ -2,6 +2,8 @@
 
 #include "hncp_routing.h"
 #include "hncp_i.h"
+#include "platform.h"
+
 #include <libubox/blobmsg_json.h>
 
 #define hd_a(test, err) do{if(!(test)) {err;}}while(0)
@@ -295,14 +297,38 @@ static int hd_info(dncp o, struct blob_buf *b)
 	return 0;
 }
 
+platform_rpc_cb hd_cb;
+platform_rpc_main hd_main;
 
-int hncp_dump(struct blob_buf *b, dncp o)
+static struct hd_rpc_method {
+	struct platform_rpc_method m;
+	dncp dncp;
+} hncp_rpc_dump = {
+	{.name = "dump", .cb = hd_cb, .main = hd_main},
+	NULL,
+};
+
+int hd_main(struct platform_rpc_method *method, __unused int argc, __unused char* const argv[])
 {
-	hd_now = hnetd_time();
-	hd_a(!hd_info(o, b), return -1);
-	hd_do_in_table(b, "links", hd_links(o,b), return -1);
-	hd_do_in_table(b, "nodes", hd_nodes(o,b), return -1);
-	return 0;
+	return platform_rpc_cli(method->name, NULL);
 }
 
+int hd_cb(struct platform_rpc_method *method, __unused const struct blob_attr *in, struct blob_buf *b)
+{
+	struct hd_rpc_method *m = container_of(method, struct hd_rpc_method, m);
+	hd_now = hnetd_time();
+	hd_a(!hd_info(m->dncp, b), return -1);
+	hd_do_in_table(b, "links", hd_links(m->dncp, b), return -1);
+	hd_do_in_table(b, "nodes", hd_nodes(m->dncp, b), return -1);
+	return 1;
+}
 
+void hd_register_rpc(void)
+{
+	platform_rpc_register(&hncp_rpc_dump.m);
+}
+
+void hd_init(dncp dncp)
+{
+	hncp_rpc_dump.dncp = dncp;
+}

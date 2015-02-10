@@ -73,6 +73,9 @@ void iface_commit_routes(void);
 // Test if iface has IPv4 address
 bool iface_has_ipv4_address(const char *ifname);
 
+// Get preferred interface address
+int iface_get_preferred_address(struct in6_addr *addr, bool v4);
+
 
 // Internal API to platform
 

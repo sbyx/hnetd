@@ -15,6 +15,7 @@
 
 #include "dncp.h"
 #include "dncp_proto.h"
+#include "platform.h"
 
 //#include <libubox/blob.h>
 #include <libubox/blobmsg.h>
@@ -48,12 +49,6 @@ void dncp_trust_set(dncp_trust t, const dncp_sha256 h,
                     uint8_t verdict, const char *cname);
 
 /*
- * Set timer during which all (non-configured-negative) new contact
- * attempts will be automatically configured-positive.
- */
-void dncp_trust_set_timer(dncp_trust t, uint32_t seconds);
-
-/*
  * Find next hash available. NULL's next is first hash, so this is a
  * looping iterator.
  */
@@ -61,11 +56,6 @@ dncp_sha256 dncp_trust_next_hash(dncp_trust t, const dncp_sha256 prev);
 
 #define dncp_trust_for_each_hash(t, h) \
   for (h = dncp_trust_next_hash(t, NULL) ; h ; h = dncp_trust_next_hash(t, h))
-
-/*
- * Dump contents of the trust (hash, verdict, cname) as an array of dicts.
- */
-bool dncp_trust_list(dncp_trust o, struct blob_buf *b);
 
 /*
  * Parse trust verdict (printable form) to value, if any.
@@ -79,3 +69,9 @@ dncp_trust_verdict dncp_trust_verdict_from_string(const char *verdict);
  * Get printable representation of a trust verdict.
  */
 const char *dncp_trust_verdict_to_string(dncp_trust_verdict verdict);
+
+
+/*
+ * Register trust multicall
+ */
+void dncp_trust_register_multicall(void);

@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Nov 19 17:34:25 2014 mstenber
- * Last modified: Mon Jan 26 19:03:12 2015 mstenber
- * Edit time:     234 min
+ * Last modified: Tue Feb  3 19:58:06 2015 mstenber
+ * Edit time:     235 min
  *
  */
 
@@ -96,6 +96,11 @@ struct dncp_trust_struct {
 
   /* Until what point in time default verdict is configured-positive. */
   hnetd_time_t trust_until;
+
+  /* RPC methods */
+  struct platform_rpc_method rpc_trust_list;
+  struct platform_rpc_method rpc_trust_set;
+  struct platform_rpc_method rpc_trust_set_timer;
 };
 
 typedef struct __packed {
@@ -543,6 +548,74 @@ static bool _dtls_unknown_callback(dtls d __unused,
     verdict == DNCP_VERDICT_CONFIGURED_POSITIVE;
 }
 
+#define T_A(x) if (!(x)) return -ENOMEM
+
+int _rpc_list(struct platform_rpc_method *m, __unused const struct blob_attr *in, struct blob_buf *b)
+{
+  /* Make blob_buf dict, with keys the hashes, and the values verdict
+   * + cname. */
+  dncp_trust o = container_of(m, dncp_trust_s, rpc_trust_list);
+  dncp_sha256 h;
+  char cname[DNCP_T_TRUST_VERDICT_CNAME_LEN];
+
+  dncp_trust_for_each_hash(o, h)
+    {
+      int v = dncp_trust_get_verdict(o, h, cname);
+      char buf[sizeof(*h)*2+1];
+      void *t;
+      T_A((t=blobmsg_open_table(b, hexlify(buf, (uint8_t *)h, sizeof(*h)))));
+      if (*cname)
+        T_A(!blobmsg_add_string(b, "cname", cname));
+      T_A(!blobmsg_add_string(b, "verdict", dncp_trust_verdict_to_string(v)));
+      blobmsg_close_table(b, t);
+    }
+  return 1;
+}
+
+int _rpc_set_timer(struct platform_rpc_method *m, const struct blob_attr *in, __unused struct blob_buf *out)
+{
+  dncp_trust t = container_of(m, dncp_trust_s, rpc_trust_set_timer);
+  uint32_t seconds = 0;
+
+  struct blob_attr *a;
+  unsigned rem;
+  blobmsg_for_each_attr(a, in, rem)
+	  if (blobmsg_type(a) == BLOBMSG_TYPE_INT32 && !strcmp(blobmsg_name(a), "timer_value"))
+		  seconds = blobmsg_get_u32(a);
+
+  t->trust_until = hnetd_time() + seconds * HNETD_TIME_PER_SECOND;
+  return 0;
+}
+
+int _rpc_set(struct platform_rpc_method *m, const struct blob_attr *in, __unused struct blob_buf *out)
+{
+  dncp_trust t = container_of(m, dncp_trust_s, rpc_trust_set);
+  const char *hs = NULL;
+  int verdict = -1;
+
+  struct blob_attr *a;
+  unsigned rem;
+  blobmsg_for_each_attr(a, in, rem) {
+	  if (blobmsg_type(a) == BLOBMSG_TYPE_STRING && !strcmp(blobmsg_name(a), "hash"))
+		  hs = blobmsg_get_string(a);
+	  else if (blobmsg_type(a) == BLOBMSG_TYPE_INT32 && !strcmp(blobmsg_name(a), "verdict"))
+		  verdict = blobmsg_get_u32(a);
+  }
+
+  if (!hs || verdict < 0)
+	  return -EINVAL;
+
+  dncp_sha256_s h;
+  if (unhexlify((uint8_t *)&h, sizeof(h), hs) == sizeof(h)) {
+    dncp_trust_set(t, &h, verdict, NULL);
+  } else {
+    L_ERR("invalid hash: %s", hs);
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 dncp_trust dncp_trust_create(dncp o, const char *filename)
 {
   dncp_trust t = calloc(1, sizeof(*t));
@@ -566,6 +639,17 @@ dncp_trust dncp_trust_create(dncp o, const char *filename)
       dtls_set_unknown_cert_callback(o->profile_data.d,
                                      _dtls_unknown_callback, t);
     }
+
+  t->rpc_trust_set_timer.cb = _rpc_set_timer;
+  t->rpc_trust_set_timer.name = "trust-set-timer";
+  t->rpc_trust_list.cb = _rpc_list;
+  t->rpc_trust_list.name = "trust-list";
+  t->rpc_trust_set.cb = _rpc_set;
+  t->rpc_trust_set.name = "trust-set";
+
+  platform_rpc_register(&t->rpc_trust_set_timer);
+  platform_rpc_register(&t->rpc_trust_list);
+  platform_rpc_register(&t->rpc_trust_set);
   return t;
 }
 
@@ -649,30 +733,58 @@ dncp_trust_verdict dncp_trust_verdict_from_string(const char *verdict)
   return DNCP_VERDICT_NONE;
 }
 
-#define T_A(x) if (!(x)) return false
 
-bool dncp_trust_list(dncp_trust o, struct blob_buf *b)
+static int _trust_help(const char *prog)
 {
-  /* Make blob_buf dict, with keys the hashes, and the values verdict
-   * + cname. */
-  dncp_sha256 h;
-  char cname[DNCP_T_TRUST_VERDICT_CNAME_LEN];
-
-  dncp_trust_for_each_hash(o, h)
-    {
-      int v = dncp_trust_get_verdict(o, h, cname);
-      char buf[sizeof(*h)*2+1];
-      void *t;
-      T_A((t=blobmsg_open_table(b, hexlify(buf, (uint8_t *)h, sizeof(*h)))));
-      if (*cname)
-        T_A(!blobmsg_add_string(b, "cname", cname));
-      T_A(!blobmsg_add_string(b, "verdict", dncp_trust_verdict_to_string(v)));
-      blobmsg_close_table(b, t);
-    }
-  return true;
+	fprintf(stderr, "usage:\n");
+	fprintf(stderr, "\t%s\n", prog);
+	fprintf(stderr, "\t\tlist\n");
+	fprintf(stderr, "\t\tset <hash> <value>\n");
+	fprintf(stderr, "\t\tset-trust-timer <value-in-seconds>\n");
+	return 1;
 }
 
-void dncp_trust_set_timer(dncp_trust t, uint32_t seconds)
+static int _trust_multicall(__unused struct platform_rpc_method *m, int argc, char* const argv[])
 {
-  t->trust_until = hnetd_time() + seconds * HNETD_TIME_PER_SECOND;
+	struct blob_buf b = {NULL, NULL, 0, NULL};
+
+	if (argc > 1) {
+		if (strcmp(argv[1], "list") == 0) {
+			return platform_rpc_cli("trust-list", NULL);
+		} else if (strcmp(argv[1], "set") == 0) {
+			if (argc != 4)
+				return _trust_help(argv[0]);
+			blob_buf_init(&b, 0);
+			blobmsg_add_string(&b, "hash", argv[2]);
+			int verdict = dncp_trust_verdict_from_string(argv[3]);
+			if (verdict < 0) {
+				L_ERR("invalid verdict: %s"
+				      " (try e.g. 0, 1 or returned values)",
+				      argv[3]);
+			} else {
+				blobmsg_add_u32(&b, "verdict", verdict);
+				return platform_rpc_cli("trust-set", b.head);
+			}
+		} else if (strcmp(argv[1], "set-trust-timer") == 0) {
+			if (argc == 3) {
+				int value = atoi(argv[2]);
+				if (value >= 0) {
+					blob_buf_init(&b, 0);
+					blobmsg_add_u32(&b, "timer_value", value);
+					return platform_rpc_cli("trust-set-timer", b.head);
+				}
+			}
+		}
+	}
+
+	return _trust_help(argv[0]);
+}
+
+static struct platform_rpc_method _trust_multicall_method = {
+	.name = "trust", .main = _trust_multicall
+};
+
+void dncp_trust_register_multicall(void)
+{
+	platform_rpc_register(&_trust_multicall_method);
 }

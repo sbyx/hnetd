@@ -26,9 +26,11 @@
 #include "hncp_routing.h"
 #include "hncp_proto.h"
 #include "hncp_link.h"
-#include "ipc.h"
+#include "hncp_dump.h"
 #include "platform.h"
 #include "pd.h"
+#include "dncp_trust.h"
+
 #ifdef DTLS
 #include "dtls.h"
 #endif /* DTLS */
@@ -107,36 +109,6 @@ int main(__unused int argc, char *argv[])
 
 	memset(&sd_params, 0, sizeof(sd_params));
 
-	if (strstr(argv[0], "hnet-ifresolve")) {
-		if (!argv[1])
-			return 1;
-
-		int ifindex = if_nametoindex(argv[1]);
-		if (ifindex) {
-			printf("%i\n", ifindex);
-			return 0;
-		} else {
-			return 2;
-		}
-	}
-#ifdef WITH_IPC
-	else if (strstr(argv[0], "hnet-call")) {
-		if(argc < 2)
-			return 3;
-		return ipc_client(argv[1]);
-	} else if (strstr(argv[0], "hnet-dump")) {
-		return ipc_dump();
-#ifdef DTLS
-	} else if (strstr(argv[0], "hnet-trust")) {
-		return ipc_trust(argc, argv);
-#endif /* DTLS */
-	} else if ((strstr(argv[0], "hnet-ifup") || strstr(argv[0], "hnet-ifdown"))) {
-		if(argc < 2)
-			return 3;
-		return ipc_ifupdown(argc, argv);
-	}
-#endif
-
 	openlog("hnetd", LOG_PERROR | LOG_PID, LOG_DAEMON);
 	uloop_init();
 
@@ -145,12 +117,15 @@ int main(__unused int argc, char *argv[])
 		return 2;
 	}
 
-#ifdef WITH_IPC
-	if (ipc_init()) {
-		L_ERR("Failed to init IPC: %s", strerror(errno));
-		return 5;
-	}
+	// Register multicalls
+	hd_register_rpc();
+#ifdef DTLS
+	dncp_trust_register_multicall();
 #endif
+
+	int ret = platform_rpc_multicall(argc, argv);
+	if (ret >= 0)
+		return ret;
 
 	int urandom_fd;
 	if ((urandom_fd = open("/dev/urandom", O_CLOEXEC | O_RDONLY)) >= 0) {
@@ -172,6 +147,7 @@ int main(__unused int argc, char *argv[])
 	const char *dtls_key = NULL;
 	const char *dtls_path = NULL;
 	const char *dtls_dir = NULL;
+	const char *pidfile = NULL;
 
 	enum {
 		GOL_IPPREFIX = 1000,
@@ -202,8 +178,11 @@ int main(__unused int argc, char *argv[])
 			{ NULL,          0,                      NULL,           0 }
 	};
 
-	while ((c = getopt_long(argc, argv, "?d:f:o:n:r:s:p:m:c:", longopts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "?b::d:f:o:n:r:s:p:m:c:", longopts, NULL)) != -1) {
 		switch (c) {
+		case 'b':
+			pidfile = (optarg && optarg[0]) ? optarg : "/var/run/hnetd.pid";
+			break;
 		case 'd':
 			sd_params.dnsmasq_script = optarg;
 			break;
@@ -270,18 +249,19 @@ int main(__unused int argc, char *argv[])
 		}
 	}
 
-	if (sd_params.dnsmasq_script && sd_params.dnsmasq_bonus_file && sd_params.ohp_script)
-		link_config.cap_mdnsproxy = 4;
-
-	link_config.cap_prefixdel = link_config.cap_hostnames = link_config.cap_legacy = 4;
-	snprintf(link_config.agent, sizeof(link_config.agent), "hnetd/%s", STR(HNETD_VERSION));
-
-
 	h = hncp_create();
 	if (!h) {
 		L_ERR("Unable to initialize HNCP");
 		return 42;
 	}
+
+	hd_init(h);
+
+	if (sd_params.dnsmasq_script && sd_params.dnsmasq_bonus_file && sd_params.ohp_script)
+		link_config.cap_mdnsproxy = 4;
+
+	link_config.cap_prefixdel = link_config.cap_hostnames = link_config.cap_legacy = 4;
+	snprintf(link_config.agent, sizeof(link_config.agent), "hnetd/%s", STR(HNETD_VERSION));
 
 	if (dtls_password || dtls_trust || dtls_dir || dtls_path) {
 #ifdef DTLS
@@ -395,7 +375,7 @@ int main(__unused int argc, char *argv[])
 
 	//End of PA conf
 
-	/* Init ipc */
+	/* Init ipc (no RPC-registrations after this point!)*/
 	iface_init(h, sd, hncp_pa, link, pd_socket_path);
 
 	/* Glue together HNCP, PA-glue and and iface */
@@ -404,11 +384,20 @@ int main(__unused int argc, char *argv[])
 	/* Sub PD */
 	pd_create(hncp_pa, pd_socket_path);
 
-#ifdef WITH_IPC
-	/* Configure ipc */
-	ipc_conf(h, dt, hncp_pa);
-#endif
+	if (pidfile && !daemon(0, 0)) {
+		FILE *fp = fopen(pidfile, "w");
+		if (fp) {
+			fprintf(fp, "%d\n", getpid());
+			fclose(fp);
+		}
+
+		closelog();
+		openlog("hnetd", LOG_PID, LOG_DAEMON);
+	}
 
 	uloop_run();
+
+	if (pidfile)
+		unlink(pidfile);
 	return 0;
 }

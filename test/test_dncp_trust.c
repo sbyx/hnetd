@@ -36,6 +36,12 @@ int pa_update_eaa(net_node node, const struct in6_addr *addr,
                   const char *ifname, bool to_delete)
 {return 0;}
 
+int platform_rpc_register(struct platform_rpc_method *m)
+{return 0;}
+
+int platform_rpc_cli(const char *method, struct blob_attr *in)
+{return 0;}
+
 /***************************************** Actual test code (fairly minimal) */
 
 #define TESTFILENAME "/tmp/dncp_trust.dat"

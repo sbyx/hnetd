@@ -18,6 +18,7 @@
 #include <sys/socket.h>
 
 #include <libubox/blobmsg.h>
+#include <libubox/blobmsg_json.h>
 #include <libubus.h>
 
 #include "dhcpv6.h"
@@ -38,15 +39,11 @@ static int handle_update(__unused struct ubus_context *ctx,
 static void handle_dump(__unused struct ubus_request *req,
 		__unused int type, struct blob_attr *msg);
 
-static int hnet_dump(struct ubus_context *ctx, __unused struct ubus_object *obj,
-		struct ubus_request_data *req, __unused const char *method,
-		__unused struct blob_attr *msg);
-
 static struct ubus_request req_dump = { .list = LIST_HEAD_INIT(req_dump.list) };
 
-static struct ubus_method hnet_object_methods[] = {
-	{.name = "dump", .handler = hnet_dump},
-};
+static struct ubus_method hnet_object_methods[PLATFORM_RPC_MAX];
+static struct platform_rpc_method *hnet_rpc_methods[PLATFORM_RPC_MAX];
+
 static struct ubus_object_type hnet_object_type =
 		UBUS_OBJECT_TYPE("hnet", hnet_object_methods);
 
@@ -54,7 +51,7 @@ static struct ubus_object main_object = {
         .name = "hnet",
         .type = &hnet_object_type,
         .methods = hnet_object_methods,
-        .n_methods = ARRAY_SIZE(hnet_object_methods),
+        .n_methods = 0,
 };
 
 static void platform_commit(struct uloop_timeout *t);
@@ -111,16 +108,20 @@ static const char *hnetd_pd_socket = NULL;
 
 int platform_init(dncp dncp, hncp_pa hncp_pa, const char *pd_socket)
 {
+
 	if (!(ubus = ubus_connect(NULL))) {
 		L_ERR("Failed to connect to ubus: %s", strerror(errno));
 		return -1;
 	}
 
+	ubus_add_uloop(ubus);
+
+	hnet_object_type.n_methods = main_object.n_methods;
+	ubus_add_object(ubus, &main_object);
+
 	netifd.cb = handle_update;
 	ubus_register_subscriber(ubus, &netifd);
 
-	ubus_add_uloop(ubus);
-	ubus_add_object(ubus, &main_object);
 	ubus_register_event_handler(ubus, &event_handler, "ubus.object.add");
 	if (!ubus_lookup_id(ubus, "network.interface", &ubus_network_interface))
 		sync_netifd(true);
@@ -129,6 +130,111 @@ int platform_init(dncp dncp, hncp_pa hncp_pa, const char *pd_socket)
 	hncp_pa_p = hncp_pa;
 	p_dncp = dncp;
 	return 0;
+}
+
+static void platform_rpc_call_cb(struct ubus_request *req,
+		__unused int type, struct blob_attr *msg)
+{
+	struct blob_attr **out = req->priv;
+	*out = blob_memdup(msg);
+}
+
+int platform_rpc_cli(const char *method, struct blob_attr *in)
+{
+	struct blob_attr *out = NULL;
+	struct ubus_context *ubus = ubus_connect(NULL);
+
+	if (!ubus) {
+		L_ERR("Failed to connect to ubus: %s", strerror(errno));
+		return 2;
+	}
+
+	uint32_t self;
+	if (ubus_lookup_id(ubus, main_object.name, &self)) {
+		L_ERR("Failed to lookup hnetd: is it running?");
+		return 3;
+	}
+
+	if (ubus_invoke(ubus, self, method, in, platform_rpc_call_cb, out, 3000)) {
+		L_ERR("Failed to invoke hnetd method %s", method);
+		return 3;
+	}
+
+	if (out) {
+		char *json = blobmsg_format_json_indent(out, true, true);
+		if (json) {
+			puts(json);
+			return 0;
+		}
+	}
+
+	return 4;
+}
+
+static int platform_rpc_handle(struct ubus_context *ctx, __unused struct ubus_object *obj,
+		struct ubus_request_data *req, const char *method, struct blob_attr *msg)
+{
+	static struct blob_buf b = {NULL, NULL, 0, NULL};
+	blob_buf_init(&b, 0);
+
+	ssize_t i;
+	for (i = 0; i < main_object.n_methods && strcmp(hnet_rpc_methods[i]->name, method); ++i);
+	if (i == main_object.n_methods || !hnet_rpc_methods[i]->cb)
+		return UBUS_STATUS_METHOD_NOT_FOUND;
+
+	int ret = hnet_rpc_methods[i]->cb(hnet_rpc_methods[i], msg, &b);
+
+	if (ret < 0)
+		return UBUS_STATUS_UNKNOWN_ERROR;
+
+	if (ret > 0)
+		ubus_send_reply(ctx, req, b.head);
+
+	return UBUS_STATUS_OK;
+}
+
+int platform_rpc_register(struct platform_rpc_method *m)
+{
+	if (main_object.n_methods >= PLATFORM_RPC_MAX)
+		return -ENOBUFS;
+
+	size_t i = main_object.n_methods++;
+	hnet_object_methods[i].name = m->name;
+	hnet_object_methods[i].policy = m->policy;
+	hnet_object_methods[i].n_policy = m->policy_cnt;
+	hnet_object_methods[i].mask = 0;
+	hnet_object_methods[i].handler = platform_rpc_handle;
+
+	hnet_rpc_methods[i] = m;
+
+	return 0;
+}
+
+int platform_rpc_multicall(int argc, char *const argv[])
+{
+	char *method = strstr(argv[0], "hnet-");
+	if (method) {
+		method += 5;
+
+		if (!strcmp(method, "ifresolve")) {
+			if (argc < 2)
+				return 1;
+
+			int ifindex = if_nametoindex(argv[1]);
+			if (ifindex) {
+				printf("%i\n", ifindex);
+				return 0;
+			} else {
+				return 2;
+			}
+		} else {
+			ssize_t i;
+			for (i = 0; i < main_object.n_methods && strcmp(hnet_rpc_methods[i]->name, method); ++i);
+			if (i < main_object.n_methods && hnet_rpc_methods[i]->main)
+				return hnet_rpc_methods[i]->main(hnet_rpc_methods[i], argc, argv);
+		}
+	}
+	return -1;
 }
 
 // Constructor for openwrt-specific interface part
@@ -472,9 +578,9 @@ static void platform_commit(struct uloop_timeout *t)
 	if (c->internal && c->elected && (avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr)) {
 		blobmsg_add_string(&b, "ra", "server");
 		blobmsg_add_string(&b, "dhcpv4", (c->elected & HNCP_LINK_LEGACY) ? "server" : "disabled");
-		blobmsg_add_string(&b, "dhcpv6", (c->elected & (HNCP_LINK_PREFIXDEL | HNCP_LINK_HOSTNAMES)) ?
+		blobmsg_add_string(&b, "dhcpv6", (c->elected & (HNCP_LINK_PREFIXDEL | HNCP_LINK_HOSTNAMES | HNCP_LINK_STATELESS)) ?
 				"server" : "disabled");
-		blobmsg_add_u32(&b, "ra_management", !!(c->elected & (HNCP_LINK_PREFIXDEL | HNCP_LINK_HOSTNAMES)));
+		blobmsg_add_u32(&b, "ra_management", !!(c->elected & (HNCP_LINK_HOSTNAMES | HNCP_LINK_OTHERMNGD)));
 	} else {
 		blobmsg_add_string(&b, "ra", "disabled");
 		blobmsg_add_string(&b, "dhcpv4", "disabled");
@@ -1130,17 +1236,5 @@ static void handle_dump(__unused struct ubus_request *req,
 		platform_update(blobmsg_data(c), blobmsg_data_len(c));
 
 	iface_commit();
-}
-
-static int hnet_dump(struct ubus_context *ctx, __unused struct ubus_object *obj,
-		struct ubus_request_data *req, __unused const char *method,
-		__unused struct blob_attr *msg)
-{
-	struct blob_buf b = {NULL, NULL, 0, NULL};
-	blob_buf_init(&b, 0);
-	hncp_dump(&b, p_dncp);
-	ubus_send_reply(ctx, req, b.head);
-	blob_buf_free(&b);
-	return 0;
 }
 
