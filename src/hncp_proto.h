@@ -69,8 +69,8 @@ typedef struct __packed {
   uint8_t prefix_data[];
 } hncp_t_assigned_prefix_header_s, *hncp_t_assigned_prefix_header;
 
-#define HNCP_T_ASSIGNED_PREFIX_FLAG_AUTHORITATIVE 0x10
-#define HNCP_T_ASSIGNED_PREFIX_FLAG_PREFERENCE(flags) ((flags) & 0xf)
+#define HNCP_T_ASSIGNED_PREFIX_FLAG_PRIORITY(flags) ((flags) & 0x0f)
+#define HNCP_T_ASSIGNED_PREFIX_FLAG(prio) (prio & 0x0f)
 
 /* HNCP_T_DHCP_OPTIONS - just container, no own content */
 /* HNCP_T_DHCPV6_OPTIONS - just container, no own content */

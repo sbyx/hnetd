@@ -29,7 +29,7 @@
 static struct ubus_context *ubus = NULL;
 static struct ubus_subscriber netifd;
 static uint32_t ubus_network_interface = 0;
-static struct pa_data *pa_data = NULL;
+static hncp_pa hncp_pa_p;
 static dncp p_dncp = NULL;
 
 static int handle_update(__unused struct ubus_context *ctx,
@@ -109,7 +109,7 @@ static void handle_event(__unused struct ubus_context *ctx, __unused struct ubus
 static struct ubus_event_handler event_handler = { .cb = handle_event };
 static const char *hnetd_pd_socket = NULL;
 
-int platform_init(dncp dncp, struct pa_data *data, const char *pd_socket)
+int platform_init(dncp dncp, hncp_pa hncp_pa, const char *pd_socket)
 {
 	if (!(ubus = ubus_connect(NULL))) {
 		L_ERR("Failed to connect to ubus: %s", strerror(errno));
@@ -126,7 +126,7 @@ int platform_init(dncp dncp, struct pa_data *data, const char *pd_socket)
 		sync_netifd(true);
 
 	hnetd_pd_socket = pd_socket;
-	pa_data = data;
+	hncp_pa_p = hncp_pa;
 	p_dncp = dncp;
 	return 0;
 }
@@ -367,7 +367,7 @@ static void platform_commit(struct uloop_timeout *t)
 		blobmsg_add_string_buffer(&b);
 
 		char *buf4 = blobmsg_alloc_string_buffer(&b, "source", PREFIX_MAXBUFFLEN);
-		prefix_ntop(buf4, PREFIX_MAXBUFFLEN, &r->from, true);
+		prefix_ntopc(buf4, PREFIX_MAXBUFFLEN, &r->from.prefix, r->from.plen);
 		blobmsg_add_string_buffer(&b);
 
 		blobmsg_add_u32(&b, "metric", r->metric);
@@ -544,8 +544,8 @@ static void platform_commit(struct uloop_timeout *t)
 
 	l = blobmsg_open_array(&b, "firewall");
 	if ((c->flags & IFACE_FLAG_GUEST) == IFACE_FLAG_GUEST) {
-		struct pa_dp *dp;
-		pa_for_each_dp(dp, pa_data) {
+		struct hncp_pa_dp *dp;
+		hncp_pa_for_each_dp(dp, hncp_pa_p) {
 			for (int i = 0; i <= 1; ++i) {
 				m = blobmsg_open_table(&b, NULL);
 
@@ -560,7 +560,7 @@ static void platform_commit(struct uloop_timeout *t)
 				blobmsg_add_string(&b, "family", family);
 
 				char *buf = blobmsg_alloc_string_buffer(&b, (i) ? "dest_ip" : "src_ip", PREFIX_MAXBUFFLEN);
-				prefix_ntop(buf, PREFIX_MAXBUFFLEN, &dp->prefix, true);
+				prefix_ntopc(buf, PREFIX_MAXBUFFLEN, &dp->prefix.prefix, dp->prefix.plen, true);
 				blobmsg_add_string_buffer(&b);
 
 				blobmsg_close_table(&b, m);
@@ -571,8 +571,8 @@ static void platform_commit(struct uloop_timeout *t)
 
 	if ((c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID && c->v4_saddr.s_addr) {
 		if (c->designatedv4) {
-			struct pa_dp *dp;
-			pa_for_each_dp(dp, pa_data) {
+			struct hncp_pa_dp *dp;
+			hncp_pa_for_each_dp(dp, hncp_pa_p) {
 				if (!IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
 					continue;
 
@@ -582,7 +582,7 @@ static void platform_commit(struct uloop_timeout *t)
 				blobmsg_add_string(&b, "family", "inet");
 				blobmsg_add_string(&b, "target", "ACCEPT");
 				char *buf = blobmsg_alloc_string_buffer(&b, "dest_ip", PREFIX_MAXBUFFLEN);
-				prefix_ntop(buf, PREFIX_MAXBUFFLEN, &dp->prefix, true);
+				prefix_ntopc(buf, PREFIX_MAXBUFFLEN, &dp->prefix.prefix, dp->prefix.plen);
 				blobmsg_add_string_buffer(&b);
 
 				blobmsg_close_table(&b, m);
@@ -935,6 +935,7 @@ static void platform_update(void *data, size_t len)
 	if ((!c || !c->platform) && up && !strcmp(proto, "hnet") && (c || created) && (a = tb[IFACE_ATTR_HANDLE])) {
 		c = iface_create(ifname, blobmsg_get_string(a), flags);
 
+		hncp_pa_conf_iface_update(hncp_pa_p, c->ifname); //Start HNCP PA Conf Update
 		if (c && dtb[DATA_ATTR_PREFIX]) {
 			struct blob_attr *k;
 			unsigned rem;
@@ -943,17 +944,16 @@ static void platform_update(void *data, size_t len)
 				if (blobmsg_type(k) == BLOBMSG_TYPE_STRING) {
 					struct prefix p;
 					if (prefix_pton(blobmsg_get_string(k), &p) == 1)
-						iface_add_chosen_prefix(c, &p);
+						hncp_pa_conf_prefix(hncp_pa_p, c->ifname, &p, 0);
 				}
 			}
-
 		}
 
 		unsigned link_id, link_mask = 8;
 		if (c && dtb[DATA_ATTR_LINK_ID] && sscanf(
 				blobmsg_get_string(dtb[DATA_ATTR_LINK_ID]),
 				"%x/%u", &link_id, &link_mask) >= 1)
-			iface_set_link_id(c, link_id, link_mask);
+			hncp_pa_conf_set_link_id(hncp_pa_p, c->ifname, link_id, link_mask);
 
 		if (c && dtb[DATA_ATTR_IFACE_ID]) {
 			struct blob_attr *k;
@@ -976,7 +976,7 @@ static void platform_update(void *data, size_t len)
 						addr.plen = 64;
 					if(res == 1)
 						filter.plen = 0;
-					iface_add_addrconf(c, &addr.prefix, 128 - addr.plen, &filter);
+					hncp_pa_conf_address(hncp_pa_p, c->ifname, &addr.prefix, 128 - addr.plen, &filter, 0);
 				}
 			}
 		}
@@ -985,15 +985,17 @@ static void platform_update(void *data, size_t len)
 		if(c && dtb[DATA_ATTR_IP6_PLEN]
 		               && sscanf(blobmsg_get_string(dtb[DATA_ATTR_IP6_PLEN]), "%u", &ip6_plen) == 1
 		               && ip6_plen <= 128) {
-			c->ip6_plen = ip6_plen;
+			hncp_pa_conf_set_ip6_plen(hncp_pa_p, c->ifname, ip6_plen);
 		}
 
 		unsigned ip4_plen;
 		if(c && dtb[DATA_ATTR_IP4_PLEN]
 		            && sscanf(blobmsg_get_string(dtb[DATA_ATTR_IP4_PLEN]), "%u", &ip4_plen) == 1
 		            && ip4_plen <= 32) {
-			c->ip4_plen = ip4_plen;
+			hncp_pa_conf_set_ip4_plen(hncp_pa_p, c->ifname, ip4_plen);
 		}
+
+		hncp_pa_conf_iface_flush(hncp_pa_p, c->ifname); //Stop HNCP_PA UPDATE
 
 		dncp_link_conf conf;
 		if(c && dtb[DATA_ATTR_KEEPALIVE_INTERVAL] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))

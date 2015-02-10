@@ -31,7 +31,7 @@ struct platform_iface {
 	pid_t dhcpv6;
 };
 
-int platform_init(__unused dncp hncp, __unused struct pa_data *data, const char *pd_socket)
+int platform_init(__unused dncp hncp, __unused hncp_pa pa, const char *pd_socket)
 {
 	hnetd_pd_socket = pd_socket;
 	return 0;
@@ -100,7 +100,7 @@ void platform_set_internal(struct iface *c, bool internal)
 void platform_filter_prefix(struct iface *c, const struct prefix *p, bool enable)
 {
 	char abuf[PREFIX_MAXBUFFLEN];
-	prefix_ntop(abuf, sizeof(abuf), p, true);
+	prefix_ntopc(abuf, sizeof(abuf), &p->prefix, p->plen);
 	char *argv[] = {backend, (enable) ? "newblocked" : "delblocked",
 			c->ifname, abuf, NULL};
 	platform_call(argv);
@@ -111,7 +111,7 @@ void platform_set_address(struct iface *c, struct iface_addr *a, bool enable)
 {
 	hnetd_time_t now = hnetd_time();
 	char abuf[PREFIX_MAXBUFFLEN], pbuf[10] = "", vbuf[10] = "", cbuf[10] = "";
-	prefix_ntop(abuf, sizeof(abuf), &a->prefix, false);
+	prefix_ntopc(abuf, sizeof(abuf), &a->prefix.prefix, a->prefix.plen);
 
 	if (!IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix)) {
 		hnetd_time_t valid = (a->valid_until - now) / HNETD_TIME_PER_SECOND;
@@ -151,7 +151,7 @@ void platform_set_snat(struct iface *c, const struct prefix *p)
 {
 	char sbuf[INET_ADDRSTRLEN], pbuf[PREFIX_MAXBUFFLEN], prefix[3] = {0};
 	inet_ntop(AF_INET, &c->v4_saddr, sbuf, sizeof(sbuf));
-	prefix_ntop(pbuf, sizeof(pbuf), p, true);
+	prefix_ntopc(pbuf, sizeof(pbuf), &p->prefix, p->plen);
 
 	if (!c->designatedv4)
 		snprintf(prefix, sizeof(prefix), "%d", c->v4_prefix);
@@ -169,7 +169,7 @@ void platform_set_route(struct iface *c, struct iface_route *route, bool enable)
 	char via[INET6_ADDRSTRLEN];
 	char metric[10];
 
-	prefix_ntop(to, sizeof(to), &route->to, true);
+	prefix_ntopc(to, sizeof(to), &route->to.prefix, route->to.plen);
 
 	if (!IN6_IS_ADDR_V4MAPPED(&route->to.prefix))
 		inet_ntop(AF_INET6, &route->via, via, sizeof(via));
@@ -177,7 +177,7 @@ void platform_set_route(struct iface *c, struct iface_route *route, bool enable)
 		inet_ntop(AF_INET, &route->via.s6_addr[12], via, sizeof(via));
 
 	if (!IN6_IS_ADDR_V4MAPPED(&route->to.prefix))
-		prefix_ntop(from, sizeof(from), &route->from, true);
+		prefix_ntopc(from, sizeof(from), &route->from.prefix, route->from.plen);
 	else
 		from[0] = 0;
 
@@ -226,7 +226,7 @@ void platform_restart_dhcpv4(struct iface *c)
 void platform_set_prefix_route(const struct prefix *p, bool enable)
 {
 	char buf[PREFIX_MAXBUFFLEN];
-	prefix_ntop(buf, sizeof(buf), p, true);
+	prefix_ntopc(buf, sizeof(buf), &p->prefix, p->plen);
 	char *argv[] = {backend, (enable) ? "newprefixroute" : "delprefixroute", buf, NULL};
 	platform_call(argv);
 }

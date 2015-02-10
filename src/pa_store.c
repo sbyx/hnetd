@@ -5,428 +5,478 @@
  *
  */
 
-#define L_PREFIX "pa-store - "
-
-#include <arpa/inet.h>
+#include <sys/stat.h> //Because stat.h uses __unused
 
 #include "pa_store.h"
-#include "pa.h"
 
-#define store_pa(store) (container_of(store, struct pa, store))
-#define store_p(store, next) (&store_pa(store)->next)
+#include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <inttypes.h>
 
-/* Storage format constants */
-#define PAS_TYPE_SP  0x00
-#define PAS_TYPE_ULA 0x01
-#define PAS_TYPE_SA 0x02
-#define PAS_TYPE_DELAY 0x03 /* Delay in min that was used for the previous write */
+struct pa_store_prefix {
+	struct list_head in_store;
+	struct list_head in_link;
+	pa_prefix prefix;
+	pa_plen plen;
+};
 
-#define PAS_DELAY_MIN INT64_C(10*60)*HNETD_TIME_PER_SECOND
-#define PAS_DELAY_MAX INT64_C(24*60*60)*HNETD_TIME_PER_SECOND /* 24h */
+static int pa_store_cache(struct pa_store *store, struct pa_store_link *link, pa_prefix *prefix, pa_plen plen);
 
-/* This algorithm will allow writes to stable storage if and only if no
- * modifications are made during an increasing delay. The delay is 5min when the
- * router is flashed, and will double at each writes up to 24h.
- * Todo: Be more clever about when it is needed to write the file. */
-static hnetd_time_t pas_next_delay(hnetd_time_t prev)
+static struct pa_store_link *pa_store_link_goc(struct pa_store *store, const char *name, int create)
 {
-	if(prev < PAS_DELAY_MIN)
-		return PAS_DELAY_MIN;
-
-	hnetd_time_t next = prev * 2;
-	return (next > PAS_DELAY_MAX) ? PAS_DELAY_MAX : next;
-}
-
-static int pas_ifname_write(char *ifname, FILE *f)
-{
-	if(fprintf(f, "%s", ifname) <= 0 || fputc('\0', f) < 0)
-		return -1;
-	return 0;
-}
-
-static int pas_ifname_read(char *ifname, FILE *f)
-{
-	int c;
-	char *ptr = ifname;
-	char *max = ifname + IFNAMSIZ; //First not valid
-	while((c = fgetc(f))) {
-		if(c < 0 || ptr == max)
-			return -1;
-
-		*(ptr++) = (char) c;
-		if(!c)
-			return 0;
-	}
-
-	return strlen(ifname)?0:-1;
-}
-
-static int pas_address_write(struct in6_addr *addr, FILE *f)
-{
-	//L_DEBUG("Writing address %s", ADDR_REPR(addr));
-	if(fwrite(addr, sizeof(struct in6_addr), 1, f) != 1)
-				return -1;
-	return 0;
-}
-
-static int pas_address_read(struct in6_addr *addr, FILE *f)
-{
-	if(fread(addr, sizeof(struct in6_addr), 1, f) != 1)
-			return -1;
-	//L_DEBUG("Read address %s", ADDR_REPR(addr));
-	return 0;
-}
-
-static int pas_prefix_write(struct prefix *p, FILE *f)
-{
-	//L_DEBUG("Writing prefix %s", PREFIX_REPR(p));
-	if(fwrite(&p->prefix, sizeof(struct in6_addr), 1, f) != 1 ||
-				fwrite(&p->plen, 1, 1, f) != 1)
-				return -1;
-		return 0;
-}
-
-static int pas_prefix_read(struct prefix *p, FILE *f)
-{
-	if(fread(&p->prefix, sizeof(struct in6_addr), 1, f) != 1 ||
-			fread(&p->plen, 1, 1, f) != 1)
-			return -1;
-	//L_DEBUG("Read prefix %s", PREFIX_REPR(p));
-	return 0;
-}
-
-static int pas_ula_load(struct pa_store *store, FILE *f)
-{
-	struct prefix p;
-	if(pas_prefix_read(&p, f))
-		return -1;
-
-	memcpy(&store->ula, &p, sizeof(struct prefix));
-	store->ula_valid = 1;
-	return 0;
-}
-
-static int pas_ula_save(struct pa_store *store, FILE *f)
-{
-	if(pas_prefix_write(&store->ula, f))
-		return -1;
-	return 0;
-}
-
-static int pas_sp_load(struct pa_store *store, FILE *f)
-{
-	struct prefix p;
-	char ifname[IFNAMSIZ] = {0}; //Init for valgrind tests
-	if(pas_prefix_read(&p, f) ||
-			pas_ifname_read(ifname, f))
-		return -1;
-
-	struct pa_iface *iface = pa_iface_get(store_p(store, data), ifname, true);
-	if(!iface)
-		return -2;
-
-	struct pa_sp *sp = pa_sp_get(store_p(store, data), iface, &p, true);
-	if(!sp)
-		return -3;
-
-	pa_sp_promote(store_p(store, data), sp);
-	return 0;
-}
-
-static int pas_sp_save(struct pa_sp *sp, FILE *f)
-{
-	if(pas_prefix_write(&sp->prefix, f) || pas_ifname_write(sp->iface->ifname, f))
-		return -1;
-	return 0;
-}
-
-static int pas_delay_load(struct pa_store *store, FILE *f)
-{
-	uint32_t minutes;
-	if(fread(&minutes, sizeof(minutes), 1, f) != 1)
-		return -1;
-	minutes = ntohl(minutes);
-	store->save_delay = pas_next_delay(minutes * 60*HNETD_TIME_PER_SECOND);
-	return 0;
-}
-
-static int pas_delay_save(struct pa_store *store, FILE *f)
-{
-	uint32_t minutes = htonl((uint32_t) (store->save_delay / (60*HNETD_TIME_PER_SECOND)));
-	if(fwrite(&minutes, sizeof(minutes), 1, f) != 1)
-		return -1;
-	return 0;
-}
-
-static int pas_sa_load(struct pa_store *store, FILE *f)
-{
-	struct in6_addr addr;
-	if(pas_address_read(&addr, f))
-		return -1;
-
-	struct pa_sa *sa = pa_sa_get(store_p(store, data), &addr, true);
-	if(!sa)
-		return -2;
-
-	pa_sa_promote(store_p(store, data), sa);
-	return 0;
-}
-
-static int pas_sa_save(struct pa_sa *sa, FILE *f)
-{
-	return pas_address_write(&sa->addr, f)?-1:0;
-}
-
-static int pas_load(struct pa_store *store)
-{
-	uint8_t type;
-	FILE *f;
-	int err = 0;
-
-	if(!store->filename)
-		return 0;
-
-	if(!(f = fopen(store->filename, "r"))) {
-		L_WARN("Cannot open file %s (write mode)", store->filename);
-		return -1;
-	}
-	L_INFO("Loading prefixes and ULA");
-	while(!err) {
-		/* Get type */
-		if(fread(&type, 1, 1, f) != 1)
-			break;
-
-		switch (type) {
-			case PAS_TYPE_SP:
-				err = pas_sp_load(store, f);
-				break;
-			case PAS_TYPE_ULA:
-				err = pas_ula_load(store, f);
-				break;
-			case PAS_TYPE_SA:
-				err = pas_sa_load(store, f);
-				break;
-			case PAS_TYPE_DELAY:
-				err = pas_delay_load(store, f);
-				break;
-			default:
-				L_DEBUG("Invalid type");
-				return -2;
+	struct pa_store_link *l;
+	list_for_each_entry(l, &store->links, le) {
+		if(!strcmp(l->name, name)) {
+			return l;
 		}
 	}
+	if(!create || !(l = malloc(sizeof(*l))))
+		return NULL;
+
+	strcpy(l->name, name);
+	INIT_LIST_HEAD(&l->prefixes);
+	l->n_prefixes = 0;
+	l->link = NULL;
+	l->max_prefixes = 0;
+	list_add(&l->le, &store->links);
+	return l;
+}
+
+/*  */
+static void pa_store_getwords(char *line, char *words[], size_t nwords)
+{
+	size_t i;
+	for(i=0; i<nwords; i++)
+		words[i] = NULL;
+
+	i = 0;
+	size_t pos = 0, reading = 0;
+	while(1) {
+		switch (line[pos]) {
+		case '\0':
+			return;
+		case ' ':
+		case '\n':
+		case '\t':
+			if(reading) {
+				line[pos] = '\0';
+				reading = 0;
+			}
+			break;
+		default:
+			if(!reading) {
+				reading = 1;
+				if(i < nwords)
+					words[i] = &line[pos];
+				i++;
+			}
+			break;
+		}
+		pos++;
+	}
+}
+
+#define PAS_PE(test, errmsg, ...) \
+		if(test) { \
+			if(!err) {\
+				PA_WARNING("Parsing error in file %s", store->filepath);\
+				err = -1;\
+			}\
+			PA_WARNING(" - "errmsg" at line %d", ##__VA_ARGS__, (int)linecnt); \
+			continue;\
+		}
+
+int pa_store_load(struct pa_store *store, const char *filepath)
+{
+	FILE *f;
+	if(!(f = fopen(filepath, "r"))) {
+		PA_WARNING("Cannot open file %s (read mode) - %s", store->filepath, strerror(errno));
+		return -1;
+	}
+
+	char *line = NULL;
+	ssize_t read;
+	size_t len;
+	size_t linecnt = 0;
+	int err = 0;
+	while ((read = getline(&line, &len, f)) != -1) {
+		linecnt++;
+		char *words[4];
+		pa_store_getwords(line, words, 4);
+
+		if(!words[0] || words[0][0] == '#')
+			continue;
+
+		if(!strcmp(words[0], PA_STORE_PREFIX)) {
+			pa_prefix px;
+			pa_plen plen;
+			struct pa_store_link *l;
+			PAS_PE(!words[1] || !words[2], "Missing arguments");
+			PAS_PE(words[3] && words[3][0] != '#', "Too many arguments");
+			PAS_PE(!pa_prefix_fromstring(words[2], &px, &plen), "Invalid prefix");
+			PAS_PE(strlen(words[1]) >= PA_STORE_NAMELEN, "Link name '%s' is too long", words[1]);
+			PAS_PE(!(l = pa_store_link_goc(store, words[1], 1)), "Internal error");
+			pa_store_cache(store, l, &px, plen);
+		} else if(!strcmp(words[0], PA_STORE_WTOKEN)) {
+			uint32_t token_count;
+			PAS_PE(!words[1] || sscanf(words[1], "%"SCNu32, &token_count) != 1, "Invalid token count");
+		} else {
+			PAS_PE(1,"Unknown type %s", words[0]);
+		}
+	}
+
+	free(line);
 	fclose(f);
 	return err;
 }
 
-static int pas_save(struct pa_store *store)
+int pa_store_save(struct pa_store *store)
 {
-	struct pa_sp *sp;
-	struct pa_sa *sa;
-	char type;
 	FILE *f;
-
-	if(!store->filename)
-		return 0;
-
-	if(!(f = fopen(store->filename, "w"))) {
-		L_WARN("Cannot open file %s (write mode)", store->filename);
+	if(!store->filepath) {
+		PA_WARNING("No specified file.");
 		return -1;
 	}
-	L_INFO("Saving prefixes and ULA");
-	type = PAS_TYPE_ULA;
-	if(store->ula_valid &&
-			((fwrite(&type, 1, 1, f) != 1) || pas_ula_save(store, f) ))
-		goto err;
 
-	type = PAS_TYPE_SP;
-	pa_for_each_sp_reverse(sp, store_p(store, data)) {
-		if((fwrite(&type, 1, 1, f) != 1) || pas_sp_save(sp, f))
-			goto err;
+	if(!(f = fopen(store->filepath, "w"))) {
+		PA_WARNING("Cannot open file %s (write mode) - %s", store->filepath, strerror(errno));
+		return -1;
 	}
 
-	type = PAS_TYPE_SA;
-	pa_for_each_sa_reverse(sa, store_p(store, data)) {
-		if((fwrite(&type, 1, 1, f) != 1) || pas_sa_save(sa, f))
-			goto err;
+	if(fprintf(f, PA_STORE_BANNER) <= 0) {
+		PA_WARNING("Error occurred while writing cache into %s: %s", store->filepath, strerror(errno));
+		return -1;
 	}
 
-	type = PAS_TYPE_DELAY;
-	if(((fwrite(&type, 1, 1, f) != 1) || pas_delay_save(store, f) ))
-			goto err;
+	struct pa_store_prefix *p;
+	struct pa_store_link *link;
+	char px[PA_PREFIX_STRLEN];
+	int err = 0;
 
-	fclose(f);
-	store->save_delay = pas_next_delay(store->save_delay); /* Getting next value */
-	return 0;
-err:
-	L_WARN("Writing error");
-	fclose(f);
-	store->save_delay = pas_next_delay(store->save_delay); /* Getting next value */
-	return -2;
-}
+	if(fprintf(f, PA_STORE_WTOKEN" %"PRIu32"\n", store->token_count) < 0) {
+		err = -3;
+	}
 
-void pas_save_cb(struct pa_timer *t)
-{
-	pas_save(container_of(t, struct pa_store, t));
-}
+	list_for_each_entry_reverse(p, &store->prefixes, in_store) {
+		link = list_entry(p->in_link.next, struct pa_store_link, prefixes);
+		if(!strlen(link->name))
+			continue;
 
-void pas_save_schedule(struct pa_store *store)
-{
-	if(store->filename)
-		pa_timer_set(&store->t, store->save_delay, true);
-}
-
-const struct prefix *pa_store_ula_get(struct pa_store *store)
-{
-	if(!store->ula_valid)
-		return NULL;
-
-	return &store->ula;
-}
-
-static void __pa_store_dps(struct pa_data_user *user, struct pa_dp *dp, uint32_t flags) {
-	struct pa_store *store = container_of(user, struct pa_store, data_user);
-	if((flags & PADF_DP_CREATED) && dp->local && prefix_is_ipv6_ula(&dp->prefix)) {
-		if(!store->ula_valid || memcmp(&store->ula, &dp->prefix, sizeof(struct prefix))) {
-			prefix_cpy(&store->ula, &dp->prefix);
-			store->ula_valid = true;
-			pas_save_schedule(store);
+		if(!err) {
+			if(fprintf(f, PA_STORE_PREFIX" %s %s\n",
+					link->name,
+					pa_prefix_tostring(px, &p->prefix, p->plen)) < 0)
+				err = -2;
 		}
+		list_move(&p->in_link, &link->prefixes);
 	}
+	if(err)
+		PA_WARNING("Error occurred while writing cache into %s: %s", store->filepath, strerror(errno));
+
+	fclose(f);
+	return err;
 }
 
-static void __pa_store_cps(struct pa_data_user *user, struct pa_cp *cp, uint32_t flags) {
-	if(cp->type != PA_CPT_L)
+static void pa_save_to(struct uloop_timeout *to)
+{
+	struct pa_store *store = container_of(to, struct pa_store, save_timer);
+	store->pending_changes = 0;
+	store->token_count--;
+	pa_store_save(store);
+}
+
+void pa_token_to(struct uloop_timeout *to)
+{
+	struct pa_store *store = container_of(to, struct pa_store, token_timer);
+	if(store->token_count == PA_STORE_WTOKENS_MAX)
 		return;
 
-	struct pa_cpl *cpl = _pa_cpl(cp);
-	struct pa_store *store = container_of(user, struct pa_store, data_user);
-	struct pa_data *data = &container_of(user, struct pa, store.data_user)->data;
-	struct pa_sp *sp;
-	if(cpl && (flags & (PADF_CP_APPLIED)) && !(flags & PADF_CP_TODELETE) && cp->applied) {
-		if(((sp = pa_sp_get(data, cpl->iface, &cp->prefix, false)) && (&sp->le != data->sps.next)) ||
-				(sp = pa_sp_get(data, cpl->iface, &cp->prefix, true))) {
-			pa_sp_promote(data, sp);
-			pas_save_schedule(store);
-		}
-	}
+	store->token_count++;
+	if(store->pending_changes)
+		pa_store_updated(store);
+	uloop_timeout_set(to, store->token_delay);
 }
 
-static void __pa_store_aas(struct pa_data_user *user, struct pa_aa *aa, uint32_t flags) {
-	struct pa_store *store = container_of(user, struct pa_store, data_user);
-	struct pa_data *data = store_p(store, data);
-	struct pa_laa *laa;
-	struct pa_sa *sa;
-	if(aa->local && (flags & PADF_LAA_APPLIED) && (laa = container_of(aa, struct pa_laa, aa))->applied) {
-		if( ((sa = pa_sa_get(data, &aa->address, false)) && (&sa->le != data->sas.next)) ||
-				(sa = pa_sa_get(data, &aa->address, true))) {
-			pa_sa_promote(data, sa);
-			pas_save_schedule(store);
-		}
-	}
-}
-
-int pa_store_setfile(struct pa_store *store, const char *filepath)
+void pa_store_updated(struct pa_store *store)
 {
-	if(filepath) {
-		L_NOTICE("Setting stable storage file %s", filepath);
+	store->pending_changes = 1;
+	if(store->filepath && store->token_count && !store->save_timer.pending) {
+		uloop_timeout_set(&store->save_timer, store->save_delay);
+	}
+}
+
+/* Only an empty private link can be destroyed */
+static void pa_store_private_link_destroy(struct pa_store_link *l)
+{
+	list_del(&l->le);
+	free(l);
+}
+
+static void pa_store_uncache(struct pa_store *store, struct pa_store_link *l, struct pa_store_prefix *p)
+{
+	list_del(&p->in_link);
+	l->n_prefixes--;
+	list_del(&p->in_store);
+	store->n_prefixes--;
+	if(!l->n_prefixes && !l->link)
+		pa_store_private_link_destroy(l);
+
+	free(p);
+	pa_store_updated(store);
+}
+
+#define pa_store_uncache_last_from_link(store, l) \
+			pa_store_uncache(store, l, list_entry((l)->prefixes.prev, struct pa_store_prefix, in_link))
+
+static void pa_store_uncache_last_from_store(struct pa_store *store)
+{
+	struct pa_store_prefix *p = list_entry((store)->prefixes.prev, struct pa_store_prefix, in_store);
+	struct pa_store_link *l =  list_entry(p->in_link.next, struct pa_store_link, prefixes);
+	pa_store_uncache(store, l, p);
+}
+
+static int pa_store_cache(struct pa_store *store, struct pa_store_link *link, pa_prefix *prefix, pa_plen plen)
+{
+	PA_DEBUG("Caching %s %s", link->name, pa_prefix_repr(prefix, plen));
+	struct pa_store_prefix *p;
+	list_for_each_entry(p, &link->prefixes, in_link) {
+		if(pa_prefix_equals(prefix, plen, &p->prefix, p->plen)) {
+			//Put existing prefix at head
+			list_move(&p->in_store, &store->prefixes);
+			list_move(&p->in_link, &link->prefixes);
+			pa_store_updated(store);
+			return 0;
+		}
+	}
+	if(!(p = malloc(sizeof(*p))))
+		return -1;
+	//Add the new prefix
+	pa_prefix_cpy(prefix, plen, &p->prefix, p->plen);
+	list_add(&p->in_link, &link->prefixes);
+	link->n_prefixes++;
+	list_add(&p->in_store, &store->prefixes);
+	store->n_prefixes++;
+
+	//If too many prefixes in the link, remove the last one
+	if(link->max_prefixes && link->n_prefixes > link->max_prefixes)
+		pa_store_uncache_last_from_link(store, link);
+
+	//If too many prefixes in storage, remove the last one
+	if(store->max_prefixes && store->n_prefixes > store->max_prefixes)
+		pa_store_uncache_last_from_store(store);
+
+	pa_store_updated(store);
+	return 0;
+}
+
+static void pa_store_applied_cb(struct pa_user *user, struct pa_ldp *ldp)
+{
+	struct pa_store *store = container_of(user, struct pa_store, user);
+	if(!ldp->applied)
+		return;
+
+	struct pa_store_link *link;
+	list_for_each_entry(link, &store->links, le) {
+		if(link->link == ldp->link) {
+			pa_store_cache(store, link, &ldp->prefix, ldp->plen);
+			return;
+		}
+	}
+}
+
+void pa_store_link_add(struct pa_store *store, struct pa_store_link *link)
+{
+	struct pa_store_link *l;
+	INIT_LIST_HEAD(&link->prefixes);
+	link->n_prefixes = 0;
+	if((l = pa_store_link_goc(store, link->name, 0))) {
+		list_splice(&l->prefixes, &link->prefixes);
+		link->n_prefixes = l->n_prefixes;
+		if(!l->link)
+			pa_store_private_link_destroy(l);
+
+		if(link->max_prefixes)
+			while(link->n_prefixes > link->max_prefixes)
+				pa_store_uncache_last_from_link(store, link);
+	}
+	list_add(&link->le, &store->links);
+	return;
+}
+
+void pa_store_link_remove(struct pa_store *store, struct pa_store_link *link)
+{
+	struct pa_store_link *l;
+	list_del(&link->le);
+	if(!link->n_prefixes)
+		return;
+
+	if(((strlen(link->name) && (l = pa_store_link_goc(store, link->name, 1))))) {
+		list_splice(&link->prefixes, &l->prefixes); //Save prefixes in a private list
+		l->n_prefixes = link->n_prefixes;
+
+		if(l->max_prefixes)
+			while(l->n_prefixes > l->max_prefixes)
+				pa_store_uncache_last_from_link(store, l);
 	} else {
-		L_NOTICE("Removing stable storage file");
-	}
-
-	if(store->filename) {
-		free(store->filename);
-		store->filename = NULL;
-	}
-
-	if(filepath) {
-		if(!(store->filename = malloc(strlen(filepath) + 1))) {
-			L_WARN("Could not allocate space for file path");
-			return -1;
+		struct pa_store_prefix *p;
+		list_for_each_entry(p, &link->prefixes, in_link) {
+			list_del(&p->in_store);
+			free(p);
 		}
-		strcpy(store->filename, filepath);
-		if(store->t.enabled)
-			pas_load(store);
+		pa_store_updated(store);
 	}
-
-	return 0;
-}
-
-static int pa_rule_try_storage(struct pa_core *core, struct pa_rule *rule,
-		struct pa_dp *dp, struct pa_iface *iface,
-		__attribute__((unused))struct pa_ap *strongest_ap,
-		__attribute__((unused))struct pa_cpl *current_cpl,
-		__unused enum pa_rule_pref best_found_priority)
-{
-	struct pa_sp *sp;
-	uint8_t plen, plen_scarcity;
-
-	if(!pa_iface_can_create_prefix(iface))
-		return -1;
-
-	plen = pa_iface_plen(iface, dp, false);
-	plen_scarcity = pa_iface_plen(iface, dp, true);
-
-	rule->result.preference = PAR_PREF_MAX;
-	pa_for_each_sp_in_iface(sp, iface) {
-		if(prefix_contains(&dp->prefix, &sp->prefix) &&
-				!pa_prefix_getcollision(container_of(core, struct pa, core), &sp->prefix)) {
-
-			if(sp->prefix.plen == plen) {
-				rule->result.preference = PAR_PREF_STORAGE;
-				prefix_cpy(&rule->result.prefix, &sp->prefix);
-				return 0;
-			}
-			if(rule->result.preference == PAR_PREF_MAX &&
-					sp->prefix.plen == plen_scarcity) {
-				rule->result.preference = PAR_PREF_STORAGE_S;
-				prefix_cpy(&rule->result.prefix, &sp->prefix);
-			}
-		}
-	}
-
-	return -1;
-}
-
-void pa_store_init(struct pa_store *store)
-{
-	pa_timer_init(&store->t, pas_save_cb, "PA Storage");
-	store->filename = NULL;
-	store->ula_valid = false;
-	memset(&store->data_user, 0, sizeof(struct pa_data_user));
-	store->data_user.cps = __pa_store_cps;
-	store->data_user.dps = __pa_store_dps;
-	store->data_user.aas = __pa_store_aas;
-	store->save_delay = pas_next_delay(0);
-	pa_core_rule_init(&store->pa_rule, "Stable storage", PAR_PREF_STORAGE, pa_rule_try_storage);
-	store->pa_rule.result.priority = PA_PRIORITY_DEFAULT;
-	store->pa_rule.result.authoritative = false;
-	store->pa_rule.result.preference = PAR_PREF_STORAGE;
-}
-
-void pa_store_start(struct pa_store *store)
-{
-	if(store->t.enabled)
-		return;
-
-	pa_timer_enable(&store->t);
-	pa_data_subscribe(store_p(store, data), &store->data_user);
-	pas_load(store);
-	pa_core_rule_add(store_p(store, core), &store->pa_rule);
-}
-
-void pa_store_stop(struct pa_store *store)
-{
-	if(!store->t.enabled)
-		return;
-
-	pa_core_rule_del(store_p(store, core), &store->pa_rule);
-	pa_store_setfile(store, NULL);
-	pa_data_unsubscribe(&store->data_user);
-	pa_timer_disable(&store->t);
+	return;
 }
 
 void pa_store_term(struct pa_store *store)
 {
-	pa_store_stop(store);
+	struct pa_store_prefix *p, *p2;
+	list_for_each_entry_safe(p, p2, &store->prefixes, in_store) {
+		free(p);
+	}
+
+	struct pa_store_link *l, *l2;
+	list_for_each_entry_safe(l, l2, &store->links, le) {
+		if(!l->link)
+			free(l);
+	}
+
+	pa_user_unregister(&store->user);
+	uloop_timeout_cancel(&store->save_timer);
+	uloop_timeout_cancel(&store->token_timer);
 }
 
+int pa_store_set_file(struct pa_store *store, const char *filepath,
+		uint32_t save_delay, uint32_t token_delay)
+{
+	int fd;
+	uloop_timeout_cancel(&store->save_timer);
+	uloop_timeout_cancel(&store->token_timer);
+	if((fd = open(filepath, O_WRONLY | O_CREAT, 0664)) == -1) {
+		PA_WARNING("Could not open file (Or incorrect authorizations) %s: %s", filepath, strerror(errno));
+		store->filepath = NULL;
+		return -1;
+	}
+	close(fd);
+
+	uint32_t token_count = PA_STORE_WTOKENS_DEFAULT;
+	/* The file is read once to get the token counter. */
+	FILE *f;
+	if(!(f = fopen(filepath, "r"))) {
+		PA_WARNING("Cannot open file %s (read mode) - %s", filepath, strerror(errno));
+		return -1;
+	}
+	char *line = NULL;
+	ssize_t read;
+	size_t len;
+	while ((read = getline(&line, &len, f)) != -1) {
+		char *words[2];
+		pa_store_getwords(line, words, 2);
+		if(words[0] && !strcmp(words[0], PA_STORE_WTOKEN)) {
+			if(!words[1] || sscanf(words[1], "%"SCNu32, &token_count) != 1) {
+				PA_WARNING("Malformed token entry in file");
+				fclose(f);
+				return -1;
+			} else {
+				store->token_count = token_count;
+				break;
+			}
+		}
+	}
+	free(line);
+	fclose(f);
+
+	store->token_count = token_count;
+	store->save_delay = save_delay;
+	store->token_delay = token_delay;
+	store->filepath = filepath;
+	store->pending_changes = 0;
+	uloop_timeout_set(&store->token_timer, store->token_delay);
+	return 0;
+}
+
+void pa_store_init(struct pa_store *store, struct pa_core *core, uint32_t max_prefixes)
+{
+	store->core = core;
+	store->max_prefixes = max_prefixes;
+	INIT_LIST_HEAD(&store->links);
+	INIT_LIST_HEAD(&store->prefixes);
+	store->user.applied = pa_store_applied_cb;
+	store->user.assigned = NULL;
+	store->user.published = NULL;
+	store->filepath = NULL;
+	store->n_prefixes = 0;
+	store->pending_changes = 0;
+	store->save_timer.pending = 0;
+	store->save_timer.cb = pa_save_to;
+	store->token_timer.pending = 0;
+	store->token_timer.cb = pa_token_to;
+	store->token_count = 0;
+	pa_user_register(core, &store->user);
+}
+
+
+pa_rule_priority pa_store_get_max_priority(struct pa_rule *rule, struct pa_ldp *ldp)
+{
+	if(ldp->best_assignment || ldp->published) //No override
+		return 0;
+
+	struct pa_store_rule *rule_s = container_of(rule, struct pa_store_rule, rule);
+	struct pa_store *store = rule_s->store;
+	struct pa_store_link *l;
+	list_for_each_entry(l, &store->links, le) {
+		if(l->link == ldp->link) {
+			if(l->n_prefixes)
+				return rule_s->rule_priority;
+			else
+				return 0;
+		}
+	}
+	return 0;
+}
+
+enum pa_rule_target pa_store_match(struct pa_rule *rule, struct pa_ldp *ldp,
+		__attribute__ ((unused)) pa_rule_priority best_match_priority,
+		struct pa_rule_arg *pa_arg)
+{
+	struct pa_store_rule *rule_s = container_of(rule, struct pa_store_rule, rule);
+	struct pa_store *store = rule_s->store;
+
+	pa_arg->priority = rule_s->priority;
+	pa_arg->rule_priority = rule_s->rule_priority;
+	//No need to check the best_match_priority because the rule uses a unique rule priority
+
+	/* We checked that there is a candidate during get_max_priority call */
+	struct pa_store_link *l;
+	list_for_each_entry(l, &store->links, le) {
+		if(l->link == ldp->link) //Will happen
+			break;
+	}
+
+	//Find a matching prefix
+	struct pa_store_prefix *prefix;
+	list_for_each_entry(prefix, &l->prefixes, in_link) {
+		if(prefix->plen >= ldp->dp->plen &&
+				pa_prefix_contains(&ldp->dp->prefix, ldp->dp->plen, &prefix->prefix) &&
+				pa_rule_valid_assignment(ldp, &prefix->prefix, prefix->plen, 0, 0, 0)) {
+			if(!ldp->backoff)
+				return PA_RULE_BACKOFF; //Start or continue backoff timer.
+
+			pa_prefix_cpy(&prefix->prefix, prefix->plen, &pa_arg->prefix, pa_arg->plen);
+			return PA_RULE_PUBLISH;
+		}
+	}
+	return PA_RULE_NO_MATCH;
+}
+
+void pa_store_rule_init(struct pa_store_rule *rule, struct pa_store *store)
+{
+	rule->store = store;
+	rule->rule.filter_accept = NULL;
+	rule->rule.get_max_priority = pa_store_get_max_priority;
+	rule->rule.match = pa_store_match;
+}

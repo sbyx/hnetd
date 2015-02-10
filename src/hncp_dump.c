@@ -173,8 +173,10 @@ static int hd_node_prefix(struct tlv_attr *tlv, struct blob_buf *b)
 	plen = ROUND_BITS_TO_BYTES(p.plen);
 	memcpy(&p, ah->prefix_data, plen);
 	hd_a(!blobmsg_add_string(b, "prefix", PREFIX_REPR(&p)), return -1);
-	hd_a(!blobmsg_add_u8(b, "authoritative", !!(ah->flags & HNCP_T_ASSIGNED_PREFIX_FLAG_AUTHORITATIVE)), return -1);
-	hd_a(!blobmsg_add_u16(b, "priority", HNCP_T_ASSIGNED_PREFIX_FLAG_PREFERENCE(ah->flags)), return -1);
+	//hd_a(!blobmsg_add_u8(b, "authoritative", !!(ah->flags & HNCP_T_ASSIGNED_PREFIX_FLAG_AUTHORITATIVE)), return -1);
+	hd_a(!blobmsg_add_u8(b, "authoritative", 0), return -1); //todo: authoritative should be removed
+	//hd_a(!blobmsg_add_u16(b, "priority", HNCP_T_ASSIGNED_PREFIX_FLAG_PREFERENCE(ah->flags)), return -1);
+	hd_a(!blobmsg_add_u16(b, "priority", HNCP_T_ASSIGNED_PREFIX_FLAG_PRIORITY(ah->flags)), return -1);
 	hd_a(!blobmsg_add_u32(b, "link", ntohl(ah->link_id)), return -1);
 	return 0;
 }

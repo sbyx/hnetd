@@ -20,7 +20,7 @@
 #include "dns_util.h"
 
 /* ADDR_REPR etc. */
-#include "prefix_utils.h"
+#include "prefix.h"
 
 #include <assert.h>
 

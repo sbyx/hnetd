@@ -36,9 +36,12 @@
 #include <libubox/uloop.h>
 
 #include "sput.h"
+#include "hnetd.h"
 
 #define hnetd_time() _fu_time
 #define set_hnetd_time fu_set_hnetd_time
+#define get_time() hnetd_time()
+#define set_time set_hnetd_time
 #define uloop_init() fu_init()
 #define uloop_run() (void)fu_loop(-1)
 #define uloop_end() do { _fu_loop_ended = true; } while(0)

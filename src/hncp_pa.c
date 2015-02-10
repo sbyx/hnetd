@@ -1,874 +1,1373 @@
 /*
- * $Id: hncp_pa.c $
+ * Author: Pierre Pfister <pierre pfister@darou.fr>
  *
- * Author: Markus Stenberg <markus stenberg@iki.fi>
+ * Copyright (c) 2014 Cisco Systems, Inc.
  *
- * Copyright (c) 2013 cisco Systems, Inc.
+ * hncp_pa.c implements prefix and address assignment.
+ * It is a particularly intricate piece of code due to its multiple
+ * dependencies.
  *
- * Created:       Wed Dec  4 12:32:50 2013 mstenber
- * Last modified: Tue Dec 23 18:50:34 2014 mstenber
- * Edit time:     494 min
+ *  - It listens to link.c in order to get:
+ *    - External interfaces PA should be enabled on.
+ *    - ISP provided Delegated Prefixes.
+ *    - DHCPv6 and v4 TLVs provided by ISPs.
+ *
+ *  - It listens to dncp.c in order to get:
+ *    - External Connection TLVs
+ *    - Assigned Prefix TLVs
+ *    - Router Address TLVs
+ *
+ *  - It bootstraps and configure pa_core.c
+ *    - Set delegated prefixes (Ignore those that are included in other DPs).
+ *    - Provide Advertised Prefixes and Addresses
+ *    - Listen to Prefix and Address assignment
+ *
+ *  - It provides info to link.c
+ *    - All available delegated prefixes
+ *    - Aggregated DHCP data
+ *    - Addresses and prefixes to be used for iface configuration.
+ *
+ *  - It enables downstream prefix delegation
+ *    - Receives subscriptions from pd.c
+ *    - Call call-backs with assigned and applied prefixes
  *
  */
 
-/* Glue code between hncp and pa. */
-
-/* What does it do:
-
-   - subscribes to HNCP and PA events
-
-   - produces / consumes HNCP TLVs related to PA
-
-   _Ideally_ this could actually use external hncp API only. In
-   practise, though, I can't be bothered. So I don't.
-
-   Strategy for dealing with different data types:
-
-   - assigned prefixes
-
-    - from hncp: pushed pa when we get tlv callback from HNCP
-
-    - from pa: added/deleted dynamically as hncp TLVs (no data that
-      changes)
-
-   - delegated prefixes
-
-    - from hncp: pushed pa when we get tlv callback from HNCP
-
-    - from pa: maintained locally (hncp_dp), and republished to hncp
-    whenever local TLVs change (as otherwise timestamps which are
-    per-node and not per-TLV would be wrong).
-
-   As fun additional piece of complexity, as of -00 draft, the
-   delegated prefixes are inside external connection TLV.
-*/
-
 #include "hncp_pa.h"
-#include "hncp_i.h"
-#include "prefix_utils.h"
-#include "dhcpv6.h"
-#include "iface.h"
-#include "pa_data.h"
-#include "dhcp.h"
-#include "dns_util.h"
 
-#define HNCP_PA_EDP_DELAYED_DELETE_MS 50
-#define HNCP_PA_AP_LINK_UPDATE_MS 50
+#include "hncp_pa_i.h"
 
-typedef struct {
-  struct vlist_node in_dps;
+#define DNCP_ID_CMP(id1, id2) memcmp(id1, id2, sizeof(dncp_node_identifier_s))
+#define ID_DNCP_TO_PA(dncp_id, pa_id) memcpy(pa_id, (dncp_id)->buf, DNCP_NI_LEN)
+#define ID_DNCP_PA_CMP(dncp_id, pa_id) memcmp((dncp_id)->buf, pa_id, DNCP_NI_LEN)
 
-  /* Container for 'stuff' we want to stick in hncp. */
-  struct prefix prefix;
-  char ifname[IFNAMSIZ];
-  hnetd_time_t valid_until;
-  hnetd_time_t preferred_until;
-  void *dhcpv6_data;
-  size_t dhcpv6_len;
-} hncp_dp_s, *hncp_dp;
+#define HNCP_ROUTER_ADDRESS_PA_PRIORITY 3
 
-struct hncp_glue_struct {
-  /* List of external links */
-  struct list_head external_links;
+#define HNCP_PA_EC_REFRESH_DELAY 50
+#define HNCP_PA_DP_DELAYED_DELETE_MS 50
 
-  /* Delegated prefix list (hncp_dp) */
-  struct vlist_tree dps;
+#define PAL_CONF_DFLT_USE_ULA             1
+#define PAL_CONF_DFLT_NO_ULA_IF_V6        1
+#define PAL_CONF_DFLT_USE_V4              1
+#define PAL_CONF_DFLT_NO_V4_IF_V6         0
+#define PAL_CONF_DFLT_USE_RDM_ULA         1
+#define PAL_CONF_DFLT_ULA_RDM_PLEN        48
 
-  /* HNCP notification subscriber structure */
-  dncp_subscriber_s subscriber;
+#define PAL_CONF_DFLT_LOCAL_VALID       600 * HNETD_TIME_PER_SECOND
+#define PAL_CONF_DFLT_LOCAL_PREFERRED   300 * HNETD_TIME_PER_SECOND
+#define PAL_CONF_DFLT_LOCAL_UPDATE      330 * HNETD_TIME_PER_SECOND
 
-  /* Timeout for updating assigned prefixes links */
-  struct uloop_timeout ap_if_update_timeout;
+#define HPA_PSEUDO_RAND_TENTATIVES 32
+#define HPA_RAND_SET_SIZE          128
 
-  /* What are we gluing together anyway? */
-  dncp dncp;
-  struct pa_data *pa_data;
-  struct pa_data_user data_user;
+#define HPA_PRIORITY_ADOPT    2
+#define HPA_PRIORITY_CREATE   2
+#define HPA_PRIORITY_SCARCITY 3
+#define HPA_PRIORITY_PD       1
+#define HPA_PRIORITY_EXCLUDE  15
 
-};
+#define HPA_RULE_EXCLUDE           1000
+#define HPA_RULE_STATIC            100
+#define HPA_RULE_LINK_ID           50
+#define HPA_RULE_ADOPT             30
+#define HPA_RULE_STORE             25
+#define HPA_RULE_CREATE            20
+#define HPA_RULE_CREATE_SCARCITY   10
 
-typedef struct {
-  struct list_head lh;
+static struct prefix PAL_CONF_DFLT_V4_PREFIX = {
+		.prefix = { .s6_addr = {
+				0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00,
+				0x00,0x00, 0xff,0xff,  0x0a }},
+		.plen = 104 };
 
-  char ifname[IFNAMSIZ];
 
-  void *extdata[NUM_HNCP_PA_EXTDATA];
-  size_t extdata_len[NUM_HNCP_PA_EXTDATA];
-} *hncp_external_link;
+/***** header *****/
+static void hpa_conf_update_cb(struct vlist_tree *tree,
+		struct vlist_node *node_new, struct vlist_node *node_old);
 
-static void _schedule_refresh_ec(hncp_glue g)
+static int hpa_iface_filter_accept(struct pa_rule *rule,
+		struct pa_ldp *ldp, void *p)
 {
-  dncp o = g->dncp;
+	hpa_iface i = p;
+	struct prefix prefix = {.prefix = ldp->dp->prefix, .plen = ldp->dp->plen};
+	if(ldp->link != &i->pal)
+		return 0;
 
-  L_DEBUG("_schedule_refresh_ec");
-  o->republish_tlvs = true;
-  dncp_schedule(o);
+	return (rule == &i->pa_rand4.rule)?prefix_is_ipv4(&prefix):!prefix_is_ipv4(&prefix);
 }
 
-static void _refresh_ec(hncp_glue g, bool publish);
-
-static int compare_dps(const void *a, const void *b, void *ptr __unused)
+/* Initializes PA, ready to be added */
+static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 {
-  hncp_dp t1 = (hncp_dp) a, t2 = (hncp_dp) b;
+	sprintf(i->pa_name, HPA_LINK_NAME_IF"%s", i->ifname);
+	pa_link_init(&i->pal, i->pa_name);
 
-  return prefix_cmp(&t1->prefix, &t2->prefix);
+	//Init the adoption rule
+	pa_rule_adopt_init(&i->pa_adopt);
+	i->pa_adopt.priority = HPA_PRIORITY_ADOPT;
+	i->pa_adopt.rule_priority = HPA_RULE_ADOPT;
+	i->pa_adopt.rule.filter_accept = hpa_iface_filter_accept;
+	i->pa_adopt.rule.filter_private = i;
+
+	//Init the assignment rule
+	pa_rule_random_init(&i->pa_rand6);
+	i->pa_rand6.pseudo_random_seed = (uint8_t *)i->pa_name; //todo use EUI64
+	i->pa_rand6.pseudo_random_seedlen = strlen(i->pa_name);
+	i->pa_rand6.pseudo_random_tentatives = HPA_PSEUDO_RAND_TENTATIVES;
+	i->pa_rand6.random_set_size = HPA_RAND_SET_SIZE;
+	i->pa_rand6.desired_plen = 64; //todo: Use conf
+	i->pa_rand6.priority = HPA_PRIORITY_CREATE;
+	i->pa_rand6.rule_priority = HPA_RULE_CREATE;
+	i->pa_rand6.rule.filter_accept = hpa_iface_filter_accept;
+	i->pa_rand6.rule.filter_private = i;
+
+	pa_rule_random_init(&i->pa_rand6_scarcity);
+	i->pa_rand6_scarcity.pseudo_random_seed = (uint8_t *)i->pa_name; //todo use EUI64
+	i->pa_rand6_scarcity.pseudo_random_seedlen = strlen(i->pa_name);
+	i->pa_rand6_scarcity.pseudo_random_tentatives = HPA_PSEUDO_RAND_TENTATIVES;
+	i->pa_rand6_scarcity.random_set_size = HPA_RAND_SET_SIZE;
+	i->pa_rand6_scarcity.desired_plen = 90; //todo: Use conf
+	i->pa_rand6_scarcity.priority = HPA_PRIORITY_SCARCITY;
+	i->pa_rand6_scarcity.rule_priority = HPA_RULE_CREATE_SCARCITY;
+	i->pa_rand6_scarcity.rule.filter_accept = hpa_iface_filter_accept;
+	i->pa_rand6_scarcity.rule.filter_private = i;
+
+	pa_rule_random_init(&i->pa_rand4);
+	i->pa_rand4.pseudo_random_seed = (uint8_t *)i->pa_name; //todo use EUI64
+	i->pa_rand4.pseudo_random_seedlen = strlen(i->pa_name);
+	i->pa_rand4.pseudo_random_tentatives = HPA_PSEUDO_RAND_TENTATIVES;
+	i->pa_rand4.random_set_size = HPA_RAND_SET_SIZE;
+	i->pa_rand4.desired_plen = 120; //todo: Use conf
+	i->pa_rand4.priority = HPA_PRIORITY_CREATE;
+	i->pa_rand4.rule_priority = HPA_RULE_CREATE;
+	i->pa_rand4.rule.filter_accept = hpa_iface_filter_accept;
+	i->pa_rand4.rule.filter_private = i;
+
+	//todo: Add scarcity
 }
 
-static void update_dp(struct vlist_tree *t __unused,
-                      struct vlist_node *node_new,
-                      struct vlist_node *node_old)
+hpa_iface hpa_iface_goc(hncp_pa hp, const char *ifname, bool create)
 {
-  hncp_dp old = container_of(node_old, hncp_dp_s, in_dps);
-  __unused hncp_dp new = container_of(node_new, hncp_dp_s, in_dps);
+	hpa_iface i;
+	hpa_for_each_iface(hp, i) {
+		if(!strcmp(ifname, i->ifname))
+			return i;
+	}
+	if(!create || strlen(ifname) >= IFNAMSIZ || !(i = calloc(1, sizeof(*i))))
+		return NULL;
 
-  /* nop? */
-  if (old == new)
-    return;
-
-  /* We don't publish TLVs here; instead, we do it in the
-   * republish callback for every currently valid TLV. So all we need
-   * to do is just remove the old ones.
-   */
-  if (old)
-    {
-      if (old->dhcpv6_data)
-        free(old->dhcpv6_data);
-      free(old);
-    }
+	strcpy(i->ifname, ifname);
+	i->pa_enabled = 0;
+	vlist_init(&i->conf, hpa_ifconf_comp, hpa_conf_update_cb);
+	hpa_iface_init_pa(hp, i);
+	return i;
 }
 
-static hncp_dp _find_or_create_dp(hncp_glue g,
-                                  const struct prefix *prefix,
-                                  bool allow_add)
+/******** Link Callbacks *******/
+
+static void hpa_link_link_cb(struct hncp_link_user *u, const char *ifname,
+		dncp_t_link_id peers, size_t peercnt)
 {
-  hncp_dp dpt = container_of(prefix, hncp_dp_s, prefix);
-  hncp_dp dp = vlist_find(&g->dps, dpt, dpt, in_dps);
+	/* Set of neighboring dncp links changed.
+	 * - Update Advertised Prefixes adjacent link.
+	 */
+	hncp_pa hpa = container_of(u, hncp_pa_s, hncp_link_user);
+	hpa_iface i = hpa_iface_goc(hpa, ifname, true);
+	if(!i) {
+		L_ERR("hpa_link_link_cb malloc error");
+		return;
+	}
 
-  if (!dp && allow_add)
-    {
-      dp = calloc(1, sizeof(*dp));
-      if (!dp)
-        return NULL;
-      dp->prefix = *prefix;
-      prefix_canonical(&dp->prefix, &dp->prefix);
+	hpa_adjacency adj;
+	size_t n;
+	for(n=0; n<peercnt; n++) {
+		if((adj = avl_find_element(&hpa->adjacencies, &peers[n], adj, te))) {
+			adj->iface = i;
+			adj->updated = 1;
+		} else if(!(adj = malloc(sizeof(*adj)))) {
+			L_ERR("hpa_link_link_cb malloc error");
+		} else {
+			adj->id = peers[n];
+			adj->iface = i;
+			adj->updated = 1;
+			adj->te.key = &adj->id;
+			avl_insert(&hpa->adjacencies, &adj->te);
+		}
+	}
 
-      vlist_add(&g->dps, &dp->in_dps, dp);
-    }
-  return dp;
+	avl_for_each_element(&hpa->adjacencies, adj, te) {
+		if(adj->iface == i) {
+			if(!adj->updated) {
+				avl_delete(&hpa->adjacencies, &adj->te);
+				free(adj);
+			} else {
+				adj->updated = 0;
+			}
+		}
+	}
+
+	hpa_advp hap;
+	list_for_each_entry(hap, &hpa->aps, le) {
+		if(hap->advp.link == &i->pal || !hap->advp.link) {
+			hpa_iface i = hpa_get_adjacent_iface(hpa, &hap->link_id);
+			if(&i->pal != hap->advp.link) {
+				hap->advp.link = &i->pal;
+				pa_advp_update(&hpa->pa, &hap->advp);
+			}
+		}
+	}
 }
 
-static hncp_external_link _find_or_create_external_link(hncp_glue g,
-                                                        const char *ifname,
-                                                        bool allow_add)
-{
-  hncp_external_link el;
 
-  list_for_each_entry(el, &g->external_links, lh)
-    {
-      if (strcmp(el->ifname, ifname) == 0)
-        return el;
-    }
-  if (!allow_add)
-    return NULL;
-  el = calloc(1, sizeof(*el));
-  if (el)
-    {
-      strcpy(el->ifname, ifname);
-      list_add(&el->lh, &g->external_links);
-    }
-  return el;
+static void hpa_refresh_ec(hncp_pa hpa, bool publish)
+{
+	dncp dncp = hpa->dncp;
+	hnetd_time_t now = dncp_time(dncp);
+	hpa_dp dp, dp2;
+	int flen, plen;
+	struct tlv_attr *st;
+	hncp_t_delegated_prefix_header dph;
+	struct tlv_buf tb;
+	char *dhcpv6_options = NULL, *dhcp_options = NULL;
+	int dhcpv6_options_len = 0, dhcp_options_len = 0;
+	hpa_iface i;
+
+	if (publish)
+		dncp_remove_tlvs_by_type(dncp, HNCP_T_EXTERNAL_CONNECTION);
+
+	//Create External Connexion TLVs for all prefixes from iface
+	hpa_for_each_dp(hpa, dp2) {
+		if(!dp2->dp.enabled || dp2->pa.type != HPA_DP_T_IFACE)
+			continue;
+
+		//Check for DPs with the same external connexion
+		bool done = false;
+		hpa_for_each_dp(hpa, dp) {
+			if(!dp->dp.enabled || dp->pa.type != HPA_DP_T_IFACE)
+				continue;
+			if(dp == dp2)
+				break;
+			if(dp->iface.iface == dp2->iface.iface) {
+				done = true;
+				break;
+			}
+		}
+		if(done)
+			continue;
+
+		//Create the External Connexion TLV for that interface
+		memset(&tb, 0, sizeof(tb));
+		tlv_buf_init(&tb, HNCP_T_EXTERNAL_CONNECTION);
+		hpa_for_each_dp(hpa, dp) {
+			void *cookie;
+			if(!dp->dp.enabled ||
+					dp->pa.type != HPA_DP_T_IFACE ||
+					dp->iface.iface != dp2->iface.iface)
+				continue;
+
+			// Determine how much space we need for TLV.
+			plen = ROUND_BITS_TO_BYTES(dp->dp.prefix.plen);
+			flen = sizeof(hncp_t_delegated_prefix_header_s) + plen;
+
+			cookie = tlv_nest_start(&tb, HNCP_T_DELEGATED_PREFIX, flen);
+			dph = tlv_data(tb.head);
+			dph->ms_valid_at_origination = _local_abs_to_remote_rel(now, dp->valid_until);
+			dph->ms_preferred_at_origination = _local_abs_to_remote_rel(now, dp->preferred_until);
+			dph->prefix_length_bits = dp->dp.prefix.plen;
+			dph++;
+			memcpy(dph, &dp->dp.prefix.prefix, plen);
+			if (dp->dhcp_len) {
+				int type = prefix_is_ipv4(&dp->dp.prefix)?HNCP_T_DHCP_OPTIONS:HNCP_T_DHCPV6_OPTIONS;
+				st = tlv_new(&tb, type, dp->dhcp_len);
+				memcpy(tlv_data(st), dp->dhcp_data, dp->dhcp_len);
+			}
+			tlv_nest_end(&tb, cookie);
+		}
+		//Sort Delegated Prefix TLVs
+		tlv_sort(tlv_data(tb.head), tlv_len(tb.head));
+
+		//Add External Connection DHCP option TLVs
+		i = dp2->iface.iface;
+		if (i->extdata_len[HNCP_PA_EXTDATA_IPV6]) {
+			void *data = i->extdata[HNCP_PA_EXTDATA_IPV6];
+			size_t len = i->extdata_len[HNCP_PA_EXTDATA_IPV6];
+			st = tlv_new(&tb, HNCP_T_DHCPV6_OPTIONS, len);
+			memcpy(tlv_data(st), data, len);
+			APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
+					tlv_data(st), tlv_len(st));
+		}
+		if (i->extdata_len[HNCP_PA_EXTDATA_IPV4])
+		{
+			void *data = i->extdata[HNCP_PA_EXTDATA_IPV4];
+			size_t len = i->extdata_len[HNCP_PA_EXTDATA_IPV4];
+			st = tlv_new(&tb, HNCP_T_DHCP_OPTIONS, len);
+			memcpy(tlv_data(st), data, len);
+			APPEND_BUF(dhcp_options, dhcp_options_len,
+					tlv_data(st), tlv_len(st));
+		}
+		if (publish)
+			dncp_add_tlv_attr(dncp, tb.head, 0);
+		tlv_buf_free(&tb);
+	}
+
+
+	dncp_node n;
+	struct tlv_attr *a, *a2;
+
+	/* add the SD domain always to search path (if present) */
+	if (dncp->domain[0])
+	{
+		/* domain is _ascii_ representation of domain (same as what
+		 * DHCPv4 expects). DHCPv6 needs ll-escaped string, though. */
+		uint8_t ll[DNS_MAX_LL_LEN];
+		int len;
+		len = escaped2ll(dncp->domain, ll, sizeof(ll));
+		if (len > 0)
+		{
+			uint16_t fake_header[2];
+			uint8_t fake4_header[2];
+
+			fake_header[0] = cpu_to_be16(DHCPV6_OPT_DNS_DOMAIN);
+			fake_header[1] = cpu_to_be16(len);
+			APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
+					&fake_header[0], 4);
+			APPEND_BUF(dhcpv6_options, dhcpv6_options_len, ll, len);
+
+			fake4_header[0] = DHCPV4_OPT_DOMAIN;
+			fake4_header[1] = strlen(dncp->domain);
+			APPEND_BUF(dhcp_options, dhcp_options_len, fake4_header, 2);
+			APPEND_BUF(dhcp_options, dhcp_options_len, dncp->domain, fake4_header[1]);
+		}
+	}
+
+	//Aggregate DHCP info from other External Connection TLVs
+	dncp_for_each_node(dncp, n)
+	{
+		if (n != dncp->own_node)
+			dncp_node_for_each_tlv_with_type(n, a, HNCP_T_EXTERNAL_CONNECTION) {
+			tlv_for_each_attr(a2, a)
+				if (tlv_id(a2) == HNCP_T_DHCPV6_OPTIONS) {
+					APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
+							tlv_data(a2), tlv_len(a2));
+				}
+				else if (tlv_id(a2) == HNCP_T_DHCP_OPTIONS)
+				{
+					APPEND_BUF(dhcp_options, dhcp_options_len,
+							tlv_data(a2), tlv_len(a2));
+				}
+			}
+
+		//Add delegated zones
+		dncp_node_for_each_tlv_with_type(n, a, HNCP_T_DNS_DELEGATED_ZONE)
+		{
+			hncp_t_dns_delegated_zone ddz = tlv_data(a);
+			if (ddz->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_SEARCH)
+			{
+				char domainbuf[256];
+				uint16_t fake_header[2];
+				uint8_t fake4_header[2];
+				uint8_t *data = tlv_data(a);
+				int l = tlv_len(a) - sizeof(*ddz);
+
+				fake_header[0] = cpu_to_be16(DHCPV6_OPT_DNS_DOMAIN);
+				fake_header[1] = cpu_to_be16(l);
+				APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
+						&fake_header[0], 4);
+				APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
+						ddz->ll, l);
+
+				if (ll2escaped(data, l, domainbuf, sizeof(domainbuf)) >= 0) {
+					fake4_header[0] = DHCPV4_OPT_DOMAIN;
+					fake4_header[1] = strlen(domainbuf);
+					APPEND_BUF(dhcp_options, dhcp_options_len, fake4_header, 2);
+					APPEND_BUF(dhcp_options, dhcp_options_len, domainbuf, fake4_header[1]);
+				}
+			}
+		}
+	}
+
+	iface_all_set_dhcp_send(dhcpv6_options, dhcpv6_options_len,
+			dhcp_options, dhcp_options_len);
+
+	L_DEBUG("set %d bytes of DHCPv6 options: %s",
+			dhcpv6_options_len, HEX_REPR(dhcpv6_options, dhcpv6_options_len));
+	oom:
+	if (dhcpv6_options)
+		free(dhcpv6_options);
+	if (dhcp_options)
+		free(dhcp_options);
 }
 
-static dncp_link _find_local_link(dncp_node onode, uint32_t olink_no)
+static void hpa_dp_update(hncp_pa hpa, hpa_dp dp,
+		hnetd_time_t preferred_until, hnetd_time_t valid_until,
+		const char *dhcp_data, size_t dhcp_len)
 {
-  dncp o = onode->dncp;
-  struct tlv_attr *a;
-  dncp_t_node_data_neighbor nh;
+	//Tell iface about changed prefixes
+	//Tell iface about DHCP change
+	//Tell DP about lifetime changes
+	bool updated = 0;
+	if(dp->preferred_until != preferred_until ||
+			dp->valid_until != valid_until) {
+		updated = 1;
+		dp->preferred_until = preferred_until;
+		dp->valid_until = valid_until;
+	}
+	if(!SAME(dp->dhcp_data, dp->dhcp_len, dhcp_data, dhcp_len)) {
+		REPLACE(dp->dhcp_data, dp->dhcp_len, dhcp_data, dhcp_len);
+		updated = 1;
+	}
 
-  /* We're lazy and just compare published information; we _could_
-   * of course also look at per-link and per-neighbor structures,
-   * but this is simpler.. */
-  dncp_node_for_each_tlv_with_type(o->own_node, a, DNCP_T_NODE_DATA_NEIGHBOR)
-    if ((nh = dncp_tlv_neighbor(a)))
-      {
-        if (nh->neighbor_link_id != olink_no)
-          continue;
-        if (memcmp(&onode->node_identifier,
-                   &nh->neighbor_node_identifier, DNCP_NI_LEN) != 0)
-          continue;
-        /* Yay, it is this one. */
-        return dncp_find_link_by_id(o, nh->link_id);
-      }
-  return NULL;
+	if(updated && dp->dp.enabled) { //Only looks for enabled dps
+		struct pa_ldp *ldp, *addr_ldp;
+		pa_for_each_ldp_in_dp(&dp->pa, ldp) {
+			if(ldp->link->type == HPA_LINK_T_IFACE) {
+				//Tell iface.c about changed lifetimes
+				if(ldp->applied && (addr_ldp = ldp->userdata[PA_LDP_U_HNCP_ADDR])
+						&& addr_ldp->applied)
+					hpa_ap_iface_notify(hpa, ldp, addr_ldp);
+			} else if(ldp->link->type == HPA_LINK_T_LEASE) {
+				//Tell pd.c about changed lifetimes
+				if(ldp->assigned)
+					hpa_ap_pd_notify(hpa, ldp);
+			}
+		}
+
+		hpa_refresh_ec(hpa, 1); //Update dhcp data and advertised prefix
+	}
 }
 
-static void _update_a_tlv(hncp_glue g, dncp_node n,
-                          struct tlv_attr *tlv, bool add)
+void hpa_update_extdata(hncp_pa hpa, hpa_iface i,
+                               const void *data, size_t data_len,
+                               int index)
 {
-  hncp_t_assigned_prefix_header ah;
-  int plen;
-  struct prefix p;
-  dncp_link l;
+	L_DEBUG("hncp_pa_set_external_link %s/%s = %p/%d",
+			ifname, index == HNCP_PA_EXTDATA_IPV6 ? "dhcpv6" : "dhcp",
+					data, (int)data_len);
+	if (!data_len)
+		data = NULL;
 
-  if (!(ah = dncp_tlv_ap(tlv)))
-    return;
-  memset(&p, 0, sizeof(p));
-  p.plen = ah->prefix_length_bits;
-  plen = ROUND_BITS_TO_BYTES(p.plen);
-  memcpy(&p, ah->prefix_data, plen);
-  l = _find_local_link(n, ah->link_id);
-
-  struct pa_ap *ap = pa_ap_get(g->pa_data, &p, (struct pa_rid *)&n->node_identifier, add);
-  if (!ap)
-    return;
-
-  struct pa_iface *iface = NULL;
-  if (l)
-    iface = pa_iface_get(g->pa_data, l->ifname, add);
-
-  if (!add) {
-    pa_ap_todelete(ap);
-  } else {
-    pa_ap_set_iface(ap, iface);
-    pa_ap_set_priority(ap, HNCP_T_ASSIGNED_PREFIX_FLAG_PREFERENCE(ah->flags));
-    pa_ap_set_authoritative(ap, ah->flags & HNCP_T_ASSIGNED_PREFIX_FLAG_AUTHORITATIVE);
-  }
-
-  pa_ap_notify(g->pa_data, ap);
-  return;
-}
-
-static void _update_pa_eaa(struct pa_data *data, const struct in6_addr *addr,
-		const struct pa_rid *rid, bool to_delete)
-{
-	/* This is a function to update external address assignments */
-	struct pa_eaa *eaa = pa_eaa_get(data, addr, rid, !to_delete);
-	if (!eaa)
+	/* Let's consider if there was a change. */
+	if (SAME(i->extdata[index], i->extdata_len[index], data, data_len))
 		return;
 
-	if (to_delete)
-		pa_aa_todelete(&eaa->aa);
-
-	pa_aa_notify(data, &eaa->aa);
+	REPLACE(i->extdata[index], i->extdata_len[index], data, data_len);
+	hpa_refresh_ec(hpa, 1); //Refresh and publish
 }
 
-hnetd_time_t _remote_rel_to_local_abs(hnetd_time_t base, uint32_t netvalue)
+static void hpa_update_v4_uplink(hncp_pa hpa, hpa_iface iface, bool uplink)
 {
-  if (netvalue == UINT32_MAX)
-    return HNETD_TIME_MAX;
-  return base + be32_to_cpu(netvalue);
+	if(iface->ipv4_uplink == uplink)
+		return;
+
+	iface->ipv4_uplink = uplink;
+	//todo: Elect IPv4 uplink
 }
 
-uint32_t _local_abs_to_remote_rel(hnetd_time_t now, hnetd_time_t v)
+static void hpa_dp_set_enabled(hncp_pa hpa, hpa_dp dp, bool enabled)
 {
-  if (v == HNETD_TIME_MAX)
-    return cpu_to_be32(UINT32_MAX);
-  if (now > v)
-    return 0;
-  hnetd_time_t delta = v - now;
-  /* Convert to infinite if it would overflow too. */
-  if (delta >= UINT32_MAX)
-    return cpu_to_be32(UINT32_MAX);
-  return cpu_to_be32(delta);
+	if(dp->dp.enabled == !!enabled)
+		return;
+
+	dp->dp.enabled = !!enabled;
+
+	//Add or remove from PA.
+	//This will synchronously call callbacks for present prefixes
+	if(dp->dp.enabled) {
+		pa_dp_add(&hpa->pa, &dp->pa);
+	} else {
+		pa_dp_del(&dp->pa);
+	}
+
+	//Add or remove excluded rule for iface prefixes only
+	if(dp->pa.type == HPA_DP_T_IFACE && dp->iface.excluded) {
+		if(dp->dp.enabled) {
+			pa_rule_add(&hpa->pa, &dp->iface.excluded_rule.rule);
+		} else {
+			pa_rule_del(&hpa->pa, &dp->iface.excluded_rule.rule);
+		}
+	}
+
+	//Tell iface that it changed
+	if(hpa->if_cbs && hpa->if_cbs->update_dp)
+		hpa->if_cbs->update_dp(hpa->if_cbs,
+				&dp->dp, !enabled);
+
+	//Update dhcp and advertised data
+	hpa_refresh_ec(hpa, dp->dp.local);
 }
 
-static void _pa_dp_delayed_delete(struct uloop_timeout *to)
+static int hpa_dp_compute_enabled(hncp_pa hpa, hpa_dp dp) {
+	hpa_dp dp2;
+	bool passed;
+	hpa_for_each_dp(hpa, dp2) {
+		if(dp2 == dp) {
+			passed = 1;
+		} else if (!prefix_cmp(&dp2->dp.prefix, &dp->dp.prefix)) {
+			//Both prefixes are the same.
+			//Give priority to the other guy.
+			if(dp->pa.type == HPA_DP_T_IFACE) {
+				if(dp2->pa.type == HPA_DP_T_IFACE) {
+					//Both are ours. Let's keep the last in the list.
+					if(passed)
+						return 0;
+				} else {
+					//The other one is not from iface. Let's give it priority.
+					return 0;
+				}
+			}
+		} else if(prefix_contains(&dp2->dp.prefix, &dp->dp.prefix)) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
+static void hpa_dp_update_enabled(hncp_pa hpa)
 {
-	struct pa_edp *edp = container_of(to, struct pa_edp, timeout);
-	pa_dp_todelete(&edp->dp);
-	pa_dp_notify(edp->data, &edp->dp);
+	hpa_dp dp;
+	hpa_for_each_dp(hpa, dp) {
+		hpa_dp_set_enabled(hpa, dp, hpa_dp_compute_enabled(hpa, dp));
+	}
 }
 
-static void _update_d_tlv(hncp_glue g, dncp_node n,
+static void hpa_dp_update_excluded(hncp_pa hpa, hpa_dp dp,
+		const struct prefix *excluded)
+{
+	if((!excluded && !dp->iface.excluded) ||
+			(excluded && dp->iface.excluded &&
+					excluded->plen == dp->iface.excluded_rule.plen &&
+					!memcmp(&excluded->prefix, &dp->iface.excluded_rule.prefix,
+							sizeof(struct in6_addr))))
+		return; //No change
+
+	if(dp->iface.excluded && dp->dp.enabled)
+		pa_rule_del(&hpa->pa, &dp->iface.excluded_rule.rule);
+
+	dp->iface.excluded = !!excluded;
+
+	if(dp->iface.excluded) {
+		pa_rule_static_init(&dp->iface.excluded_rule);
+		dp->iface.excluded_rule.override_priority = HPA_PRIORITY_EXCLUDE;
+		dp->iface.excluded_rule.override_rule_priority = HPA_RULE_EXCLUDE;
+		dp->iface.excluded_rule.rule_priority = HPA_RULE_EXCLUDE;
+		dp->iface.excluded_rule.priority = HPA_PRIORITY_EXCLUDE;
+		dp->iface.excluded_rule.plen = excluded->plen;
+		memcpy(&dp->iface.excluded_rule.prefix, &excluded->prefix,
+				sizeof(struct in6_addr));
+
+		if(dp->dp.enabled)
+			pa_rule_add(&hpa->pa, &dp->iface.excluded_rule.rule);
+	}
+}
+
+/******** Iface Callbacks *******/
+
+static void hpa_iface_set_enabled(hncp_pa hpa, hpa_iface i, bool enabled)
+{
+	if(i->pa_enabled == (!!enabled))
+		return;
+
+	i->pa_enabled = !!enabled;
+	L_INFO("%s Prefix Assignment on %s",
+			enabled?"Enabling":"Disabling", i->ifname);
+
+	if(i->pa_enabled) {
+		pa_rule_add(&hpa->pa, &i->pa_adopt.rule);
+		pa_rule_add(&hpa->pa, &i->pa_rand6.rule);
+		pa_rule_add(&hpa->pa, &i->pa_rand6_scarcity.rule);
+		pa_rule_add(&hpa->pa, &i->pa_rand4.rule);
+		//todo: Add scarcity
+		pa_link_add(&hpa->pa, &i->pal);
+	} else {
+		pa_link_del(&i->pal);
+		//todo: Del scarcity
+		pa_rule_add(&hpa->pa, &i->pa_rand4.rule);
+		pa_rule_del(&hpa->pa, &i->pa_rand6_scarcity.rule);
+		pa_rule_del(&hpa->pa, &i->pa_rand6.rule);
+		pa_rule_del(&hpa->pa, &i->pa_adopt.rule);
+	}
+}
+
+static void hpa_iface_intiface_cb(struct iface_user *u,
+		const char *ifname, bool enabled)
+{
+	/* Internal iface change.
+	 * PA may be enabled or disabled on this iface. */
+	hncp_pa hpa = container_of(u, hncp_pa_s, iface_user);
+	hpa_iface i = hpa_iface_goc(hpa, ifname, 1);
+	struct iface *iface = iface_get(ifname);
+
+	if(!(i = hpa_iface_goc(hpa, ifname, 1)) ||
+			!(iface = iface_get(ifname)))
+		return;
+
+	if(iface->flags & IFACE_FLAG_DISABLE_PA)
+		enabled = false;
+
+	hpa_iface_set_enabled(hpa, i, enabled);
+}
+
+static void hpa_iface_extdata_cb(struct iface_user *u, const char *ifname,
+		const void *dhcpv6_data, size_t dhcpv6_len)
+{
+	hncp_pa hpa = container_of(u, hncp_pa_s, iface_user);
+	hpa_iface i;
+	if((i = hpa_iface_goc(hpa, ifname, true)))
+		hpa_update_extdata(hpa, i, dhcpv6_data, dhcpv6_len, HNCP_PA_EXTDATA_IPV6);
+}
+
+static void hpa_iface_ext4data_cb(struct iface_user *u, const char *ifname,
+		const void *dhcp_data, size_t dhcp_len)
+{
+	hncp_pa hpa = container_of(u, hncp_pa_s, iface_user);
+	hpa_iface i;
+	if((i = hpa_iface_goc(hpa, ifname, true))) {
+		hpa_update_extdata(hpa, i, dhcp_data, dhcp_len, HNCP_PA_EXTDATA_IPV4);
+		hpa_update_v4_uplink(hpa, i, !!dhcp_data);
+	}
+}
+
+static hpa_dp hpa_dp_get_local(hncp_pa hpa, const struct prefix *p)
+{
+	hpa_dp dp;
+	hpa_for_each_dp(hpa, dp) {
+		if(dp->pa.type == HPA_DP_T_IFACE &&
+				!prefix_cmp(&dp->dp.prefix, p)) {
+			return dp;
+		}
+	}
+	return NULL;
+}
+
+static void hpa_iface_prefix_cb(struct iface_user *u, const char *ifname,
+		const struct prefix *prefix, const struct prefix *excluded,
+		hnetd_time_t valid_until, hnetd_time_t preferred_until,
+		const void *dhcpv6_data, size_t dhcpv6_len)
+{
+	/* Add/Delete update a local delegated prefix.
+	 */
+	hncp_pa hpa = container_of(u, hncp_pa_s, iface_user);
+	hpa_iface i;
+	if(!(i = hpa_iface_goc(hpa, ifname, 1)))
+		return;
+
+	//Find the DP if existing
+	hpa_dp dp = hpa_dp_get_local(hpa, prefix);
+	if(!valid_until) {
+		if(dp) {
+			//Deleting the prefix
+			hpa_dp_set_enabled(hpa, dp, 0);
+			list_del(&dp->dp.le);
+			free(dp);
+
+			//Update all other dp in case one of them was enabled
+			hpa_dp_update_enabled(hpa);
+		}
+	} else if(dp) {
+		//Just an update in parameters
+		hpa_dp_update(hpa, dp, preferred_until,
+				valid_until, dhcpv6_data, dhcpv6_len);
+		hpa_dp_update_excluded(hpa, dp, excluded);
+	} else if(!(dp = calloc(1, sizeof(*dp)))) {
+		L_ERR("hpa_iface_prefix_cb malloc error");
+	} else {
+		//Create DP for the first time
+		dp->dp.prefix = *prefix;
+		dp->dp.local = 1;
+		dp->dp.enabled = 0;
+		dp->pa.type = HPA_DP_T_IFACE;
+		dp->pa.prefix = prefix->prefix;
+		dp->pa.plen = prefix->plen;
+		dp->preferred_until = preferred_until;
+		dp->valid_until = valid_until;
+		REPLACE(dp->dhcp_data, dp->dhcp_len, dhcpv6_data, dhcpv6_len);
+		dp->hpa = hpa;
+		dp->iface.excluded = 0;
+		dp->iface.iface = i;
+		list_add(&dp->dp.le, &hpa->dps);
+
+		//Set the excluded prefix
+		hpa_dp_update_excluded(hpa, dp, excluded);
+
+		//Update dp enabled for others
+		hpa_dp_update_enabled(hpa);
+	}
+}
+
+/*
+static void hpa_iface_intaddr_cb(struct iface_user *u, const char *ifname,
+		const struct prefix *addr6, const struct prefix *addr4)
+{
+ //Do nothing
+}
+*/
+
+/******** DNCP Stuff *******/
+
+
+
+static void hpa_update_ap_tlv(hncp_pa hpa, dncp_node n,
+		struct tlv_attr *tlv, bool add)
+{
+	hncp_t_assigned_prefix_header ah;
+	if (!(ah = dncp_tlv_ap(tlv)))
+		return;
+
+	struct prefix p;
+	pa_prefix_cpy(ah->prefix_data, ah->prefix_length_bits, &p.prefix, p.plen);
+
+	//Get adjacent link
+	dncp_t_link_id_s id = {n->node_identifier, ah->link_id };
+	struct pa_advp *ap;
+	hpa_advp hap;
+	if(!add) {
+		pa_for_each_advp(&hpa->pa, ap, &p.prefix, p.plen) {
+			hap = container_of(ap, hpa_advp_s, advp);
+			//We must compare every field of the TLV in case it was modified
+			if(!memcmp(&id, &hap->link_id, sizeof(id)) &&
+					hap->ap_flags == ah->flags) {
+				pa_advp_del(&hpa->pa, ap);
+				list_del(&hap->le);
+				free(hap);
+				return;
+			}
+		}
+	} else if(!(hap = malloc(sizeof(*hap)))) {
+		L_ERR("hpa_update_ap_tlv: malloc error");
+	} else {
+		hpa_iface i = hpa_get_adjacent_iface(hpa, &id);
+		hap->advp.plen = p.plen;
+		hap->advp.prefix = p.prefix;
+		hap->advp.priority = HNCP_T_ASSIGNED_PREFIX_FLAG_PRIORITY(ah->flags);
+		hap->advp.link = i?&i->pal:NULL;
+		ID_DNCP_TO_PA(&n->node_identifier, &hap->advp.node_id);
+		pa_advp_add(&hpa->pa, &hap->advp);
+
+		list_add(&hap->le, &hpa->aps);
+		hap->link_id = id;
+		hap->ap_flags = ah->flags;
+	}
+}
+
+static void hpa_update_ra_tlv(hncp_pa hpa, dncp_node n,
+		struct tlv_attr *tlv, bool add)
+{
+	hncp_t_router_address ra;
+	if (!(ra = dncp_tlv_router_address(tlv)))
+		return;
+
+	struct pa_advp *ap;
+	hpa_advp hap;
+	dncp_t_link_id_s id = {n->node_identifier, ra->link_id};
+	if(!add) {
+		pa_for_each_advp(&hpa->aa, ap, &ra->address, 128) {
+			hap = container_of(ap, hpa_advp_s, advp);
+			//We must compare every field of the TLV in case it was modified
+			if(!memcmp(&id, &hap->link_id, sizeof(id))) {
+				pa_advp_del(&hpa->aa, ap);
+				free(hap);
+				return;
+			}
+		}
+	} else if(!(hap = malloc(sizeof(*hap)))) {
+		L_ERR("hpa_update_ap_tlv: malloc error");
+	} else {
+		hap->advp.plen = 128;
+		hap->advp.prefix = ra->address;
+		hap->advp.priority = HNCP_ROUTER_ADDRESS_PA_PRIORITY;
+		hap->advp.link = NULL;
+		ID_DNCP_TO_PA(&n->node_identifier, &hap->advp.node_id);
+		pa_advp_add(&hpa->aa, &hap->advp);
+
+		hap->link_id = id;
+	}
+}
+
+static void hpa_dp_delete_to(struct uloop_timeout *to)
+{
+	hpa_dp dp = container_of(to, hpa_dp_s, hncp.delete_to);
+	hpa_dp_set_enabled(dp->hpa, dp, 0);
+	list_del(&dp->dp.le); //Remove first.
+	free(dp);
+}
+
+static hpa_dp hpa_dp_get_hncp(hncp_pa hpa, const struct prefix *p,
+		dncp_node_identifier id)
+{
+	hpa_dp dp;
+	hpa_for_each_dp(hpa, dp) {
+		if(dp->pa.type == HPA_DP_T_HNCP &&
+				!prefix_cmp(&dp->dp.prefix, p) &&
+				!DNCP_ID_CMP(&dp->hncp.node_id, id)) {
+			return dp;
+		}
+	}
+	return NULL;
+}
+
+static void hpa_update_dp_tlv(hncp_pa hpa, dncp_node n,
                           struct tlv_attr *tlv, bool add)
 {
-  hnetd_time_t preferred, valid;
-  void *dhcpv6_data = NULL;
-  size_t dhcpv6_len = 0;
-  hncp_t_delegated_prefix_header dh;
-  int plen;
-  struct prefix p;
+	hnetd_time_t preferred, valid;
+	void *dhcpv6_data = NULL;
+	size_t dhcpv6_len = 0;
+	hncp_t_delegated_prefix_header dh;
+	struct prefix p;
 
-  if (!(dh = dncp_tlv_dp(tlv)))
-    return;
-  memset(&p, 0, sizeof(p));
-  p.plen = dh->prefix_length_bits;
-  plen = ROUND_BITS_TO_BYTES(p.plen);
-  memcpy(&p, dh->prefix_data, plen);
-  if (!add)
-    {
-      valid = 0;
-      preferred = 0;
-    }
-  else
-    {
-      valid = _remote_rel_to_local_abs(n->origination_time,
-                                       dh->ms_valid_at_origination);
-      preferred = _remote_rel_to_local_abs(n->origination_time,
-                                           dh->ms_preferred_at_origination);
-    }
-  unsigned int flen = sizeof(hncp_t_delegated_prefix_header_s) + plen;
-  struct tlv_attr *stlv;
-  int left;
-  void *start;
+	if (!(dh = dncp_tlv_dp(tlv)))
+		return;
 
-  /* Account for prefix padding */
-  flen = ROUND_BYTES_TO_4BYTES(flen);
+	pa_prefix_cpy(dh->prefix_data, dh->prefix_length_bits, &p.prefix, p.plen);
 
-  start = tlv_data(tlv) + flen;
-  left = tlv_len(tlv) - flen;
-  L_DEBUG("considering what is at offset %lu->%u: %s",
-          (unsigned long)sizeof(hncp_t_delegated_prefix_header_s) + plen,
-          flen,
-          HEX_REPR(start, left));
-  /* Now, flen is actually padded length of stuff, _before_ DHCPv6
-   * options. */
-  tlv_for_each_in_buf(stlv, start, left)
-    {
-      if (tlv_id(stlv) == HNCP_T_DHCPV6_OPTIONS)
-        {
-          dhcpv6_data = tlv_data(stlv);
-          dhcpv6_len = tlv_len(stlv);
-        }
-      else
-        {
-          L_NOTICE("unknown delegated prefix option seen:%d", tlv_id(stlv));
-        }
-    }
+	valid = _remote_rel_to_local_abs(n->origination_time,
+			dh->ms_valid_at_origination);
+	preferred = _remote_rel_to_local_abs(n->origination_time,
+			dh->ms_preferred_at_origination);
 
-  struct pa_edp *edp = pa_edp_get(g->pa_data, &p, (struct pa_rid *)&n->node_identifier, !!valid);
-  if(!edp)
-	  return;
+	//Fetch DHCP data
+	unsigned int flen = sizeof(hncp_t_delegated_prefix_header_s) +  ROUND_BITS_TO_BYTES(p.plen);
+	struct tlv_attr *stlv;
+	int left;
+	void *start;
 
-  if(valid) {
-	  pa_dp_set_lifetime(&edp->dp, preferred, valid);
-	  pa_dp_set_dhcp(&edp->dp, dhcpv6_data, dhcpv6_len);
-	  if (edp->timeout.pending)
-		  uloop_timeout_cancel(&edp->timeout);
-  } else if (!edp->timeout.pending) {
-	  edp->timeout.cb = _pa_dp_delayed_delete;
-	  edp->data = g->pa_data;
-	  uloop_timeout_set(&edp->timeout, HNCP_PA_EDP_DELAYED_DELETE_MS);
-  }
+	/* Account for prefix padding */
+	flen = ROUND_BYTES_TO_4BYTES(flen);
+	start = tlv_data(tlv) + flen;
+	left = tlv_len(tlv) - flen;
+	L_DEBUG("considering what is at offset %lu->%u: %s",
+			(unsigned long)sizeof(hncp_t_delegated_prefix_header_s) + plen,
+			flen,
+			HEX_REPR(start, left));
+	/* Now, flen is actually padded length of stuff, _before_ DHCPv6
+	 * options. */
+	tlv_for_each_in_buf(stlv, start, left) {
+		if (tlv_id(stlv) == HNCP_T_DHCPV6_OPTIONS) {
+			dhcpv6_data = tlv_data(stlv);
+			dhcpv6_len = tlv_len(stlv);
+		} else {
+			L_NOTICE("unknown delegated prefix option seen:%d", tlv_id(stlv));
+		}
+	}
 
-  pa_dp_notify(g->pa_data, &edp->dp);
-  return;
-}
+	//Fetch existing dp
+	hpa_dp dp = hpa_dp_get_hncp(hpa, &p, &n->node_identifier);
 
-static void _update_a_local_links(hncp_glue g)
-{
-  dncp o = g->dncp;
-  dncp_node n;
-  struct tlv_attr *a;
-  hncp_t_assigned_prefix_header ah;
-  dncp_link l;
-  struct prefix p;
+	if(!add) { //Removing the dp
+		if(dp && !dp->hncp.delete_to.pending) {
+			//DPs are not removed instantly because there may be a delay during
+			//dncp update (TLV is removed and then added).
+			dp->hncp.delete_to.cb = hpa_dp_delete_to;
+			uloop_timeout_set(&dp->hncp.delete_to,
+					HNCP_PA_DP_DELAYED_DELETE_MS);
+		}
+		//Update lifetimes anyway
+		hpa_dp_update(hpa, dp, preferred, valid, dhcpv6_data, dhcpv6_len);
+	} else if(dp) {
+		if(valid)
+			uloop_timeout_cancel(&dp->hncp.delete_to);
 
-  L_DEBUG("_update_a_local_links");
-  dncp_for_each_node(o, n)
-    {
-      /* apparently own node's AP is called something else, so skip */
-      if (n == o->own_node)
-        continue;
-      dncp_node_for_each_tlv_with_type(n, a, HNCP_T_ASSIGNED_PREFIX)
-        {
-          if (!(ah = dncp_tlv_ap(a)))
-            continue;
-          memset(&p, 0, sizeof(p));
-          p.plen = ah->prefix_length_bits;
-          int plen = ROUND_BITS_TO_BYTES(p.plen);
-          memcpy(&p, ah->prefix_data, plen);
-          l = _find_local_link(n, ah->link_id);
-          struct pa_ap *ap = pa_ap_get(g->pa_data, &p, (struct pa_rid *)&n->node_identifier, false);
-          if (!ap)
-            {
-              L_DEBUG(" unable to find AP for %s", PREFIX_REPR(&p));
-              continue;
-            }
-          struct pa_iface *iface = NULL;
-          if (l)
-            iface = pa_iface_get(g->pa_data, l->ifname, true);
-          pa_ap_set_iface(ap, iface);
-          L_DEBUG(" updated " PA_AP_L, PA_AP_LA(ap));
-          pa_ap_notify(g->pa_data, ap);
-        }
-    }
-}
-
-static void _tlv_cb(dncp_subscriber s,
-                    dncp_node n, struct tlv_attr *tlv, bool add)
-{
-  hncp_glue g = container_of(s, hncp_glue_s, subscriber);
-
-  L_NOTICE("[pa]_tlv_cb %s %s %s",
-           add ? "add" : "remove",
-           n == g->dncp->own_node ? "local" : DNCP_NODE_REPR(n),
-           TLV_REPR(tlv));
-
-  /* Local TLV changes should be mostly handled by PA code already.
-   * The exception is DNCP_T_NODE_DATA_NEIGHBOR which may cause local
-   * or remote connectivity changes.
-  */
-  if (dncp_node_is_self(n) && tlv_id(tlv) != DNCP_T_NODE_DATA_NEIGHBOR)
-    {
-      return;
-    }
-
-  switch (tlv_id(tlv))
-    {
-    case HNCP_T_EXTERNAL_CONNECTION:
-      {
-        struct tlv_attr *a;
-        int c = 0;
-        tlv_for_each_attr(a, tlv)
-        {
-          if (tlv_id(a) == HNCP_T_DELEGATED_PREFIX)
-            _update_d_tlv(g, n, a, add);
-          else {
-            L_INFO("unsupported external connection tlv:#%d", tlv_id(a));
-          }
-          c++;
-        }
-        if (!c)
-          L_INFO("empty external connection TLV");
-
-        /* Don't republish here, only update outgoing dhcp options */
-        _refresh_ec(g, false);
-
-      }
-      break;
-    case HNCP_T_ASSIGNED_PREFIX:
-      _update_a_tlv(g, n, tlv, add);
-      break;
-    case HNCP_T_ROUTER_ADDRESS:
-      {
-        hncp_t_router_address ra = dncp_tlv_router_address(tlv);
-        if (ra)
-        {
-          _update_pa_eaa(g->pa_data, &ra->address,
-                         (struct pa_rid *)&n->node_identifier,
-                         !add);
-        }
-      else
-        {
-          L_INFO("invalid sized router address tlv:%d bytes", tlv_len(tlv));
-        }
-      }
-      break;
-    case DNCP_T_NODE_DATA_NEIGHBOR:
-      {
-        uloop_timeout_set(&g->ap_if_update_timeout, HNCP_PA_AP_LINK_UPDATE_MS);
-      }
-      break;
-    default:
-      return;
-    }
-
-}
-
-#define APPEND_BUF(buf, len, ibuf, ilen)        \
-do                                              \
-  {                                             \
-  if (ilen)                                     \
-    {                                           \
-      buf = realloc(buf, len + ilen);           \
-      if (!buf)                                 \
-        {                                       \
-          L_ERR("oom gathering buf");           \
-          goto oom;                             \
-        }                                       \
-      memcpy(buf + len, ibuf, ilen);            \
-      len += ilen;                              \
-    }                                           \
- } while(0)
-
-
-static void _refresh_ec(hncp_glue g, bool publish)
-{
-  dncp o = g->dncp;
-  hnetd_time_t now = dncp_time(o);
-  hncp_dp dp, dp2;
-  int flen, plen;
-  struct tlv_attr *st;
-  hncp_t_delegated_prefix_header dph;
-  struct tlv_buf tb;
-  char *dhcpv6_options = NULL, *dhcp_options = NULL;
-  int dhcpv6_options_len = 0, dhcp_options_len = 0;
-  hncp_external_link el;
-
-  if (publish)
-    dncp_remove_tlvs_by_type(o, HNCP_T_EXTERNAL_CONNECTION);
-
-  /* This is very brute force. Oh well. (O(N^2) to # of delegated
-     prefixes. Most likely it's small enough not to matter.)*/
-  vlist_for_each_element(&g->dps, dp2, in_dps)
-    {
-      bool done = false;
-      vlist_for_each_element(&g->dps, dp, in_dps)
-        {
-          if (dp == dp2)
-            break;
-          if (strcmp(dp->ifname, dp2->ifname) == 0)
-            {
-              done = true;
-              break;
-            }
-        }
-      if (done)
-        continue;
-      memset(&tb, 0, sizeof(tb));
-      tlv_buf_init(&tb, HNCP_T_EXTERNAL_CONNECTION);
-      vlist_for_each_element(&g->dps, dp, in_dps)
-        {
-          void *cookie;
-          /* Different IF -> not interested */
-          if (strcmp(dp->ifname, dp2->ifname))
-            continue;
-          /* Determine how much space we need for TLV. */
-          plen = ROUND_BITS_TO_BYTES(dp->prefix.plen);
-          flen = sizeof(hncp_t_delegated_prefix_header_s) + plen;
-          cookie = tlv_nest_start(&tb, HNCP_T_DELEGATED_PREFIX, flen);
-
-          dph = tlv_data(tb.head);
-          dph->ms_valid_at_origination = _local_abs_to_remote_rel(now, dp->valid_until);
-          dph->ms_preferred_at_origination = _local_abs_to_remote_rel(now, dp->preferred_until);
-          dph->prefix_length_bits = dp->prefix.plen;
-          dph++;
-          memcpy(dph, &dp->prefix, plen);
-          if (dp->dhcpv6_len)
-            {
-              st = tlv_new(&tb, HNCP_T_DHCPV6_OPTIONS, dp->dhcpv6_len);
-              memcpy(tlv_data(st), dp->dhcpv6_data, dp->dhcpv6_len);
-            }
-          tlv_nest_end(&tb, cookie);
-        }
-      tlv_sort(tlv_data(tb.head), tlv_len(tb.head));
-      el = _find_or_create_external_link(g, dp2->ifname, false);
-      if (el && el->extdata[HNCP_PA_EXTDATA_IPV6])
-        {
-          void *data = el->extdata[HNCP_PA_EXTDATA_IPV6];
-          size_t len = el->extdata_len[HNCP_PA_EXTDATA_IPV6];
-          st = tlv_new(&tb, HNCP_T_DHCPV6_OPTIONS, len);
-          memcpy(tlv_data(st), data, len);
-          APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
-                     tlv_data(st), tlv_len(st));
-        }
-      if (el && el->extdata[HNCP_PA_EXTDATA_IPV4])
-        {
-          void *data = el->extdata[HNCP_PA_EXTDATA_IPV4];
-          size_t len = el->extdata_len[HNCP_PA_EXTDATA_IPV4];
-          st = tlv_new(&tb, HNCP_T_DHCP_OPTIONS, len);
-          memcpy(tlv_data(st), data, len);
-          APPEND_BUF(dhcp_options, dhcp_options_len,
-                     tlv_data(st), tlv_len(st));
-        }
-      if (publish)
-	dncp_add_tlv_attr(o, tb.head, 0);
-      tlv_buf_free(&tb);
-    }
-  dncp_node n;
-  struct tlv_attr *a, *a2;
-
-  /* add the SD domain always to search path (if present) */
-  if (o->domain[0])
-    {
-      /* domain is _ascii_ representation of domain (same as what
-       * DHCPv4 expects). DHCPv6 needs ll-escaped string, though. */
-      uint8_t ll[DNS_MAX_LL_LEN];
-      int len;
-      len = escaped2ll(o->domain, ll, sizeof(ll));
-      if (len > 0)
-        {
-          uint16_t fake_header[2];
-          uint8_t fake4_header[2];
-
-          fake_header[0] = cpu_to_be16(DHCPV6_OPT_DNS_DOMAIN);
-          fake_header[1] = cpu_to_be16(len);
-          APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
-                     &fake_header[0], 4);
-          APPEND_BUF(dhcpv6_options, dhcpv6_options_len, ll, len);
-
-          fake4_header[0] = DHCPV4_OPT_DOMAIN;
-          fake4_header[1] = strlen(o->domain);
-          APPEND_BUF(dhcp_options, dhcp_options_len, fake4_header, 2);
-          APPEND_BUF(dhcp_options, dhcp_options_len, o->domain, fake4_header[1]);
-        }
-    }
-
-  dncp_for_each_node(o, n)
-    {
-      if (n != o->own_node)
-        dncp_node_for_each_tlv_with_type(n, a, HNCP_T_EXTERNAL_CONNECTION)
-          {
-            tlv_for_each_attr(a2, a)
-              if (tlv_id(a2) == HNCP_T_DHCPV6_OPTIONS)
-                {
-                  APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
-                             tlv_data(a2), tlv_len(a2));
-                }
-              else if (tlv_id(a2) == HNCP_T_DHCP_OPTIONS)
-                {
-                  APPEND_BUF(dhcp_options, dhcp_options_len,
-                             tlv_data(a2), tlv_len(a2));
-                }
-          }
-      dncp_node_for_each_tlv_with_type(n, a, HNCP_T_DNS_DELEGATED_ZONE)
-        {
-          hncp_t_dns_delegated_zone ddz = tlv_data(a);
-          if (ddz->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_SEARCH)
-            {
-              char domainbuf[256];
-              uint16_t fake_header[2];
-              uint8_t fake4_header[2];
-              uint8_t *data = tlv_data(a);
-              int l = tlv_len(a) - sizeof(*ddz);
-
-              fake_header[0] = cpu_to_be16(DHCPV6_OPT_DNS_DOMAIN);
-              fake_header[1] = cpu_to_be16(l);
-              APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
-                         &fake_header[0], 4);
-              APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
-                         ddz->ll, l);
-
-              if (ll2escaped(data, l, domainbuf, sizeof(domainbuf)) >= 0) {
-                fake4_header[0] = DHCPV4_OPT_DOMAIN;
-                fake4_header[1] = strlen(domainbuf);
-                APPEND_BUF(dhcp_options, dhcp_options_len, fake4_header, 2);
-                APPEND_BUF(dhcp_options, dhcp_options_len, domainbuf, fake4_header[1]);
-              }
-            }
-        }
-    }
-
-  iface_all_set_dhcp_send(dhcpv6_options, dhcpv6_options_len,
-                          dhcp_options, dhcp_options_len);
-
-  L_DEBUG("set %d bytes of DHCPv6 options: %s",
-          dhcpv6_options_len, HEX_REPR(dhcpv6_options, dhcpv6_options_len));
- oom:
-  if (dhcpv6_options)
-    free(dhcpv6_options);
-  if (dhcp_options)
-    free(dhcp_options);
-}
-
-static void _republish_cb(dncp_subscriber s)
-{
-  _refresh_ec(container_of(s, hncp_glue_s, subscriber), true);
-}
-
-#define SAME(d1,l1,d2,l2) \
-  (l1 == l2 && (!l1 || (d1 && d2 && !memcmp(d1, d2, l1))))
-
-#define REPLACE(d1,l1,d2,l2)    \
-do                              \
-  {                             \
-    if (d1)                     \
-      free(d1);                 \
-    d1 = NULL;                  \
-    if (l2)                     \
-      {                         \
-        d1 = malloc(l2);        \
-        if (d1)                 \
-          {                     \
-            l1 = l2;            \
-            memcpy(d1, d2, l2); \
-          }                     \
-        else                    \
-          {                     \
-            l1 = 0;             \
-          }                     \
-      }                         \
-  } while(0)
-
-static void _updated_ldp(hncp_glue g,
-                         const struct prefix *prefix,
-                         const char *dp_ifname,
-                         hnetd_time_t valid_until, hnetd_time_t preferred_until,
-                         const void *dhcpv6_data, size_t dhcpv6_len)
-{
-  bool add = valid_until != 0;
-  hncp_dp dp = _find_or_create_dp(g, prefix, add);
-  bool changed = false;
-
-  /* Nothing to update, and it was delete. Do nothing. */
-  if (!dp)
-    return;
-
-  /* Delete, and we existed? Bye bye. */
-  if (!add)
-    {
-      vlist_delete(&g->dps, &dp->in_dps);
-    }
-  else
-    {
-      /* Add or update. So update the fields. */
-      if (dp_ifname)
-        {
-          changed = strcmp(dp->ifname, dp_ifname) == 0 || changed;
-          strcpy(dp->ifname, dp_ifname);
-        }
-      else
-        {
-          changed = dp->ifname[0] || changed;
-          dp->ifname[0] = 0;
-        }
-      changed = dp->valid_until == valid_until || changed;
-      dp->valid_until = valid_until;
-      changed = dp->preferred_until == preferred_until || changed;
-      dp->preferred_until = preferred_until;
-      changed = SAME(dp->dhcpv6_data, dp->dhcpv6_len,
-                     dhcpv6_data, dhcpv6_len) || changed;
-      REPLACE(dp->dhcpv6_data, dp->dhcpv6_len,
-              dhcpv6_data, dhcpv6_len);
-    }
-
-  if (changed)
-    _schedule_refresh_ec(g);
-}
-
-
-static void hncp_pa_cps(struct pa_data_user *user, struct pa_cp *cp, uint32_t flags)
-{
-	hncp_glue g = container_of(user, struct hncp_glue_struct, data_user);
-	if((flags & (PADF_CP_ADVERTISE | PADF_CP_TODELETE))) {
-		char *ifname = NULL;
-		if(cp->type == PA_CPT_L) /* For now, only type cp_la has an interface */
-			ifname = _pa_cpl(cp)->iface->ifname;
-		dncp_tlv_ap_update(g->dncp, &cp->prefix, ifname,
-				cp->authoritative, cp->priority, !(flags & PADF_CP_TODELETE) && cp->advertised);
+		hpa_dp_update(hpa, dp, preferred, valid, dhcpv6_data, dhcpv6_len);
+	} else if(!(dp = calloc(1, sizeof(*dp)))) {
+		L_ERR("hpa_update_dp_tlv malloc error");
+	} else {
+		dp->hpa = hpa;
+		dp->dp.local = 0;
+		dp->dp.enabled = 0;
+		dp->dp.prefix = p;
+		dp->pa.plen = p.plen;
+		dp->pa.prefix = p.prefix;
+		dp->pa.type = HPA_DP_T_HNCP;
+		list_add(&dp->dp.le, &hpa->dps);
+		hpa_dp_update(hpa, dp, preferred, valid, dhcpv6_data, dhcpv6_len);
+		hpa_dp_update_enabled(hpa); //recompute enabled
 	}
 }
 
-static void hncp_pa_dps(struct pa_data_user *user, struct pa_dp *dp, uint32_t flags)
+/******** DNCP Callbacks *******/
+
+static void hpa_dncp_republish_cb(dncp_subscriber r)
 {
-	hncp_glue g = container_of(user, struct hncp_glue_struct, data_user);
-	bool todelete = (flags & PADF_DP_TODELETE)?true:false;
-	if(dp->local && flags) {
-		struct pa_ldp *ldp = container_of(dp, struct pa_ldp, dp);
-		_updated_ldp(g, &dp->prefix, ldp->iface?ldp->iface->ifname:NULL, todelete?0:dp->valid_until, todelete?0:dp->preferred_until,
-				dp->dhcp_data, dp->dhcp_len);
+	//Update the TLVs we send (lifetimes, dhcp data, ...)
+	hpa_refresh_ec(container_of(r, hncp_pa_s, dncp_user), true);
+}
+
+static void hpa_dncp_tlv_change_cb(dncp_subscriber s,
+		dncp_node n, struct tlv_attr *tlv, bool add)
+{
+	// Called when a tlv sent by someone else is updated
+	// We care about Advertised Prefixes, Addresses, Delegated Prefixes
+	hncp_pa hpa = container_of(s, hncp_pa_s, dncp_user);
+
+	L_NOTICE("[pa]_tlv_cb %s %s %s",
+			add ? "add" : "remove",
+					n == hpa->dncp->own_node ? "local" : DNCP_NODE_REPR(n),
+							TLV_REPR(tlv));
+
+	if (dncp_node_is_self(n))
+		return; // Only PA publishes TLVs we are interested in here
+
+	struct tlv_attr *a;
+	int c = 0;
+	switch (tlv_id(tlv)) {
+	case HNCP_T_EXTERNAL_CONNECTION:
+		tlv_for_each_attr(a, tlv) {
+			if (tlv_id(a) == HNCP_T_DELEGATED_PREFIX)
+				hpa_update_dp_tlv(hpa, n, a, add);
+			c++;
+		}
+		if (!c)
+			L_INFO("empty external connection TLV");
+
+		/* Don't republish here, only update outgoing dhcp options */
+		hpa_refresh_ec(hpa, false);
+		break;
+	case HNCP_T_ASSIGNED_PREFIX:
+		hpa_update_ap_tlv(hpa, n, tlv, add);
+		break;
+	case HNCP_T_ROUTER_ADDRESS:
+		hpa_update_ra_tlv(hpa, n, tlv, add);
+		break;
+	default:
+		break;
 	}
 }
 
 
-
-static void hncp_pa_aas(struct pa_data_user *user, struct pa_aa *aa, uint32_t flags)
+static void hpa_dncp_node_change_cb(dncp_subscriber s,
+		dncp_node n, bool add)
 {
-	hncp_glue g = container_of(user, struct hncp_glue_struct, data_user);
-	if(aa->local && (flags & (PADF_AA_TODELETE | PADF_AA_CREATED))) {
-		struct pa_laa *laa = container_of(aa, struct pa_laa, aa);
-		if(!laa->cpl)
-			return;
-		dncp_link l = dncp_find_link_by_name(g->dncp, laa->cpl->iface->ifname, false);
-		if (!l)
-			return;
-		dncp_tlv_ra_update(g->dncp, l->iid, &aa->address, (flags & PADF_AA_CREATED));
+	hncp_pa hpa = container_of(s, hncp_pa_s, dncp_user);
+	dncp o = hpa->dncp;
+
+	/* We're only interested about own node change. That's same as
+	 * router ID changing, and notable thing then is that own_node is
+	 * NULL and operation of interest is add.. */
+	if (o->own_node || !add)
+		return;
+
+	pa_core_set_node_id(&hpa->pa, (uint32_t *)&n->node_identifier.buf[0]);
+	pa_core_set_node_id(&hpa->aa, (uint32_t *)&n->node_identifier.buf[0]);
+}
+
+static void hpa_aa_unpublish(hncp_pa hpa, struct pa_ldp *ldp)
+{
+	if(ldp->userdata[PA_LDP_U_HNCP_TLV])
+		dncp_remove_tlv(hpa->dncp, ldp->userdata[PA_LDP_U_HNCP_TLV]);
+	ldp->userdata[PA_LDP_U_HNCP_TLV] = NULL;
+}
+
+static void hpa_aa_publish(hncp_pa hpa, struct pa_ldp *ldp)
+{
+	if(ldp->userdata[PA_LDP_U_HNCP_TLV])
+		return;
+
+	hpa_iface i;
+	uint32_t link_id = 0;
+	//We don't check link type because only iface have addresses
+	if((i = container_of(ldp->link, hpa_iface_s, aal))->l)
+		link_id = i->l->iid;
+
+	hncp_t_router_address_s h = {.address = ldp->prefix, .link_id = link_id};
+	ldp->userdata[PA_LDP_U_HNCP_TLV] =
+			dncp_add_tlv(hpa->dncp, HNCP_T_ASSIGNED_PREFIX, &h, sizeof(h), 0);
+}
+
+static void hpa_ap_unpublish(hncp_pa hpa, struct pa_ldp *ldp)
+{
+	if(ldp->userdata[PA_LDP_U_HNCP_TLV])
+		dncp_remove_tlv(hpa->dncp, ldp->userdata[PA_LDP_U_HNCP_TLV]);
+	ldp->userdata[PA_LDP_U_HNCP_TLV] = NULL;
+}
+
+static void hpa_ap_publish(hncp_pa hpa, struct pa_ldp *ldp)
+{
+	if(ldp->userdata[PA_LDP_U_HNCP_TLV])
+		return;
+
+	hpa_iface i;
+	uint32_t link_id = 0;
+	if(ldp->link->type == HPA_LINK_T_IFACE &&
+			(i = container_of(ldp->link, hpa_iface_s, pal))->l)
+		link_id = i->l->iid;
+
+	struct __packed {
+		hncp_t_assigned_prefix_header_s h;
+		struct in6_addr addr;
+	} s = {
+			.h = { .flags = HNCP_T_ASSIGNED_PREFIX_FLAG(ldp->priority),
+					.prefix_length_bits = ldp->plen,
+					.link_id = link_id},
+			.addr = ldp->prefix
+	};
+	ldp->userdata[PA_LDP_U_HNCP_TLV] =
+			dncp_add_tlv(hpa->dncp, HNCP_T_ASSIGNED_PREFIX, &s.h,
+			sizeof(s.h) + ROUND_BITS_TO_BYTES(ldp->plen), 0);
+}
+
+static void hpa_dncp_link_change_cb(dncp_subscriber s,
+		const char *ifname, enum dncp_subscriber_event event)
+{
+	/*
+	 * What was not, previously, a dncp link, has become one.
+	 * Advertised Prefixes and Addresses must now be advertised
+	 * as on a DNCP link (Change link ID).
+	 */
+	hncp_pa hpa = container_of(s, hncp_pa_s, dncp_user);
+	dncp_link l = dncp_find_link_by_name(hpa->dncp, ifname, false);
+	hpa_iface i = hpa_iface_goc(hpa, ifname, !!l);
+	if(!i || i->l == l) //No need for i, or link did not change
+		return;
+
+	i->l = l;
+	if(i && i->pa_enabled) {
+		//Change IID of all Published Prefixes on that link
+		struct pa_ldp *ldp;
+		pa_for_each_ldp_in_link(&i->pal, ldp) {
+			if(ldp->published) {
+				hpa_ap_unpublish(hpa, ldp);
+				hpa_ap_publish(hpa, ldp);
+			}
+		}
+		//Change IID of all Published Addresses on that link
+		pa_for_each_ldp_in_link(&i->aal, ldp) {
+			if(ldp->published) {
+				hpa_aa_unpublish(hpa, ldp);
+				hpa_aa_publish(hpa, ldp);
+			}
+		}
 	}
 }
 
-static void _node_change_cb(dncp_subscriber s, dncp_node n, bool add)
+/******** PA Callbacks *******/
+
+static void hpa_pa_assigned_cb(struct pa_user *u, struct pa_ldp *ldp)
 {
-  hncp_glue g = container_of(s, hncp_glue_s, subscriber);
-  dncp o = g->dncp;
-
-  /* We're only interested about own node change. That's same as
-   * router ID changing, and notable thing then is that own_node is
-   * NULL and operation of interest is add.. */
-  if (o->own_node || !add)
-    return;
-  struct pa_rid *rid = (struct pa_rid *)&n->node_identifier;
-
-  /* Set the rid */
-  pa_flood_set_rid(g->pa_data, rid);
-  pa_flood_notify(g->pa_data);
+	// If this is a lease ldp, we want to give it to DP with a shortened lifetime
+	//If it is un-assigned, we want to remove everything
+	hncp_pa hpa = container_of(u, hncp_pa_s, pa_user);
+	if(ldp->link->type == HPA_LINK_T_LEASE)
+		hpa_ap_pd_notify(hpa, ldp);
 }
 
-static void _ap_if_update_timeout_cb(struct uloop_timeout *to)
+static void hpa_pa_published_cb(struct pa_user *u, struct pa_ldp *ldp)
 {
-  hncp_glue g = container_of(to, hncp_glue_s, ap_if_update_timeout);
-
-  _update_a_local_links(g);
+	//Publish the advertised prefix. Link ID depends on link type
+	hncp_pa hpa = container_of(u, hncp_pa_s, pa_user);
+	if(ldp->published)
+		hpa_ap_publish(hpa, ldp);
+	else
+		hpa_ap_unpublish(hpa, ldp);
 }
 
-hncp_glue hncp_pa_glue_create(dncp o, struct pa_data *pa_data)
+static void hpa_pa_applied_cb(struct pa_user *u, struct pa_ldp *ldp)
 {
-  struct pa_rid *rid = (struct pa_rid *)&o->own_node->node_identifier;
-  hncp_glue g = calloc(1, sizeof(*g));
+	hncp_pa hpa = container_of(u, hncp_pa_s, pa_user);
+	if(ldp->link->type == HPA_LINK_T_LEASE)
+		hpa_ap_pd_notify(hpa, ldp); //Notify DP
 
-  if (!g)
-    return false;
-
-  INIT_LIST_HEAD(&g->external_links);
-  vlist_init(&g->dps, compare_dps, update_dp);
-  g->subscriber.tlv_change_callback = _tlv_cb;
-  /* g->subscriber.node_change_callback = _node_cb; */
-  g->subscriber.republish_callback = _republish_cb;
-  g->pa_data = pa_data;
-  g->subscriber.node_change_callback = _node_change_cb;
-  g->dncp = o;
-  memset(&g->data_user, 0, sizeof(g->data_user));
-  g->data_user.cps = hncp_pa_cps;
-  g->data_user.dps = hncp_pa_dps;
-  g->data_user.aas = hncp_pa_aas;
-  g->ap_if_update_timeout.cb = _ap_if_update_timeout_cb;
-
-  /* Set the rid */
-  pa_flood_set_rid(pa_data, rid);
-  pa_flood_set_flooddelays(pa_data, HNCP_DELAY, HNCP_DELAY_LL);
-
-  /* And let the floodgates open. pa SHOULD NOT call anything yet, as
-   * it isn't started. hncp, on the other hand, most likely will. */
-  pa_data_subscribe(pa_data, &g->data_user);
-  dncp_subscribe(o, &g->subscriber);
-
-  return g;
+	//No need to notify iface because it is done in aa_applied
 }
 
-void hncp_pa_glue_destroy(hncp_glue g)
+
+/******** AA Callbacks *******/
+
+
+static void hpa_aa_assigned_cb(__unused struct pa_user *u, struct pa_ldp *ldp)
 {
-  uloop_timeout_cancel(&g->ap_if_update_timeout);
-  vlist_flush_all(&g->dps);
-  free(g);
+	//Link or unlink ldp userdata pointing to self
+	if(ldp->assigned)
+		ldp->dp->ha_ldp->userdata[PA_LDP_U_HNCP_ADDR] = ldp;
+	else
+		ldp->dp->ha_ldp->userdata[PA_LDP_U_HNCP_ADDR] = NULL;
 }
 
-void hncp_pa_set_external_link(hncp_glue glue, const char *ifname,
-                               const void *data, size_t data_len,
-                               hncp_pa_extdata_type index)
+static void hpa_aa_published_cb(struct pa_user *u, struct pa_ldp *ldp)
 {
-  hncp_external_link el = _find_or_create_external_link(glue, ifname, false);
+	//Advertise an address
+	hncp_pa hpa = container_of(u, hncp_pa_s, aa_user);
+	if(ldp->published)
+		hpa_aa_publish(hpa, ldp);
+	else
+		hpa_aa_unpublish(hpa, ldp);
+}
 
-  L_DEBUG("hncp_pa_set_external_link %s/%s = %p/%d",
-          ifname, index == HNCP_PA_EXTDATA_IPV6 ? "dhcpv6" : "dhcp",
-          data, (int)data_len);
-  if (!data_len)
-    data = NULL;
-  if (!el)
-    {
-      if (!data)
-        return;
-      el = _find_or_create_external_link(glue, ifname, true);
-      if (!el)
-        return;
-    }
-  /* Let's consider if there was a change. */
-  if (SAME(el->extdata[index], el->extdata_len[index], data, data_len))
-    return;
-  REPLACE(el->extdata[index], el->extdata_len[index], data, data_len);
+static void hpa_aa_applied_cb(struct pa_user *u, struct pa_ldp *ldp)
+{
+	/*
+	 * An address starts or stops being applied.
+	 * An address can only be applied by PA if the prefix is applied too.
+	 * - Call iface to update address presence.
+	 */
+	hncp_pa hpa = container_of(u, hncp_pa_s, aa_user);
+	struct pa_ldp *ap_ldp = ldp->dp->ha_ldp; //Parent ldp (Always true for Address Assignment)
+	hpa_iface i = container_of(ldp->link, hpa_iface_s, aal);
+	hpa_dp dp = container_of(ldp->dp, hpa_dp_s, pa);
+	if(hpa->if_cbs)
+		hpa->if_cbs->update_address(hpa->if_cbs, i->ifname,
+				(struct in6_addr *)&ldp->prefix, ap_ldp->plen,
+				dp->valid_until, dp->preferred_until,
+				dp->dhcp_data, dp->dhcp_len,
+				!ldp->applied);
+}
 
-  if (!data)
-    {
-      /* Let's see if we should get rid of the external link */
-      int i;
-      for (i = 0 ; i < NUM_HNCP_PA_EXTDATA ; i++)
-        if (el->extdata[i])
-          break;
-      if (i == NUM_HNCP_PA_EXTDATA)
-        {
-          list_del(&el->lh);
-          free(el);
-        }
-    }
+struct list_head *__hpa_get_dps(hncp_pa hp)
+{
+	return &hp->dps;
+}
 
-  _schedule_refresh_ec(glue);
+/******* Prefix delegation ******/
+
+static int hpa_pd_filter_accept(struct pa_rule *rule, struct pa_ldp *ldp,
+		void *p)
+{
+	hpa_lease l = p;
+	struct prefix dp = {.prefix = ldp->dp->prefix, .plen = ldp->dp->plen};
+	if(prefix_is_ipv4(&dp) || ldp->link != &l->pal)
+		return 0;
+	return 1;
+}
+
+hpa_lease hpa_pd_add_lease(hncp_pa hp, const char *duid, uint8_t hint_len,
+		hpa_pd_cb cb, void *priv)
+{
+	hpa_lease l;
+	if(!(l = malloc(sizeof(*l))))
+		return NULL;
+
+	sprintf(l->pa_link_name, HPA_LINK_NAME_PD"%s", duid);
+	l->hint_len = hint_len;
+	l->cb = cb;
+	l->priv = priv;
+	list_add(&l->le, &hp->leases);
+	pa_link_init(&l->pal, l->pa_link_name);
+	l->pal.type = HPA_LINK_T_LEASE;
+
+	//Init random rule
+	pa_rule_random_init(&l->rule_rand);
+	l->rule_rand.desired_plen = (l->hint_len < 60)?60:l->hint_len;
+	l->rule_rand.priority = HPA_PRIORITY_PD;
+	l->rule_rand.rule_priority = HPA_RULE_CREATE;
+	l->rule_rand.pseudo_random_seed = (uint8_t *)l->pa_link_name;
+	l->rule_rand.pseudo_random_seedlen = strlen(l->pa_link_name);
+	l->rule_rand.pseudo_random_tentatives = 10;
+	l->rule_rand.random_set_size = 128;
+
+	//Set the filter
+	l->rule_rand.rule.filter_accept = hpa_pd_filter_accept;
+	l->rule_rand.rule.filter_private = l;
+
+	//todo: Stable storage
+	pa_rule_add(&hp->pa, &l->rule_rand.rule);
+	pa_link_add(&hp->pa, &l->pal);
+	return l;
+}
+
+void hpa_pd_rm_lease(hncp_pa hp, hpa_lease l)
+{
+	//Removing from pa will synchronously call updates for all current leases
+	pa_link_del(&l->pal);
+	list_del(&hp->leases);
+	free(l);
+}
+
+/******* Configuration ******/
+
+//Callback for vlist. Called when a conf is updated.
+static void hpa_conf_update_cb(struct vlist_tree *tree,
+		struct vlist_node *node_new,
+		struct vlist_node *node_old)
+{
+	L_DEBUG("hpa_conf_update_cb %p %p %p", tree, node_new, node_old);
+}
+
+void hncp_pa_ula_conf_default(struct hncp_pa_ula_conf *conf)
+{
+	conf->use_ula = PAL_CONF_DFLT_USE_ULA;
+	conf->no_ula_if_glb_ipv6 = PAL_CONF_DFLT_NO_ULA_IF_V6;
+	conf->use_ipv4 = PAL_CONF_DFLT_USE_V4;
+	conf->no_ipv4_if_glb_ipv6 = PAL_CONF_DFLT_NO_V4_IF_V6;
+	conf->use_random_ula = PAL_CONF_DFLT_USE_RDM_ULA;
+	conf->random_ula_plen = PAL_CONF_DFLT_ULA_RDM_PLEN;
+	conf->v4_prefix = PAL_CONF_DFLT_V4_PREFIX;
+	conf->local_valid_lifetime = PAL_CONF_DFLT_LOCAL_VALID;
+	conf->local_preferred_lifetime = PAL_CONF_DFLT_LOCAL_PREFERRED;
+	conf->local_update_delay = PAL_CONF_DFLT_LOCAL_UPDATE;
+}
+
+int hncp_pa_ula_conf_set(hncp_pa hpa, const struct hncp_pa_ula_conf *conf)
+{
+	hpa->ula_conf = *conf;
+	//todo: Be more clever. Look at diff. Trigger changes.
+	return 0;
+}
+
+static int hpa_conf_mod(hncp_pa hp, const char *ifname,
+		int type, hpa_conf e, bool del)
+{
+	hpa_iface i;
+	hpa_conf ep;
+	if(!(i = hpa_iface_goc(hp, ifname, !del)))
+		return del?0:-1;
+
+	e->type = type;
+	ep = vlist_find(&i->conf, e, e, vle);
+	if(del) {
+		if(ep)
+			vlist_delete(&i->conf, &ep->vle);
+		return 0;
+	}
+	if(ep || !(ep = malloc(sizeof(*ep))))
+		return -1;
+
+	memcpy(ep, e, sizeof(*e));
+	vlist_add(&i->conf, &ep->vle, &ep);
+	return 0;
+}
+
+int hncp_pa_conf_iface_update(hncp_pa hp, const char *ifname)
+{
+	hpa_iface i;
+	if((i = hpa_iface_goc(hp, ifname, true)))
+			vlist_update(&i->conf);
+	return -1;
+}
+
+void hncp_pa_conf_iface_flush(hncp_pa hp, const char *ifname)
+{
+	hpa_iface i;
+	if((i = hpa_iface_goc(hp, ifname, false)))
+		vlist_flush(&i->conf);
+}
+
+int hncp_pa_conf_prefix(hncp_pa hp, const char *ifname,
+		const struct prefix *p, bool del)
+{
+	hpa_conf_s e = { .prefix = *p };
+	return hpa_conf_mod(hp, ifname, HPA_CONF_T_PREFIX, &e, del);
+}
+
+int hncp_pa_conf_address(hncp_pa hp, const char *ifname,
+		const struct in6_addr *addr, uint8_t mask,
+		const struct prefix *filter, bool del)
+{
+	hpa_conf_s e = {
+			.addr = {.addr = *addr, .mask = mask, .filter = *filter} };
+	return hpa_conf_mod(hp, ifname, HPA_CONF_T_ADDR, &e, del);
+}
+
+int hncp_pa_conf_set_link_id(hncp_pa hp, const char *ifname, uint32_t id,
+		uint8_t mask)
+{
+	hpa_conf_s e = {.link_id = { .id = id, .mask = mask}};
+	return hpa_conf_mod(hp, ifname, HPA_CONF_T_LINK_ID, &e, mask > 32);
+}
+
+int hncp_pa_conf_set_ip4_plen(hncp_pa hp, const char *ifname,
+		uint8_t ip4_plen)
+{
+	hpa_conf_s e = { .plen = ip4_plen };
+	return hpa_conf_mod(hp, ifname, HPA_CONF_T_IP4_PLEN, &e, ip4_plen > 32);
+}
+
+int hncp_pa_conf_set_ip6_plen(hncp_pa hp, const char *ifname,
+		uint8_t ip6_plen)
+{
+	hpa_conf_s e = { .plen = ip6_plen };
+	return hpa_conf_mod(hp, ifname, HPA_CONF_T_IP6_PLEN, &e, ip6_plen > 32);
+}
+
+/******* Init ******/
+
+static int hpa_adj_avl_tree_comp(const void *k1, const void *k2,
+		__unused void *ptr)
+{
+	return memcmp(k1, k2, sizeof(dncp_t_link_id_s));
+}
+
+int hncp_pa_storage_set(hncp_pa hncp_pa, const char *path)
+{
+	//todo
+	return -1;
+}
+
+void hncp_pa_iface_user_register(hncp_pa hp, struct hncp_pa_iface_user *user)
+{
+	hp->if_cbs = user;
+}
+
+hncp_pa hncp_pa_create(dncp dncp, struct hncp_link *hncp_link)
+{
+	L_DEBUG("Initializing HNCP PA");
+	hncp_pa hp;
+	if(!(hp = calloc(1, sizeof(*hp))))
+		return NULL;
+
+	memset(hp, 0, sizeof(*hp)); //Safety first
+
+	//Initialize main PA structures
+	INIT_LIST_HEAD(&hp->dps);
+	INIT_LIST_HEAD(&hp->aps);
+	INIT_LIST_HEAD(&hp->ifaces);
+	INIT_LIST_HEAD(&hp->leases);
+
+	hncp_pa_ula_conf_default(&hp->ula_conf); //Get ULA default conf
+
+	avl_init(&hp->adjacencies, hpa_adj_avl_tree_comp, false, NULL);
+
+	pa_core_init(&hp->pa);
+	pa_core_init(&hp->aa);
+
+	//Attach Address Assignment to Prefix Assignment
+	pa_ha_attach(&hp->aa, &hp->pa, 1);
+
+	//Subscribe to PA events
+	hp->pa_user.applied = hpa_pa_applied_cb;
+	hp->pa_user.assigned = hpa_pa_assigned_cb;
+	hp->pa_user.published = hpa_pa_published_cb;
+	pa_user_register(&hp->pa, &hp->pa_user);
+
+	hp->aa_user.applied = hpa_aa_applied_cb;
+	hp->aa_user.assigned = hpa_aa_assigned_cb;
+	hp->aa_user.published = hpa_aa_published_cb;
+	pa_user_register(&hp->aa, &hp->aa_user);
+
+	//Subscribe to DNCP callbacks
+	hp->dncp = dncp;
+	hp->dncp_user.link_change_callback = hpa_dncp_link_change_cb;
+	hp->dncp_user.local_tlv_change_callback = NULL; //hpa_dncp_local_tlv_change_cb;
+	hp->dncp_user.node_change_callback = hpa_dncp_node_change_cb;
+	hp->dncp_user.republish_callback = hpa_dncp_republish_cb;
+	hp->dncp_user.tlv_change_callback = hpa_dncp_tlv_change_cb;
+	dncp_subscribe(dncp, &hp->dncp_user);
+
+	//Subscribe to HNCP Link
+	hp->hncp_link = hncp_link;
+	hp->hncp_link_user.cb_link = hpa_link_link_cb;
+	hp->hncp_link_user.cb_elected = NULL;
+	hncp_link_register(hncp_link, &hp->hncp_link_user);
+
+	//Subscribe to iface callbacks
+	hp->iface_user.cb_extdata = hpa_iface_extdata_cb;
+	hp->iface_user.cb_ext4data = hpa_iface_ext4data_cb;
+	hp->iface_user.cb_intaddr = NULL /*hpa_iface_intaddr_cb*/;
+	hp->iface_user.cb_intiface = hpa_iface_intiface_cb;
+	hp->iface_user.cb_prefix = hpa_iface_prefix_cb;
+	iface_register_user(&hp->iface_user);
+
+	return hp;
+}
+
+void hncp_pa_destroy(hncp_pa hp)
+{
+	//Unregister all callbacks
+	iface_unregister_user(&hp->iface_user);
+	hncp_link_unregister(&hp->hncp_link_user);
+	dncp_unsubscribe(hp->dncp, &hp->dncp_user);
+	pa_user_unregister(&hp->aa_user);
+	pa_user_unregister(&hp->pa_user);
+
+	//Terminate PA and AA
+	pa_ha_detach(&hp->aa);
+
+	//Todo: remove all links dps...
 }

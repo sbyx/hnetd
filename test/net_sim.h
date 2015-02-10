@@ -22,7 +22,6 @@
 /* We leverage the fake timers and other stuff in fake_uloop. */
 #include "fake_uloop.h"
 
-#include "pa_data.c"
 #ifdef L_PREFIX
 #undef L_PREFIX
 #endif /* L_PREFIX */

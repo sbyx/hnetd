@@ -15,8 +15,9 @@
 int log_level = LOG_DEBUG;
 
 
-void pa_data_subscribe(__unused struct pa_data *d, __unused struct pa_data_user *u){}
+/*
 struct pa_iface* pa_iface_get(__unused struct pa_data *d, __unused const char *ifname, __unused bool goc){ return NULL; }
+void pa_data_subscribe(__unused struct pa_data *d, __unused struct pa_data_user *u){}
 void pa_core_static_prefix_init(__unused struct pa_static_prefix_rule *rule, __unused const char *ifname,
 		__unused const struct prefix* p, __unused bool hard) {};
 void pa_core_link_id_init(__unused struct pa_link_id_rule *lrule, __unused const char *ifname,
@@ -27,8 +28,12 @@ void pa_core_iface_addr_init(__unused struct pa_iface_addr *addr, __unused const
 		__unused struct in6_addr *address, __unused uint8_t mask, __unused struct prefix *filter) {}
 void pa_core_iface_addr_add(__unused struct pa_core *core, __unused struct pa_iface_addr *addr) {}
 void pa_core_iface_addr_del(__unused struct pa_core *core, __unused struct pa_iface_addr *addr) {}
+*/
+struct list_head *__hpa_get_dps(hncp_pa hpa) {return NULL;}
+void hncp_pa_iface_user_register(hncp_pa hp, struct hncp_pa_iface_user *user) {}
+
 void platform_set_dhcp(__unused struct iface *c, __unused enum hncp_link_elected elected) {}
-int platform_init(__unused dncp hncp, __unused struct pa_data *data, __unused const char *pd_socket) { return 0; }
+int platform_init(__unused dncp hncp, __unused hncp_pa pa, __unused const char *pd_socket) { return 0; }
 void platform_set_address(__unused struct iface *c, __unused struct iface_addr *addr, __unused bool enable) {}
 void platform_set_route(__unused struct iface *c, __unused struct iface_route *addr, __unused bool enable) {}
 void platform_iface_free(__unused struct iface *c) {}

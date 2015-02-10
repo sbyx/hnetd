@@ -25,6 +25,7 @@
 #include "prefix_utils.h"
 #include "hncp_dump.h"
 #include "dncp_trust.h"
+#include "hncp_pa.h"
 
 static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events);
 static struct uloop_fd ipcsock = { .cb = ipc_handle };
@@ -32,6 +33,7 @@ static const char *ipcpath = "/var/run/hnetd.sock";
 static const char *ipcpath_client = "/var/run/hnetd-client%d.sock";
 static dncp ipc_hncp = NULL;
 static dncp_trust ipc_dtrust = NULL;
+static hncp_pa hncp_pa_p = NULL;
 
 enum ipc_option {
 	OPT_COMMAND,
@@ -109,10 +111,11 @@ int ipc_init(void)
 	return 0;
 }
 
-void ipc_conf(dncp hncp, dncp_trust trust)
+void ipc_conf(dncp hncp, dncp_trust trust, hncp_pa hncp_pa)
 {
 	ipc_hncp = hncp;
 	ipc_dtrust = trust;
+	hncp_pa_p = hncp_pa;
 }
 
 // CLI JSON->IPC TLV converter for 3rd party dhcp client integration
@@ -404,6 +407,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			struct iface *iface = iface_create(ifname, tb[OPT_HANDLE] == NULL ? NULL :
 					blobmsg_get_string(tb[OPT_HANDLE]), flags);
 
+			hncp_pa_conf_iface_update(hncp_pa_p, iface->ifname); //Start HNCP PA Conf Update
 			if (iface && tb[OPT_PREFIX]) {
 				struct blob_attr *k;
 				unsigned rem;
@@ -411,8 +415,8 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 				blobmsg_for_each_attr(k, tb[OPT_PREFIX], rem) {
 					struct prefix p;
 					if (blobmsg_type(k) == BLOBMSG_TYPE_STRING &&
-							prefix_pton(blobmsg_get_string(k), &p) == 1)
-						iface_add_chosen_prefix(iface, &p);
+							prefix_pton(blobmsg_get_string(k), &p.prefix, &p.plen) == 1)
+						hncp_pa_conf_prefix(hncp_pa_p, iface->ifname, &p, 0);
 				}
 			}
 
@@ -420,7 +424,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			if (iface && tb[OPT_LINK_ID] && sscanf(
 						blobmsg_get_string(tb[OPT_LINK_ID]),
 						"%x/%u", &link_id, &link_mask) >= 1)
-					iface_set_link_id(iface, link_id, link_mask);
+				hncp_pa_conf_set_link_id(hncp_pa_p, iface->ifname, link_id, link_mask);
 
 			if (iface && tb[OPT_IFACE_ID]) {
 				struct blob_attr *k;
@@ -431,7 +435,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 						char astr[55], fstr[55];
 						struct prefix filter, addr;
 						int res = sscanf(blobmsg_get_string(k), "%54s %54s", astr, fstr);
-						if(res <= 0 || !prefix_pton(astr, &addr) || (res > 1 && !prefix_pton(fstr, &filter))) {
+						if(res <= 0 || !prefix_pton(astr, &addr.prefix, &addr.plen) || (res > 1 && !prefix_pton(fstr, &filter.prefix, &filter.plen))) {
 							L_ERR("Incorrect iface_id syntax %s", blobmsg_get_string(k));
 							continue;
 						}
@@ -439,7 +443,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 							addr.plen = 64;
 						if(res == 1)
 							filter.plen = 0;
-						iface_add_addrconf(iface, &addr.prefix, 128 - addr.plen, &filter);
+						hncp_pa_conf_address(hncp_pa_p, iface->ifname, &addr.prefix, 128 - addr.plen, &filter, 0);
 					}
 				}
 			}
@@ -448,15 +452,17 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			if(iface && tb[OPT_IP6_PLEN]
 				       && sscanf(blobmsg_get_string(tb[OPT_IP6_PLEN]), "%u", &ip6_plen) == 1
 				       && ip6_plen <= 128) {
-				iface->ip6_plen = ip6_plen;
+				hncp_pa_conf_set_ip6_plen(hncp_pa_p, iface->ifname, ip6_plen);
 			}
 
 			unsigned ip4_plen;
 			if(iface && tb[OPT_IP4_PLEN]
 				       && sscanf(blobmsg_get_string(tb[OPT_IP4_PLEN]), "%u", &ip4_plen) == 1
 				       && ip4_plen <= 128) {
-				iface->ip4_plen = ip4_plen;
+				hncp_pa_conf_set_ip4_plen(hncp_pa_p, iface->ifname, ip4_plen);
 			}
+
+			hncp_pa_conf_iface_flush(hncp_pa_p, iface->ifname); //Stop HNCP_PA UPDATE
 
 			dncp_link_conf conf;
 			if(c && tb[OPT_KEEPALIVE_INTERVAL] && (conf = dncp_if_find_conf_by_name(ipc_hncp, c->ifname))) {
@@ -526,11 +532,11 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 				blobmsg_parse(ipc_prefix_policy, PREFIX_MAX, tb,
 						blobmsg_data(k), blobmsg_data_len(k));
 
-				if (!tb[PREFIX_ADDRESS] || !prefix_pton(blobmsg_get_string(tb[PREFIX_ADDRESS]), &addr))
+				if (!tb[PREFIX_ADDRESS] || !prefix_pton(blobmsg_get_string(tb[PREFIX_ADDRESS]), &addr.prefix, &addr.plen))
 					continue;
 
 				if (tb[PREFIX_EXCLUDED])
-					prefix_pton(blobmsg_get_string(tb[PREFIX_EXCLUDED]), &ex);
+					prefix_pton(blobmsg_get_string(tb[PREFIX_EXCLUDED]), &ex.prefix, &ex.plen);
 
 				if (tb[PREFIX_PREFERRED])
 					preferred = now + blobmsg_get_u32(tb[PREFIX_PREFERRED]) * HNETD_TIME_PER_SECOND;

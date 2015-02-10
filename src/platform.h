@@ -12,7 +12,7 @@
 
 
 // Platform specific initialization
-int platform_init(dncp hncp, struct pa_data *pa_data, const char *pd_socket);
+int platform_init(dncp hncp, hncp_pa hncp_pa, const char *pd_socket);
 
 
 

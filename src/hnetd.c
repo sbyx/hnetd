@@ -28,7 +28,6 @@
 #include "hncp_link.h"
 #include "ipc.h"
 #include "platform.h"
-#include "pa.h"
 #include "pd.h"
 #ifdef DTLS
 #include "dtls.h"
@@ -41,7 +40,6 @@ int log_level = LOG_INFO;
 typedef struct {
 	struct iface_user iu;
 	dncp hncp;
-	hncp_glue glue;
 } hncp_iface_user_s, *hncp_iface_user;
 
 
@@ -50,7 +48,6 @@ void hncp_iface_intaddr_callback(struct iface_user *u, const char *ifname,
 								 const struct prefix *addr4 __unused)
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
-
 	dncp_if_set_ipv6_address(hiu->hncp, ifname, addr6 ? &addr6->prefix : NULL);
 }
 
@@ -64,42 +61,13 @@ void hncp_iface_intiface_callback(struct iface_user *u,
 			(c->flags & IFACE_FLAG_LEAF) != IFACE_FLAG_LEAF);
 }
 
-
-void hncp_iface_extdata_callback(struct iface_user *u,
-								 const char *ifname,
-								 const void *dhcpv6_data,
-								 size_t dhcpv6_len)
-{
-	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
-
-	hncp_pa_set_external_link(hiu->glue, ifname, dhcpv6_data, dhcpv6_len,
-							  HNCP_PA_EXTDATA_IPV6);
-}
-
-void hncp_iface_ext4data_callback(struct iface_user *u,
-								  const char *ifname,
-								  const void *dhcpv4_data,
-								  size_t dhcpv4_len)
-{
-	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
-
-	hncp_pa_set_external_link(hiu->glue, ifname, dhcpv4_data, dhcpv4_len,
-							  HNCP_PA_EXTDATA_IPV4);
-}
-
-
-void hncp_iface_glue(hncp_iface_user hiu, dncp h, hncp_glue g)
+void hncp_iface_glue(hncp_iface_user hiu, dncp h)
 {
 	/* Initialize hiu appropriately */
 	memset(hiu, 0, sizeof(*hiu));
 	hiu->iu.cb_intiface = hncp_iface_intiface_callback;
 	hiu->iu.cb_intaddr = hncp_iface_intaddr_callback;
-	hiu->iu.cb_extdata = hncp_iface_extdata_callback;
-	hiu->iu.cb_ext4data = hncp_iface_ext4data_callback;
 	hiu->hncp = h;
-	hiu->glue = g;
-
-	/* We don't care about other callbacks for now. */
 	iface_register_user(&hiu->iu);
 }
 
@@ -130,10 +98,9 @@ int usage() {
 int main(__unused int argc, char *argv[])
 {
 	dncp h;
-	struct pa pa;
 	int c;
 	hncp_iface_user_s hiu;
-	hncp_glue hg;
+	hncp_pa hncp_pa;
 	hncp_sd_params_s sd_params;
 	dncp_trust dt = NULL;
 	struct hncp_link_config link_config = {HNCP_VERSION, 0, 0, 0, 0, ""};
@@ -296,57 +263,10 @@ int main(__unused int argc, char *argv[])
 			break;
 		default:
 			L_ERR("Unrecognized option");
+			//no break
 		case '?':
 			return usage();
 			break;
-		}
-	}
-
-	pa_init(&pa, NULL);
-	if(pa_store_file)
-		pa_store_setfile(&pa.store, pa_store_file);
-
-	if(pa_ip4prefix) {
-		if(!prefix_pton(pa_ip4prefix, &pa.local.conf.v4_prefix)) {
-			L_ERR("Unable to parse ipv4 prefix option '%s'", pa_ip4prefix);
-			return 40;
-		} else if (!prefix_is_ipv4(&pa.local.conf.v4_prefix)) {
-			L_ERR("The ip4prefix option '%s' is not an IPv4 prefix", pa_ip4prefix);
-			return 41;
-		} else {
-			L_INFO("Setting %s as IPv4 prefix", PREFIX_REPR(&pa.local.conf.v4_prefix));
-		}
-	}
-
-	if(pa_ulaprefix) {
-		if(!prefix_pton(pa_ulaprefix, &pa.local.conf.ula_prefix)) {
-			L_ERR("Unable to parse ula prefix option '%s'", pa_ulaprefix);
-			return 40;
-		} else if (prefix_is_ipv4(&pa.local.conf.ula_prefix)) {
-			L_ERR("The ulaprefix option '%s' is an IPv4 prefix", pa_ulaprefix);
-			return 41;
-		} else {
-			if (!prefix_is_ipv6_ula(&pa.local.conf.ula_prefix)) {
-				L_WARN("The provided ULA prefix %s is not an ULA. I hope you know what you are doing.",
-						PREFIX_REPR(&pa.local.conf.ula_prefix));
-			}
-			pa.local.conf.use_random_ula = false;
-			L_INFO("Setting %s as ULA prefix", PREFIX_REPR(&pa.local.conf.ula_prefix));
-		}
-	}
-
-	if(pa_ulamode) {
-		if(!strcmp(pa_ulamode, "off")) {
-			pa.local.conf.use_ula = 0;
-		} else if(!strcmp(pa_ulamode, "ifnov6")) {
-			pa.local.conf.use_ula = 1;
-			pa.local.conf.no_ula_if_glb_ipv6 = 1;
-		} else if(!strcmp(pa_ulamode, "on")) {
-			pa.local.conf.use_ula = 1;
-			pa.local.conf.no_ula_if_glb_ipv6 = 0;
-		} else {
-			L_ERR("Invalid ulamode option (Can be on, off or ifnov6)");
-			return 43;
 		}
 	}
 
@@ -400,11 +320,6 @@ int main(__unused int argc, char *argv[])
 #endif /* DTLS */
 	}
 
-	if (!(hg = hncp_pa_glue_create(h, &pa.data))) {
-		L_ERR("Unable to connect hncp and pa");
-		return 17;
-	}
-
 	hncp_sd sd = hncp_sd_create(h, &sd_params);
 	if (!sd) {
 		L_ERR("unable to initialize sd, exiting");
@@ -416,22 +331,82 @@ int main(__unused int argc, char *argv[])
 
 	struct hncp_link *link = hncp_link_create(h, &link_config);
 
+	//Note that pa subscribes to iface. Which is possible before iface init.
+	if(!(hncp_pa = hncp_pa_create(h, link))) {
+		L_ERR("Unable to initialize PA");
+		return 17;
+	}
+
+	//PA configuration
+
+	if(pa_store_file && hncp_pa_storage_set(hncp_pa, pa_store_file)) {
+		L_ERR("Could not set prefix storage file (%s): %s",
+				pa_store_file, strerror(errno));
+		return 18;
+	}
+
+	struct hncp_pa_ula_conf ula_conf;
+	hncp_pa_ula_conf_default(&ula_conf);
+	if(pa_ip4prefix) {
+		if(!prefix_pton(pa_ip4prefix, &ula_conf.v4_prefix.prefix, &ula_conf.v4_prefix.plen)) {
+			L_ERR("Unable to parse ipv4 prefix option '%s'", pa_ip4prefix);
+			return 40;
+		} else if (!prefix_is_ipv4(&ula_conf.v4_prefix)) {
+			L_ERR("The ip4prefix option '%s' is not an IPv4 prefix", pa_ip4prefix);
+			return 41;
+		} else {
+			L_INFO("Setting %s as IPv4 prefix", PREFIX_REPR(&ula_conf.v4_prefix));
+		}
+	}
+
+	if(pa_ulaprefix) {
+		if(!prefix_pton(pa_ulaprefix, &ula_conf.ula_prefix.prefix, &ula_conf.ula_prefix.plen)) {
+			L_ERR("Unable to parse ula prefix option '%s'", pa_ulaprefix);
+			return 40;
+		} else if (prefix_is_ipv4(&ula_conf.ula_prefix)) {
+			L_ERR("The ulaprefix option '%s' is an IPv4 prefix", pa_ulaprefix);
+			return 41;
+		} else {
+			if (!prefix_is_ipv6_ula(&ula_conf.ula_prefix)) {
+				L_WARN("The provided ULA prefix %s is not an ULA. I hope you know what you are doing.",
+						PREFIX_REPR(&ula_conf.ula_prefix));
+			}
+			ula_conf.use_random_ula = false;
+			L_INFO("Setting %s as ULA prefix", PREFIX_REPR(&ula_conf.ula_prefix));
+		}
+	}
+
+	if(pa_ulamode) {
+		if(!strcmp(pa_ulamode, "off")) {
+			ula_conf.use_ula = 0;
+		} else if(!strcmp(pa_ulamode, "ifnov6")) {
+			ula_conf.use_ula = 1;
+			ula_conf.no_ula_if_glb_ipv6 = 1;
+		} else if(!strcmp(pa_ulamode, "on")) {
+			ula_conf.use_ula = 1;
+			ula_conf.no_ula_if_glb_ipv6 = 0;
+		} else {
+			L_ERR("Invalid ulamode option (Can be on, off or ifnov6)");
+			return 43;
+		}
+	}
+
+	hncp_pa_ula_conf_set(hncp_pa, &ula_conf);
+
+	//End of PA conf
+
 	/* Init ipc */
-	iface_init(h, sd, &pa, link, pd_socket_path);
+	iface_init(h, sd, hncp_pa, link, pd_socket_path);
 
 	/* Glue together HNCP, PA-glue and and iface */
-	hncp_iface_glue(&hiu, h, hg);
+	hncp_iface_glue(&hiu, h);
 
-	/* PA */
-	pd_create(&pa.pd, pd_socket_path);
-	pa_set_hncp(&pa, h);
-
-	/* Fire up the prefix assignment code. */
-	pa_start(&pa);
+	/* Sub PD */
+	pd_create(hncp_pa, pd_socket_path);
 
 #ifdef WITH_IPC
 	/* Configure ipc */
-	ipc_conf(h, dt);
+	ipc_conf(h, dt, hncp_pa);
 #endif
 
 	uloop_run();

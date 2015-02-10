@@ -101,7 +101,7 @@ void dncp_tlv_ra_update(dncp o,
   dncp_update_tlv(o, HNCP_T_ROUTER_ADDRESS, &ra, sizeof(ra), 0, add);
 }
 
-
+/*
 void dncp_tlv_ap_update(dncp o,
                         const struct prefix *prefix,
                         const char *ifname,
@@ -120,7 +120,7 @@ void dncp_tlv_ap_update(dncp o,
   memset(buf, 0, sizeof(buf));
   p = *prefix;
   prefix_canonical(&p, &p);
-  /* XXX - what if links renumber? let's hope they don't */
+  // XXX - what if links renumber? let's hope they don't
   ah = (void *)buf;
   l = dncp_find_link_by_name(o, ifname, false);
   if (l)
@@ -133,6 +133,7 @@ void dncp_tlv_ap_update(dncp o,
   memcpy(ah, &p, plen);
   dncp_update_tlv(o, HNCP_T_ASSIGNED_PREFIX, buf, flen, 0, add);
 }
+*/
 
 static bool _hncp_init(dncp o)
 {

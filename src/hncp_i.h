@@ -63,6 +63,7 @@ dncp_tlv_router_address(const struct tlv_attr *a)
   return tlv_data(a);
 }
 
+/*
 void dncp_tlv_ap_update(dncp o,
                         const struct prefix *prefix,
                         const char *ifname,
@@ -74,3 +75,4 @@ void dncp_tlv_ra_update(dncp o,
                         uint32_t lid,
                         const struct in6_addr *address,
                         bool add);
+*/
