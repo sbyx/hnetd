@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 10:02:45 2013 mstenber
- * Last modified: Mon Jan 12 13:21:39 2015 mstenber
- * Edit time:     231 min
+ * Last modified: Tue Feb 10 20:47:47 2015 mstenber
+ * Edit time:     235 min
  *
  */
 
@@ -35,6 +35,13 @@ struct in6_addr fixed_ia6;
 #include "dncp_timeout.c"
 #include "sput.h"
 #include "smock.h"
+
+/* Work-around to prevent side effects of dncp_if_set_enabled; it
+   produces some TLVs now on it's own, and this test code does not
+   deal with it yet. Could adapt test code at some point.. -MSt 02/2015
+*/
+#define dncp_if_set_enabled(o, ifname, val) \
+  dncp_find_link_by_name(o, ifname, true)
 
 int log_level = LOG_DEBUG;
 

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Jan 12 11:07:18 2015 mstenber
- * Edit time:     831 min
+ * Last modified: Tue Feb 10 20:01:09 2015 mstenber
+ * Edit time:     837 min
  *
  */
 
@@ -464,16 +464,26 @@ bool dncp_if_set_enabled(dncp o, const char *ifname, bool enabled)
     {
       if (!l)
         return false;
-      dncp_notify_subscribers_link_changed(l, DNCP_EVENT_REMOVE);
-      vlist_delete(&o->links, &l->in_links);
-      return true;
     }
-  if (l)
-    return false;
-  l = dncp_find_link_by_name(o, ifname, true);
-  if (l)
-    dncp_notify_subscribers_link_changed(l, DNCP_EVENT_ADD);
-  return l != NULL;
+  else
+    {
+      if (l)
+        return false;
+      l = dncp_find_link_by_name(o, ifname, true);
+      if (!l)
+        return false;
+    }
+  dncp_notify_subscribers_link_changed(l, enabled ? DNCP_EVENT_ADD : DNCP_EVENT_REMOVE);
+  if (l->conf->keepalive_interval != DNCP_KEEPALIVE_INTERVAL)
+    {
+      dncp_t_keepalive_interval_s ka = { .link_id = l->iid,
+                                         .interval_in_ms = cpu_to_be32(l->conf->keepalive_interval * 1000 / HNETD_TIME_PER_SECOND) };
+      dncp_update_tlv(o, DNCP_T_KEEPALIVE_INTERVAL,
+                      &ka, sizeof(ka), 0, enabled);
+    }
+  if (!enabled)
+    vlist_delete(&o->links, &l->in_links);
+  return true;
 }
 
 

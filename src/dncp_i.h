@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Jan  8 14:40:30 2015 mstenber
+ * Last modified: Tue Feb 10 19:59:56 2015 mstenber
  * Edit time:     317 min
  *
  */
@@ -180,9 +180,6 @@ struct dncp_neighbor_struct {
 
   /* When did we last time receive _consistent_ state from the peer. */
   hnetd_time_t last_sync;
-
-  /* When did the remote party say they would be sending keep-alives. */
-  hnetd_time_t keepalive_interval;
 };
 
 
