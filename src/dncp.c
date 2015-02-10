@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Feb 10 20:01:09 2015 mstenber
- * Edit time:     837 min
+ * Last modified: Tue Feb 10 21:25:17 2015 mstenber
+ * Edit time:     836 min
  *
  */
 
@@ -179,6 +179,27 @@ compare_links(const void *a, const void *b, void *ptr __unused)
   return strcmp(t1->ifname, t2->ifname);
 }
 
+void dncp_link_set_keepalive_interval(dncp_link l, uint32_t value)
+{
+  if (l->published_keepalive_interval == value)
+    return;
+  dncp o = l->dncp;
+  if (l->published_keepalive_interval != DNCP_KEEPALIVE_INTERVAL)
+    {
+      dncp_t_keepalive_interval_s ka = { .link_id = l->iid,
+                                         .interval_in_ms = cpu_to_be32(l->published_keepalive_interval) };
+      dncp_remove_tlv_matching(o, DNCP_T_KEEPALIVE_INTERVAL, &ka, sizeof(ka));
+    }
+  if (value != DNCP_KEEPALIVE_INTERVAL)
+    {
+      dncp_t_keepalive_interval_s ka = { .link_id = l->iid,
+                                         .interval_in_ms = cpu_to_be32(value) };
+      dncp_add_tlv(o, DNCP_T_KEEPALIVE_INTERVAL, &ka, sizeof(ka), 0);
+    }
+  l->published_keepalive_interval = value;
+}
+
+
 static void update_link(struct vlist_tree *t,
                         struct vlist_node *node_new,
                         struct vlist_node *node_old)
@@ -199,11 +220,14 @@ static void update_link(struct vlist_tree *t,
             if (ne->link_id == t_old->iid)
               dncp_remove_tlv(o, t);
           }
+      /* kill TLV, if any */
+      dncp_link_set_keepalive_interval(t_old, DNCP_KEEPALIVE_INTERVAL);
       free(t_old);
     }
   else
     {
       t_new->join_failed_time = 1;
+      t_new->published_keepalive_interval = DNCP_KEEPALIVE_INTERVAL;
     }
   dncp_schedule(o);
 }
@@ -474,13 +498,6 @@ bool dncp_if_set_enabled(dncp o, const char *ifname, bool enabled)
         return false;
     }
   dncp_notify_subscribers_link_changed(l, enabled ? DNCP_EVENT_ADD : DNCP_EVENT_REMOVE);
-  if (l->conf->keepalive_interval != DNCP_KEEPALIVE_INTERVAL)
-    {
-      dncp_t_keepalive_interval_s ka = { .link_id = l->iid,
-                                         .interval_in_ms = cpu_to_be32(l->conf->keepalive_interval * 1000 / HNETD_TIME_PER_SECOND) };
-      dncp_update_tlv(o, DNCP_T_KEEPALIVE_INTERVAL,
-                      &ka, sizeof(ka), 0, enabled);
-    }
   if (!enabled)
     vlist_delete(&o->links, &l->in_links);
   return true;

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Tue Feb 10 21:03:52 2015 mstenber
- * Edit time:     463 min
+ * Last modified: Tue Feb 10 21:33:00 2015 mstenber
+ * Edit time:     472 min
  *
  */
 
@@ -289,6 +289,9 @@ void dncp_run(dncp o)
 
   vlist_for_each_element(&o->links, l, in_links)
     {
+      /* Update the 'active' link's published keepalive interval, if need be */
+      dncp_link_set_keepalive_interval(l, l->conf->keepalive_interval);
+
       /* If we're in join pending state, we retry every
        * DNCP_REJOIN_INTERVAL if necessary. */
       if (l->join_failed_time)

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Feb 10 19:59:56 2015 mstenber
- * Edit time:     317 min
+ * Last modified: Tue Feb 10 21:24:34 2015 mstenber
+ * Edit time:     319 min
  *
  */
 
@@ -162,6 +162,9 @@ struct dncp_link_struct {
   /* When the next keep-alive should be sent (if any) */
   hnetd_time_t next_keepalive_time;
 
+  /* What value we have TLV for, if any */
+  uint32_t published_keepalive_interval;
+
   /* Statistics about Trickle (mostly for debugging) */
   int num_trickle_sent;
   int num_trickle_skipped;
@@ -285,6 +288,7 @@ void dncp_link_send_network_state(dncp_link l,
                                   size_t maximum_size);
 void dncp_link_send_req_network_state(dncp_link l, struct sockaddr_in6 *dst);
 void dncp_link_set_ipv6_address(dncp_link l, const struct in6_addr *addr);
+void dncp_link_set_keepalive_interval(dncp_link l, uint32_t value);
 
 /* Subscription stuff (dncp_notify.c) */
 void dncp_notify_subscribers_tlvs_changed(dncp_node n,
