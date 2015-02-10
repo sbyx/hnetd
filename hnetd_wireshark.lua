@@ -7,8 +7,8 @@
 -- Copyright (c) 2013 cisco Systems, Inc.
 --
 -- Created:       Tue Dec  3 11:13:05 2013 mstenber
--- Last modified: Thu Jan  8 15:16:26 2015 mstenber
--- Edit time:     111 min
+-- Last modified: Tue Feb 10 19:44:44 2015 mstenber
+-- Edit time:     117 min
 --
 
 -- This is Lua module which provides VERY basic dissector for TLVs we
@@ -34,6 +34,8 @@ local f_rlid = ProtoField.uint32('hncp.rlid', 'Remote link identifier')
 local f_upd = ProtoField.uint32('hncp.update_number', 'Update number')
 local f_ms = ProtoField.uint32('hncp.ms_since_origination', 
                                'Time since origination (ms)')
+local f_interval_ms = ProtoField.uint32('hncp.keepalive_interval',
+                               'Keep-alive interval (ms)')
 
 p_hncp.fields = {f_id, f_len, f_data,
                  f_nid_hash, f_data_hash, f_network_hash,
@@ -69,7 +71,9 @@ local tlvs = {
                                               {4, f_lid},
                                              },
    },
-   [14]={name='keepalive-interval'},
+   [14]={name='keepalive-interval', contents={{4, f_lid},
+                                              {4, f_interval}},
+   },
    [15]={name='custom'},
 
    -- hncp content
