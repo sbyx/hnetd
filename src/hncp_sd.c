@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Feb  9 09:52:35 2015 mstenber
- * Edit time:     578 min
+ * Last modified: Tue Feb 10 18:55:07 2015 mstenber
+ * Edit time:     580 min
  *
  */
 
@@ -875,7 +875,7 @@ static void _intaddr_cb(struct iface_user *u, __unused const char *ifname,
 {
   hncp_sd sd = container_of(u, hncp_sd_s, iface);
 
-  _should_update(sd, UPDATE_FLAG_RNAME);
+  _should_update(sd, UPDATE_FLAG_RNAME | UPDATE_FLAG_DDZ);
 }
 
 
