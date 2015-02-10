@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue Feb 10 19:27:56 2015 mstenber
- * Edit time:     668 min
+ * Last modified: Tue Feb 10 20:11:17 2015 mstenber
+ * Edit time:     670 min
  *
  */
 
@@ -222,7 +222,6 @@ _heard(dncp_link l, dncp_t_link_id lid, struct sockaddr_in6 *src,
         return NULL;
       n = dncp_tlv_get_extra(t);
       n->last_sync = dncp_time(l->dncp);
-      n->keepalive_interval = DNCP_KEEPALIVE_INTERVAL;
       L_DEBUG(DNCP_NEIGH_F " added on " DNCP_LINK_F,
               DNCP_NEIGH_D(n), DNCP_LINK_D(l));
     }
@@ -283,29 +282,6 @@ handle_message(dncp_link l,
       ne = _heard(l, lid, src, multicast);
       if (!ne && !multicast)
         return;
-    }
-
-  if (ne)
-    {
-      dncp_t_keepalive_interval ki, best_ki = NULL;
-      tlv_for_each_in_buf(a, data, len)
-        if (tlv_id(a) == DNCP_T_KEEPALIVE_INTERVAL
-            && tlv_len(a) == sizeof(*ki))
-          {
-            ki = tlv_data(a);
-            if ((!ki->link_id || ki->link_id == lid->link_id)
-                && (!best_ki || !best_ki->link_id))
-              best_ki = ki;
-          }
-      if (best_ki)
-        {
-          ne->keepalive_interval = be32_to_cpu(best_ki->interval_in_ms)
-            * HNETD_TIME_PER_SECOND / 1000;
-        }
-      else
-        {
-          ne->keepalive_interval = DNCP_KEEPALIVE_INTERVAL;
-        }
     }
 
   /* Estimates what's in the payload + handles the few

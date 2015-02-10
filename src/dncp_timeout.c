@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Mon Jan 12 13:17:48 2015 mstenber
- * Edit time:     443 min
+ * Last modified: Tue Feb 10 20:37:27 2015 mstenber
+ * Edit time:     462 min
  *
  */
 
@@ -180,6 +180,43 @@ do {                                                            \
 
 #endif /* L_LEVEL >= 7 */
 
+static hnetd_time_t
+_neighbor_interval(dncp o, struct tlv_attr *neighbor_tlv)
+{
+  dncp_t_node_data_neighbor neigh = dncp_tlv_neighbor(neighbor_tlv);
+  if (!neigh)
+    {
+      L_ERR("invalid (internally generated) dncp_t_node_data_neighbor");
+      return 1;
+    }
+  dncp_node n = dncp_find_node_by_node_identifier(o, &neigh->neighbor_node_identifier, false);
+  if (!n)
+    {
+      return DNCP_KEEPALIVE_INTERVAL;
+    }
+
+  struct tlv_attr *a;
+  uint32_t value = DNCP_KEEPALIVE_INTERVAL;
+  dncp_node_for_each_tlv_with_type(n, a, DNCP_T_KEEPALIVE_INTERVAL)
+    {
+      dncp_t_keepalive_interval ka = tlv_data(a);
+      if (tlv_len(a) != sizeof(*ka))
+        {
+          L_DEBUG("invalid keepalive tlv length");
+          continue;
+        }
+      if (ka->link_id && ka->link_id != neigh->neighbor_link_id)
+        {
+          continue;
+        }
+      value = be32_to_cpu(ka->interval_in_ms) * HNETD_TIME_PER_SECOND / 1000;
+      if (ka->link_id)
+        break;
+    }
+  /* L_DEBUG("using keepalive %d", value); */
+  return value;
+}
+
 void dncp_run(dncp o)
 {
   hnetd_time_t next = 0;
@@ -312,7 +349,7 @@ void dncp_run(dncp o)
         dncp_neighbor n = dncp_tlv_get_extra(t);
         hnetd_time_t next_time =
           n->last_sync +
-          n->keepalive_interval * DNCP_KEEPALIVE_MULTIPLIER;
+          _neighbor_interval(o, &t->tlv) * DNCP_KEEPALIVE_MULTIPLIER;
 
         /* No cause to do anything right now. */
         if (next_time > now)
