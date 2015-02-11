@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Feb 11 18:03:16 2015 mstenber
- * Edit time:     476 min
+ * Last modified: Wed Feb 11 19:33:57 2015 mstenber
+ * Edit time:     486 min
  *
  */
 
@@ -328,17 +328,18 @@ void dncp_run(dncp o)
             }
         }
 
-      if (l->trickle_interval_end_time <= now)
-        trickle_upgrade(l);
-      else if (l->trickle_send_time && l->trickle_send_time <= now)
-        trickle_send(l);
-      else if (l->next_keepalive_time && l->next_keepalive_time <= now)
+      if (l->next_keepalive_time && l->next_keepalive_time <= now)
         {
           L_DEBUG("sending keep-alive");
           trickle_send_nocheck(l);
           /* Do not increment Trickle i, but set next t to i/2 .. i */
           trickle_set_i(l, l->trickle_i);
         }
+      else if (l->trickle_interval_end_time <= now)
+        trickle_upgrade(l);
+      else if (l->trickle_send_time && l->trickle_send_time <= now)
+        trickle_send(l);
+
       SET_NEXT(l->trickle_interval_end_time, "trickle_interval_end_time");
       SET_NEXT(l->trickle_send_time, "trickle_send_time");
       SET_NEXT(l->next_keepalive_time, "next_keepalive_time");
@@ -350,6 +351,7 @@ void dncp_run(dncp o)
     if (tlv_id(&t->tlv) == DNCP_T_NODE_DATA_NEIGHBOR)
       {
         dncp_neighbor n = dncp_tlv_get_extra(t);
+
         hnetd_time_t next_time =
           n->last_sync +
           _neighbor_interval(o, &t->tlv) * DNCP_KEEPALIVE_MULTIPLIER;
@@ -362,8 +364,13 @@ void dncp_run(dncp o)
           }
 
         /* Zap the neighbor */
-        L_DEBUG(DNCP_NEIGH_F " gone on " DNCP_LINK_F " - nothing in %d ms",
-                DNCP_NEIGH_D(n), DNCP_LINK_D(l), (int) (now - n->last_sync));
+#if L_LEVEL >= 7
+        dncp_t_node_data_neighbor ne = tlv_data(&t->tlv);
+        l = dncp_find_link_by_id(o, ne->link_id);
+        L_DEBUG("Neighbor %s gone on " DNCP_LINK_F " - nothing in %d ms",
+                DNCP_STRUCT_REPR(ne->neighbor_node_identifier),
+                DNCP_LINK_D(l), (int) (now - n->last_sync));
+#endif /* L_LEVEL >= 7 */
         dncp_remove_tlv(o, t);
         o->num_neighbor_dropped++;
       }

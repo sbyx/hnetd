@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Feb 11 17:39:15 2015 mstenber
- * Edit time:     320 min
+ * Last modified: Wed Feb 11 19:34:04 2015 mstenber
+ * Edit time:     325 min
  *
  */
 
@@ -314,11 +314,9 @@ static inline hnetd_time_t dncp_time(dncp o)
 
 #define TMIN(x,y) ((x) == 0 ? (y) : (y) == 0 ? (x) : (x) < (y) ? (x) : (y))
 
-#define DNCP_NODE_REPR(n) \
-  HEX_REPR(&n->node_identifier, sizeof(n->node_identifier))
+#define DNCP_STRUCT_REPR(i) HEX_REPR(&i, sizeof(i))
 
-#define DNCP_NEIGH_F "neighbor %p"
-#define DNCP_NEIGH_D(n) n
+#define DNCP_NODE_REPR(n) DNCP_STRUCT_REPR(n->node_identifier)
 
 #define DNCP_LINK_F "link %s[#%d]"
 #define DNCP_LINK_D(l) l->ifname,l->iid
