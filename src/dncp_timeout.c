@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Feb 11 12:19:39 2015 mstenber
- * Edit time:     488 min
+ * Last modified: Wed Feb 11 12:20:47 2015 mstenber
+ * Edit time:     489 min
  *
  */
 
@@ -328,17 +328,18 @@ void dncp_run(dncp o)
             }
         }
 
-      if (l->trickle_interval_end_time <= now)
-        trickle_upgrade(l);
-      else if (l->trickle_send_time && l->trickle_send_time <= now)
-        trickle_send(l);
-      else if (l->next_keepalive_time && l->next_keepalive_time <= now)
+      if (l->next_keepalive_time && l->next_keepalive_time <= now)
         {
           L_DEBUG("sending keep-alive");
           trickle_send_nocheck(l);
           /* Do not increment Trickle i, but set next t to i/2 .. i */
           trickle_set_i(l, l->trickle_i);
         }
+      else if (l->trickle_interval_end_time <= now)
+        trickle_upgrade(l);
+      else if (l->trickle_send_time && l->trickle_send_time <= now)
+        trickle_send(l);
+
       SET_NEXT(l->trickle_interval_end_time, "trickle_interval_end_time");
       SET_NEXT(l->trickle_send_time, "trickle_send_time");
       SET_NEXT(l->next_keepalive_time, "next_keepalive_time");
