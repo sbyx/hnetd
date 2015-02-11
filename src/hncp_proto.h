@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:52:55 2014 mstenber
- * Last modified: Thu Jan  8 14:31:24 2015 mstenber
+ * Last modified: Wed Feb 11 10:29:38 2015 mstenber
  * Edit time:     4 min
  *
  */
@@ -22,8 +22,8 @@ enum {
   HNCP_T_DELEGATED_PREFIX = 34, /* may contain TLVs */
   HNCP_T_ASSIGNED_PREFIX = 35, /* may contain TLVs */
   HNCP_T_ROUTER_ADDRESS = 36, /* router address */
-  HNCP_T_DHCP_OPTIONS = 37,
-  HNCP_T_DHCPV6_OPTIONS = 38, /* contains just raw DHCPv6 options */
+  HNCP_T_DHCPV6_OPTIONS = 37, /* contains just raw DHCPv6 options */
+  HNCP_T_DHCP_OPTIONS = 38,
 
   HNCP_T_DNS_DELEGATED_ZONE = 39, /* the 'beef' */
   HNCP_T_DNS_DOMAIN_NAME = 40, /* non-default domain (very optional) */
