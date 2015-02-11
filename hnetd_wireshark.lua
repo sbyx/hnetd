@@ -7,7 +7,7 @@
 -- Copyright (c) 2013 cisco Systems, Inc.
 --
 -- Created:       Tue Dec  3 11:13:05 2013 mstenber
--- Last modified: Wed Feb 11 10:29:13 2015 mstenber
+-- Last modified: Wed Feb 11 11:02:44 2015 mstenber
 -- Edit time:     119 min
 --
 
@@ -39,7 +39,7 @@ local f_interval_ms = ProtoField.uint32('hncp.keepalive_interval',
 
 p_hncp.fields = {f_id, f_len, f_data,
                  f_nid_hash, f_data_hash, f_network_hash,
-                 f_lid, f_rlid, f_upd, f_ms}
+                 f_lid, f_rlid, f_upd, f_ms, f_interval_ms}
 
 local tlvs = {
    -- dncp content
@@ -72,7 +72,7 @@ local tlvs = {
                                              },
    },
    [14]={name='keepalive-interval', contents={{4, f_lid},
-                                              {4, f_interval}},
+                                              {4, f_interval_ms}},
    },
    [15]={name='custom'},
    [16]={name='trust-verdict'},
