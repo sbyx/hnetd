@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Feb 11 11:45:11 2015 mstenber
- * Edit time:     673 min
+ * Last modified: Wed Feb 11 20:57:47 2015 mstenber
+ * Edit time:     704 min
  *
  */
 
@@ -199,7 +199,7 @@ void dncp_link_send_req_node_data(dncp_link l,
 
 /************************************************************ Input handling */
 
-static dncp_neighbor
+static dncp_tlv
 _heard(dncp_link l, dncp_t_link_id lid, struct sockaddr_in6 *src,
        bool multicast)
 {
@@ -208,14 +208,15 @@ _heard(dncp_link l, dncp_t_link_id lid, struct sockaddr_in6 *src,
     .neighbor_link_id = lid->link_id,
     .link_id = l->iid
   };
-
-  dncp_neighbor n = dncp_link_find_neighbor_for_tlv(l, &np);
-  if (!n)
+  dncp_neighbor n;
+  dncp_tlv t = dncp_find_tlv(l->dncp, DNCP_T_NODE_DATA_NEIGHBOR,
+                             &np, sizeof(np));
+  if (!t)
     {
       /* Doing add based on multicast is relatively insecure. */
       if (multicast)
         return NULL;
-      dncp_tlv t =
+      t =
         dncp_add_tlv(l->dncp, DNCP_T_NODE_DATA_NEIGHBOR, &np, sizeof(np),
                      sizeof(*n));
       if (!t)
@@ -225,10 +226,14 @@ _heard(dncp_link l, dncp_t_link_id lid, struct sockaddr_in6 *src,
       L_DEBUG("Neighbor %s added on " DNCP_LINK_F,
               DNCP_STRUCT_REPR(lid->node_identifier), DNCP_LINK_D(l));
     }
+  else
+    n = dncp_tlv_get_extra(t);
 
   if (!multicast)
-    n->last_sa6 = *src;
-  return n;
+    {
+      n->last_sa6 = *src;
+    }
+  return t;
 }
 
 /* Handle a single received message. */
@@ -244,6 +249,7 @@ handle_message(dncp_link l,
   dncp_t_link_id lid = NULL;
   unsigned char *nethash = NULL;
   int nodestates = 0;
+  dncp_tlv tne = NULL;
   dncp_neighbor ne = NULL;
   dncp_t_node_state ns;
   dncp_t_node_data_header nd;
@@ -279,9 +285,10 @@ handle_message(dncp_link l,
   if (memcmp(&lid->node_identifier, &o->own_node->node_identifier,
              DNCP_NI_LEN) != 0)
     {
-      ne = _heard(l, lid, src, multicast);
-      if (!ne && !multicast)
+      tne = _heard(l, lid, src, multicast);
+      if (!tne && !multicast)
         return;
+      ne = tne ? dncp_tlv_get_extra(tne) : NULL;
     }
 
   /* Estimates what's in the payload + handles the few
@@ -374,7 +381,10 @@ handle_message(dncp_link l,
       /* We don't care, if network hash state IS same. */
       if (memcmp(nethash, &o->network_hash, DNCP_HASH_LEN) == 0)
         {
-          L_DEBUG("received network state which is consistent");
+          L_DEBUG("received network state which is consistent (%s)",
+                  memcmp(&lid->node_identifier, &o->own_node->node_identifier,
+                         DNCP_NI_LEN) ? ne ?
+                  "remote" : "unknown remote" : "local");
 
           /* Increment Trickle count + last in sync time.*/
           if (ne)
@@ -395,9 +405,19 @@ handle_message(dncp_link l,
       if (multicast)
         {
           /* No need to reset Trickle anymore, but log the fact */
-          L_DEBUG("received inconsistent multicast network state %s != %s",
+          L_DEBUG("received inconsistent multicast network state %s != %s %s",
                   HEX_REPR(nethash, DNCP_HASH_LEN),
-                  HEX_REPR(&o->network_hash, DNCP_HASH_LEN));
+                  HEX_REPR(&o->network_hash, DNCP_HASH_LEN),
+                  ne ? "" : "(from unknown)");
+
+          /* If it is from existing neighbor, and Trickle seems
+           * 'busy', consider it valid anyway. */
+          hnetd_time_t delta = dncp_time(l->dncp) - o->last_network_hash_change;
+          if (ne && delta < dncp_neighbor_interval(o, &tne->tlv))
+            {
+              ne->last_sync = dncp_time(l->dncp);
+              L_DEBUG(" considering consistent, as we are busy");
+            }
         }
 
       /* Short form (raw network hash) */
@@ -588,4 +608,3 @@ void dncp_poll(dncp o)
       handle_message(l, &src, buf, read, false);
     }
 }
-

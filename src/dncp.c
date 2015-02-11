@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Feb 10 21:25:17 2015 mstenber
- * Edit time:     836 min
+ * Last modified: Wed Feb 11 19:05:30 2015 mstenber
+ * Edit time:     842 min
  *
  */
 
@@ -629,6 +629,10 @@ void dncp_calculate_network_hash(dncp o)
 
   if (!o->network_hash_dirty)
     return;
+
+  /* Store original network hash for future study. */
+  dncp_hash_s old_hash = o->network_hash;
+
   md5_begin(&ctx);
   dncp_for_each_node(o, n)
     {
@@ -638,6 +642,12 @@ void dncp_calculate_network_hash(dncp o)
   dncp_md5_end(&o->network_hash, &ctx);
   L_DEBUG("dncp_calculate_network_hash @%p =%llx",
           o, dncp_hash64(&o->network_hash));
+
+  if (memcmp(&old_hash, &o->network_hash, DNCP_HASH_LEN))
+    {
+      dncp_trickle_reset(o);
+      o->last_network_hash_change = dncp_time(o);
+    }
   o->network_hash_dirty = false;
 }
 

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Feb 11 19:33:57 2015 mstenber
- * Edit time:     486 min
+ * Last modified: Wed Feb 11 20:47:35 2015 mstenber
+ * Edit time:     504 min
  *
  */
 
@@ -17,9 +17,7 @@ static void trickle_set_i(dncp_link l, int i)
 {
   hnetd_time_t now = dncp_time(l->dncp);
   int imin = l->conf->trickle_imin;
-  if (!imin) imin = DNCP_TRICKLE_IMIN;
   int imax = l->conf->trickle_imax;
-  if (!imax) imax = DNCP_TRICKLE_IMAX;
 
   i = i < imin ? imin : i > imax ? imax : i;
   l->trickle_i = i;
@@ -40,8 +38,6 @@ static void trickle_send_nocheck(dncp_link l)
   l->num_trickle_sent++;
   l->last_trickle_sent = dncp_time(l->dncp);
   dncp_profile_link_send_network_state(l);
-  if (l->conf->keepalive_interval)
-    l->next_keepalive_time = l->last_trickle_sent + l->conf->keepalive_interval;
 }
 
 static void trickle_send(dncp_link l)
@@ -180,8 +176,8 @@ do {                                                            \
 
 #endif /* L_LEVEL >= 7 */
 
-static hnetd_time_t
-_neighbor_interval(dncp o, struct tlv_attr *neighbor_tlv)
+hnetd_time_t
+dncp_neighbor_interval(dncp o, struct tlv_attr *neighbor_tlv)
 {
   dncp_t_node_data_neighbor neigh = dncp_tlv_neighbor(neighbor_tlv);
   if (!neigh)
@@ -269,23 +265,8 @@ void dncp_run(dncp o)
    * events within dncp_run). */
   o->immediate_scheduled = false;
 
-  /* First off: If the network hash is dirty, recalculate it (and hope
-   * the outcome ISN'T). */
-  if (o->network_hash_dirty)
-    {
-      /* Store original network hash for future study. */
-      dncp_hash_s old_hash = o->network_hash;
-
-      dncp_calculate_network_hash(o);
-      if (memcmp(&old_hash, &o->network_hash, DNCP_HASH_LEN))
-        {
-          /* Shocker. The network hash changed -> reset _every_
-           * trickle (that is actually running; join_pending ones
-           * don't really count). */
-          vlist_for_each_element(&o->links, l, in_links)
-            trickle_set_i(l, l->conf->trickle_imin);
-        }
-    }
+  /* Recalculate network hash if necessary. */
+  dncp_calculate_network_hash(o);
 
   vlist_for_each_element(&o->links, l, in_links)
     {
@@ -311,10 +292,8 @@ void dncp_run(dncp o)
                   /* This is essentially second-stage init for a
                    * link. Before multicast join succeeds, it is
                    * essentially zombie. */
-                  if (l->conf->keepalive_interval)
-                    l->next_keepalive_time =
-                      dncp_time(l->dncp) + l->conf->keepalive_interval;
                   trickle_set_i(l, l->conf->trickle_imin);
+                  l->last_trickle_sent = dncp_time(l->dncp);
                 }
             }
           /* If still join pending, do not use this for anything. */
@@ -328,21 +307,28 @@ void dncp_run(dncp o)
             }
         }
 
-      if (l->next_keepalive_time && l->next_keepalive_time <= now)
+      if (l->conf->keepalive_interval)
         {
-          L_DEBUG("sending keep-alive");
-          trickle_send_nocheck(l);
-          /* Do not increment Trickle i, but set next t to i/2 .. i */
-          trickle_set_i(l, l->trickle_i);
+          hnetd_time_t next_time =
+            l->last_trickle_sent + l->conf->keepalive_interval;
+          if (next_time <= now)
+            {
+              L_DEBUG("sending keep-alive");
+              trickle_send_nocheck(l);
+              /* Do not increment Trickle i, but set next t to i/2 .. i */
+              trickle_set_i(l, l->trickle_i);
+              next_time =
+                l->last_trickle_sent + l->conf->keepalive_interval;
+            }
+          SET_NEXT(next_time, "next keep-alive");
         }
-      else if (l->trickle_interval_end_time <= now)
+      if (l->trickle_interval_end_time <= now)
         trickle_upgrade(l);
       else if (l->trickle_send_time && l->trickle_send_time <= now)
         trickle_send(l);
 
       SET_NEXT(l->trickle_interval_end_time, "trickle_interval_end_time");
       SET_NEXT(l->trickle_send_time, "trickle_send_time");
-      SET_NEXT(l->next_keepalive_time, "next_keepalive_time");
     }
 
   /* Look at neighbors we should be worried about.. */
@@ -354,7 +340,7 @@ void dncp_run(dncp o)
 
         hnetd_time_t next_time =
           n->last_sync +
-          _neighbor_interval(o, &t->tlv) * DNCP_KEEPALIVE_MULTIPLIER;
+          dncp_neighbor_interval(o, &t->tlv) * DNCP_KEEPALIVE_MULTIPLIER;
 
         /* No cause to do anything right now. */
         if (next_time > now)
@@ -388,4 +374,12 @@ void dncp_run(dncp o)
 
   /* Clear the cached time, it's most likely no longer valid. */
   o->now = 0;
+}
+
+void dncp_trickle_reset(dncp o)
+{
+  dncp_link l;
+
+  vlist_for_each_element(&o->links, l, in_links)
+    trickle_set_i(l, l->conf->trickle_imin);
 }

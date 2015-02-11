@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Feb 11 19:34:04 2015 mstenber
+ * Last modified: Wed Feb 11 20:03:51 2015 mstenber
  * Edit time:     325 min
  *
  */
@@ -69,8 +69,11 @@ struct dncp_struct {
   /* flag which indicates that we (or someone connected) may have
    * changed connectivity. */
   bool graph_dirty;
+
+  /* Few different times.. */
   hnetd_time_t last_prune;
   hnetd_time_t next_prune;
+  hnetd_time_t last_network_hash_change;
 
   /* flag which indicates that we should re-calculate network hash
    * based on nodes' state. */
@@ -161,9 +164,6 @@ struct dncp_link_struct {
   hnetd_time_t trickle_interval_end_time; /* when does current interval end */
   int trickle_c; /* counter */
   hnetd_time_t last_trickle_sent;
-
-  /* When the next keep-alive should be sent (if any) */
-  hnetd_time_t next_keepalive_time;
 
   /* What value we have TLV for, if any */
   uint32_t published_keepalive_interval;
@@ -293,6 +293,11 @@ void dncp_link_send_req_network_state(dncp_link l, struct sockaddr_in6 *dst);
 void dncp_link_set_ipv6_address(dncp_link l, const struct in6_addr *addr);
 void dncp_link_set_keepalive_interval(dncp_link l, uint32_t value);
 
+
+/* Miscellaneous utilities that live in dncp_timeout */
+hnetd_time_t dncp_neighbor_interval(dncp o, struct tlv_attr *neighbor_tlv);
+void dncp_trickle_reset(dncp o);
+
 /* Subscription stuff (dncp_notify.c) */
 void dncp_notify_subscribers_tlvs_changed(dncp_node n,
                                           struct tlv_attr *a_old,
@@ -420,16 +425,6 @@ do {                            \
 
 #define dncp_for_each_local_tlv_safe(o, t, t2)  \
   avl_for_each_element_safe(&o->tlvs.avl, t, in_tlvs.avl, t2)
-
-static inline dncp_neighbor
-dncp_link_find_neighbor_for_tlv(dncp_link l, dncp_t_node_data_neighbor n)
-{
-  dncp_tlv t = dncp_find_tlv(l->dncp, DNCP_T_NODE_DATA_NEIGHBOR,
-                             n, sizeof(*n));
-  if (t)
-    return dncp_tlv_get_extra(t);
-  return NULL;
-}
 
 #define dncp_update_tlv(o, t, d, dlen, elen, is_add)    \
 do {                                                    \
