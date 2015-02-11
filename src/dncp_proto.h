@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Tue Feb 10 19:19:21 2015 mstenber
- * Edit time:     110 min
+ * Last modified: Wed Feb 11 10:25:18 2015 mstenber
+ * Edit time:     112 min
  *
  */
 
@@ -81,18 +81,18 @@ typedef struct __packed {
   uint32_t update_number;
 } dncp_t_node_data_header_s, *dncp_t_node_data_header;
 
-/* DNCP_T_KEEPALIVE_INTERVAL */
-typedef struct __packed {
-  uint32_t link_id;
-  uint32_t interval_in_ms;
-} dncp_t_keepalive_interval_s, *dncp_t_keepalive_interval;
-
 /* DNCP_T_NODE_DATA_NEIGHBOR */
 typedef struct __packed {
   dncp_node_identifier_s neighbor_node_identifier;
   uint32_t neighbor_link_id;
   uint32_t link_id;
 } dncp_t_node_data_neighbor_s, *dncp_t_node_data_neighbor;
+
+/* DNCP_T_KEEPALIVE_INTERVAL */
+typedef struct __packed {
+  uint32_t link_id;
+  uint32_t interval_in_ms;
+} dncp_t_keepalive_interval_s, *dncp_t_keepalive_interval;
 
 /* DNCP_T_CUSTOM custom data, with H-64 of URI at start to identify type TBD */
 
@@ -108,6 +108,7 @@ typedef enum {
 
 #define DNCP_T_TRUST_VERDICT_CNAME_LEN 64
 
+/* DNCP_T_TRUST_VERDICT */
 typedef struct __packed {
   uint8_t verdict;
   uint8_t reserved[3];
@@ -121,4 +122,3 @@ typedef struct __packed {
 /* How often we retry multicast joins? Once per second seems sane
  * enough. */
 #define DNCP_REJOIN_INTERVAL (1 * HNETD_TIME_PER_SECOND)
-
