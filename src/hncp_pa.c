@@ -74,12 +74,15 @@
 #define HPA_RULE_CREATE            20
 #define HPA_RULE_CREATE_SCARCITY   10
 
+#define HPA_PD_MIN_PLEN            60
+
 static struct prefix PAL_CONF_DFLT_V4_PREFIX = {
 		.prefix = { .s6_addr = {
 				0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00,
 				0x00,0x00, 0xff,0xff,  0x0a }},
 		.plen = 104 };
 
+static const char *excluded_link_name = "excluded-prefixes";
 
 /***** header *****/
 static void hpa_conf_update_cb(struct vlist_tree *tree,
@@ -89,10 +92,10 @@ static int hpa_iface_filter_accept(struct pa_rule *rule,
 		struct pa_ldp *ldp, void *p)
 {
 	hpa_iface i = p;
-	struct prefix prefix = {.prefix = ldp->dp->prefix, .plen = ldp->dp->plen};
 	if(ldp->link != &i->pal)
 		return 0;
 
+	struct prefix prefix = {.prefix = ldp->dp->prefix, .plen = ldp->dp->plen};
 	return (rule == &i->pa_rand4.rule)?prefix_is_ipv4(&prefix):!prefix_is_ipv4(&prefix);
 }
 
@@ -144,6 +147,21 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	i->pa_rand4.rule.filter_private = i;
 
 	//todo: Add scarcity
+
+	//Init AA
+	sprintf(i->aa_name, HPA_LINK_NAME_ADDR"%s", i->ifname);
+	pa_link_init(&i->aal, i->aa_name);
+	i->aal.ha_parent = &i->pal;
+
+	//Use first quarter of available addresses
+	pa_rule_random_init(&i->aa_rand);
+	i->aa_rand.pseudo_random_seed = (uint8_t *)i->aa_name; //todo use EUI64
+	i->aa_rand.pseudo_random_seedlen = strlen(i->aa_name);
+	i->aa_rand.pseudo_random_tentatives = HPA_PSEUDO_RAND_TENTATIVES;
+	i->aa_rand.random_set_size = HPA_RAND_SET_SIZE;
+	i->aa_rand.desired_plen = 128; //todo: Use conf
+	i->aa_rand.priority = HPA_PRIORITY_CREATE;
+	i->aa_rand.rule_priority = HPA_RULE_CREATE;
 }
 
 hpa_iface hpa_iface_goc(hncp_pa hp, const char *ifname, bool create)
@@ -153,8 +171,17 @@ hpa_iface hpa_iface_goc(hncp_pa hp, const char *ifname, bool create)
 		if(!strcmp(ifname, i->ifname))
 			return i;
 	}
-	if(!create || strlen(ifname) >= IFNAMSIZ || !(i = calloc(1, sizeof(*i))))
+	if(!create)
 		return NULL;
+
+	if(strlen(ifname) >= IFNAMSIZ) {
+		L_WARN("hpa_iface_goc: interface name is too long (%s)", ifname);
+		return NULL;
+	}
+	if(!(i = calloc(1, sizeof(*i)))) {
+		L_ERR("hpa_iface_goc: malloc error");
+		return NULL;
+	}
 
 	strcpy(i->ifname, ifname);
 	i->pa_enabled = 0;
@@ -171,21 +198,22 @@ static void hpa_link_link_cb(struct hncp_link_user *u, const char *ifname,
 	/* Set of neighboring dncp links changed.
 	 * - Update Advertised Prefixes adjacent link.
 	 */
-	hncp_pa hpa = container_of(u, hncp_pa_s, hncp_link_user);
-	hpa_iface i = hpa_iface_goc(hpa, ifname, true);
-	if(!i) {
-		L_ERR("hpa_link_link_cb malloc error");
-		return;
-	}
+	L_DEBUG("hpa_link_link_cb: iface %s has now %d peers",
+			ifname, (int) peercnt);
 
-	hpa_adjacency adj;
+	hncp_pa hpa = container_of(u, hncp_pa_s, hncp_link_user);
+	hpa_iface i;
+	if(!(i = hpa_iface_goc(hpa, ifname, true)))
+		return;
+
+	hpa_adjacency adj, adj2;
 	size_t n;
 	for(n=0; n<peercnt; n++) {
 		if((adj = avl_find_element(&hpa->adjacencies, &peers[n], adj, te))) {
 			adj->iface = i;
 			adj->updated = 1;
 		} else if(!(adj = malloc(sizeof(*adj)))) {
-			L_ERR("hpa_link_link_cb malloc error");
+			L_ERR("hpa_link_link_cb: malloc error");
 		} else {
 			adj->id = peers[n];
 			adj->iface = i;
@@ -195,7 +223,7 @@ static void hpa_link_link_cb(struct hncp_link_user *u, const char *ifname,
 		}
 	}
 
-	avl_for_each_element(&hpa->adjacencies, adj, te) {
+	avl_for_each_element_safe(&hpa->adjacencies, adj, te, adj2) {
 		if(adj->iface == i) {
 			if(!adj->updated) {
 				avl_delete(&hpa->adjacencies, &adj->te);
@@ -402,9 +430,6 @@ static void hpa_dp_update(hncp_pa hpa, hpa_dp dp,
 		hnetd_time_t preferred_until, hnetd_time_t valid_until,
 		const char *dhcp_data, size_t dhcp_len)
 {
-	//Tell iface about changed prefixes
-	//Tell iface about DHCP change
-	//Tell DP about lifetime changes
 	bool updated = 0;
 	if(dp->preferred_until != preferred_until ||
 			dp->valid_until != valid_until) {
@@ -441,7 +466,7 @@ void hpa_update_extdata(hncp_pa hpa, hpa_iface i,
                                int index)
 {
 	L_DEBUG("hncp_pa_set_external_link %s/%s = %p/%d",
-			ifname, index == HNCP_PA_EXTDATA_IPV6 ? "dhcpv6" : "dhcp",
+			i->ifname, index == HNCP_PA_EXTDATA_IPV6 ? "dhcpv6" : "dhcp",
 					data, (int)data_len);
 	if (!data_len)
 		data = NULL;
@@ -489,14 +514,14 @@ static void hpa_dp_set_enabled(hncp_pa hpa, hpa_dp dp, bool enabled)
 
 	//Tell iface that it changed
 	if(hpa->if_cbs && hpa->if_cbs->update_dp)
-		hpa->if_cbs->update_dp(hpa->if_cbs,
-				&dp->dp, !enabled);
+		hpa->if_cbs->update_dp(hpa->if_cbs, &dp->dp, !enabled);
 
 	//Update dhcp and advertised data
 	hpa_refresh_ec(hpa, dp->dp.local);
 }
 
 static int hpa_dp_compute_enabled(hncp_pa hpa, hpa_dp dp) {
+	//A little bit brute-force. Using a btrie would help avoiding that.
 	hpa_dp dp2;
 	bool passed;
 	hpa_for_each_dp(hpa, dp2) {
@@ -505,8 +530,8 @@ static int hpa_dp_compute_enabled(hncp_pa hpa, hpa_dp dp) {
 		} else if (!prefix_cmp(&dp2->dp.prefix, &dp->dp.prefix)) {
 			//Both prefixes are the same.
 			//Give priority to the other guy.
-			if(dp->pa.type == HPA_DP_T_IFACE) {
-				if(dp2->pa.type == HPA_DP_T_IFACE) {
+			if(dp->pa.type != HPA_DP_T_HNCP) {
+				if(dp2->pa.type != HPA_DP_T_HNCP) {
 					//Both are ours. Let's keep the last in the list.
 					if(passed)
 						return 0;
@@ -514,7 +539,12 @@ static int hpa_dp_compute_enabled(hncp_pa hpa, hpa_dp dp) {
 					//The other one is not from iface. Let's give it priority.
 					return 0;
 				}
+			} else if(dp2->pa.type == HPA_DP_T_HNCP) {
+				//Both are not ours, the conflict will have to be solved.
+				//In the meantime, ignore both
+				return 0;
 			}
+			//if the other is ours but not this one, it is given priority
 		} else if(prefix_contains(&dp2->dp.prefix, &dp->dp.prefix)) {
 			return 0;
 		}
@@ -525,9 +555,8 @@ static int hpa_dp_compute_enabled(hncp_pa hpa, hpa_dp dp) {
 static void hpa_dp_update_enabled(hncp_pa hpa)
 {
 	hpa_dp dp;
-	hpa_for_each_dp(hpa, dp) {
+	hpa_for_each_dp(hpa, dp)
 		hpa_dp_set_enabled(hpa, dp, hpa_dp_compute_enabled(hpa, dp));
-	}
 }
 
 static void hpa_dp_update_excluded(hncp_pa hpa, hpa_dp dp,
@@ -546,11 +575,7 @@ static void hpa_dp_update_excluded(hncp_pa hpa, hpa_dp dp,
 	dp->iface.excluded = !!excluded;
 
 	if(dp->iface.excluded) {
-		pa_rule_static_init(&dp->iface.excluded_rule);
-		dp->iface.excluded_rule.override_priority = HPA_PRIORITY_EXCLUDE;
-		dp->iface.excluded_rule.override_rule_priority = HPA_RULE_EXCLUDE;
-		dp->iface.excluded_rule.rule_priority = HPA_RULE_EXCLUDE;
-		dp->iface.excluded_rule.priority = HPA_PRIORITY_EXCLUDE;
+		//Set the prefix, the rest is initialized already
 		dp->iface.excluded_rule.plen = excluded->plen;
 		memcpy(&dp->iface.excluded_rule.prefix, &excluded->prefix,
 				sizeof(struct in6_addr));
@@ -562,7 +587,7 @@ static void hpa_dp_update_excluded(hncp_pa hpa, hpa_dp dp,
 
 /******** Iface Callbacks *******/
 
-static void hpa_iface_set_enabled(hncp_pa hpa, hpa_iface i, bool enabled)
+static void hpa_iface_set_pa_enabled(hncp_pa hpa, hpa_iface i, bool enabled)
 {
 	if(i->pa_enabled == (!!enabled))
 		return;
@@ -604,7 +629,7 @@ static void hpa_iface_intiface_cb(struct iface_user *u,
 	if(iface->flags & IFACE_FLAG_DISABLE_PA)
 		enabled = false;
 
-	hpa_iface_set_enabled(hpa, i, enabled);
+	hpa_iface_set_pa_enabled(hpa, i, enabled);
 }
 
 static void hpa_iface_extdata_cb(struct iface_user *u, const char *ifname,
@@ -637,6 +662,13 @@ static hpa_dp hpa_dp_get_local(hncp_pa hpa, const struct prefix *p)
 		}
 	}
 	return NULL;
+}
+
+static int hpa_excluded_filter_accept(__unused struct pa_rule *rule,
+		struct pa_ldp *ldp, __unused void *p)
+{
+	return ldp->link->type == HPA_LINK_T_EXCLU &&
+			ldp->dp->type == HPA_DP_T_IFACE;
 }
 
 static void hpa_iface_prefix_cb(struct iface_user *u, const char *ifname,
@@ -678,15 +710,22 @@ static void hpa_iface_prefix_cb(struct iface_user *u, const char *ifname,
 		dp->pa.type = HPA_DP_T_IFACE;
 		dp->pa.prefix = prefix->prefix;
 		dp->pa.plen = prefix->plen;
-		dp->preferred_until = preferred_until;
-		dp->valid_until = valid_until;
-		REPLACE(dp->dhcp_data, dp->dhcp_len, dhcpv6_data, dhcpv6_len);
 		dp->hpa = hpa;
 		dp->iface.excluded = 0;
 		dp->iface.iface = i;
 		list_add(&dp->dp.le, &hpa->dps);
 
+		//Init excluded rule (except prefix which is done in excluded update)
+		pa_rule_static_init(&dp->iface.excluded_rule);
+		dp->iface.excluded_rule.override_priority = HPA_PRIORITY_EXCLUDE;
+		dp->iface.excluded_rule.override_rule_priority = HPA_RULE_EXCLUDE;
+		dp->iface.excluded_rule.rule_priority = HPA_RULE_EXCLUDE;
+		dp->iface.excluded_rule.priority = HPA_PRIORITY_EXCLUDE;
+		dp->iface.excluded_rule.rule.filter_accept = hpa_excluded_filter_accept;
+
 		//Set the excluded prefix
+		hpa_dp_update(hpa, dp, preferred_until,
+						valid_until, dhcpv6_data, dhcpv6_len);
 		hpa_dp_update_excluded(hpa, dp, excluded);
 
 		//Update dp enabled for others
@@ -704,7 +743,23 @@ static void hpa_iface_intaddr_cb(struct iface_user *u, const char *ifname,
 
 /******** DNCP Stuff *******/
 
-
+static hpa_advp hpa_get_hpa_advp(struct pa_core *core, dncp_node n,
+		struct in6_addr *addr, uint8_t plen, uint32_t link_id,
+		uint8_t flags)
+{
+	struct pa_advp *ap;
+	hpa_advp hap;
+	dncp_t_link_id_s id = {n->node_identifier, link_id};
+	pa_for_each_advp(core, ap, addr, plen) {
+		hap = container_of(ap, hpa_advp_s, advp);
+		//We must compare every field of the TLV in case it was modified
+		if(!memcmp(&id, &hap->link_id, sizeof(id)) &&
+				hap->ap_flags == flags) {
+			return hap;
+		}
+	}
+	return NULL;
+}
 
 static void hpa_update_ap_tlv(hncp_pa hpa, dncp_node n,
 		struct tlv_attr *tlv, bool add)
@@ -717,24 +772,26 @@ static void hpa_update_ap_tlv(hncp_pa hpa, dncp_node n,
 	pa_prefix_cpy(ah->prefix_data, ah->prefix_length_bits, &p.prefix, p.plen);
 
 	//Get adjacent link
-	dncp_t_link_id_s id = {n->node_identifier, ah->link_id };
-	struct pa_advp *ap;
+
 	hpa_advp hap;
 	if(!add) {
-		pa_for_each_advp(&hpa->pa, ap, &p.prefix, p.plen) {
-			hap = container_of(ap, hpa_advp_s, advp);
-			//We must compare every field of the TLV in case it was modified
-			if(!memcmp(&id, &hap->link_id, sizeof(id)) &&
-					hap->ap_flags == ah->flags) {
-				pa_advp_del(&hpa->pa, ap);
-				list_del(&hap->le);
-				free(hap);
-				return;
-			}
+		if((hap = hpa_get_hpa_advp(&hpa->pa, n, &p.prefix,
+				p.plen, ah->link_id, ah->flags))) {
+			L_DEBUG("hpa_update_ap_tlv: deleting assigned prefix from %s",
+									HEX_REPR(tlv_data(tlv), tlv_len(tlv)));
+			pa_advp_del(&hpa->pa, &hap->advp);
+			list_del(&hap->le);
+			free(hap);
+		} else {
+			L_INFO("hpa_update_ap_tlv: could not find assigned prefix from %s",
+									HEX_REPR(tlv_data(tlv), tlv_len(tlv)));
 		}
 	} else if(!(hap = malloc(sizeof(*hap)))) {
 		L_ERR("hpa_update_ap_tlv: malloc error");
 	} else {
+		L_DEBUG("hpa_update_ap_tlv: creating new assigned prefix from %s",
+									HEX_REPR(tlv_data(tlv), tlv_len(tlv)));
+		dncp_t_link_id_s id = {n->node_identifier, ah->link_id};
 		hpa_iface i = hpa_get_adjacent_iface(hpa, &id);
 		hap->advp.plen = p.plen;
 		hap->advp.prefix = p.prefix;
@@ -756,22 +813,23 @@ static void hpa_update_ra_tlv(hncp_pa hpa, dncp_node n,
 	if (!(ra = dncp_tlv_router_address(tlv)))
 		return;
 
-	struct pa_advp *ap;
 	hpa_advp hap;
-	dncp_t_link_id_s id = {n->node_identifier, ra->link_id};
 	if(!add) {
-		pa_for_each_advp(&hpa->aa, ap, &ra->address, 128) {
-			hap = container_of(ap, hpa_advp_s, advp);
-			//We must compare every field of the TLV in case it was modified
-			if(!memcmp(&id, &hap->link_id, sizeof(id))) {
-				pa_advp_del(&hpa->aa, ap);
-				free(hap);
-				return;
-			}
+		if((hap = hpa_get_hpa_advp(&hpa->aa, n,
+				&ra->address, 128, ra->link_id, 0))) {
+			L_DEBUG("hpa_update_ra_tlv removing router address from %s",
+					HEX_REPR(tlv_data(tlv), tlv_len(tlv)));
+			pa_advp_del(&hpa->aa, &hap->advp);
+			free(hap);
+		} else {
+			L_INFO("hpa_update_ra_tlv could not find router address from %s",
+					HEX_REPR(tlv_data(tlv), tlv_len(tlv)));
 		}
 	} else if(!(hap = malloc(sizeof(*hap)))) {
-		L_ERR("hpa_update_ap_tlv: malloc error");
+		L_ERR("hpa_update_ra_tlv: malloc error");
 	} else {
+		L_DEBUG("hpa_update_ra_tlv creating new router address from %s",
+							HEX_REPR(tlv_data(tlv), tlv_len(tlv)));
 		hap->advp.plen = 128;
 		hap->advp.prefix = ra->address;
 		hap->advp.priority = HNCP_ROUTER_ADDRESS_PA_PRIORITY;
@@ -779,16 +837,21 @@ static void hpa_update_ra_tlv(hncp_pa hpa, dncp_node n,
 		ID_DNCP_TO_PA(&n->node_identifier, &hap->advp.node_id);
 		pa_advp_add(&hpa->aa, &hap->advp);
 
-		hap->link_id = id;
+		hap->link_id.node_identifier = n->node_identifier;
+		hap->link_id.link_id = ra->link_id;
+		hap->ap_flags = 0;
 	}
 }
 
 static void hpa_dp_delete_to(struct uloop_timeout *to)
 {
+	//This is only for hncp dps
 	hpa_dp dp = container_of(to, hpa_dp_s, hncp.delete_to);
-	hpa_dp_set_enabled(dp->hpa, dp, 0);
-	list_del(&dp->dp.le); //Remove first.
+	hncp_pa hpa = dp->hpa;
+	hpa_dp_set_enabled(hpa, dp, 0);
+	list_del(&dp->dp.le);
 	free(dp);
+	hpa_dp_update_enabled(hpa);
 }
 
 static hpa_dp hpa_dp_get_hncp(hncp_pa hpa, const struct prefix *p,
@@ -812,12 +875,9 @@ static void hpa_update_dp_tlv(hncp_pa hpa, dncp_node n,
 	void *dhcpv6_data = NULL;
 	size_t dhcpv6_len = 0;
 	hncp_t_delegated_prefix_header dh;
-	struct prefix p;
 
 	if (!(dh = dncp_tlv_dp(tlv)))
 		return;
-
-	pa_prefix_cpy(dh->prefix_data, dh->prefix_length_bits, &p.prefix, p.plen);
 
 	valid = _remote_rel_to_local_abs(n->origination_time,
 			dh->ms_valid_at_origination);
@@ -825,7 +885,8 @@ static void hpa_update_dp_tlv(hncp_pa hpa, dncp_node n,
 			dh->ms_preferred_at_origination);
 
 	//Fetch DHCP data
-	unsigned int flen = sizeof(hncp_t_delegated_prefix_header_s) +  ROUND_BITS_TO_BYTES(p.plen);
+	unsigned int flen = sizeof(*dh) +
+			ROUND_BITS_TO_BYTES(dh->prefix_length_bits);
 	struct tlv_attr *stlv;
 	int left;
 	void *start;
@@ -834,10 +895,8 @@ static void hpa_update_dp_tlv(hncp_pa hpa, dncp_node n,
 	flen = ROUND_BYTES_TO_4BYTES(flen);
 	start = tlv_data(tlv) + flen;
 	left = tlv_len(tlv) - flen;
-	L_DEBUG("considering what is at offset %lu->%u: %s",
-			(unsigned long)sizeof(hncp_t_delegated_prefix_header_s) + plen,
-			flen,
-			HEX_REPR(start, left));
+	L_DEBUG("considering what is at offset %u: %s",
+			flen, HEX_REPR(start, left));
 	/* Now, flen is actually padded length of stuff, _before_ DHCPv6
 	 * options. */
 	tlv_for_each_in_buf(stlv, start, left) {
@@ -850,26 +909,31 @@ static void hpa_update_dp_tlv(hncp_pa hpa, dncp_node n,
 	}
 
 	//Fetch existing dp
+	struct prefix p;
+	pa_prefix_cpy(dh->prefix_data, dh->prefix_length_bits, &p.prefix, p.plen);
 	hpa_dp dp = hpa_dp_get_hncp(hpa, &p, &n->node_identifier);
 
 	if(!add) { //Removing the dp
 		if(dp && !dp->hncp.delete_to.pending) {
+			L_DEBUG("hpa_update_dp_tlv delayed removal for dp %s",
+							HEX_REPR(tlv_data(tlv), tlv_len(tlv)));
 			//DPs are not removed instantly because there may be a delay during
 			//dncp update (TLV is removed and then added).
-			dp->hncp.delete_to.cb = hpa_dp_delete_to;
 			uloop_timeout_set(&dp->hncp.delete_to,
 					HNCP_PA_DP_DELAYED_DELETE_MS);
 		}
 		//Update lifetimes anyway
 		hpa_dp_update(hpa, dp, preferred, valid, dhcpv6_data, dhcpv6_len);
 	} else if(dp) {
-		if(valid)
-			uloop_timeout_cancel(&dp->hncp.delete_to);
-
+		L_DEBUG("hpa_update_dp_tlv updating existing dp %s",
+				HEX_REPR(tlv_data(tlv), tlv_len(tlv)));
+		uloop_timeout_cancel(&dp->hncp.delete_to);
 		hpa_dp_update(hpa, dp, preferred, valid, dhcpv6_data, dhcpv6_len);
 	} else if(!(dp = calloc(1, sizeof(*dp)))) {
-		L_ERR("hpa_update_dp_tlv malloc error");
+		L_ERR("hpa_update_dp_tlv could not malloc for new dp");
 	} else {
+		L_DEBUG("hpa_update_dp_tlv adding new dp %s",
+				HEX_REPR(tlv_data(tlv), tlv_len(tlv)));
 		dp->hpa = hpa;
 		dp->dp.local = 0;
 		dp->dp.enabled = 0;
@@ -877,6 +941,8 @@ static void hpa_update_dp_tlv(hncp_pa hpa, dncp_node n,
 		dp->pa.plen = p.plen;
 		dp->pa.prefix = p.prefix;
 		dp->pa.type = HPA_DP_T_HNCP;
+		dp->hncp.delete_to.cb = hpa_dp_delete_to;
+		dp->hncp.node_id = n->node_identifier;
 		list_add(&dp->dp.le, &hpa->dps);
 		hpa_dp_update(hpa, dp, preferred, valid, dhcpv6_data, dhcpv6_len);
 		hpa_dp_update_enabled(hpa); //recompute enabled
@@ -961,15 +1027,15 @@ static void hpa_aa_publish(hncp_pa hpa, struct pa_ldp *ldp)
 	if(ldp->userdata[PA_LDP_U_HNCP_TLV])
 		return;
 
-	hpa_iface i;
+	dncp_link l;
 	uint32_t link_id = 0;
 	//We don't check link type because only iface have addresses
-	if((i = container_of(ldp->link, hpa_iface_s, aal))->l)
-		link_id = i->l->iid;
+	if((l = container_of(ldp->link, hpa_iface_s, aal)->l))
+		link_id = l->iid;
 
 	hncp_t_router_address_s h = {.address = ldp->prefix, .link_id = link_id};
 	ldp->userdata[PA_LDP_U_HNCP_TLV] =
-			dncp_add_tlv(hpa->dncp, HNCP_T_ASSIGNED_PREFIX, &h, sizeof(h), 0);
+			dncp_add_tlv(hpa->dncp, HNCP_T_ROUTER_ADDRESS, &h, sizeof(h), 0);
 }
 
 static void hpa_ap_unpublish(hncp_pa hpa, struct pa_ldp *ldp)
@@ -981,14 +1047,14 @@ static void hpa_ap_unpublish(hncp_pa hpa, struct pa_ldp *ldp)
 
 static void hpa_ap_publish(hncp_pa hpa, struct pa_ldp *ldp)
 {
-	if(ldp->userdata[PA_LDP_U_HNCP_TLV])
+	if(ldp->userdata[PA_LDP_U_HNCP_TLV]) //Already published
 		return;
 
-	hpa_iface i;
+	dncp_link l;
 	uint32_t link_id = 0;
 	if(ldp->link->type == HPA_LINK_T_IFACE &&
-			(i = container_of(ldp->link, hpa_iface_s, pal))->l)
-		link_id = i->l->iid;
+			(l = container_of(ldp->link, hpa_iface_s, pal)->l))
+		link_id = l->iid;
 
 	struct __packed {
 		hncp_t_assigned_prefix_header_s h;
@@ -1005,7 +1071,7 @@ static void hpa_ap_publish(hncp_pa hpa, struct pa_ldp *ldp)
 }
 
 static void hpa_dncp_link_change_cb(dncp_subscriber s,
-		const char *ifname, enum dncp_subscriber_event event)
+		const char *ifname, __unused enum dncp_subscriber_event event)
 {
 	/*
 	 * What was not, previously, a dncp link, has become one.
@@ -1042,7 +1108,7 @@ static void hpa_dncp_link_change_cb(dncp_subscriber s,
 
 static void hpa_pa_assigned_cb(struct pa_user *u, struct pa_ldp *ldp)
 {
-	// If this is a lease ldp, we want to give it to DP with a shortened lifetime
+	//If this is a lease ldp, we want to give it to DP with a shortened lifetime
 	//If it is un-assigned, we want to remove everything
 	hncp_pa hpa = container_of(u, hncp_pa_s, pa_user);
 	if(ldp->link->type == HPA_LINK_T_LEASE)
@@ -1093,13 +1159,11 @@ static void hpa_aa_published_cb(struct pa_user *u, struct pa_ldp *ldp)
 
 static void hpa_aa_applied_cb(struct pa_user *u, struct pa_ldp *ldp)
 {
-	/*
-	 * An address starts or stops being applied.
-	 * An address can only be applied by PA if the prefix is applied too.
-	 * - Call iface to update address presence.
-	 */
+	//An address starts or stops being applied
 	hncp_pa hpa = container_of(u, hncp_pa_s, aa_user);
-	struct pa_ldp *ap_ldp = ldp->dp->ha_ldp; //Parent ldp (Always true for Address Assignment)
+	//Parent ldp (Always true for Address Assignment)
+	struct pa_ldp *ap_ldp = ldp->dp->ha_ldp;
+	//We only have assigned address for iface aa links
 	hpa_iface i = container_of(ldp->link, hpa_iface_s, aal);
 	hpa_dp dp = container_of(ldp->dp, hpa_dp_s, pa);
 	if(hpa->if_cbs)
@@ -1117,14 +1181,17 @@ struct list_head *__hpa_get_dps(hncp_pa hp)
 
 /******* Prefix delegation ******/
 
-static int hpa_pd_filter_accept(struct pa_rule *rule, struct pa_ldp *ldp,
+static int hpa_pd_filter_accept(__unused struct pa_rule *rule, struct pa_ldp *ldp,
 		void *p)
 {
+	//We use private pointer instead of container_of(rule...) in order to use
+	//the same function for multiple rules.
 	hpa_lease l = p;
-	struct prefix dp = {.prefix = ldp->dp->prefix, .plen = ldp->dp->plen};
-	if(prefix_is_ipv4(&dp) || ldp->link != &l->pal)
+	if(ldp->link != &l->pal)
 		return 0;
-	return 1;
+
+	struct prefix dp = {.prefix = ldp->dp->prefix, .plen = ldp->dp->plen};
+	return !prefix_is_ipv4(&dp);
 }
 
 hpa_lease hpa_pd_add_lease(hncp_pa hp, const char *duid, uint8_t hint_len,
@@ -1138,13 +1205,15 @@ hpa_lease hpa_pd_add_lease(hncp_pa hp, const char *duid, uint8_t hint_len,
 	l->hint_len = hint_len;
 	l->cb = cb;
 	l->priv = priv;
+
 	list_add(&l->le, &hp->leases);
 	pa_link_init(&l->pal, l->pa_link_name);
 	l->pal.type = HPA_LINK_T_LEASE;
 
 	//Init random rule
 	pa_rule_random_init(&l->rule_rand);
-	l->rule_rand.desired_plen = (l->hint_len < 60)?60:l->hint_len;
+	l->rule_rand.desired_plen = (l->hint_len < HPA_PD_MIN_PLEN)?
+			HPA_PD_MIN_PLEN:l->hint_len;
 	l->rule_rand.priority = HPA_PRIORITY_PD;
 	l->rule_rand.rule_priority = HPA_RULE_CREATE;
 	l->rule_rand.pseudo_random_seed = (uint8_t *)l->pa_link_name;
@@ -1157,6 +1226,7 @@ hpa_lease hpa_pd_add_lease(hncp_pa hp, const char *duid, uint8_t hint_len,
 	l->rule_rand.rule.filter_private = l;
 
 	//todo: Stable storage
+
 	pa_rule_add(&hp->pa, &l->rule_rand.rule);
 	pa_link_add(&hp->pa, &l->pal);
 	return l;
@@ -1177,7 +1247,7 @@ static void hpa_conf_update_cb(struct vlist_tree *tree,
 		struct vlist_node *node_new,
 		struct vlist_node *node_old)
 {
-	L_DEBUG("hpa_conf_update_cb %p %p %p", tree, node_new, node_old);
+	L_DEBUG("hpa_conf_update_cb tree:%p new:%p old%p", tree, node_new, node_old);
 }
 
 void hncp_pa_ula_conf_default(struct hncp_pa_ula_conf *conf)
@@ -1210,26 +1280,28 @@ static int hpa_conf_mod(hncp_pa hp, const char *ifname,
 		return del?0:-1;
 
 	e->type = type;
-	ep = vlist_find(&i->conf, e, e, vle);
 	if(del) {
-		if(ep)
-			vlist_delete(&i->conf, &ep->vle);
-		return 0;
-	}
-	if(ep || !(ep = malloc(sizeof(*ep))))
+		if((e = vlist_find(&i->conf, e, e, vle))) {
+			vlist_delete(&i->conf, &e->vle);
+			return 0;
+		}
+		L_DEBUG("hpa_conf_mod: could not find conf. entry");
 		return -1;
-
+	}
+	if (!(ep = malloc(sizeof(*ep)))) {
+		L_ERR("hpa_conf_mod: malloc error");
+		return -1;
+	}
 	memcpy(ep, e, sizeof(*e));
 	vlist_add(&i->conf, &ep->vle, &ep);
 	return 0;
 }
 
-int hncp_pa_conf_iface_update(hncp_pa hp, const char *ifname)
+void hncp_pa_conf_iface_update(hncp_pa hp, const char *ifname)
 {
 	hpa_iface i;
 	if((i = hpa_iface_goc(hp, ifname, true)))
-			vlist_update(&i->conf);
-	return -1;
+		vlist_update(&i->conf);
 }
 
 void hncp_pa_conf_iface_flush(hncp_pa hp, const char *ifname)
@@ -1309,13 +1381,18 @@ hncp_pa hncp_pa_create(dncp dncp, struct hncp_link *hncp_link)
 	INIT_LIST_HEAD(&hp->aps);
 	INIT_LIST_HEAD(&hp->ifaces);
 	INIT_LIST_HEAD(&hp->leases);
+	avl_init(&hp->adjacencies, hpa_adj_avl_tree_comp, false, NULL);
 
 	hncp_pa_ula_conf_default(&hp->ula_conf); //Get ULA default conf
 
-	avl_init(&hp->adjacencies, hpa_adj_avl_tree_comp, false, NULL);
-
 	pa_core_init(&hp->pa);
 	pa_core_init(&hp->aa);
+
+	//Set node IDs based on dncd node ID
+	pa_core_set_node_id(&hp->pa,
+			(uint32_t *)&dncp->own_node->node_identifier.buf[0]);
+	pa_core_set_node_id(&hp->aa,
+			(uint32_t *)&dncp->own_node->node_identifier.buf[0]);
 
 	//Attach Address Assignment to Prefix Assignment
 	pa_ha_attach(&hp->aa, &hp->pa, 1);
@@ -1330,6 +1407,10 @@ hncp_pa hncp_pa_create(dncp dncp, struct hncp_link *hncp_link)
 	hp->aa_user.assigned = hpa_aa_assigned_cb;
 	hp->aa_user.published = hpa_aa_published_cb;
 	pa_user_register(&hp->aa, &hp->aa_user);
+
+	//Init and add excluded link
+	pa_link_init(&hp->excluded_link, excluded_link_name);
+	pa_link_add(&hp->pa, &hp->excluded_link);
 
 	//Subscribe to DNCP callbacks
 	hp->dncp = dncp;
@@ -1365,6 +1446,8 @@ void hncp_pa_destroy(hncp_pa hp)
 	dncp_unsubscribe(hp->dncp, &hp->dncp_user);
 	pa_user_unregister(&hp->aa_user);
 	pa_user_unregister(&hp->pa_user);
+
+	pa_link_del(&hp->excluded_link);
 
 	//Terminate PA and AA
 	pa_ha_detach(&hp->aa);

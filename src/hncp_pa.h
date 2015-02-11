@@ -68,7 +68,7 @@ void hncp_pa_iface_user_register(hncp_pa hp, struct hncp_pa_iface_user *user);
  */
 
 /*  Starts an update, waiting for new prefixes and addresses. */
-int hncp_pa_conf_iface_update(hncp_pa hp, const char *ifname);
+void hncp_pa_conf_iface_update(hncp_pa hp, const char *ifname);
 
 /* Add a static prefix configuration. */
 int hncp_pa_conf_prefix(hncp_pa hp, const char *ifname,

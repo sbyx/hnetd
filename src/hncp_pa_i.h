@@ -62,10 +62,6 @@ struct hncp_pa_struct {
 	/* ULA configuration parameters */
 	struct hncp_pa_ula_conf ula_conf;
 
-	/* Used to exclude some prefixes */
-	struct pa_link excluded_vlink;
-	struct pa_filter_type excluded_filter; //Only accept for local dps
-
 	/* List of all available dps */
 	struct list_head dps;
 
@@ -206,7 +202,7 @@ typedef struct hpa_dp_struct {
 
 		} local;
 		struct {
-			dncp_node_identifier node_id;
+			dncp_node_identifier_s node_id;
 			struct uloop_timeout delete_to;
 		} hncp;
 	};
@@ -291,9 +287,9 @@ static int hpa_ifconf_comp(const void *k1, const void *k2, __unused void *ptr)
 		case HPA_CONF_T_LINK_ID:
 		case HPA_CONF_T_IP4_PLEN:
 		case HPA_CONF_T_IP6_PLEN:
+		default:
 			return 0; //Only one entry is allowed for these types
 	}
-	return 0;
 }
 
 
@@ -307,7 +303,7 @@ static void hpa_ap_iface_notify(__unused hncp_pa hpa,
 				(struct in6_addr *)&addr_ldp->prefix, ldp->plen,
 				dp->valid_until, dp->preferred_until,
 				dp->dhcp_data, dp->dhcp_len,
-				!ldp->applied);
+				!addr_ldp->applied);
 }
 
 static void hpa_ap_pd_notify(__unused hncp_pa hpa, struct pa_ldp *ldp)
