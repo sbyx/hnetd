@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue Feb 10 20:11:17 2015 mstenber
- * Edit time:     670 min
+ * Last modified: Wed Feb 11 11:45:11 2015 mstenber
+ * Edit time:     673 min
  *
  */
 
@@ -222,8 +222,8 @@ _heard(dncp_link l, dncp_t_link_id lid, struct sockaddr_in6 *src,
         return NULL;
       n = dncp_tlv_get_extra(t);
       n->last_sync = dncp_time(l->dncp);
-      L_DEBUG(DNCP_NEIGH_F " added on " DNCP_LINK_F,
-              DNCP_NEIGH_D(n), DNCP_LINK_D(l));
+      L_DEBUG("Neighbor %s added on " DNCP_LINK_F,
+              DNCP_STRUCT_REPR(lid->node_identifier), DNCP_LINK_D(l));
     }
 
   if (!multicast)
