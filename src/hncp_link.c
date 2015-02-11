@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <net/if.h>
 
+#include "iface.h"
 #include "dncp_i.h"
 #include "hncp_i.h"
 #include "hncp_proto.h"
@@ -19,6 +20,7 @@ struct hncp_link {
 	dncp dncp;
 	dncp_tlv versiontlv;
 	dncp_subscriber_s subscr;
+	struct iface_user iface;
 	struct list_head users;
 };
 
@@ -178,12 +180,12 @@ static void calculate_link(struct hncp_link *l, dncp_link link)
 	free(peers);
 }
 
-static void cb_link(dncp_subscriber s, const char *ifname, enum dncp_subscriber_event event)
+static void cb_intiface(struct iface_user *u, const char *ifname, bool enabled)
 {
-	struct hncp_link *l = container_of(s, struct hncp_link, subscr);
-	if (event == DNCP_EVENT_ADD)
+	struct hncp_link *l = container_of(u, struct hncp_link, iface);
+	if (enabled)
 		calculate_link(l, dncp_find_link_by_name(l->dncp, ifname, false));
-	else if (event == DNCP_EVENT_REMOVE)
+	else
 		notify(l, ifname, NULL, 0, HNCP_LINK_NONE);
 }
 
@@ -212,9 +214,11 @@ struct hncp_link* hncp_link_create(dncp dncp, const struct hncp_link_config *con
 		l->dncp = dncp;
 		INIT_LIST_HEAD(&l->users);
 
-		l->subscr.link_change_callback = cb_link;
 		l->subscr.tlv_change_callback = cb_tlv;
 		dncp_subscribe(dncp, &l->subscr);
+
+		l->iface.cb_intiface = cb_intiface;
+		iface_register_user(&l->iface);
 
 		if (conf) {
 			struct __packed {
@@ -240,6 +244,7 @@ void hncp_link_destroy(struct hncp_link *l)
 
 	dncp_remove_tlv(l->dncp, l->versiontlv);
 	dncp_unsubscribe(l->dncp, &l->subscr);
+	iface_unregister_user(&l->iface);
 	free(l);
 }
 
