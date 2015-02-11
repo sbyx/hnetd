@@ -7,8 +7,8 @@
 -- Copyright (c) 2013 cisco Systems, Inc.
 --
 -- Created:       Tue Dec  3 11:13:05 2013 mstenber
--- Last modified: Tue Feb 10 19:44:44 2015 mstenber
--- Edit time:     117 min
+-- Last modified: Wed Feb 11 10:29:13 2015 mstenber
+-- Edit time:     119 min
 --
 
 -- This is Lua module which provides VERY basic dissector for TLVs we
@@ -75,18 +75,22 @@ local tlvs = {
                                               {4, f_interval}},
    },
    [15]={name='custom'},
+   [16]={name='trust-verdict'},
 
    -- hncp content
+   [32]={name='version'},
    [33]={name='external-connection', contents={}, recurse=true},
    [34]={name='delegated-prefix'},
    [35]={name='assigned-prefix'},
    [36]={name='router-address'},
-   [37]={name='dhcp-options'},
-   [38]={name='dhcpv6-options'},
+   [37]={name='dhcpv6-options'},
+   [38]={name='dhcpv4-options'},
 
    [39]={name='dns-delegated-zone'},
    [40]={name='dns-domain-name'},
    [41]={name='dns-router-name'},
+   [42]={name='managed-psk'},
+
    [199]={name='routing-protocol'},
 }
 
