@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Tue Feb 10 20:22:15 2015 mstenber
- * Edit time:     567 min
+ * Last modified: Wed Feb 11 18:32:18 2015 mstenber
+ * Edit time:     574 min
  *
  */
 
@@ -330,6 +330,9 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes)
 
       dncp_link l1 = net_sim_dncp_find_link_by_name(n1, "down");
       dncp_link l2 = net_sim_dncp_find_link_by_name(n2, "up");
+      /* Asymmetric keepalive setup; l2 sends them 'normally', and l1
+       * very aggressively. */
+      l1->conf->keepalive_interval = DNCP_KEEPALIVE_INTERVAL / 20;
       net_sim_set_connected(l1, l2, true);
       net_sim_set_connected(l2, l1, true);
     }
@@ -337,6 +340,20 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes)
 
   sput_fail_unless(net_sim_find_hncp(s, "node0")->nodes.avl.count >= num_nodes,
                    "enough nodes");
+  for (i = 0 ; i < num_nodes ; i++)
+    {
+      char buf[128];
+
+      sprintf(buf, "node%d", i);
+      dncp n = net_sim_find_hncp(s, buf);
+      /* <= 5 may have up to 2 drops; >5 0. */
+      if (i <= 5)
+        sput_fail_unless(n->num_neighbor_dropped <= 2, "few many drops (start)");
+      else
+        sput_fail_unless(!n->num_neighbor_dropped, "no drops (end)");
+
+
+    }
 
   net_sim_uninit(s);
   L_NOTICE("finished in %lld ms", (long long)hnetd_time() - s->start);

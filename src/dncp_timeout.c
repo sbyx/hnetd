@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Tue Feb 10 21:33:00 2015 mstenber
- * Edit time:     472 min
+ * Last modified: Wed Feb 11 18:03:16 2015 mstenber
+ * Edit time:     476 min
  *
  */
 
@@ -365,7 +365,8 @@ void dncp_run(dncp o)
         L_DEBUG(DNCP_NEIGH_F " gone on " DNCP_LINK_F " - nothing in %d ms",
                 DNCP_NEIGH_D(n), DNCP_LINK_D(l), (int) (now - n->last_sync));
         dncp_remove_tlv(o, t);
-    }
+        o->num_neighbor_dropped++;
+      }
 
   if (next && !o->immediate_scheduled)
     {

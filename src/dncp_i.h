@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Feb 10 21:24:34 2015 mstenber
- * Edit time:     319 min
+ * Last modified: Wed Feb 11 17:39:15 2015 mstenber
+ * Edit time:     320 min
  *
  */
 
@@ -122,6 +122,9 @@ struct dncp_struct {
   /* Number of TLV indexes we have. That is, the # of non-empty slots
    * in the tlv_type_to_index. */
   int num_tlv_indexes;
+
+  /* Number of times neighbor has been dropped. */
+  int num_neighbor_dropped;
 
   /* Profile-specific data */
   dncp_profile_data_s profile_data;
