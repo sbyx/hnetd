@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Feb 11 20:03:51 2015 mstenber
+ * Last modified: Thu Feb 12 11:49:06 2015 mstenber
  * Edit time:     325 min
  *
  */
@@ -73,7 +73,6 @@ struct dncp_struct {
   /* Few different times.. */
   hnetd_time_t last_prune;
   hnetd_time_t next_prune;
-  hnetd_time_t last_network_hash_change;
 
   /* flag which indicates that we should re-calculate network hash
    * based on nodes' state. */

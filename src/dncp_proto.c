@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Feb 11 20:57:47 2015 mstenber
- * Edit time:     704 min
+ * Last modified: Thu Feb 12 12:05:06 2015 mstenber
+ * Edit time:     736 min
  *
  */
 
@@ -100,7 +100,6 @@ void dncp_link_send_network_state(dncp_link l,
 {
   struct tlv_buf tb;
   dncp o = l->dncp;
-  int nn = 0;
   dncp_node n;
 
   memset(&tb, 0, sizeof(tb));
@@ -110,26 +109,36 @@ void dncp_link_send_network_state(dncp_link l,
   dncp_calculate_network_hash(o);
   if (!_push_network_state_tlv(&tb, o))
     goto done;
-  dncp_for_each_node(o, n)
-    if (!o->graph_dirty || n == o->own_node)
-      nn++;
-  if (!maximum_size
-      || maximum_size >= (tlv_len(tb.head)
-                          + 8 /* optional keep-alive interval */
-                          + nn * (4 + sizeof(dncp_t_node_state_s))))
+
+  /* We multicast only 'stable' state. Unicast, we give everything we have. */
+  if (!o->graph_dirty || !maximum_size)
     {
-      dncp_for_each_node(o, n)
+      int nn = 0;
+
+      if (maximum_size)
+        dncp_for_each_node(o, n)
+          nn++;
+      if (!maximum_size
+          || maximum_size >= (tlv_len(tb.head)
+                              + (4 + sizeof(dncp_t_keepalive_interval_s))
+                              + nn * (4 + sizeof(dncp_t_node_state_s))))
         {
-          if (!o->graph_dirty || n == o->own_node)
-            if (!_push_node_state_tlv(&tb, n))
-              goto done;
+          dncp_for_each_node(o, n)
+            {
+              if (!_push_node_state_tlv(&tb, n))
+                goto done;
+            }
         }
     }
   if (l->conf->keepalive_interval != DNCP_KEEPALIVE_INTERVAL)
     if (!_push_keepalive_interval_tlv(&tb, l->iid, l->conf->keepalive_interval))
       goto done;
   if (maximum_size && tlv_len(tb.head) > maximum_size)
-    goto done;
+    {
+      L_ERR("dncp_link_send_network_state failed: %d > %d",
+            (int)tlv_len(tb.head), maximum_size);
+      goto done;
+    }
   L_DEBUG("dncp_link_send_network_state -> " SA6_F "%%" DNCP_LINK_F,
           SA6_D(dst), DNCP_LINK_D(l));
   dncp_io_sendto(o, tlv_data(tb.head), tlv_len(tb.head), dst);
@@ -369,6 +378,8 @@ handle_message(dncp_link l,
     {
       L_DEBUG("unicast received from %s on " DNCP_LINK_F,
               DNCP_NODE_REPR(lid), DNCP_LINK_D(l));
+      if (ne)
+        ne->last_sync = dncp_time(l->dncp);
     }
 
   /* Three different cases to be handled for solicited/unsolicited responses:
@@ -402,6 +413,7 @@ handle_message(dncp_link l,
           return;
         }
 
+      bool should_unicast = multicast;
       if (multicast)
         {
           /* No need to reset Trickle anymore, but log the fact */
@@ -409,15 +421,6 @@ handle_message(dncp_link l,
                   HEX_REPR(nethash, DNCP_HASH_LEN),
                   HEX_REPR(&o->network_hash, DNCP_HASH_LEN),
                   ne ? "" : "(from unknown)");
-
-          /* If it is from existing neighbor, and Trickle seems
-           * 'busy', consider it valid anyway. */
-          hnetd_time_t delta = dncp_time(l->dncp) - o->last_network_hash_change;
-          if (ne && delta < dncp_neighbor_interval(o, &tne->tlv))
-            {
-              ne->last_sync = dncp_time(l->dncp);
-              L_DEBUG(" considering consistent, as we are busy");
-            }
         }
 
       /* Short form (raw network hash) */
@@ -429,6 +432,13 @@ handle_message(dncp_link l,
             L_INFO("unicast short form network status received - ignoring");
           return;
         }
+
+      /* TBD: The section below is essentially an attack vector. We
+       * should definitely add some sort of rate limiting here, as now
+       * this provides nice amplification attack (send packet with src
+       * = your enemy, with alleged set of new data.. current
+       * req-per-node code below sends N packets. oops). */
+
       /* Long form (has node states). */
       /* The exercise becomes just to ask for any node state that
        * differs from local and is more recent. */
@@ -455,6 +465,7 @@ handle_message(dncp_link l,
                 L_DEBUG("saw something new for %s/%p (update number %d)",
                         DNCP_NODE_REPR(ns), n, new_update_number);
                 dncp_link_send_req_node_data(l, src, ns);
+                should_unicast = false;
               }
             else
               {
@@ -462,6 +473,17 @@ handle_message(dncp_link l,
                         DNCP_NODE_REPR(ns), n, new_update_number);
               }
           }
+
+      if (should_unicast && ne)
+        {
+          /* They did not have anything newer than what we did -> by
+           * implication, we probably have something they are lacking.
+           */
+          dncp_link_send_network_state(l, src, 0);
+
+          /* This is needed to keep keepalive ticking */
+          dncp_link_send_req_network_state(l, src);
+        }
       return;
     }
   /* We don't accept node data via multicast. */
