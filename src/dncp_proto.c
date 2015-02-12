@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu Feb 12 12:05:06 2015 mstenber
- * Edit time:     736 min
+ * Last modified: Thu Feb 12 12:16:46 2015 mstenber
+ * Edit time:     739 min
  *
  */
 
@@ -136,7 +136,7 @@ void dncp_link_send_network_state(dncp_link l,
   if (maximum_size && tlv_len(tb.head) > maximum_size)
     {
       L_ERR("dncp_link_send_network_state failed: %d > %d",
-            (int)tlv_len(tb.head), maximum_size);
+            (int)tlv_len(tb.head), (int)maximum_size);
       goto done;
     }
   L_DEBUG("dncp_link_send_network_state -> " SA6_F "%%" DNCP_LINK_F,
@@ -482,7 +482,8 @@ handle_message(dncp_link l,
           dncp_link_send_network_state(l, src, 0);
 
           /* This is needed to keep keepalive ticking */
-          dncp_link_send_req_network_state(l, src);
+          if (dncp_neighbor_interval(o, &tne->tlv))
+            dncp_link_send_req_network_state(l, src);
         }
       return;
     }

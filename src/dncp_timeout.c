@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Feb 11 20:47:35 2015 mstenber
- * Edit time:     504 min
+ * Last modified: Thu Feb 12 12:18:26 2015 mstenber
+ * Edit time:     510 min
  *
  */
 
@@ -341,6 +341,12 @@ void dncp_run(dncp o)
         hnetd_time_t next_time =
           n->last_sync +
           dncp_neighbor_interval(o, &t->tlv) * DNCP_KEEPALIVE_MULTIPLIER;
+
+        /* TBD: How to treat party that has keepalive_interval 0? */
+
+        /* (For the time being, we just drop them immediately, but
+         * some sort of API might be called for it in the future.)
+         */
 
         /* No cause to do anything right now. */
         if (next_time > now)
