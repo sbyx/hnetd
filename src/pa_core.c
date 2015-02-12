@@ -516,8 +516,10 @@ int pa_dp_add(struct pa_core *core, struct pa_dp *dp)
 #ifdef PA_HIERARCHICAL
 		/* If dp is from higher level and the link is the child of a higher level link.
 		 * Compare the two links.  */
-		if(dp->ha_ldp && link->ha_parent && link->ha_parent != dp->ha_ldp->link)
+		if(dp->ha_ldp && link->ha_parent && link->ha_parent != dp->ha_ldp->link) {
+			PA_DEBUG("Hierarchical Assignment: No state for link %s", link->name);
 			continue;
+		}
 #endif
 
 		if(pa_ldp_create(core, link, dp)) {

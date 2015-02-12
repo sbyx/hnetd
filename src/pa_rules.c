@@ -19,7 +19,11 @@ void pa_rule_prefix_nth(pa_prefix *dst, pa_prefix *container, pa_plen container_
 {
 	uint32_t i = htonl(n);
 	__unused pa_plen pp;
+	memset(dst, 0, sizeof(*dst));
 	pa_prefix_cpy(container, container_len, dst, pp);
+	if((plen - container_len) > 32)
+		container_len = plen - 32;
+
 	bmemcpy_shift(dst, container_len, &i, 32 - (plen - container_len), plen - container_len);
 }
 

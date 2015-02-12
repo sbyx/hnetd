@@ -278,7 +278,8 @@ static void _publish_ddzs(hncp_sd sd)
           l = dncp_find_link_by_id(sd->dncp, link_id);
           if (!l)
             {
-              L_ERR("unable to find hncp link by id #%d", link_id);
+        	  if(ah->link_id)
+        		  L_ERR("unable to find hncp link by id #%d", link_id);
               continue;
             }
 

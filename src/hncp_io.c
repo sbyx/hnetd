@@ -178,7 +178,8 @@ bool dncp_io_set_ifname_enabled(dncp o,
 
 void dncp_io_schedule(dncp o, int msecs)
 {
-  uloop_timeout_set(&o->timeout, msecs);
+  //1ms timeout was weird in VirtualBox env (causing less than 1ms to).
+  uloop_timeout_set(&o->timeout, msecs?(msecs+1):0);
 }
 
 ssize_t dncp_io_recvfrom(dncp o, void *buf, size_t len,

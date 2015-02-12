@@ -167,8 +167,8 @@ do {                                                            \
         }                                                       \
       else if (!next || next > v)                               \
         {                                                       \
-          L_DEBUG("setting next to %d due to %s",               \
-                  (int)(v-now), reason);                        \
+          L_DEBUG("setting next to %ld due to %s",               \
+                  (long int)(v-now), reason);                   \
           next = v;                                             \
         }                                                       \
     }                                                           \

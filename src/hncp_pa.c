@@ -76,6 +76,9 @@
 
 #define HPA_PD_MIN_PLEN            60
 
+#define HPA_AP_FLOOD_DELAY 4000
+#define HPA_RA_FLOOD_DELAY 1000
+
 static struct prefix PAL_CONF_DFLT_V4_PREFIX = {
 		.prefix = { .s6_addr = {
 				0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00,
@@ -187,6 +190,7 @@ hpa_iface hpa_iface_goc(hncp_pa hp, const char *ifname, bool create)
 	i->pa_enabled = 0;
 	vlist_init(&i->conf, hpa_ifconf_comp, hpa_conf_update_cb);
 	hpa_iface_init_pa(hp, i);
+	list_add(&i->le, &hp->ifaces);
 	return i;
 }
 
@@ -601,12 +605,16 @@ static void hpa_iface_set_pa_enabled(hncp_pa hpa, hpa_iface i, bool enabled)
 		pa_rule_add(&hpa->pa, &i->pa_rand6.rule);
 		pa_rule_add(&hpa->pa, &i->pa_rand6_scarcity.rule);
 		pa_rule_add(&hpa->pa, &i->pa_rand4.rule);
-		//todo: Add scarcity
 		pa_link_add(&hpa->pa, &i->pal);
+
+		pa_rule_add(&hpa->aa, &i->aa_rand.rule);
+		pa_link_add(&hpa->aa, &i->aal);
 	} else {
+		pa_link_del(&i->aal);
+		pa_rule_del(&hpa->aa, &i->aa_rand.rule);
+
 		pa_link_del(&i->pal);
-		//todo: Del scarcity
-		pa_rule_add(&hpa->pa, &i->pa_rand4.rule);
+		pa_rule_del(&hpa->pa, &i->pa_rand4.rule);
 		pa_rule_del(&hpa->pa, &i->pa_rand6_scarcity.rule);
 		pa_rule_del(&hpa->pa, &i->pa_rand6.rule);
 		pa_rule_del(&hpa->pa, &i->pa_adopt.rule);
@@ -619,8 +627,8 @@ static void hpa_iface_intiface_cb(struct iface_user *u,
 	/* Internal iface change.
 	 * PA may be enabled or disabled on this iface. */
 	hncp_pa hpa = container_of(u, hncp_pa_s, iface_user);
-	hpa_iface i = hpa_iface_goc(hpa, ifname, 1);
-	struct iface *iface = iface_get(ifname);
+	hpa_iface i;
+	struct iface *iface;
 
 	if(!(i = hpa_iface_goc(hpa, ifname, 1)) ||
 			!(iface = iface_get(ifname)))
@@ -676,6 +684,9 @@ static void hpa_iface_prefix_cb(struct iface_user *u, const char *ifname,
 		hnetd_time_t valid_until, hnetd_time_t preferred_until,
 		const void *dhcpv6_data, size_t dhcpv6_len)
 {
+	L_DEBUG("hpa_iface_prefix_cb: %s,%d,%d,excluded=%s,dhcp_data=%s",
+			PREFIX_REPR(prefix), (int) valid_until, (int) preferred_until,
+			excluded?PREFIX_REPR(excluded):"null", dhcpv6_len?HEX_REPR(dhcpv6_data, dhcpv6_len):"null");
 	/* Add/Delete update a local delegated prefix.
 	 */
 	hncp_pa hpa = container_of(u, hncp_pa_s, iface_user);
@@ -685,7 +696,7 @@ static void hpa_iface_prefix_cb(struct iface_user *u, const char *ifname,
 
 	//Find the DP if existing
 	hpa_dp dp = hpa_dp_get_local(hpa, prefix);
-	if(!valid_until) {
+	if(valid_until <= hnetd_time()) { //valid_until is -1 when iface wants to remove
 		if(dp) {
 			//Deleting the prefix
 			hpa_dp_set_enabled(hpa, dp, 0);
@@ -1165,7 +1176,7 @@ static void hpa_aa_applied_cb(struct pa_user *u, struct pa_ldp *ldp)
 	struct pa_ldp *ap_ldp = ldp->dp->ha_ldp;
 	//We only have assigned address for iface aa links
 	hpa_iface i = container_of(ldp->link, hpa_iface_s, aal);
-	hpa_dp dp = container_of(ldp->dp, hpa_dp_s, pa);
+	hpa_dp dp = container_of(ap_ldp->dp, hpa_dp_s, pa);
 	if(hpa->if_cbs)
 		hpa->if_cbs->update_address(hpa->if_cbs, i->ifname,
 				(struct in6_addr *)&ldp->prefix, ap_ldp->plen,
@@ -1394,6 +1405,9 @@ hncp_pa hncp_pa_create(dncp dncp, struct hncp_link *hncp_link)
 	pa_core_set_node_id(&hp->aa,
 			(uint32_t *)&dncp->own_node->node_identifier.buf[0]);
 
+	pa_core_set_flooding_delay(&hp->pa, HPA_AP_FLOOD_DELAY);
+	pa_core_set_flooding_delay(&hp->pa, HPA_RA_FLOOD_DELAY);
+
 	//Attach Address Assignment to Prefix Assignment
 	pa_ha_attach(&hp->aa, &hp->pa, 1);
 
@@ -1410,6 +1424,7 @@ hncp_pa hncp_pa_create(dncp dncp, struct hncp_link *hncp_link)
 
 	//Init and add excluded link
 	pa_link_init(&hp->excluded_link, excluded_link_name);
+	hp->excluded_link.type = HPA_LINK_T_EXCLU;
 	pa_link_add(&hp->pa, &hp->excluded_link);
 
 	//Subscribe to DNCP callbacks
