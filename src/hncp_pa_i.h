@@ -38,46 +38,6 @@ typedef struct hpa_advp_struct {
 	uint8_t ap_flags;
 } hpa_advp_s, *hpa_advp;
 
-struct hncp_pa_struct {
-	dncp dncp;
-	dncp_subscriber_s dncp_user;
-
-	struct iface_user iface_user;
-
-	/* hncp_link helps us deciding who is on our link */
-	struct hncp_link *hncp_link;
-	struct hncp_link_user hncp_link_user;
-
-	/* Main PA structures */
-	struct pa_core pa;
-	struct pa_user pa_user;
-	struct pa_core aa;
-	struct pa_user aa_user;
-
-	struct pa_link excluded_link; //Link used to exclude prefixes
-
-	/* iface.c subscription callbacks */
-	struct hncp_pa_iface_user *if_cbs;
-
-	/* ULA configuration parameters */
-	struct hncp_pa_ula_conf ula_conf;
-
-	/* List of all available dps */
-	struct list_head dps;
-
-	/* All APs are linked here for fast iteration */
-	struct list_head aps;
-
-	/* List of ifaces known to hncp_pa */
-	struct list_head ifaces;
-
-	/* List of downstream PD leases */
-	struct list_head leases;
-
-	/* Tree containing the adjacent links provided by hncp_link.c */
-	struct avl_tree adjacencies;
-};
-
 #define hpa_for_each_iface(hpa, i) list_for_each_entry(i, &(hpa)->ifaces, le)
 
 typedef struct hpa_conf_struct {
@@ -209,6 +169,57 @@ typedef struct hpa_dp_struct {
 } *hpa_dp, hpa_dp_s;
 
 #define hpa_for_each_dp(hpa, dp_p) list_for_each_entry(dp_p, &(hpa)->dps, dp.le)
+
+struct hncp_pa_struct {
+	dncp dncp;
+	dncp_subscriber_s dncp_user;
+
+	struct iface_user iface_user;
+
+	/* hncp_link helps us deciding who is on our link */
+	struct hncp_link *hncp_link;
+	struct hncp_link_user hncp_link_user;
+
+	/* Main PA structures */
+	struct pa_core pa;
+	struct pa_user pa_user;
+	struct pa_core aa;
+	struct pa_user aa_user;
+
+	struct pa_link excluded_link; //Link used to exclude prefixes
+
+	/* iface.c subscription callbacks */
+	struct hncp_pa_iface_user *if_cbs;
+
+	/* ULA configuration parameters */
+	struct hncp_pa_ula_conf ula_conf;
+
+	/* List of all available dps */
+	struct list_head dps;
+
+	/* All APs are linked here for fast iteration */
+	struct list_head aps;
+
+	/* List of ifaces known to hncp_pa */
+	struct list_head ifaces;
+
+	/* List of downstream PD leases */
+	struct list_head leases;
+
+	/* Tree containing the adjacent links provided by hncp_link.c */
+	struct avl_tree adjacencies;
+
+	/* IPv4 and ula delegated prefixes */
+	struct uloop_timeout v4_to;
+	bool v4_enabled;
+	hpa_dp_s v4_dp;
+	hnetd_time_t v4_backoff;
+
+	struct uloop_timeout ula_to;
+	bool ula_enabled;
+	hpa_dp_s ula_dp;
+	hnetd_time_t ula_backoff;
+};
 
 
 #define APPEND_BUF(buf, len, ibuf, ilen)        \

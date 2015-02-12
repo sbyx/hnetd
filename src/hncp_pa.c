@@ -78,6 +78,7 @@
 
 #define HPA_AP_FLOOD_DELAY 4000
 #define HPA_RA_FLOOD_DELAY 1000
+#define HPA_ULA_MAX_BACKOFF 10000
 
 static struct prefix PAL_CONF_DFLT_V4_PREFIX = {
 		.prefix = { .s6_addr = {
@@ -342,6 +343,36 @@ static void hpa_refresh_ec(hncp_pa hpa, bool publish)
 		tlv_buf_free(&tb);
 	}
 
+	//Add local ULA prefix if enabled
+	//todo: I did a gross copy past from above.
+	//I would like to find a cleaner way of doing this
+	if(publish && hpa->ula_enabled && hpa->ula_dp.dp.enabled) {
+		void *cookie;
+		memset(&tb, 0, sizeof(tb));
+		tlv_buf_init(&tb, HNCP_T_EXTERNAL_CONNECTION);
+
+		dp = &hpa->ula_dp;
+		// Determine how much space we need for TLV.
+		plen = ROUND_BITS_TO_BYTES(dp->dp.prefix.plen);
+		flen = sizeof(hncp_t_delegated_prefix_header_s) + plen;
+
+		cookie = tlv_nest_start(&tb, HNCP_T_DELEGATED_PREFIX, flen);
+		dph = tlv_data(tb.head);
+		dph->ms_valid_at_origination = _local_abs_to_remote_rel(now, dp->valid_until);
+		dph->ms_preferred_at_origination = _local_abs_to_remote_rel(now, dp->preferred_until);
+		dph->prefix_length_bits = dp->dp.prefix.plen;
+		dph++;
+		memcpy(dph, &dp->dp.prefix.prefix, plen);
+		if (dp->dhcp_len) {
+			int type = prefix_is_ipv4(&dp->dp.prefix)?HNCP_T_DHCP_OPTIONS:HNCP_T_DHCPV6_OPTIONS;
+			st = tlv_new(&tb, type, dp->dhcp_len);
+			memcpy(tlv_data(st), dp->dhcp_data, dp->dhcp_len);
+		}
+		tlv_nest_end(&tb, cookie);
+
+		//todo: Add DHCP Data
+		dncp_add_tlv_attr(dncp, tb.head, 0);
+	}
 
 	dncp_node n;
 	struct tlv_attr *a, *a2;
@@ -752,6 +783,114 @@ static void hpa_iface_intaddr_cb(struct iface_user *u, const char *ifname,
 }
 */
 
+
+/******** ULA and IPv4 handling *******/
+
+#define hpa_v4_update(hpa) hpa_v4_to(&(hpa)->v4_to)
+
+static void hpa_v4_to(struct uloop_timeout *to)
+{
+	L_DEBUG("hpa_v4_to: Do nothing for now");
+}
+
+static int hpa_has_other_ula(hncp_pa hpa)
+{
+	hpa_dp dp;
+	hpa_for_each_dp(hpa, dp)
+		if(dp->pa.type != HPA_DP_T_ULA &&
+				prefix_is_ipv6_ula(&dp->dp.prefix))
+			return 1;
+	return 0;
+}
+
+static int hpa_has_global_v6(hncp_pa hpa)
+{
+	hpa_dp dp;
+	hpa_for_each_dp(hpa, dp)
+		if(prefix_is_global(&dp->dp.prefix))
+			return 1;
+	return 0;
+}
+
+#define hpa_ula_update(hpa) hpa_ula_to(&(hpa)->ula_to)
+
+static void hpa_ula_to(struct uloop_timeout *to)
+{
+	L_DEBUG("hpa_ula_to: Update");
+
+	hncp_pa hpa = container_of(to, hncp_pa_s, ula_to);
+	hnetd_time_t now = hnetd_time();
+
+	bool destroy = !hpa->ula_conf.use_ula ||
+			hpa_has_other_ula(hpa) ||
+			(hpa->ula_conf.no_ula_if_glb_ipv6 && hpa_has_global_v6(hpa));
+
+	if(destroy) {
+		if(hpa->ula_enabled) {
+			//Remove ula
+			L_DEBUG("ULA Spontaneous Generation: Remove ULA");
+			hpa->ula_enabled = 0;
+			hpa_dp_set_enabled(hpa, &hpa->ula_dp, 0);
+			list_del(&hpa->ula_dp.dp.le);
+			hpa_dp_update_enabled(hpa);
+		} else if(hpa->ula_backoff) {
+			//Cancel backoff
+			L_DEBUG("ULA Spontaneous Generation: Cancel Backoff");
+			hpa->ula_backoff = 0;
+		}
+	} else if(hpa->ula_enabled) { //It exists already
+		L_DEBUG("ULA Spontaneous Generation: Update");
+		if((hpa->ula_dp.valid_until - hpa->ula_conf.local_update_delay) <= now) {
+			//Update lifetime
+			hpa_dp_update(hpa, &hpa->ula_dp,
+					now + hpa->ula_conf.local_preferred_lifetime,
+					now + hpa->ula_conf.local_valid_lifetime,
+					NULL, 0);
+		}
+	} else if(!hpa->ula_backoff) { //No backoff yet
+		int delay = 10 + (random() % HPA_ULA_MAX_BACKOFF);
+		hpa->ula_backoff = now + delay;
+		L_DEBUG("ULA Spontaneous Generation: Backoff %d ms", delay);
+	} else if(hpa->ula_backoff <= now) { //Time to create
+		L_DEBUG("ULA Spontaneous Generation: Create");
+		//create ula
+		struct prefix ula;
+		if(hpa->ula_conf.use_random_ula) {
+			memcpy(&ula.prefix, &ipv6_ula_prefix.prefix,
+					sizeof(struct in6_addr));
+			//todo: Generate randomly based on RFCXXXX
+			uint32_t rand[2] = {random(), random()};
+			bmemcpy_shift(&ula.prefix, ipv6_ula_prefix.plen, rand, 0,
+					48 - ipv6_ula_prefix.plen);
+			ula.plen = 48;
+		} else {
+			ula = hpa->ula_conf.ula_prefix;
+		}
+
+		memset(&hpa->ula_dp, 0, sizeof(hpa->ula_dp));
+		hpa->ula_dp.dp.local = 1;
+		hpa->ula_dp.dp.prefix = ula;
+		hpa->ula_dp.pa.type = HPA_DP_T_ULA;
+		hpa->ula_dp.pa.prefix = ula.prefix;
+		hpa->ula_dp.pa.plen = ula.plen;
+		list_add(&hpa->ula_dp.dp.le, &hpa->dps);
+		hpa_dp_update(hpa, &hpa->ula_dp,
+				now + hpa->ula_conf.local_preferred_lifetime,
+				now + hpa->ula_conf.local_valid_lifetime,
+				NULL, 0);
+		hpa->ula_enabled = 1;
+		hpa_dp_update_enabled(hpa);
+		hpa->ula_backoff = 0;
+	}
+
+	if(hpa->ula_enabled) { //Next update time
+		uloop_timeout_set(to,
+			(int)(hpa->ula_dp.valid_until - hpa->ula_conf.local_update_delay - now));
+	} else if(hpa->ula_backoff) { //Wake up for backoff
+		uloop_timeout_set(to, (int)(hpa->ula_backoff - now + 10));
+	}
+}
+
 /******** DNCP Stuff *******/
 
 static hpa_advp hpa_get_hpa_advp(struct pa_core *core, dncp_node n,
@@ -863,6 +1002,10 @@ static void hpa_dp_delete_to(struct uloop_timeout *to)
 	list_del(&dp->dp.le);
 	free(dp);
 	hpa_dp_update_enabled(hpa);
+
+	//update local
+	hpa_ula_update(hpa);
+	hpa_v4_update(hpa);
 }
 
 static hpa_dp hpa_dp_get_hncp(hncp_pa hpa, const struct prefix *p,
@@ -957,6 +1100,9 @@ static void hpa_update_dp_tlv(hncp_pa hpa, dncp_node n,
 		list_add(&dp->dp.le, &hpa->dps);
 		hpa_dp_update(hpa, dp, preferred, valid, dhcpv6_data, dhcpv6_len);
 		hpa_dp_update_enabled(hpa); //recompute enabled
+
+		hpa_ula_update(hpa); //update ULA
+		hpa_v4_update(hpa);
 	}
 }
 
@@ -1394,7 +1540,14 @@ hncp_pa hncp_pa_create(dncp dncp, struct hncp_link *hncp_link)
 	INIT_LIST_HEAD(&hp->leases);
 	avl_init(&hp->adjacencies, hpa_adj_avl_tree_comp, false, NULL);
 
+	//Init ULA
 	hncp_pa_ula_conf_default(&hp->ula_conf); //Get ULA default conf
+	hp->ula_to.cb = hpa_ula_to;
+	hp->v4_to.cb = hpa_v4_to;
+
+	//todo: Maybe not best place in create
+	uloop_timeout_set(&hp->ula_to, 3000);
+	uloop_timeout_set(&hp->v4_to, 3000);
 
 	pa_core_init(&hp->pa);
 	pa_core_init(&hp->aa);
