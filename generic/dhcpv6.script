@@ -2,7 +2,8 @@
 echo "[dhcpv6.script] $*"
 [ -z "$2" ] && echo "Error: should be run by odhcpc6c" && exit 1
 
-. /usr/share/hnetd/utils.script
+BASEDIR=$(dirname $0)
+. $BASEDIR/utils.script
 
 PROTO=72
 

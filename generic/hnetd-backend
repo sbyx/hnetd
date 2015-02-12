@@ -1,6 +1,7 @@
 #!/bin/sh
 
-. /usr/share/hnetd/utils.script
+BASEDIR=$(dirname $0)
+. $BASEDIR/utils.script
 
 echo "[hnetd-backend] $*"
 
@@ -8,11 +9,11 @@ case "$1" in
 dhcpv4client)
 	[ "$2" = 1 ] && export NODEFAULT=1
 	[ -n "$3" ] && export METRIC=$3
-	exec udhcpc -f -t 0 -i "$2" -x "hostname:$(hostname)" -x "0x4d:07484f4d454e4554" -s /usr/share/hnetd/dhcp.script
+	exec udhcpc -f -t 0 -i "$2" -x "hostname:$(hostname)" -x "0x4d:07484f4d454e4554" -s $BASEDIR/dhcp.script
 	;;
 
 dhcpv6client)
-	exec odhcp6c -t120 -P0 -F -s /usr/share/hnetd/dhcpv6.script -u HOMENET "$2"
+	exec odhcp6c -t120 -P0 -F -s $BASEDIR/dhcpv6.script -u HOMENET "$2"
 	;;
 
 setfilter|unsetfilter)

@@ -2,7 +2,8 @@
 echo "[dhcp.script] $*"
 [ -z "$1" ] && echo "Error: should be run by udhcpc" && exit 1
 
-. /usr/share/hnetd/utils.script
+BASEDIR=$(dirname $0)
+. $BASEDIR/utils.script
 
 set_classless_routes() {
 	local max=128
