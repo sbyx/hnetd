@@ -194,17 +194,20 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 {
 	struct hncp_link *l = container_of(s, struct hncp_link, subscr);
 	dncp_t_node_data_neighbor ne = dncp_tlv_neighbor(tlv);
-	dncp_link link = NULL;
+	hncp_t_assigned_prefix_header ap = dncp_tlv_ap(tlv);
+	uint32_t link = 0;
 
 	if (ne) {
 		if (dncp_node_is_self(n))
-			link = dncp_find_link_by_id(l->dncp, ne->link_id);
+			link = ne->link_id;
 		else if (!memcmp(&ne->neighbor_node_identifier,
 				&l->dncp->own_node->node_identifier, DNCP_NI_LEN))
-			link = dncp_find_link_by_id(l->dncp, ne->neighbor_link_id);
+			link = ne->neighbor_link_id;
+	} else if (ap && dncp_node_is_self(n)) {
+		link = ap->link_id;
 	}
 
-	calculate_link(l, link);
+	calculate_link(l, dncp_find_link_by_id(l->dncp, link));
 }
 
 struct hncp_link* hncp_link_create(dncp dncp, const struct hncp_link_config *conf)
