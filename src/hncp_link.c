@@ -39,16 +39,13 @@ static void notify(struct hncp_link *l, const char *ifname, dncp_t_link_id ids, 
 	}
 }
 
-static void calculate_link(struct hncp_link *l, dncp_link link)
+static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 {
-	bool unique = true;
 	hncp_t_version ourvertlv = NULL;
 	enum hncp_link_elected elected = HNCP_LINK_NONE;
 	dncp_t_link_id peers = NULL;
 	size_t peercnt = 0, peerpos = 0;
-
-	if (!link)
-		return;
+	dncp_link link = dncp_find_link_by_name(l->dncp, ifname, false);
 
 	struct tlv_attr *c;
 	dncp_node_for_each_tlv(l->dncp->own_node, c) {
@@ -71,122 +68,128 @@ static void calculate_link(struct hncp_link *l, dncp_link link)
 			++peercnt;
 		} else if (tlv_id(c) == HNCP_T_ASSIGNED_PREFIX) {
 			hncp_t_assigned_prefix_header ah = dncp_tlv_ap(c);
-			if (ah && ah->link_id == link->iid)
+			if (ah && link && ah->link_id == link->iid)
 				elected |= HNCP_LINK_STATELESS;
 		}
 	}
 
 	L_DEBUG("hncp_link_calculate: %s peer-candidates: %d preelected(SMPHL): %x",
-			link->ifname, (int)peercnt, elected);
+			ifname, (int)peercnt, elected);
 
-	if (peercnt)
-		peers = malloc(sizeof(*peers) * peercnt);
+	if (link && enable) {
+		if (peercnt)
+			peers = malloc(sizeof(*peers) * peercnt);
 
-	dncp_node_for_each_tlv(l->dncp->own_node, c) {
-		dncp_t_node_data_neighbor cn = dncp_tlv_neighbor(c);
+		dncp_node_for_each_tlv(l->dncp->own_node, c) {
+			dncp_t_node_data_neighbor cn = dncp_tlv_neighbor(c);
 
-		if (!cn || cn->link_id != link->iid)
-			continue;
-
-		dncp_node peer = dncp_find_node_by_node_identifier(l->dncp,
-				&cn->neighbor_node_identifier, false);
-
-		if (!peer)
-			continue;
-
-		bool mutual = false;
-		hncp_t_version peervertlv = NULL;
-
-		struct tlv_attr *pc;
-		dncp_node_for_each_tlv(peer, pc) {
-			if (tlv_id(pc) == HNCP_T_VERSION &&
-					tlv_len(pc) > sizeof(*peervertlv))
-				peervertlv = tlv_data(pc);
-
-			dncp_t_node_data_neighbor pn = dncp_tlv_neighbor(pc);
-			if (!pn || pn->link_id != cn->neighbor_link_id ||
-					memcmp(&pn->neighbor_node_identifier,
-							&l->dncp->own_node->node_identifier, DNCP_NI_LEN))
+			if (!cn || cn->link_id != link->iid)
 				continue;
 
-			if (pn->neighbor_link_id == link->iid) {
-				// Matching reverse neighbor entry
-				mutual = true;
-				peers[peerpos].node_identifier = peer->node_identifier;
-				peers[peerpos].link_id = pn->link_id;
-				++peerpos;
-			} else if (pn->neighbor_link_id < link->iid) {
-				L_WARN("hncp_link_calculate: %s links %d and %d appear to be connected",
-						link->ifname, link->iid, pn->neighbor_link_id);
+			dncp_node peer = dncp_find_node_by_node_identifier(l->dncp,
+					&cn->neighbor_node_identifier, false);
 
-				// Two of our links seem to be connected
-				unique = false;
-				break;
+			if (!peer)
+				continue;
+
+			bool mutual = false;
+			hncp_t_version peervertlv = NULL;
+
+			struct tlv_attr *pc;
+			dncp_node_for_each_tlv(peer, pc) {
+				if (tlv_id(pc) == HNCP_T_VERSION &&
+						tlv_len(pc) > sizeof(*peervertlv))
+					peervertlv = tlv_data(pc);
+
+				dncp_t_node_data_neighbor pn = dncp_tlv_neighbor(pc);
+				if (!pn || pn->link_id != cn->neighbor_link_id ||
+						memcmp(&pn->neighbor_node_identifier,
+								&l->dncp->own_node->node_identifier, DNCP_NI_LEN))
+					continue;
+
+				if (pn->neighbor_link_id == link->iid) {
+					// Matching reverse neighbor entry
+					mutual = true;
+					peers[peerpos].node_identifier = peer->node_identifier;
+					peers[peerpos].link_id = pn->link_id;
+					++peerpos;
+				} else if (pn->neighbor_link_id < link->iid) {
+					L_WARN("hncp_link_calculate: %s links %d and %d appear to be connected",
+							link->ifname, link->iid, pn->neighbor_link_id);
+
+					// Two of our links seem to be connected
+					enable = false;
+					break;
+				}
 			}
-		}
 
-		if (!unique)
-			break;
+			if (!enable)
+				break;
 
-		// Capability election
-		if (mutual && ourvertlv && peervertlv) {
-			int ourcaps = ourvertlv->cap_mdnsproxy << 12 |
-					ourvertlv->cap_prefixdel << 8 |
-					ourvertlv->cap_hostnames << 4 |
-					ourvertlv->cap_legacy;
-			int peercaps = peervertlv->cap_mdnsproxy << 12 |
-					peervertlv->cap_prefixdel << 8 |
-					peervertlv->cap_hostnames << 4 |
-					peervertlv->cap_legacy;
+			// Capability election
+			if (mutual && ourvertlv && peervertlv) {
+				int ourcaps = ourvertlv->cap_mdnsproxy << 12 |
+						ourvertlv->cap_prefixdel << 8 |
+						ourvertlv->cap_hostnames << 4 |
+						ourvertlv->cap_legacy;
+				int peercaps = peervertlv->cap_mdnsproxy << 12 |
+						peervertlv->cap_prefixdel << 8 |
+						peervertlv->cap_hostnames << 4 |
+						peervertlv->cap_legacy;
 
-			if (ourvertlv->cap_mdnsproxy < peervertlv->cap_mdnsproxy)
-				elected &= ~HNCP_LINK_MDNSPROXY;
-
-			if (ourvertlv->cap_prefixdel < peervertlv->cap_prefixdel)
-				elected &= ~HNCP_LINK_PREFIXDEL;
-
-			if (ourvertlv->cap_hostnames < peervertlv->cap_hostnames)
-				elected = (elected & ~HNCP_LINK_HOSTNAMES) | HNCP_LINK_OTHERMNGD;
-
-			if (ourvertlv->cap_legacy < peervertlv->cap_legacy)
-				elected &= ~HNCP_LINK_LEGACY;
-
-			if (ourcaps < peercaps || (ourcaps == peercaps &&
-					memcmp(&l->dncp->own_node->node_identifier, &peer->node_identifier, DNCP_NI_LEN) < 0)) {
-				if (peervertlv->cap_mdnsproxy &&
-						ourvertlv->cap_mdnsproxy == peervertlv->cap_mdnsproxy)
+				if (ourvertlv->cap_mdnsproxy < peervertlv->cap_mdnsproxy)
 					elected &= ~HNCP_LINK_MDNSPROXY;
 
-				if (peervertlv->cap_prefixdel &&
-						ourvertlv->cap_prefixdel == peervertlv->cap_prefixdel)
+				if (ourvertlv->cap_prefixdel < peervertlv->cap_prefixdel)
 					elected &= ~HNCP_LINK_PREFIXDEL;
 
-				if (peervertlv->cap_hostnames &&
-						ourvertlv->cap_hostnames == peervertlv->cap_hostnames)
+				if (ourvertlv->cap_hostnames < peervertlv->cap_hostnames)
 					elected = (elected & ~HNCP_LINK_HOSTNAMES) | HNCP_LINK_OTHERMNGD;
 
-				if (peervertlv->cap_legacy &&
-						ourvertlv->cap_legacy == peervertlv->cap_legacy)
+				if (ourvertlv->cap_legacy < peervertlv->cap_legacy)
 					elected &= ~HNCP_LINK_LEGACY;
-			}
 
-			L_DEBUG("hncp_link_calculate: %s peer: %x peer-caps: %x ourcaps: %x pre-elected(SMPHL): %x",
-					link->ifname, *((uint32_t*)&peer->node_identifier), peercaps, ourcaps, elected);
+				if (ourcaps < peercaps || (ourcaps == peercaps &&
+						memcmp(&l->dncp->own_node->node_identifier,
+								&peer->node_identifier, DNCP_NI_LEN) < 0)) {
+					if (peervertlv->cap_mdnsproxy &&
+							ourvertlv->cap_mdnsproxy == peervertlv->cap_mdnsproxy)
+						elected &= ~HNCP_LINK_MDNSPROXY;
+
+					if (peervertlv->cap_prefixdel &&
+							ourvertlv->cap_prefixdel == peervertlv->cap_prefixdel)
+						elected &= ~HNCP_LINK_PREFIXDEL;
+
+					if (peervertlv->cap_hostnames &&
+							ourvertlv->cap_hostnames == peervertlv->cap_hostnames)
+						elected = (elected & ~HNCP_LINK_HOSTNAMES) | HNCP_LINK_OTHERMNGD;
+
+					if (peervertlv->cap_legacy &&
+							ourvertlv->cap_legacy == peervertlv->cap_legacy)
+						elected &= ~HNCP_LINK_LEGACY;
+				}
+
+				L_DEBUG("hncp_link_calculate: %s peer: %x peer-caps: %x ourcaps: %x pre-elected(SMPHL): %x",
+						link->ifname, *((uint32_t*)&peer->node_identifier), peercaps, ourcaps, elected);
+			}
 		}
 	}
 
-	notify(l, link->ifname, (!unique) ? NULL : (peers) ? peers : (void*)1,
-			(unique) ? peerpos : 0, unique ? elected : HNCP_LINK_NONE);
+	notify(l, ifname, (!enable) ? NULL : (peers) ? peers : (void*)1,
+			(enable) ? peerpos : 0, enable ? elected : HNCP_LINK_NONE);
 	free(peers);
 }
 
 static void cb_intiface(struct iface_user *u, const char *ifname, bool enabled)
 {
 	struct hncp_link *l = container_of(u, struct hncp_link, iface);
-	if (enabled)
-		calculate_link(l, dncp_find_link_by_name(l->dncp, ifname, false));
-	else
-		notify(l, ifname, NULL, 0, HNCP_LINK_NONE);
+	calculate_link(l, ifname, enabled);
+}
+
+static void cb_intaddr(struct iface_user *u, const char *ifname,
+			const struct prefix *addr6, const struct prefix *addr4)
+{
+	cb_intiface(u, ifname, addr6 || addr4);
 }
 
 static void cb_tlv(dncp_subscriber s, dncp_node n,
@@ -194,20 +197,21 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 {
 	struct hncp_link *l = container_of(s, struct hncp_link, subscr);
 	dncp_t_node_data_neighbor ne = dncp_tlv_neighbor(tlv);
-	hncp_t_assigned_prefix_header ap = dncp_tlv_ap(tlv);
-	uint32_t link = 0;
+	dncp_link link = NULL;
 
 	if (ne) {
 		if (dncp_node_is_self(n))
-			link = ne->link_id;
+			link = dncp_find_link_by_id(l->dncp, ne->link_id);
 		else if (!memcmp(&ne->neighbor_node_identifier,
 				&l->dncp->own_node->node_identifier, DNCP_NI_LEN))
-			link = ne->neighbor_link_id;
-	} else if (ap && dncp_node_is_self(n)) {
-		link = ap->link_id;
+			link = dncp_find_link_by_id(l->dncp, ne->neighbor_link_id);
 	}
 
-	calculate_link(l, dncp_find_link_by_id(l->dncp, link));
+	if (link) {
+		struct iface *iface = iface_get(link->ifname);
+		if (iface && iface->internal)
+			calculate_link(l, link->ifname, true);
+	}
 }
 
 struct hncp_link* hncp_link_create(dncp dncp, const struct hncp_link_config *conf)
@@ -221,6 +225,7 @@ struct hncp_link* hncp_link_create(dncp dncp, const struct hncp_link_config *con
 		dncp_subscribe(dncp, &l->subscr);
 
 		l->iface.cb_intiface = cb_intiface;
+		l->iface.cb_intaddr = cb_intaddr;
 		iface_register_user(&l->iface);
 
 		if (conf) {
