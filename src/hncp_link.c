@@ -47,36 +47,40 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 	size_t peercnt = 0, peerpos = 0;
 	dncp_link link = dncp_find_link_by_name(l->dncp, ifname, false);
 
-	struct tlv_attr *c;
-	dncp_node_for_each_tlv(l->dncp->own_node, c) {
-		if (tlv_id(c) == HNCP_T_VERSION &&
-				tlv_len(c) > sizeof(hncp_t_version_s)) {
-			ourvertlv = tlv_data(c);
+	if (l->versiontlv) {
+		ourvertlv = tlv_data(&l->versiontlv->tlv);
 
-			if (ourvertlv->cap_mdnsproxy)
-				elected |= HNCP_LINK_MDNSPROXY;
+		if (ourvertlv->cap_mdnsproxy)
+			elected |= HNCP_LINK_MDNSPROXY;
 
-			if (ourvertlv->cap_prefixdel)
-				elected |= HNCP_LINK_PREFIXDEL;
+		if (ourvertlv->cap_prefixdel)
+			elected |= HNCP_LINK_PREFIXDEL;
 
-			if (ourvertlv->cap_hostnames)
-				elected |= HNCP_LINK_HOSTNAMES;
+		if (ourvertlv->cap_hostnames)
+			elected |= HNCP_LINK_HOSTNAMES;
 
-			if (ourvertlv->cap_legacy)
-				elected |= HNCP_LINK_LEGACY;
-		} else if (dncp_tlv_neighbor(c)) {
-			++peercnt;
-		} else if (tlv_id(c) == HNCP_T_ASSIGNED_PREFIX) {
-			hncp_t_assigned_prefix_header ah = dncp_tlv_ap(c);
-			if (ah && link && ah->link_id == link->iid)
-				elected |= HNCP_LINK_STATELESS;
-		}
+		if (ourvertlv->cap_legacy)
+			elected |= HNCP_LINK_LEGACY;
+
+		if (!link)
+			elected |= HNCP_LINK_STATELESS;
 	}
 
 	L_DEBUG("hncp_link_calculate: %s peer-candidates: %d preelected(SMPHL): %x",
 			ifname, (int)peercnt, elected);
 
 	if (link && enable) {
+		struct tlv_attr *c;
+		dncp_node_for_each_tlv(l->dncp->own_node, c) {
+			dncp_t_node_data_neighbor ne = dncp_tlv_neighbor(c);
+			hncp_t_assigned_prefix_header ah = dncp_tlv_ap(c);
+
+			if (ne && ne->link_id == link->iid)
+				++peercnt;
+			else if (ah && ah->link_id == link->iid)
+				elected |= HNCP_LINK_STATELESS;
+		}
+
 		if (peercnt)
 			peers = malloc(sizeof(*peers) * peercnt);
 
@@ -209,8 +213,7 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 
 	if (link) {
 		struct iface *iface = iface_get(link->ifname);
-		if (iface && iface->internal)
-			calculate_link(l, link->ifname, true);
+		calculate_link(l, link->ifname, iface && iface->internal);
 	}
 }
 
