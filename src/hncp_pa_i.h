@@ -213,7 +213,6 @@ struct hncp_pa_struct {
 	struct uloop_timeout v4_to;
 	bool v4_enabled;
 	hpa_dp_s v4_dp;
-	hnetd_time_t v4_backoff;
 
 	struct uloop_timeout ula_to;
 	bool ula_enabled;
@@ -247,18 +246,11 @@ do                              \
     if (d1)                     \
       free(d1);                 \
     d1 = NULL;                  \
-    if (l2)                     \
+    l1 = 0;                     \
+    if (l2 && (d1 = malloc(l2)))\
       {                         \
-        d1 = malloc(l2);        \
-        if (d1)                 \
-          {                     \
-            l1 = l2;            \
-            memcpy(d1, d2, l2); \
-          }                     \
-        else                    \
-          {                     \
-            l1 = 0;             \
-          }                     \
+         l1 = l2;               \
+         memcpy(d1, d2, l2);    \
       }                         \
   } while(0)
 

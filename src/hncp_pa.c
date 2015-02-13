@@ -195,62 +195,6 @@ hpa_iface hpa_iface_goc(hncp_pa hp, const char *ifname, bool create)
 	return i;
 }
 
-/******** Link Callbacks *******/
-
-static void hpa_link_link_cb(struct hncp_link_user *u, const char *ifname,
-		dncp_t_link_id peers, size_t peercnt)
-{
-	/* Set of neighboring dncp links changed.
-	 * - Update Advertised Prefixes adjacent link.
-	 */
-	L_DEBUG("hpa_link_link_cb: iface %s has now %d peers",
-			ifname, (int) peercnt);
-
-	hncp_pa hpa = container_of(u, hncp_pa_s, hncp_link_user);
-	hpa_iface i;
-	if(!(i = hpa_iface_goc(hpa, ifname, true)))
-		return;
-
-	hpa_adjacency adj, adj2;
-	size_t n;
-	for(n=0; n<peercnt; n++) {
-		if((adj = avl_find_element(&hpa->adjacencies, &peers[n], adj, te))) {
-			adj->iface = i;
-			adj->updated = 1;
-		} else if(!(adj = malloc(sizeof(*adj)))) {
-			L_ERR("hpa_link_link_cb: malloc error");
-		} else {
-			adj->id = peers[n];
-			adj->iface = i;
-			adj->updated = 1;
-			adj->te.key = &adj->id;
-			avl_insert(&hpa->adjacencies, &adj->te);
-		}
-	}
-
-	avl_for_each_element_safe(&hpa->adjacencies, adj, te, adj2) {
-		if(adj->iface == i) {
-			if(!adj->updated) {
-				avl_delete(&hpa->adjacencies, &adj->te);
-				free(adj);
-			} else {
-				adj->updated = 0;
-			}
-		}
-	}
-
-	hpa_advp hap;
-	list_for_each_entry(hap, &hpa->aps, le) {
-		if(hap->advp.link == &i->pal || !hap->advp.link) {
-			hpa_iface i = hpa_get_adjacent_iface(hpa, &hap->link_id);
-			if(&i->pal != hap->advp.link) {
-				hap->advp.link = &i->pal;
-				pa_advp_update(&hpa->pa, &hap->advp);
-			}
-		}
-	}
-}
-
 
 static void hpa_refresh_ec(hncp_pa hpa, bool publish)
 {
@@ -496,33 +440,6 @@ static void hpa_dp_update(hncp_pa hpa, hpa_dp dp,
 	}
 }
 
-void hpa_update_extdata(hncp_pa hpa, hpa_iface i,
-                               const void *data, size_t data_len,
-                               int index)
-{
-	L_DEBUG("hncp_pa_set_external_link %s/%s = %p/%d",
-			i->ifname, index == HNCP_PA_EXTDATA_IPV6 ? "dhcpv6" : "dhcp",
-					data, (int)data_len);
-	if (!data_len)
-		data = NULL;
-
-	/* Let's consider if there was a change. */
-	if (SAME(i->extdata[index], i->extdata_len[index], data, data_len))
-		return;
-
-	REPLACE(i->extdata[index], i->extdata_len[index], data, data_len);
-	hpa_refresh_ec(hpa, 1); //Refresh and publish
-}
-
-static void hpa_update_v4_uplink(hncp_pa hpa, hpa_iface iface, bool uplink)
-{
-	if(iface->ipv4_uplink == uplink)
-		return;
-
-	iface->ipv4_uplink = uplink;
-	//todo: Elect IPv4 uplink
-}
-
 static void hpa_dp_set_enabled(hncp_pa hpa, hpa_dp dp, bool enabled)
 {
 	if(dp->dp.enabled == !!enabled)
@@ -592,6 +509,268 @@ static void hpa_dp_update_enabled(hncp_pa hpa)
 	hpa_dp dp;
 	hpa_for_each_dp(hpa, dp)
 		hpa_dp_set_enabled(hpa, dp, hpa_dp_compute_enabled(hpa, dp));
+}
+
+/******** ULA and IPv4 handling *******/
+
+#define hpa_v4_update(hpa) hpa_v4_to(&(hpa)->v4_to)
+
+static int hpa_has_other_v4(hncp_pa hpa)
+{
+	hpa_dp dp;
+	hpa_for_each_dp(hpa, dp)
+		if(dp->pa.type == HPA_DP_T_HNCP && prefix_is_ipv4(&dp->dp.prefix) &&
+				(memcmp(&dp->hncp.node_id, &hpa->dncp->own_node->node_identifier,
+						sizeof(dncp_node_identifier_s)) >= 0))
+			return 1;
+	return 0;
+}
+
+static hpa_iface hpa_elect_v4(hncp_pa hpa)
+{
+	if(hpa->v4_enabled && hpa->v4_dp.iface.iface->ipv4_uplink)
+		return hpa->v4_dp.iface.iface;
+
+	hpa_iface i;
+	hpa_for_each_iface(hpa, i)
+	if(i->ipv4_uplink)
+		return i;
+	return NULL;
+}
+
+static void hpa_v4_to(struct uloop_timeout *to)
+{
+	hnetd_time_t now = hnetd_time();
+	hncp_pa hpa = container_of(to, hncp_pa_s, v4_to);
+	hpa_iface elected_iface;
+
+	if(!hpa->ula_conf.use_ipv4 ||
+			!(elected_iface = hpa_elect_v4(hpa)) || //We have no v4 candidate
+			hpa_has_other_v4(hpa)) {
+		//Cannot have an IPv4 uplink
+		if(hpa->v4_enabled) {
+			L_DEBUG("IPv4 Prefix: Remove");
+			hpa->v4_enabled = 0;
+			hpa_dp_set_enabled(hpa, &hpa->v4_dp, 0);
+			list_del(&hpa->v4_dp.dp.le);
+			hpa_dp_update_enabled(hpa);
+		}
+	} else if(hpa->v4_enabled) {
+		if(hpa->v4_dp.iface.iface != elected_iface) {
+			//Update elected interface
+			L_DEBUG("IPv4 Prefix: Change interface from %s to %s",
+					hpa->v4_dp.iface.iface->ifname, elected_iface->ifname);
+			//todo: This approach will destroy all APs. Maybe we can do it more
+			//seemlessly
+			hpa_dp_set_enabled(hpa, &hpa->v4_dp, 0);
+			hpa->v4_dp.iface.iface = elected_iface;
+			hpa_dp_update_enabled(hpa);
+		}
+
+		if((hpa->v4_dp.valid_until - hpa->ula_conf.local_update_delay) <= now) {
+			L_DEBUG("IPv4 Prefix: Update");
+			hpa_dp_update(hpa, &hpa->v4_dp,
+					now + hpa->ula_conf.local_preferred_lifetime,
+					now + hpa->ula_conf.local_valid_lifetime,
+					NULL, 0);
+		}
+	} else {
+		//
+		L_DEBUG("IPv4 Prefix: Uplink is now %s", elected_iface->ifname);
+		memset(&hpa->v4_dp, 0, sizeof(hpa->v4_dp));
+		hpa->v4_dp.dp.local = 1;
+		hpa->v4_dp.dp.prefix = hpa->ula_conf.v4_prefix;
+		hpa->v4_dp.pa.type = HPA_DP_T_IFACE;
+		hpa->v4_dp.iface.excluded = 0;
+		hpa->v4_dp.iface.iface = elected_iface;
+		hpa->v4_dp.pa.prefix = hpa->ula_conf.v4_prefix.prefix;
+		hpa->v4_dp.pa.plen = hpa->ula_conf.v4_prefix.plen;
+		list_add(&hpa->v4_dp.dp.le, &hpa->dps);
+		hpa_dp_update(hpa, &hpa->v4_dp,
+				now + hpa->ula_conf.local_preferred_lifetime,
+				now + hpa->ula_conf.local_valid_lifetime,
+				NULL, 0);
+		hpa->v4_enabled = 1;
+		hpa_dp_update_enabled(hpa);
+		hpa->ula_backoff = 0;
+	}
+
+	if(hpa->v4_enabled) { //Next update time
+		uloop_timeout_set(to,
+				(int)(hpa->v4_dp.valid_until - hpa->ula_conf.local_update_delay - now));
+	}
+}
+
+static int hpa_has_other_ula(hncp_pa hpa)
+{
+	hpa_dp dp;
+	hpa_for_each_dp(hpa, dp)
+		if(dp->pa.type != HPA_DP_T_ULA &&
+				prefix_is_ipv6_ula(&dp->dp.prefix))
+			return 1;
+	return 0;
+}
+
+static int hpa_has_global_v6(hncp_pa hpa)
+{
+	hpa_dp dp;
+	hpa_for_each_dp(hpa, dp)
+		if(prefix_is_global(&dp->dp.prefix))
+			return 1;
+	return 0;
+}
+
+#define hpa_ula_update(hpa) hpa_ula_to(&(hpa)->ula_to)
+
+static void hpa_ula_to(struct uloop_timeout *to)
+{
+	L_DEBUG("hpa_ula_to: Update");
+
+	hncp_pa hpa = container_of(to, hncp_pa_s, ula_to);
+	hnetd_time_t now = hnetd_time();
+
+	bool destroy = !hpa->ula_conf.use_ula ||
+			hpa_has_other_ula(hpa) ||
+			(hpa->ula_conf.no_ula_if_glb_ipv6 && hpa_has_global_v6(hpa));
+
+	if(destroy) {
+		if(hpa->ula_enabled) {
+			//Remove ula
+			L_DEBUG("ULA Spontaneous Generation: Remove ULA");
+			hpa->ula_enabled = 0;
+			hpa_dp_set_enabled(hpa, &hpa->ula_dp, 0);
+			list_del(&hpa->ula_dp.dp.le);
+			hpa_dp_update_enabled(hpa);
+		} else if(hpa->ula_backoff) {
+			//Cancel backoff
+			L_DEBUG("ULA Spontaneous Generation: Cancel Backoff");
+			hpa->ula_backoff = 0;
+		}
+	} else if(hpa->ula_enabled) { //It exists already
+		if((hpa->ula_dp.valid_until - hpa->ula_conf.local_update_delay) <= now) {
+			L_DEBUG("ULA Spontaneous Generation: Update");
+			//Update lifetime
+			hpa_dp_update(hpa, &hpa->ula_dp,
+					now + hpa->ula_conf.local_preferred_lifetime,
+					now + hpa->ula_conf.local_valid_lifetime,
+					NULL, 0);
+		}
+	} else if(!hpa->ula_backoff) { //No backoff yet
+		int delay = 10 + (random() % HPA_ULA_MAX_BACKOFF);
+		hpa->ula_backoff = now + delay;
+		L_DEBUG("ULA Spontaneous Generation: Backoff %d ms", delay);
+	} else if(hpa->ula_backoff <= now) { //Time to create
+		L_DEBUG("ULA Spontaneous Generation: Create");
+		//create ula
+		struct prefix ula;
+		if(hpa->ula_conf.use_random_ula) {
+			memcpy(&ula.prefix, &ipv6_ula_prefix.prefix,
+					sizeof(struct in6_addr));
+			//todo: Generate randomly based on RFCXXXX
+			uint32_t rand[2] = {random(), random()};
+			bmemcpy_shift(&ula.prefix, ipv6_ula_prefix.plen, rand, 0,
+					48 - ipv6_ula_prefix.plen);
+			ula.plen = 48;
+		} else {
+			ula = hpa->ula_conf.ula_prefix;
+		}
+
+		memset(&hpa->ula_dp, 0, sizeof(hpa->ula_dp));
+		hpa->ula_dp.dp.local = 1;
+		hpa->ula_dp.dp.prefix = ula;
+		hpa->ula_dp.pa.type = HPA_DP_T_ULA;
+		hpa->ula_dp.pa.prefix = ula.prefix;
+		hpa->ula_dp.pa.plen = ula.plen;
+		list_add(&hpa->ula_dp.dp.le, &hpa->dps);
+		hpa_dp_update(hpa, &hpa->ula_dp,
+				now + hpa->ula_conf.local_preferred_lifetime,
+				now + hpa->ula_conf.local_valid_lifetime,
+				NULL, 0);
+		hpa->ula_enabled = 1;
+		hpa_dp_update_enabled(hpa);
+		hpa->ula_backoff = 0;
+	}
+
+	if(hpa->ula_enabled) { //Next update time
+		uloop_timeout_set(to,
+			(int)(hpa->ula_dp.valid_until - hpa->ula_conf.local_update_delay - now));
+	} else if(hpa->ula_backoff) { //Wake up for backoff
+		uloop_timeout_set(to, (int)(hpa->ula_backoff - now + 10));
+	}
+}
+
+/******** Link Callbacks *******/
+
+static void hpa_link_link_cb(struct hncp_link_user *u, const char *ifname,
+		dncp_t_link_id peers, size_t peercnt)
+{
+	/* Set of neighboring dncp links changed.
+	 * - Update Advertised Prefixes adjacent link.
+	 */
+	L_DEBUG("hpa_link_link_cb: iface %s has now %d peers",
+			ifname, (int) peercnt);
+
+	hncp_pa hpa = container_of(u, hncp_pa_s, hncp_link_user);
+	hpa_iface i;
+	if(!(i = hpa_iface_goc(hpa, ifname, true)))
+		return;
+
+	hpa_adjacency adj, adj2;
+	size_t n;
+	for(n=0; n<peercnt; n++) {
+		if((adj = avl_find_element(&hpa->adjacencies, &peers[n], adj, te))) {
+			adj->iface = i;
+			adj->updated = 1;
+		} else if(!(adj = malloc(sizeof(*adj)))) {
+			L_ERR("hpa_link_link_cb: malloc error");
+		} else {
+			adj->id = peers[n];
+			adj->iface = i;
+			adj->updated = 1;
+			adj->te.key = &adj->id;
+			avl_insert(&hpa->adjacencies, &adj->te);
+		}
+	}
+
+	avl_for_each_element_safe(&hpa->adjacencies, adj, te, adj2) {
+		if(adj->iface == i) {
+			if(!adj->updated) {
+				avl_delete(&hpa->adjacencies, &adj->te);
+				free(adj);
+			} else {
+				adj->updated = 0;
+			}
+		}
+	}
+
+	hpa_advp hap;
+	list_for_each_entry(hap, &hpa->aps, le) {
+		if(hap->advp.link == &i->pal || !hap->advp.link) {
+			hpa_iface i = hpa_get_adjacent_iface(hpa, &hap->link_id);
+			if(&i->pal != hap->advp.link) {
+				hap->advp.link = &i->pal;
+				pa_advp_update(&hpa->pa, &hap->advp);
+			}
+		}
+	}
+}
+
+void hpa_update_extdata(hncp_pa hpa, hpa_iface i,
+                               const void *data, size_t data_len,
+                               int index)
+{
+	L_DEBUG("hncp_pa_set_external_link %s/%s = %p/%d",
+			i->ifname, index == HNCP_PA_EXTDATA_IPV6 ? "dhcpv6" : "dhcp",
+					data, (int)data_len);
+	if (!data_len)
+		data = NULL;
+
+	/* Let's consider if there was a change. */
+	if (SAME(i->extdata[index], i->extdata_len[index], data, data_len))
+		return;
+
+	REPLACE(i->extdata[index], i->extdata_len[index], data, data_len);
+	hpa_refresh_ec(hpa, 1); //Refresh and publish
 }
 
 static void hpa_dp_update_excluded(hncp_pa hpa, hpa_dp dp,
@@ -687,7 +866,10 @@ static void hpa_iface_ext4data_cb(struct iface_user *u, const char *ifname,
 	hpa_iface i;
 	if((i = hpa_iface_goc(hpa, ifname, true))) {
 		hpa_update_extdata(hpa, i, dhcp_data, dhcp_len, HNCP_PA_EXTDATA_IPV4);
-		hpa_update_v4_uplink(hpa, i, !!dhcp_data);
+		if(i->ipv4_uplink != !!dhcp_data) {
+			i->ipv4_uplink = !!dhcp_data;
+			hpa_v4_update(hpa);
+		}
 	}
 }
 
@@ -782,114 +964,6 @@ static void hpa_iface_intaddr_cb(struct iface_user *u, const char *ifname,
  //Do nothing
 }
 */
-
-
-/******** ULA and IPv4 handling *******/
-
-#define hpa_v4_update(hpa) hpa_v4_to(&(hpa)->v4_to)
-
-static void hpa_v4_to(struct uloop_timeout *to)
-{
-	L_DEBUG("hpa_v4_to: Do nothing for now");
-}
-
-static int hpa_has_other_ula(hncp_pa hpa)
-{
-	hpa_dp dp;
-	hpa_for_each_dp(hpa, dp)
-		if(dp->pa.type != HPA_DP_T_ULA &&
-				prefix_is_ipv6_ula(&dp->dp.prefix))
-			return 1;
-	return 0;
-}
-
-static int hpa_has_global_v6(hncp_pa hpa)
-{
-	hpa_dp dp;
-	hpa_for_each_dp(hpa, dp)
-		if(prefix_is_global(&dp->dp.prefix))
-			return 1;
-	return 0;
-}
-
-#define hpa_ula_update(hpa) hpa_ula_to(&(hpa)->ula_to)
-
-static void hpa_ula_to(struct uloop_timeout *to)
-{
-	L_DEBUG("hpa_ula_to: Update");
-
-	hncp_pa hpa = container_of(to, hncp_pa_s, ula_to);
-	hnetd_time_t now = hnetd_time();
-
-	bool destroy = !hpa->ula_conf.use_ula ||
-			hpa_has_other_ula(hpa) ||
-			(hpa->ula_conf.no_ula_if_glb_ipv6 && hpa_has_global_v6(hpa));
-
-	if(destroy) {
-		if(hpa->ula_enabled) {
-			//Remove ula
-			L_DEBUG("ULA Spontaneous Generation: Remove ULA");
-			hpa->ula_enabled = 0;
-			hpa_dp_set_enabled(hpa, &hpa->ula_dp, 0);
-			list_del(&hpa->ula_dp.dp.le);
-			hpa_dp_update_enabled(hpa);
-		} else if(hpa->ula_backoff) {
-			//Cancel backoff
-			L_DEBUG("ULA Spontaneous Generation: Cancel Backoff");
-			hpa->ula_backoff = 0;
-		}
-	} else if(hpa->ula_enabled) { //It exists already
-		L_DEBUG("ULA Spontaneous Generation: Update");
-		if((hpa->ula_dp.valid_until - hpa->ula_conf.local_update_delay) <= now) {
-			//Update lifetime
-			hpa_dp_update(hpa, &hpa->ula_dp,
-					now + hpa->ula_conf.local_preferred_lifetime,
-					now + hpa->ula_conf.local_valid_lifetime,
-					NULL, 0);
-		}
-	} else if(!hpa->ula_backoff) { //No backoff yet
-		int delay = 10 + (random() % HPA_ULA_MAX_BACKOFF);
-		hpa->ula_backoff = now + delay;
-		L_DEBUG("ULA Spontaneous Generation: Backoff %d ms", delay);
-	} else if(hpa->ula_backoff <= now) { //Time to create
-		L_DEBUG("ULA Spontaneous Generation: Create");
-		//create ula
-		struct prefix ula;
-		if(hpa->ula_conf.use_random_ula) {
-			memcpy(&ula.prefix, &ipv6_ula_prefix.prefix,
-					sizeof(struct in6_addr));
-			//todo: Generate randomly based on RFCXXXX
-			uint32_t rand[2] = {random(), random()};
-			bmemcpy_shift(&ula.prefix, ipv6_ula_prefix.plen, rand, 0,
-					48 - ipv6_ula_prefix.plen);
-			ula.plen = 48;
-		} else {
-			ula = hpa->ula_conf.ula_prefix;
-		}
-
-		memset(&hpa->ula_dp, 0, sizeof(hpa->ula_dp));
-		hpa->ula_dp.dp.local = 1;
-		hpa->ula_dp.dp.prefix = ula;
-		hpa->ula_dp.pa.type = HPA_DP_T_ULA;
-		hpa->ula_dp.pa.prefix = ula.prefix;
-		hpa->ula_dp.pa.plen = ula.plen;
-		list_add(&hpa->ula_dp.dp.le, &hpa->dps);
-		hpa_dp_update(hpa, &hpa->ula_dp,
-				now + hpa->ula_conf.local_preferred_lifetime,
-				now + hpa->ula_conf.local_valid_lifetime,
-				NULL, 0);
-		hpa->ula_enabled = 1;
-		hpa_dp_update_enabled(hpa);
-		hpa->ula_backoff = 0;
-	}
-
-	if(hpa->ula_enabled) { //Next update time
-		uloop_timeout_set(to,
-			(int)(hpa->ula_dp.valid_until - hpa->ula_conf.local_update_delay - now));
-	} else if(hpa->ula_backoff) { //Wake up for backoff
-		uloop_timeout_set(to, (int)(hpa->ula_backoff - now + 10));
-	}
-}
 
 /******** DNCP Stuff *******/
 
