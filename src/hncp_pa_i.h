@@ -96,9 +96,7 @@ struct hpa_iface_struct {
 	char pa_name[IFNAMSIZ + HPA_LINK_NAME_LEN];
 	struct pa_link pal;
 	struct pa_rule_adopt pa_adopt;
-	struct pa_rule_random pa_rand6;
-	struct pa_rule_random pa_rand6_scarcity;
-	struct pa_rule_random pa_rand4;
+	struct pa_rule_random pa_rand;
 	//todo: Add filters for v4 vs v6
 
 	char aa_name[IFNAMSIZ + HPA_LINK_NAME_LEN];

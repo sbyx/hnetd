@@ -220,6 +220,13 @@
  **********************************/
 
 /**
+ * pa_rule_random provides the available prefix count for
+ * all available prefixes up to the maximum plen included.
+ *   (Mandatory)
+ */
+#define PA_RAND_MAX_PLEN 128
+
+/**
  * Random function used by pa_rule_random.
  *   int pa_rand(void)
  */

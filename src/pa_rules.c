@@ -163,28 +163,31 @@ enum pa_rule_target pa_rule_random_match(struct pa_rule *rule, struct pa_ldp *ld
 	if(!ldp->backoff)
 		return PA_RULE_BACKOFF; //Start or continue backoff timer.
 
-	uint16_t prefix_count[rule_r->desired_plen];
-	pa_rule_prefix_count(ldp, prefix_count, rule_r->desired_plen);
+	uint16_t prefix_count[PA_RAND_MAX_PLEN + 1];
+	pa_rule_prefix_count(ldp, prefix_count, PA_RAND_MAX_PLEN);
+
+	pa_plen desired_plen = (rule_r->desired_plen_cb)?
+			rule_r->desired_plen_cb(rule_r, ldp, prefix_count):rule_r->desired_plen;
 
 	uint32_t found;
 	pa_plen min_plen;
 	uint32_t overflow_n;
-	found = pa_rule_candidate_subset(prefix_count, rule_r->desired_plen, rule_r->random_set_size, &min_plen, &overflow_n);
+	found = pa_rule_candidate_subset(prefix_count, desired_plen, rule_r->random_set_size, &min_plen, &overflow_n);
 
 
 	if(!found) { //No more available prefixes
-		PA_INFO("No prefix candidates of length %d could be found in %s", (int)rule_r->desired_plen, pa_prefix_repr(&ldp->dp->prefix, ldp->dp->plen));
+		PA_INFO("No prefix candidates of length %d could be found in %s", (int)desired_plen, pa_prefix_repr(&ldp->dp->prefix, ldp->dp->plen));
 		return PA_RULE_NO_MATCH;
 	}
 
-	PA_DEBUG("Found %"PRIu32" prefix candidates of length %d in %s", found, (int)rule_r->desired_plen, pa_prefix_repr(&ldp->dp->prefix, ldp->dp->plen));
+	PA_DEBUG("Found %"PRIu32" prefix candidates of length %d in %s", found, (int)desired_plen, pa_prefix_repr(&ldp->dp->prefix, ldp->dp->plen));
 	PA_DEBUG("Minimum available prefix length is %d", min_plen);
 
 	if(rule_r->pseudo_random_tentatives) {
 		pa_prefix overflow_prefix;
 		if(overflow_n) {
-			pa_rule_candidate_pick(ldp, overflow_n, &overflow_prefix, rule_r->desired_plen, min_plen, min_plen);
-			PA_DEBUG("Last (#%"PRIu32") candidate in available prefix of length %d is %s", overflow_n, min_plen, pa_prefix_repr(&overflow_prefix, rule_r->desired_plen));
+			pa_rule_candidate_pick(ldp, overflow_n, &overflow_prefix, desired_plen, min_plen, min_plen);
+			PA_DEBUG("Last (#%"PRIu32") candidate in available prefix of length %d is %s", overflow_n, min_plen, pa_prefix_repr(&overflow_prefix, desired_plen));
 		}
 
 		/* Make pseudo-random tentatives. */
@@ -194,16 +197,16 @@ enum pa_rule_target pa_rule_random_match(struct pa_rule *rule, struct pa_ldp *ld
 		pa_plen iter_plen;
 		uint16_t i;
 		for(i=0; i<rule_r->pseudo_random_tentatives; i++) {
-			pa_rule_prefix_prandom(rule_r->pseudo_random_seed, rule_r->pseudo_random_seedlen, i, &ldp->dp->prefix, ldp->dp->plen, &tentative, rule_r->desired_plen);
-			PA_DEBUG("Trying pseudo-random %s", pa_prefix_repr(&tentative, rule_r->desired_plen));
+			pa_rule_prefix_prandom(rule_r->pseudo_random_seed, rule_r->pseudo_random_seedlen, i, &ldp->dp->prefix, ldp->dp->plen, &tentative, desired_plen);
+			PA_DEBUG("Trying pseudo-random %s", pa_prefix_repr(&tentative, desired_plen));
 			btrie_for_each_available_loop_stop(&ldp->core->prefixes, n, n0, l0, (btrie_key_t *)&iter_p, &iter_plen, \
-					(btrie_key_t *)&tentative, ldp->dp->plen, rule_r->desired_plen)
+					(btrie_key_t *)&tentative, ldp->dp->plen, desired_plen)
 			{
-				if(iter_plen > rule_r->desired_plen || //First available prefix is too small
+				if(iter_plen > desired_plen || //First available prefix is too small
 						!pa_prefix_contains(&iter_p, iter_plen, &tentative) || //First available prefix does not contain the tentative prefix
 						iter_plen < min_plen || //Not in the candidate prefix set
 						(overflow_n && iter_plen == min_plen && //Minimal length and greater than the overflow prefix
-								(bmemcmp(&tentative, &overflow_prefix, rule_r->desired_plen) >= 0))) {
+								(bmemcmp(&tentative, &overflow_prefix, desired_plen) >= 0))) {
 					//Prefix is not in the candidate prefix set
 					PA_DEBUG("Prefix is not in the candidate prefixes set");
 					break;
@@ -215,10 +218,10 @@ enum pa_rule_target pa_rule_random_match(struct pa_rule *rule, struct pa_ldp *ld
 
 	/* Select a random prefix */
 	uint32_t id = pa_rand() % found;
-	pa_rule_candidate_pick(ldp, id, &tentative, rule_r->desired_plen, min_plen, rule_r->desired_plen);
+	pa_rule_candidate_pick(ldp, id, &tentative, desired_plen, min_plen, desired_plen);
 
 choose:
-	pa_prefix_cpy(&tentative, rule_r->desired_plen, &pa_arg->prefix, pa_arg->plen);
+	pa_prefix_cpy(&tentative, desired_plen, &pa_arg->prefix, pa_arg->plen);
 	return PA_RULE_PUBLISH;
 }
 

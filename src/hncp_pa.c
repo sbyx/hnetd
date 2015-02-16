@@ -92,15 +92,47 @@ static const char *excluded_link_name = "excluded-prefixes";
 static void hpa_conf_update_cb(struct vlist_tree *tree,
 		struct vlist_node *node_new, struct vlist_node *node_old);
 
-static int hpa_iface_filter_accept(struct pa_rule *rule,
+static int hpa_iface_filter_accept(__unused struct pa_rule *rule,
 		struct pa_ldp *ldp, void *p)
 {
 	hpa_iface i = p;
-	if(ldp->link != &i->pal)
-		return 0;
+	return ldp->link == &i->pal;
+}
 
-	struct prefix prefix = {.prefix = ldp->dp->prefix, .plen = ldp->dp->plen};
-	return (rule == &i->pa_rand4.rule)?prefix_is_ipv4(&prefix):!prefix_is_ipv4(&prefix);
+static pa_plen hpa_desired_plen_cb(__unused struct pa_rule_random *rule_r,
+		struct pa_ldp *ldp,
+		uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
+{
+	pa_plen biggest = 129;
+	int i;
+	for(i=0; i<=PA_RAND_MAX_PLEN; i++) {
+		if(prefix_count[i]) {
+			biggest = i;
+			break;
+		}
+	}
+
+	if(biggest == 129)
+		goto fail;
+
+	//todo: Add config
+
+	hpa_dp dp = container_of(ldp->dp, hpa_dp_s, pa);
+	if(prefix_is_ipv4(&dp->dp.prefix)) {
+		if(biggest <= 120)
+			return 124;
+		if(biggest <= 124)
+			return 124;
+		goto fail;
+	} else {
+		if(biggest <= 64)
+			return 64;
+		if(biggest <= 90)
+			return 90;
+		goto fail;
+	}
+fail:
+	return ldp->dp->plen;
 }
 
 /* Initializes PA, ready to be added */
@@ -117,40 +149,16 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	i->pa_adopt.rule.filter_private = i;
 
 	//Init the assignment rule
-	pa_rule_random_init(&i->pa_rand6);
-	i->pa_rand6.pseudo_random_seed = (uint8_t *)i->pa_name; //todo use EUI64
-	i->pa_rand6.pseudo_random_seedlen = strlen(i->pa_name);
-	i->pa_rand6.pseudo_random_tentatives = HPA_PSEUDO_RAND_TENTATIVES;
-	i->pa_rand6.random_set_size = HPA_RAND_SET_SIZE;
-	i->pa_rand6.desired_plen = 64; //todo: Use conf
-	i->pa_rand6.priority = HPA_PRIORITY_CREATE;
-	i->pa_rand6.rule_priority = HPA_RULE_CREATE;
-	i->pa_rand6.rule.filter_accept = hpa_iface_filter_accept;
-	i->pa_rand6.rule.filter_private = i;
-
-	pa_rule_random_init(&i->pa_rand6_scarcity);
-	i->pa_rand6_scarcity.pseudo_random_seed = (uint8_t *)i->pa_name; //todo use EUI64
-	i->pa_rand6_scarcity.pseudo_random_seedlen = strlen(i->pa_name);
-	i->pa_rand6_scarcity.pseudo_random_tentatives = HPA_PSEUDO_RAND_TENTATIVES;
-	i->pa_rand6_scarcity.random_set_size = HPA_RAND_SET_SIZE;
-	i->pa_rand6_scarcity.desired_plen = 90; //todo: Use conf
-	i->pa_rand6_scarcity.priority = HPA_PRIORITY_SCARCITY;
-	i->pa_rand6_scarcity.rule_priority = HPA_RULE_CREATE_SCARCITY;
-	i->pa_rand6_scarcity.rule.filter_accept = hpa_iface_filter_accept;
-	i->pa_rand6_scarcity.rule.filter_private = i;
-
-	pa_rule_random_init(&i->pa_rand4);
-	i->pa_rand4.pseudo_random_seed = (uint8_t *)i->pa_name; //todo use EUI64
-	i->pa_rand4.pseudo_random_seedlen = strlen(i->pa_name);
-	i->pa_rand4.pseudo_random_tentatives = HPA_PSEUDO_RAND_TENTATIVES;
-	i->pa_rand4.random_set_size = HPA_RAND_SET_SIZE;
-	i->pa_rand4.desired_plen = 120; //todo: Use conf
-	i->pa_rand4.priority = HPA_PRIORITY_CREATE;
-	i->pa_rand4.rule_priority = HPA_RULE_CREATE;
-	i->pa_rand4.rule.filter_accept = hpa_iface_filter_accept;
-	i->pa_rand4.rule.filter_private = i;
-
-	//todo: Add scarcity
+	pa_rule_random_init(&i->pa_rand);
+	i->pa_rand.pseudo_random_seed = (uint8_t *)i->pa_name; //todo use EUI64
+	i->pa_rand.pseudo_random_seedlen = strlen(i->pa_name);
+	i->pa_rand.pseudo_random_tentatives = HPA_PSEUDO_RAND_TENTATIVES;
+	i->pa_rand.random_set_size = HPA_RAND_SET_SIZE;
+	i->pa_rand.desired_plen_cb = hpa_desired_plen_cb;
+	i->pa_rand.priority = HPA_PRIORITY_CREATE;
+	i->pa_rand.rule_priority = HPA_RULE_CREATE;
+	i->pa_rand.rule.filter_accept = hpa_iface_filter_accept;
+	i->pa_rand.rule.filter_private = i;
 
 	//Init AA
 	sprintf(i->aa_name, HPA_LINK_NAME_ADDR"%s", i->ifname);
@@ -163,6 +171,7 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	i->aa_rand.pseudo_random_seedlen = strlen(i->aa_name);
 	i->aa_rand.pseudo_random_tentatives = HPA_PSEUDO_RAND_TENTATIVES;
 	i->aa_rand.random_set_size = HPA_RAND_SET_SIZE;
+	i->aa_rand.desired_plen_cb = NULL;
 	i->aa_rand.desired_plen = 128; //todo: Use conf
 	i->aa_rand.priority = HPA_PRIORITY_CREATE;
 	i->aa_rand.rule_priority = HPA_RULE_CREATE;
@@ -812,9 +821,7 @@ static void hpa_iface_set_pa_enabled(hncp_pa hpa, hpa_iface i, bool enabled)
 
 	if(i->pa_enabled) {
 		pa_rule_add(&hpa->pa, &i->pa_adopt.rule);
-		pa_rule_add(&hpa->pa, &i->pa_rand6.rule);
-		pa_rule_add(&hpa->pa, &i->pa_rand6_scarcity.rule);
-		pa_rule_add(&hpa->pa, &i->pa_rand4.rule);
+		pa_rule_add(&hpa->pa, &i->pa_rand.rule);
 		pa_link_add(&hpa->pa, &i->pal);
 
 		pa_rule_add(&hpa->aa, &i->aa_rand.rule);
@@ -824,9 +831,7 @@ static void hpa_iface_set_pa_enabled(hncp_pa hpa, hpa_iface i, bool enabled)
 		pa_rule_del(&hpa->aa, &i->aa_rand.rule);
 
 		pa_link_del(&i->pal);
-		pa_rule_del(&hpa->pa, &i->pa_rand4.rule);
-		pa_rule_del(&hpa->pa, &i->pa_rand6_scarcity.rule);
-		pa_rule_del(&hpa->pa, &i->pa_rand6.rule);
+		pa_rule_del(&hpa->pa, &i->pa_rand.rule);
 		pa_rule_del(&hpa->pa, &i->pa_adopt.rule);
 	}
 }

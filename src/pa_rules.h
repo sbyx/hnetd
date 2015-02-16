@@ -66,7 +66,11 @@ struct pa_rule_random {
 	/* The Advertised Prefix Priority used when publishing the new prefix. */
 	pa_priority priority;
 
-	/* The desired prefix length. */
+	/* The desired prefix length. When desired_plen_cb is not NULL, it is
+	 * called with the available prefix count for each prefix length.
+	 * desired_plen is used otherwise. */
+	pa_plen (*desired_plen_cb)(struct pa_rule_random *, struct pa_ldp *,
+			uint16_t prefix_count[PA_RAND_MAX_PLEN + 1]);
 	pa_plen desired_plen;
 
 	/* Pseudo-random and random prefixes are picked in a given set of

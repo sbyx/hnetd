@@ -72,6 +72,7 @@ void pa_rules_random()
 
 	struct pa_rule_random random;
 	pa_rule_random_init(&random);
+	random.desired_plen_cb = NULL;
 	random.desired_plen = 12;
 	random.rule_priority = 3;
 	random.priority = 4;
