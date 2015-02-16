@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Mon Jan 26 15:50:03 2015 mstenber
- * Edit time:     297 min
+ * Last modified: Mon Feb 16 11:27:58 2015 mstenber
+ * Edit time:     299 min
  *
  */
 
@@ -33,11 +33,6 @@
  */
 
 
-#include "dtls.h"
-#if L_LEVEL >= LOG_DEBUG
-/* HEX_REPR */
-#include "tlv.h"
-#endif /* L_LEVEL >= LOG_DEBUG */
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,9 +45,16 @@
 #include <libubox/uloop.h>
 #include <errno.h>
 #include <net/if.h>
-/* In linux, fcntl.h includes something with __unused. Argh. */
+/* In linux, fcntl.h includes something with __unused. Argh. So
+ * include this before anything hnetd-specific.*/
 #include <fcntl.h>
-#define __unused __attribute__((unused))
+
+#include "dtls.h"
+#if L_LEVEL >= LOG_DEBUG
+/* HEX_REPR */
+#include "tlv.h"
+#endif /* L_LEVEL >= LOG_DEBUG */
+
 
 #ifdef DTLS_OPENSSL
 
