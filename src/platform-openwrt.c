@@ -155,7 +155,7 @@ int platform_rpc_cli(const char *method, struct blob_attr *in)
 		return 3;
 	}
 
-	if (ubus_invoke(ubus, self, method, in, platform_rpc_call_cb, out, 3000)) {
+	if (ubus_invoke(ubus, self, method, in, platform_rpc_call_cb, &out, 3000)) {
 		L_ERR("Failed to invoke hnetd method %s", method);
 		return 3;
 	}
