@@ -76,8 +76,8 @@
 
 #define HPA_PD_MIN_PLEN            60
 
-#define HPA_AP_FLOOD_DELAY 4000
-#define HPA_RA_FLOOD_DELAY 1000
+#define HPA_AP_FLOOD_DELAY 3000
+#define HPA_RA_FLOOD_DELAY 700
 #define HPA_ULA_MAX_BACKOFF 10000
 
 static struct prefix PAL_CONF_DFLT_V4_PREFIX = {
@@ -140,6 +140,7 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 {
 	sprintf(i->pa_name, HPA_LINK_NAME_IF"%s", i->ifname);
 	pa_link_init(&i->pal, i->pa_name);
+	i->pal.type = HPA_LINK_T_IFACE;
 
 	//Init the adoption rule
 	pa_rule_adopt_init(&i->pa_adopt);
@@ -164,6 +165,7 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	sprintf(i->aa_name, HPA_LINK_NAME_ADDR"%s", i->ifname);
 	pa_link_init(&i->aal, i->aa_name);
 	i->aal.ha_parent = &i->pal;
+	i->aal.type = HPA_LINK_T_IFACE;
 
 	//Use first quarter of available addresses
 	pa_rule_random_init(&i->aa_rand);
@@ -418,14 +420,23 @@ static void hpa_dp_update(hncp_pa hpa, hpa_dp dp,
 		hnetd_time_t preferred_until, hnetd_time_t valid_until,
 		const char *dhcp_data, size_t dhcp_len)
 {
+	L_DEBUG("hpa_dp_update: updating delegated prefix %s",
+			PREFIX_REPR(&dp->dp.prefix));
 	bool updated = 0;
 	if(dp->preferred_until != preferred_until ||
 			dp->valid_until != valid_until) {
-		updated = 1;
+		L_DEBUG("hpa_dp_update: updating lifetimes from (%"PRItime", %"PRItime
+				") to (%"PRItime", %"PRItime")",
+				dp->valid_until, dp->preferred_until,
+				valid_until, preferred_until);
 		dp->preferred_until = preferred_until;
 		dp->valid_until = valid_until;
+		updated = 1;
 	}
 	if(!SAME(dp->dhcp_data, dp->dhcp_len, dhcp_data, dhcp_len)) {
+		L_DEBUG("hpa_dp_update: updating DHCP from %s to %s",
+				HEX_REPR(dp->dhcp_data, dp->dhcp_len),
+				HEX_REPR(dhcp_data, dhcp_len));
 		REPLACE(dp->dhcp_data, dp->dhcp_len, dhcp_data, dhcp_len);
 		updated = 1;
 	}
@@ -433,6 +444,7 @@ static void hpa_dp_update(hncp_pa hpa, hpa_dp dp,
 	if(updated && dp->dp.enabled) { //Only looks for enabled dps
 		struct pa_ldp *ldp, *addr_ldp;
 		pa_for_each_ldp_in_dp(&dp->pa, ldp) {
+			L_DEBUG("hpa_dp_update: One LDP of type %d", ldp->link->type); //todo: remove that line
 			if(ldp->link->type == HPA_LINK_T_IFACE) {
 				//Tell iface.c about changed lifetimes
 				if(ldp->applied && (addr_ldp = ldp->userdata[PA_LDP_U_HNCP_ADDR])
@@ -902,8 +914,8 @@ static void hpa_iface_prefix_cb(struct iface_user *u, const char *ifname,
 		hnetd_time_t valid_until, hnetd_time_t preferred_until,
 		const void *dhcpv6_data, size_t dhcpv6_len)
 {
-	L_DEBUG("hpa_iface_prefix_cb: %s,%d,%d,excluded=%s,dhcp_data=%s",
-			PREFIX_REPR(prefix), (int) valid_until, (int) preferred_until,
+	L_DEBUG("hpa_iface_prefix_cb: %s,%"PRItime",%"PRItime",excluded=%s,dhcp_data=%s",
+			PREFIX_REPR(prefix), valid_until, preferred_until,
 			excluded?PREFIX_REPR(excluded):"null", dhcpv6_len?HEX_REPR(dhcpv6_data, dhcpv6_len):"null");
 	/* Add/Delete update a local delegated prefix.
 	 */
@@ -917,6 +929,7 @@ static void hpa_iface_prefix_cb(struct iface_user *u, const char *ifname,
 	if(valid_until <= hnetd_time()) { //valid_until is -1 when iface wants to remove
 		if(dp) {
 			//Deleting the prefix
+			L_DEBUG("hpa_iface_prefix_cb: Deleting prefix");
 			hpa_dp_set_enabled(hpa, dp, 0);
 			list_del(&dp->dp.le);
 			free(dp);
@@ -926,12 +939,14 @@ static void hpa_iface_prefix_cb(struct iface_user *u, const char *ifname,
 		}
 	} else if(dp) {
 		//Just an update in parameters
+		L_DEBUG("hpa_iface_prefix_cb: Prefix exists already");
 		hpa_dp_update(hpa, dp, preferred_until,
 				valid_until, dhcpv6_data, dhcpv6_len);
 		hpa_dp_update_excluded(hpa, dp, excluded);
 	} else if(!(dp = calloc(1, sizeof(*dp)))) {
 		L_ERR("hpa_iface_prefix_cb malloc error");
 	} else {
+		L_DEBUG("hpa_iface_prefix_cb: Creating new prefix");
 		//Create DP for the first time
 		dp->dp.prefix = *prefix;
 		dp->dp.local = 1;
@@ -1395,6 +1410,7 @@ static void hpa_aa_published_cb(struct pa_user *u, struct pa_ldp *ldp)
 
 static void hpa_aa_applied_cb(struct pa_user *u, struct pa_ldp *ldp)
 {
+	L_DEBUG("hpa_aa_applied_cb: called");
 	//An address starts or stops being applied
 	hncp_pa hpa = container_of(u, hncp_pa_s, aa_user);
 	//Parent ldp (Always true for Address Assignment)
@@ -1468,7 +1484,7 @@ hpa_lease hpa_pd_add_lease(hncp_pa hp, const char *duid, uint8_t hint_len,
 	return l;
 }
 
-void hpa_pd_rm_lease(hncp_pa hp, hpa_lease l)
+void hpa_pd_del_lease(hncp_pa hp, hpa_lease l)
 {
 	//Removing from pa will synchronously call updates for all current leases
 	pa_link_del(&l->pal);
@@ -1595,7 +1611,7 @@ static int hpa_adj_avl_tree_comp(const void *k1, const void *k2,
 int hncp_pa_storage_set(hncp_pa hncp_pa, const char *path)
 {
 	//todo
-	return -1;
+	return 0;
 }
 
 void hncp_pa_iface_user_register(hncp_pa hp, struct hncp_pa_iface_user *user)
@@ -1605,7 +1621,7 @@ void hncp_pa_iface_user_register(hncp_pa hp, struct hncp_pa_iface_user *user)
 
 hncp_pa hncp_pa_create(dncp dncp, struct hncp_link *hncp_link)
 {
-	L_DEBUG("Initializing HNCP PA");
+	L_INFO("Initializing HNCP Prefix Assignment");
 	hncp_pa hp;
 	if(!(hp = calloc(1, sizeof(*hp))))
 		return NULL;

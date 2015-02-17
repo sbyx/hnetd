@@ -666,7 +666,7 @@ static void platform_commit(struct uloop_timeout *t)
 				blobmsg_add_string(&b, "family", family);
 
 				char *buf = blobmsg_alloc_string_buffer(&b, (i) ? "dest_ip" : "src_ip", PREFIX_MAXBUFFLEN);
-				prefix_ntopc(buf, PREFIX_MAXBUFFLEN, &dp->prefix.prefix, dp->prefix.plen, true);
+				prefix_ntopc(buf, PREFIX_MAXBUFFLEN, &dp->prefix.prefix, dp->prefix.plen);
 				blobmsg_add_string_buffer(&b);
 
 				blobmsg_close_table(&b, m);
@@ -867,7 +867,7 @@ static void update_interface(struct iface *c,
 				valid = now + (blobmsg_get_u32(a) * HNETD_TIME_PER_SECOND);
 
 			if ((a = tb[PREFIX_ATTR_EXCLUDED]))
-				prefix_pton(blobmsg_get_string(a), &ex);
+				prefix_pton(blobmsg_get_string(a), &ex.prefix, &ex.plen);
 
 			void *data = NULL;
 			size_t len = 0;
@@ -1049,7 +1049,7 @@ static void platform_update(void *data, size_t len)
 			blobmsg_for_each_attr(k, dtb[DATA_ATTR_PREFIX], rem) {
 				if (blobmsg_type(k) == BLOBMSG_TYPE_STRING) {
 					struct prefix p;
-					if (prefix_pton(blobmsg_get_string(k), &p) == 1)
+					if (prefix_pton(blobmsg_get_string(k), &p.prefix, &p.plen) == 1)
 						hncp_pa_conf_prefix(hncp_pa_p, c->ifname, &p, 0);
 				}
 			}
@@ -1074,7 +1074,8 @@ static void platform_update(void *data, size_t len)
 					if (at)
 						*at = ' ';
 					int res = sscanf(buf, "%54s %54s", astr, fstr);
-					if(res <= 0 || !prefix_pton(astr, &addr) || (res > 1 && !prefix_pton(fstr, &filter))) {
+					if(res <= 0 || !prefix_pton(astr, &addr.prefix, &addr.plen) ||
+							(res > 1 && !prefix_pton(fstr, &filter.prefix, &filter.plen))) {
 						L_ERR("Incorrect iface_id syntax %s", blobmsg_get_string(k));
 						continue;
 					}

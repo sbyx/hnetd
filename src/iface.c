@@ -157,7 +157,8 @@ static void iface_update_address_cb(__unused struct hncp_pa_iface_user *i,
 	assert(c->platform != NULL);
 
 	if(del) {
-		if ((a = vlist_find(&c->assigned, &addr, a, node))) {
+		struct prefix p = {.plen = plen, .prefix = *addr};
+		if ((a = vlist_find(&c->assigned, &p, a, node))) {
 			vlist_delete(&c->assigned, &a->node);
 		} else {
 			L_DEBUG("iface_update_address_cb: element not found.");

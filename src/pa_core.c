@@ -318,7 +318,7 @@ static void pa_routine(struct pa_ldp *ldp, bool backoff)
 				best_target = PA_RULE_NO_MATCH;
 	pa_rule_priority best_prio;
 	struct pa_rule_arg arg, best_arg;
-	struct pa_rule *best_rule;
+	struct pa_rule *best_rule = NULL;
 
 	//Get existing rule priority
 	best_prio = (ldp->published || ldp->adopting)?ldp->rule_priority:0;

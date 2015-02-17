@@ -15,6 +15,7 @@
 #include "hncp_proto.h"
 #include "sput.h"
 #include "smock.h"
+#include "platform.h"
 
 int log_level = LOG_DEBUG;
 
@@ -28,8 +29,8 @@ void dncp_self_flush(dncp_node n);
 
 
 /* Fake structures to keep pa's default config happy. */
-void *iface_register_user;
-void *iface_unregister_user;
+void iface_register_user(struct iface_user *user) {}
+void iface_unregister_user(struct iface_user *user) {}
 
 struct iface* iface_get(const char *ifname )
 {

@@ -52,7 +52,7 @@ static void pd_handle_done(struct ustream *s)
 	struct pd_handle *c = container_of(s, struct pd_handle, fd.stream);
 
 	if (c->established)
-		hpa_pd_rm_lease(c->pd->hncp_pa, &c->lease);
+		hpa_pd_del_lease(c->pd->hncp_pa, c->lease);
 
 	close(c->fd.fd.fd);
 	ustream_free(&c->fd.stream);

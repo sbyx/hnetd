@@ -55,7 +55,7 @@ static inline int prefix_cmp(const struct prefix *p1, const struct prefix *p2) {
 /*#define prefix_cmp(p1, p2) (((p1)->plen != (p2)->plen)?((p2)->plen - (p1)->plen):\
 		bmemcmp(&(p1)->prefix, &(p2)->prefix, (p1)->plen))*/
 
-#define prefix_af_length(p) prefix_is_ipv4(p)?(p)->plen - 96:(p)->plen
+#define prefix_af_length(p) (prefix_is_ipv4(p)?(p)->plen - 96:(p)->plen)
 
 /**
  * Format helper for address representation.

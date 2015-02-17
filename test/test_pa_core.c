@@ -477,6 +477,7 @@ void pa_core_rule() {
 	pa_link_add(&core, &l1);
 	pa_dp_add(&core, &d1);
 
+	ldp = NULL;
 	pa_for_each_ldp_in_dp(&d1, ldp2){
 		ldp = ldp2; //Get the unique ldp
 	}
