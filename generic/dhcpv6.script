@@ -134,24 +134,26 @@ teardown_interface() {
 	update_resolv "dhcpv6" "$device" ""
 }
 
-case "$2" in
-	bound)
-		teardown_interface "$1"
-		setup_interface "$1"
-	;;
-	informed|updated|rebound|ra-updated)
-		setup_interface "$1"
-	;;
-	stopped|unbound)
-		teardown_interface "$1"
-	;;
-	started)
-		hnet-call ifup "{\"ifname\": \"$1\"}"
-		teardown_interface "$1"
-	;;
-esac
+(
+	flock 8
+	case "$2" in
+		bound)
+			teardown_interface "$1"
+			setup_interface "$1"
+		;;
+		informed|updated|rebound|ra-updated)
+			setup_interface "$1"
+		;;
+		stopped|unbound)
+			teardown_interface "$1"
+		;;
+		started)
+			hnet-call ifup "{\"ifname\": \"$1\"}"
+			teardown_interface "$1"
+		;;
+	esac
 
-# user rules
-[ -f /etc/odhcp6c.user ] && . /etc/odhcp6c.user
-
-exit 0
+	# user rules
+	[ -f /etc/odhcp6c.user ] && . /etc/odhcp6c.user
+) 8>/tmp/odhcp6c.lock.$1
+rm -f /tmp/odhcp6c.lock.$1

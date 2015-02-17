@@ -146,11 +146,6 @@ endif(${DTLS})
 #add_test(hncp_sd test_hncp_sd)
 #add_dependencies(check test_hncp_sd)
 
-add_executable(test_dncp_nio test/test_dncp_nio.c ${PU} ${TLV})
-target_link_libraries(test_dncp_nio ubox ${BACKEND_LINK} blobmsg_json)
-add_test(dncp_nio test_dncp_nio)
-add_dependencies(check test_dncp_nio)
-
 add_executable(test_hncp_bfs test/test_hncp_bfs.c src/hncp.c ${DNCP_BASE} ${HNCP_IO} ${BT})
 target_link_libraries(test_hncp_bfs ubox ${BACKEND_LINK} blobmsg_json ${DTLS_LINK})
 add_test(hncp_bfs test_hncp_bfs)

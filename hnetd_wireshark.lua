@@ -7,8 +7,8 @@
 -- Copyright (c) 2013 cisco Systems, Inc.
 --
 -- Created:       Tue Dec  3 11:13:05 2013 mstenber
--- Last modified: Thu Jan  8 15:16:26 2015 mstenber
--- Edit time:     111 min
+-- Last modified: Wed Feb 11 11:02:44 2015 mstenber
+-- Edit time:     119 min
 --
 
 -- This is Lua module which provides VERY basic dissector for TLVs we
@@ -34,10 +34,12 @@ local f_rlid = ProtoField.uint32('hncp.rlid', 'Remote link identifier')
 local f_upd = ProtoField.uint32('hncp.update_number', 'Update number')
 local f_ms = ProtoField.uint32('hncp.ms_since_origination', 
                                'Time since origination (ms)')
+local f_interval_ms = ProtoField.uint32('hncp.keepalive_interval',
+                               'Keep-alive interval (ms)')
 
 p_hncp.fields = {f_id, f_len, f_data,
                  f_nid_hash, f_data_hash, f_network_hash,
-                 f_lid, f_rlid, f_upd, f_ms}
+                 f_lid, f_rlid, f_upd, f_ms, f_interval_ms}
 
 local tlvs = {
    -- dncp content
@@ -69,20 +71,26 @@ local tlvs = {
                                               {4, f_lid},
                                              },
    },
-   [14]={name='keepalive-interval'},
+   [14]={name='keepalive-interval', contents={{4, f_lid},
+                                              {4, f_interval_ms}},
+   },
    [15]={name='custom'},
+   [16]={name='trust-verdict'},
 
    -- hncp content
+   [32]={name='version'},
    [33]={name='external-connection', contents={}, recurse=true},
    [34]={name='delegated-prefix'},
    [35]={name='assigned-prefix'},
    [36]={name='router-address'},
-   [37]={name='dhcp-options'},
-   [38]={name='dhcpv6-options'},
+   [37]={name='dhcpv6-options'},
+   [38]={name='dhcpv4-options'},
 
    [39]={name='dns-delegated-zone'},
    [40]={name='dns-domain-name'},
    [41]={name='dns-router-name'},
+   [42]={name='managed-psk'},
+
    [199]={name='routing-protocol'},
 }
 

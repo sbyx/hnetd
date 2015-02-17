@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Mon Jan 12 13:17:48 2015 mstenber
- * Edit time:     443 min
+ * Last modified: Thu Feb 12 12:18:26 2015 mstenber
+ * Edit time:     510 min
  *
  */
 
@@ -17,9 +17,7 @@ static void trickle_set_i(dncp_link l, int i)
 {
   hnetd_time_t now = dncp_time(l->dncp);
   int imin = l->conf->trickle_imin;
-  if (!imin) imin = DNCP_TRICKLE_IMIN;
   int imax = l->conf->trickle_imax;
-  if (!imax) imax = DNCP_TRICKLE_IMAX;
 
   i = i < imin ? imin : i > imax ? imax : i;
   l->trickle_i = i;
@@ -40,8 +38,6 @@ static void trickle_send_nocheck(dncp_link l)
   l->num_trickle_sent++;
   l->last_trickle_sent = dncp_time(l->dncp);
   dncp_profile_link_send_network_state(l);
-  if (l->conf->keepalive_interval)
-    l->next_keepalive_time = l->last_trickle_sent + l->conf->keepalive_interval;
 }
 
 static void trickle_send(dncp_link l)
@@ -180,6 +176,43 @@ do {                                                            \
 
 #endif /* L_LEVEL >= 7 */
 
+hnetd_time_t
+dncp_neighbor_interval(dncp o, struct tlv_attr *neighbor_tlv)
+{
+  dncp_t_node_data_neighbor neigh = dncp_tlv_neighbor(neighbor_tlv);
+  if (!neigh)
+    {
+      L_ERR("invalid (internally generated) dncp_t_node_data_neighbor");
+      return 1;
+    }
+  dncp_node n = dncp_find_node_by_node_identifier(o, &neigh->neighbor_node_identifier, false);
+  if (!n)
+    {
+      return DNCP_KEEPALIVE_INTERVAL;
+    }
+
+  struct tlv_attr *a;
+  uint32_t value = DNCP_KEEPALIVE_INTERVAL;
+  dncp_node_for_each_tlv_with_type(n, a, DNCP_T_KEEPALIVE_INTERVAL)
+    {
+      dncp_t_keepalive_interval ka = tlv_data(a);
+      if (tlv_len(a) != sizeof(*ka))
+        {
+          L_DEBUG("invalid keepalive tlv length");
+          continue;
+        }
+      if (ka->link_id && ka->link_id != neigh->neighbor_link_id)
+        {
+          continue;
+        }
+      value = be32_to_cpu(ka->interval_in_ms) * HNETD_TIME_PER_SECOND / 1000;
+      if (ka->link_id)
+        break;
+    }
+  /* L_DEBUG("using keepalive %d", value); */
+  return value;
+}
+
 void dncp_run(dncp o)
 {
   hnetd_time_t next = 0;
@@ -232,26 +265,14 @@ void dncp_run(dncp o)
    * events within dncp_run). */
   o->immediate_scheduled = false;
 
-  /* First off: If the network hash is dirty, recalculate it (and hope
-   * the outcome ISN'T). */
-  if (o->network_hash_dirty)
-    {
-      /* Store original network hash for future study. */
-      dncp_hash_s old_hash = o->network_hash;
-
-      dncp_calculate_network_hash(o);
-      if (memcmp(&old_hash, &o->network_hash, DNCP_HASH_LEN))
-        {
-          /* Shocker. The network hash changed -> reset _every_
-           * trickle (that is actually running; join_pending ones
-           * don't really count). */
-          vlist_for_each_element(&o->links, l, in_links)
-            trickle_set_i(l, l->conf->trickle_imin);
-        }
-    }
+  /* Recalculate network hash if necessary. */
+  dncp_calculate_network_hash(o);
 
   vlist_for_each_element(&o->links, l, in_links)
     {
+      /* Update the 'active' link's published keepalive interval, if need be */
+      dncp_link_set_keepalive_interval(l, l->conf->keepalive_interval);
+
       /* If we're in join pending state, we retry every
        * DNCP_REJOIN_INTERVAL if necessary. */
       if (l->join_failed_time)
@@ -271,10 +292,8 @@ void dncp_run(dncp o)
                   /* This is essentially second-stage init for a
                    * link. Before multicast join succeeds, it is
                    * essentially zombie. */
-                  if (l->conf->keepalive_interval)
-                    l->next_keepalive_time =
-                      dncp_time(l->dncp) + l->conf->keepalive_interval;
                   trickle_set_i(l, l->conf->trickle_imin);
+                  l->last_trickle_sent = dncp_time(l->dncp);
                 }
             }
           /* If still join pending, do not use this for anything. */
@@ -288,20 +307,28 @@ void dncp_run(dncp o)
             }
         }
 
+      if (l->conf->keepalive_interval)
+        {
+          hnetd_time_t next_time =
+            l->last_trickle_sent + l->conf->keepalive_interval;
+          if (next_time <= now)
+            {
+              L_DEBUG("sending keep-alive");
+              trickle_send_nocheck(l);
+              /* Do not increment Trickle i, but set next t to i/2 .. i */
+              trickle_set_i(l, l->trickle_i);
+              next_time =
+                l->last_trickle_sent + l->conf->keepalive_interval;
+            }
+          SET_NEXT(next_time, "next keep-alive");
+        }
       if (l->trickle_interval_end_time <= now)
         trickle_upgrade(l);
       else if (l->trickle_send_time && l->trickle_send_time <= now)
         trickle_send(l);
-      else if (l->next_keepalive_time && l->next_keepalive_time <= now)
-        {
-          L_DEBUG("sending keep-alive");
-          trickle_send_nocheck(l);
-          /* Do not increment Trickle i, but set next t to i/2 .. i */
-          trickle_set_i(l, l->trickle_i);
-        }
+
       SET_NEXT(l->trickle_interval_end_time, "trickle_interval_end_time");
       SET_NEXT(l->trickle_send_time, "trickle_send_time");
-      SET_NEXT(l->next_keepalive_time, "next_keepalive_time");
     }
 
   /* Look at neighbors we should be worried about.. */
@@ -310,9 +337,16 @@ void dncp_run(dncp o)
     if (tlv_id(&t->tlv) == DNCP_T_NODE_DATA_NEIGHBOR)
       {
         dncp_neighbor n = dncp_tlv_get_extra(t);
+
         hnetd_time_t next_time =
           n->last_sync +
-          n->keepalive_interval * DNCP_KEEPALIVE_MULTIPLIER;
+          dncp_neighbor_interval(o, &t->tlv) * DNCP_KEEPALIVE_MULTIPLIER;
+
+        /* TBD: How to treat party that has keepalive_interval 0? */
+
+        /* (For the time being, we just drop them immediately, but
+         * some sort of API might be called for it in the future.)
+         */
 
         /* No cause to do anything right now. */
         if (next_time > now)
@@ -322,10 +356,16 @@ void dncp_run(dncp o)
           }
 
         /* Zap the neighbor */
-        L_DEBUG(DNCP_NEIGH_F " gone on " DNCP_LINK_F,
-                DNCP_NEIGH_D(n), DNCP_LINK_D(l));
+#if L_LEVEL >= 7
+        dncp_t_node_data_neighbor ne = tlv_data(&t->tlv);
+        l = dncp_find_link_by_id(o, ne->link_id);
+        L_DEBUG("Neighbor %s gone on " DNCP_LINK_F " - nothing in %d ms",
+                DNCP_STRUCT_REPR(ne->neighbor_node_identifier),
+                DNCP_LINK_D(l), (int) (now - n->last_sync));
+#endif /* L_LEVEL >= 7 */
         dncp_remove_tlv(o, t);
-    }
+        o->num_neighbor_dropped++;
+      }
 
   if (next && !o->immediate_scheduled)
     {
@@ -340,4 +380,12 @@ void dncp_run(dncp o)
 
   /* Clear the cached time, it's most likely no longer valid. */
   o->now = 0;
+}
+
+void dncp_trickle_reset(dncp o)
+{
+  dncp_link l;
+
+  vlist_for_each_element(&o->links, l, in_links)
+    trickle_set_i(l, l->conf->trickle_imin);
 }

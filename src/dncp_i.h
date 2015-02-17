@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Jan  8 14:40:30 2015 mstenber
- * Edit time:     317 min
+ * Last modified: Thu Feb 12 11:49:06 2015 mstenber
+ * Edit time:     325 min
  *
  */
 
@@ -69,6 +69,8 @@ struct dncp_struct {
   /* flag which indicates that we (or someone connected) may have
    * changed connectivity. */
   bool graph_dirty;
+
+  /* Few different times.. */
   hnetd_time_t last_prune;
   hnetd_time_t next_prune;
 
@@ -123,6 +125,9 @@ struct dncp_struct {
    * in the tlv_type_to_index. */
   int num_tlv_indexes;
 
+  /* Number of times neighbor has been dropped. */
+  int num_neighbor_dropped;
+
   /* Profile-specific data */
   dncp_profile_data_s profile_data;
 };
@@ -159,8 +164,8 @@ struct dncp_link_struct {
   int trickle_c; /* counter */
   hnetd_time_t last_trickle_sent;
 
-  /* When the next keep-alive should be sent (if any) */
-  hnetd_time_t next_keepalive_time;
+  /* What value we have TLV for, if any */
+  uint32_t published_keepalive_interval;
 
   /* Statistics about Trickle (mostly for debugging) */
   int num_trickle_sent;
@@ -180,9 +185,6 @@ struct dncp_neighbor_struct {
 
   /* When did we last time receive _consistent_ state from the peer. */
   hnetd_time_t last_sync;
-
-  /* When did the remote party say they would be sending keep-alives. */
-  hnetd_time_t keepalive_interval;
 };
 
 
@@ -288,6 +290,12 @@ void dncp_link_send_network_state(dncp_link l,
                                   size_t maximum_size);
 void dncp_link_send_req_network_state(dncp_link l, struct sockaddr_in6 *dst);
 void dncp_link_set_ipv6_address(dncp_link l, const struct in6_addr *addr);
+void dncp_link_set_keepalive_interval(dncp_link l, uint32_t value);
+
+
+/* Miscellaneous utilities that live in dncp_timeout */
+hnetd_time_t dncp_neighbor_interval(dncp o, struct tlv_attr *neighbor_tlv);
+void dncp_trickle_reset(dncp o);
 
 /* Subscription stuff (dncp_notify.c) */
 void dncp_notify_subscribers_tlvs_changed(dncp_node n,
@@ -310,11 +318,9 @@ static inline hnetd_time_t dncp_time(dncp o)
 
 #define TMIN(x,y) ((x) == 0 ? (y) : (y) == 0 ? (x) : (x) < (y) ? (x) : (y))
 
-#define DNCP_NODE_REPR(n) \
-  HEX_REPR(&n->node_identifier, sizeof(n->node_identifier))
+#define DNCP_STRUCT_REPR(i) HEX_REPR(&i, sizeof(i))
 
-#define DNCP_NEIGH_F "neighbor %p"
-#define DNCP_NEIGH_D(n) n
+#define DNCP_NODE_REPR(n) DNCP_STRUCT_REPR(n->node_identifier)
 
 #define DNCP_LINK_F "link %s[#%d]"
 #define DNCP_LINK_D(l) l->ifname,l->iid
@@ -418,16 +424,6 @@ do {                            \
 
 #define dncp_for_each_local_tlv_safe(o, t, t2)  \
   avl_for_each_element_safe(&o->tlvs.avl, t, in_tlvs.avl, t2)
-
-static inline dncp_neighbor
-dncp_link_find_neighbor_for_tlv(dncp_link l, dncp_t_node_data_neighbor n)
-{
-  dncp_tlv t = dncp_find_tlv(l->dncp, DNCP_T_NODE_DATA_NEIGHBOR,
-                             n, sizeof(*n));
-  if (t)
-    return dncp_tlv_get_extra(t);
-  return NULL;
-}
 
 #define dncp_update_tlv(o, t, d, dlen, elen, is_add)    \
 do {                                                    \

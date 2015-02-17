@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Mon Feb  9 09:52:04 2015 mstenber
- * Edit time:     205 min
+ * Last modified: Tue Feb 10 20:36:26 2015 mstenber
+ * Edit time:     206 min
  *
  */
 
@@ -329,7 +329,9 @@ dncp_link net_sim_dncp_find_link_by_name(dncp o, const char *name)
   if (l)
     return l;
 
-  l = dncp_find_link_by_name(o, name, true);
+  dncp_if_set_enabled(o, name, true);
+
+  l = dncp_find_link_by_name(o, name, false);
 
   sput_fail_unless(l, "dncp_find_link_by_name");
   if (l)

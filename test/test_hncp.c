@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Mon Jan 19 14:52:01 2015 mstenber
+ * Last modified: Tue Feb 10 19:28:55 2015 mstenber
  * Edit time:     94 min
  *
  */
@@ -46,6 +46,10 @@ int iface_get_preferred_address(struct in6_addr *foo, bool v4)
 {
   return -1;
 }
+
+/* Quiet some warnings.. */
+struct platform_rpc_method;
+struct blob_attr;
 
 int platform_rpc_register(struct platform_rpc_method *m)
 {

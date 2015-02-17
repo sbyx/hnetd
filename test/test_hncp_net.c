@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Thu Jan  8 14:41:02 2015 mstenber
- * Edit time:     561 min
+ * Last modified: Wed Feb 11 18:32:18 2015 mstenber
+ * Edit time:     574 min
  *
  */
 
@@ -92,7 +92,7 @@ void hncp_two(void)
   n1 = net_sim_find_hncp(&s, "n1");
   n1->own_node->update_number = 0xFFFFFFFE;
   dncp_link_conf lc = dncp_if_find_conf_by_name(n1, "eth0");
-  lc->keepalive_interval = 100;
+  lc->keepalive_interval = 1000;
   n2 = net_sim_find_hncp(&s, "n2");
   l1 = net_sim_dncp_find_link_by_name(n1, "eth0");
   l2 = net_sim_dncp_find_link_by_name(n2, "eth1");
@@ -133,9 +133,15 @@ void hncp_two(void)
 
   /* disconnect on one side (=> unidirectional traffic) => should at
    * some point disappear. */
+  hnetd_time_t time_ok = hnetd_time();
+  L_DEBUG("disconnecting one side (the more active sender)");
   net_sim_set_connected(l1, l2, false);
   SIM_WHILE(&s, 10000,
             link_has_neighbors(l2));
+  hnetd_time_t time_gone = hnetd_time();
+  sput_fail_unless((time_gone - time_ok) < lc->keepalive_interval * 5,
+                   "realized relatively fast neighbor gone");
+
 
   /* n1 will keep getting stuff from n2, so it's sometimes alive,
    * sometimes not.. However, network hashes should be again
@@ -324,6 +330,9 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes)
 
       dncp_link l1 = net_sim_dncp_find_link_by_name(n1, "down");
       dncp_link l2 = net_sim_dncp_find_link_by_name(n2, "up");
+      /* Asymmetric keepalive setup; l2 sends them 'normally', and l1
+       * very aggressively. */
+      l1->conf->keepalive_interval = DNCP_KEEPALIVE_INTERVAL / 20;
       net_sim_set_connected(l1, l2, true);
       net_sim_set_connected(l2, l1, true);
     }
@@ -331,6 +340,20 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes)
 
   sput_fail_unless(net_sim_find_hncp(s, "node0")->nodes.avl.count >= num_nodes,
                    "enough nodes");
+  for (i = 0 ; i < num_nodes ; i++)
+    {
+      char buf[128];
+
+      sprintf(buf, "node%d", i);
+      dncp n = net_sim_find_hncp(s, buf);
+      /* <= 5 may have up to 2 drops; >5 0. */
+      if (i <= 5)
+        sput_fail_unless(n->num_neighbor_dropped <= 2, "few many drops (start)");
+      else
+        sput_fail_unless(!n->num_neighbor_dropped, "no drops (end)");
+
+
+    }
 
   net_sim_uninit(s);
   L_NOTICE("finished in %lld ms", (long long)hnetd_time() - s->start);

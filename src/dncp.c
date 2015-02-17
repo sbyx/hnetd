@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Jan 12 11:07:18 2015 mstenber
- * Edit time:     831 min
+ * Last modified: Thu Feb 12 11:49:00 2015 mstenber
+ * Edit time:     842 min
  *
  */
 
@@ -179,6 +179,27 @@ compare_links(const void *a, const void *b, void *ptr __unused)
   return strcmp(t1->ifname, t2->ifname);
 }
 
+void dncp_link_set_keepalive_interval(dncp_link l, uint32_t value)
+{
+  if (l->published_keepalive_interval == value)
+    return;
+  dncp o = l->dncp;
+  if (l->published_keepalive_interval != DNCP_KEEPALIVE_INTERVAL)
+    {
+      dncp_t_keepalive_interval_s ka = { .link_id = l->iid,
+                                         .interval_in_ms = cpu_to_be32(l->published_keepalive_interval) };
+      dncp_remove_tlv_matching(o, DNCP_T_KEEPALIVE_INTERVAL, &ka, sizeof(ka));
+    }
+  if (value != DNCP_KEEPALIVE_INTERVAL)
+    {
+      dncp_t_keepalive_interval_s ka = { .link_id = l->iid,
+                                         .interval_in_ms = cpu_to_be32(value) };
+      dncp_add_tlv(o, DNCP_T_KEEPALIVE_INTERVAL, &ka, sizeof(ka), 0);
+    }
+  l->published_keepalive_interval = value;
+}
+
+
 static void update_link(struct vlist_tree *t,
                         struct vlist_node *node_new,
                         struct vlist_node *node_old)
@@ -199,11 +220,14 @@ static void update_link(struct vlist_tree *t,
             if (ne->link_id == t_old->iid)
               dncp_remove_tlv(o, t);
           }
+      /* kill TLV, if any */
+      dncp_link_set_keepalive_interval(t_old, DNCP_KEEPALIVE_INTERVAL);
       free(t_old);
     }
   else
     {
       t_new->join_failed_time = 1;
+      t_new->published_keepalive_interval = DNCP_KEEPALIVE_INTERVAL;
     }
   dncp_schedule(o);
 }
@@ -464,16 +488,19 @@ bool dncp_if_set_enabled(dncp o, const char *ifname, bool enabled)
     {
       if (!l)
         return false;
-      dncp_notify_subscribers_link_changed(l, DNCP_EVENT_REMOVE);
-      vlist_delete(&o->links, &l->in_links);
-      return true;
     }
-  if (l)
-    return false;
-  l = dncp_find_link_by_name(o, ifname, true);
-  if (l)
-    dncp_notify_subscribers_link_changed(l, DNCP_EVENT_ADD);
-  return l != NULL;
+  else
+    {
+      if (l)
+        return false;
+      l = dncp_find_link_by_name(o, ifname, true);
+      if (!l)
+        return false;
+    }
+  dncp_notify_subscribers_link_changed(l, enabled ? DNCP_EVENT_ADD : DNCP_EVENT_REMOVE);
+  if (!enabled)
+    vlist_delete(&o->links, &l->in_links);
+  return true;
 }
 
 
@@ -602,6 +629,10 @@ void dncp_calculate_network_hash(dncp o)
 
   if (!o->network_hash_dirty)
     return;
+
+  /* Store original network hash for future study. */
+  dncp_hash_s old_hash = o->network_hash;
+
   md5_begin(&ctx);
   dncp_for_each_node(o, n)
     {
@@ -611,6 +642,10 @@ void dncp_calculate_network_hash(dncp o)
   dncp_md5_end(&o->network_hash, &ctx);
   L_DEBUG("dncp_calculate_network_hash @%p =%llx",
           o, dncp_hash64(&o->network_hash));
+
+  if (memcmp(&old_hash, &o->network_hash, DNCP_HASH_LEN))
+    dncp_trickle_reset(o);
+
   o->network_hash_dirty = false;
 }
 
