@@ -6,7 +6,7 @@ update_resolv() {
     local dns="$3"
 
     (
-	flock -n 9
+	flock 9
         FILE=`tempfile`
         if [ ! -d /run/resolvconf ]
         then
