@@ -74,6 +74,7 @@ void pa_rules_random()
 	pa_rule_random_init(&random);
 	random.desired_plen_cb = NULL;
 	random.desired_plen = 12;
+	random.accept_proposed_cb = NULL;
 	random.rule_priority = 3;
 	random.priority = 4;
 	random.pseudo_random_seed = (uint8_t *)"SEED";

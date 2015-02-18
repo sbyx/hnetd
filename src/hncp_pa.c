@@ -135,6 +135,21 @@ fail:
 	return ldp->dp->plen;
 }
 
+static int hpa_accept_proposed_addr(struct pa_rule_random *r, struct pa_ldp *ldp,
+			pa_prefix *prefix, pa_plen plen)
+{
+	//The purpose of this function is to reject IPv4 Network Addresses
+	struct prefix p = {.plen = plen};
+	bmemcpy(&p.prefix, prefix, 0, plen);
+	if(prefix_is_ipv4(&p)) {
+		struct prefix dp = {.plen = ldp->dp->plen };
+		bmemcpy(&dp.prefix, &ldp->dp->prefix, 0, ldp->dp->plen);
+		if(!memcmp(&p.prefix, &dp.prefix, sizeof(struct in6_addr)))
+			return 0;
+	}
+	return 1;
+}
+
 /* Initializes PA, ready to be added */
 static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 {
@@ -156,6 +171,7 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	i->pa_rand.pseudo_random_tentatives = HPA_PSEUDO_RAND_TENTATIVES;
 	i->pa_rand.random_set_size = HPA_RAND_SET_SIZE;
 	i->pa_rand.desired_plen_cb = hpa_desired_plen_cb;
+	i->pa_rand.accept_proposed_cb = NULL;
 	i->pa_rand.priority = HPA_PRIORITY_CREATE;
 	i->pa_rand.rule_priority = HPA_RULE_CREATE;
 	i->pa_rand.rule.filter_accept = hpa_iface_filter_accept;
@@ -175,6 +191,7 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	i->aa_rand.random_set_size = HPA_RAND_SET_SIZE;
 	i->aa_rand.desired_plen_cb = NULL;
 	i->aa_rand.desired_plen = 128; //todo: Use conf
+	i->aa_rand.accept_proposed_cb = hpa_accept_proposed_addr;
 	i->aa_rand.priority = HPA_PRIORITY_CREATE;
 	i->aa_rand.rule_priority = HPA_RULE_CREATE;
 }
@@ -1664,7 +1681,7 @@ hncp_pa hncp_pa_create(dncp dncp, struct hncp_link *hncp_link)
 			(uint32_t *)&dncp->own_node->node_identifier.buf[0]);
 
 	pa_core_set_flooding_delay(&hp->pa, HPA_AP_FLOOD_DELAY);
-	pa_core_set_flooding_delay(&hp->pa, HPA_RA_FLOOD_DELAY);
+	pa_core_set_flooding_delay(&hp->aa, HPA_RA_FLOOD_DELAY);
 
 	//Attach Address Assignment to Prefix Assignment
 	pa_ha_attach(&hp->aa, &hp->pa, 1);

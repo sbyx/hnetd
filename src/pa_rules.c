@@ -156,6 +156,7 @@ enum pa_rule_target pa_rule_random_match(struct pa_rule *rule, struct pa_ldp *ld
 {
 	struct pa_rule_random *rule_r = container_of(rule, struct pa_rule_random, rule);
 	pa_prefix tentative;
+	uint16_t i;
 
 	pa_arg->priority = rule_r->priority;
 	pa_arg->rule_priority = rule_r->rule_priority;
@@ -195,7 +196,6 @@ enum pa_rule_target pa_rule_random_match(struct pa_rule *rule, struct pa_ldp *ld
 		btrie_plen_t l0;
 		pa_prefix iter_p;
 		pa_plen iter_plen;
-		uint16_t i;
 		for(i=0; i<rule_r->pseudo_random_tentatives; i++) {
 			pa_rule_prefix_prandom(rule_r->pseudo_random_seed, rule_r->pseudo_random_seedlen, i, &ldp->dp->prefix, ldp->dp->plen, &tentative, desired_plen);
 			PA_DEBUG("Trying pseudo-random %s", pa_prefix_repr(&tentative, desired_plen));
@@ -211,14 +211,27 @@ enum pa_rule_target pa_rule_random_match(struct pa_rule *rule, struct pa_ldp *ld
 					PA_DEBUG("Prefix is not in the candidate prefixes set");
 					break;
 				}
-				goto choose;
+				if(!rule_r->accept_proposed_cb ||
+						rule_r->accept_proposed_cb(rule_r, ldp, &tentative, desired_plen)) {
+					goto choose;
+				} else {
+					PA_DEBUG("Prefix got rejected by user");
+					break;
+				}
 			}
 		}
 	}
 
 	/* Select a random prefix */
-	uint32_t id = pa_rand() % found;
-	pa_rule_candidate_pick(ldp, id, &tentative, desired_plen, min_plen, desired_plen);
+	for(i=0; i<100; i++) { //No more than 100 tentatives if they are all rejected
+		uint32_t id = pa_rand() % found;
+		pa_rule_candidate_pick(ldp, id, &tentative, desired_plen, min_plen, desired_plen);
+		if(!rule_r->accept_proposed_cb || rule_r->accept_proposed_cb(rule_r, ldp, &tentative, desired_plen)) {
+			goto choose;
+		} else {
+			PA_DEBUG("Random prefix %s was rejected by user", pa_prefix_repr(&tentative, desired_plen));
+		}
+	}
 
 choose:
 	pa_prefix_cpy(&tentative, desired_plen, &pa_arg->prefix, pa_arg->plen);

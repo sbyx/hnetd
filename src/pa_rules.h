@@ -73,6 +73,13 @@ struct pa_rule_random {
 			uint16_t prefix_count[PA_RAND_MAX_PLEN + 1]);
 	pa_plen desired_plen;
 
+	/* When set, pseudo-random or random prefixes which are suitable are
+	 * proposed by calling this function. If 0 is returned, another prefix is
+	 * tried. The prefix is used otherwise.
+	 */
+	int (*accept_proposed_cb)(struct pa_rule_random *, struct pa_ldp *,
+			pa_prefix *prefix, pa_plen plen);
+
 	/* Pseudo-random and random prefixes are picked in a given set of
 	 * candidates.
 	 * The larger the set, the lower the collision probability.
