@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu Feb 12 12:16:46 2015 mstenber
- * Edit time:     739 min
+ * Last modified: Wed Feb 18 13:43:58 2015 mstenber
+ * Edit time:     742 min
  *
  */
 
@@ -291,8 +291,9 @@ handle_message(dncp_link l,
       return;
     }
 
-  if (memcmp(&lid->node_identifier, &o->own_node->node_identifier,
-             DNCP_NI_LEN) != 0)
+  bool is_local = memcmp(&lid->node_identifier, &o->own_node->node_identifier,
+                         DNCP_NI_LEN) == 0;
+  if (!is_local)
     {
       tne = _heard(l, lid, src, multicast);
       if (!tne && !multicast)
@@ -376,7 +377,8 @@ handle_message(dncp_link l,
    * recently. */
   if (!multicast)
     {
-      L_DEBUG("unicast received from %s on " DNCP_LINK_F,
+      L_DEBUG("unicast received from %s %s on " DNCP_LINK_F,
+              is_local ? "local" : ne ? "remote" : "unknown remote",
               DNCP_NODE_REPR(lid), DNCP_LINK_D(l));
       if (ne)
         ne->last_sync = dncp_time(l->dncp);
@@ -393,9 +395,7 @@ handle_message(dncp_link l,
       if (memcmp(nethash, &o->network_hash, DNCP_HASH_LEN) == 0)
         {
           L_DEBUG("received network state which is consistent (%s)",
-                  memcmp(&lid->node_identifier, &o->own_node->node_identifier,
-                         DNCP_NI_LEN) ? ne ?
-                  "remote" : "unknown remote" : "local");
+                  is_local ? "local" : ne ? "remote" : "unknown remote");
 
           /* Increment Trickle count + last in sync time.*/
           if (ne)
@@ -403,8 +403,7 @@ handle_message(dncp_link l,
               l->trickle_c++;
               ne->last_sync = dncp_time(l->dncp);
             }
-          else if (memcmp(&lid->node_identifier, &o->own_node->node_identifier,
-                          DNCP_NI_LEN) != 0)
+          else if (!is_local)
             {
               /* Send an unicast request, to potentially set up the
                * peer structure. */

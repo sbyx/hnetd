@@ -196,9 +196,10 @@ static void cb_intiface(struct iface_user *u, const char *ifname, bool enabled)
 }
 
 static void cb_intaddr(struct iface_user *u, const char *ifname,
-			const struct prefix *addr6, const struct prefix *addr4)
+			const struct prefix *addr6 __unused, const struct prefix *addr4 __unused)
 {
-	cb_intiface(u, ifname, addr6 || addr4);
+	struct iface *iface = iface_get(ifname);
+	cb_intiface(u, ifname, iface && iface->internal);
 }
 
 static void cb_tlv(dncp_subscriber s, dncp_node n,
