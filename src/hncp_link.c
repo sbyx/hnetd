@@ -84,6 +84,9 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 		if (peercnt)
 			peers = malloc(sizeof(*peers) * peercnt);
 
+		L_DEBUG("hncp_link_calculate: local node advertises %d "
+				"neighbors on iface %d", (int)peercnt, (int)link->iid);
+
 		dncp_node_for_each_tlv(l->dncp->own_node, c) {
 			dncp_t_node_data_neighbor cn = dncp_tlv_neighbor(c);
 
@@ -113,6 +116,8 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 
 				if (pn->neighbor_link_id == link->iid) {
 					// Matching reverse neighbor entry
+					L_DEBUG("hncp_link_calculate: if %"PRIu32" -> neigh %s:%"PRIu32,
+							link->iid, DNCP_STRUCT_REPR(peer->node_identifier), pn->link_id);
 					mutual = true;
 					peers[peerpos].node_identifier = peer->node_identifier;
 					peers[peerpos].link_id = pn->link_id;
@@ -204,15 +209,19 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 	dncp_link link = NULL;
 
 	if (ne) {
-		if (dncp_node_is_self(n))
+		if (dncp_node_is_self(n)) {
+			L_DEBUG("hncp_link: local neighbor tlv changed");
 			link = dncp_find_link_by_id(l->dncp, ne->link_id);
-		else if (!memcmp(&ne->neighbor_node_identifier,
-				&l->dncp->own_node->node_identifier, DNCP_NI_LEN))
+		} else if (!memcmp(&ne->neighbor_node_identifier,
+				&l->dncp->own_node->node_identifier, DNCP_NI_LEN)) {
+			L_DEBUG("hncp_link: other node neighbor tlv changed");
 			link = dncp_find_link_by_id(l->dncp, ne->neighbor_link_id);
+		}
 	}
 
 	if (link) {
 		struct iface *iface = iface_get(link->ifname);
+		L_DEBUG("hncp_link: iface is %s (%d)", link->ifname, (int)link->iid);
 		calculate_link(l, link->ifname, iface && iface->internal);
 	}
 }

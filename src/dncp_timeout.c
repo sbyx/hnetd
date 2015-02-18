@@ -158,13 +158,13 @@ do {                                                            \
     {                                                           \
       if (v < now)                                              \
         {                                                       \
-          L_DEBUG("invalid value due to %s: %d in past",        \
-                  reason, (int)(now-v));                        \
+          /*L_DEBUG("invalid value due to %s: %d in past",        \
+                  reason, (int)(now-v));*/                        \
         }                                                       \
       else if (!next || next > v)                               \
         {                                                       \
-          L_DEBUG("setting next to %ld due to %s",               \
-                  (long int)(v-now), reason);                   \
+          /*L_DEBUG("setting next to %ld due to %s",               \
+                  (long int)(v-now), reason);*/                   \
           next = v;                                             \
         }                                                       \
     }                                                           \

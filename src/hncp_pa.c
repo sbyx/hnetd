@@ -119,9 +119,9 @@ static pa_plen hpa_desired_plen_cb(__unused struct pa_rule_random *rule_r,
 
 	hpa_dp dp = container_of(ldp->dp, hpa_dp_s, pa);
 	if(prefix_is_ipv4(&dp->dp.prefix)) {
+		if(biggest <= 112)
+			return 120;
 		if(biggest <= 120)
-			return 124;
-		if(biggest <= 124)
 			return 124;
 		goto fail;
 	} else {
@@ -740,11 +740,15 @@ static void hpa_link_link_cb(struct hncp_link_user *u, const char *ifname,
 	size_t n;
 	for(n=0; n<peercnt; n++) {
 		if((adj = avl_find_element(&hpa->adjacencies, &peers[n], adj, te))) {
+			L_DEBUG("hpa_link_link_cb: updating adjacency %s:%"PRIu32,
+								DNCP_STRUCT_REPR(peers[n].node_identifier), peers[n].link_id);
 			adj->iface = i;
 			adj->updated = 1;
 		} else if(!(adj = malloc(sizeof(*adj)))) {
 			L_ERR("hpa_link_link_cb: malloc error");
 		} else {
+			L_DEBUG("hpa_link_link_cb: adding adjacency %s:%"PRIu32,
+					DNCP_STRUCT_REPR(peers[n].node_identifier), peers[n].link_id);
 			adj->id = peers[n];
 			adj->iface = i;
 			adj->updated = 1;
@@ -756,6 +760,8 @@ static void hpa_link_link_cb(struct hncp_link_user *u, const char *ifname,
 	avl_for_each_element_safe(&hpa->adjacencies, adj, te, adj2) {
 		if(adj->iface == i) {
 			if(!adj->updated) {
+				L_DEBUG("hpa_link_link_cb: deleting adjacency %s:%"PRIu32,
+							DNCP_STRUCT_REPR(adj->id.node_identifier), adj->id.link_id);
 				avl_delete(&hpa->adjacencies, &adj->te);
 				free(adj);
 			} else {
@@ -767,9 +773,13 @@ static void hpa_link_link_cb(struct hncp_link_user *u, const char *ifname,
 	hpa_advp hap;
 	list_for_each_entry(hap, &hpa->aps, le) {
 		if(hap->advp.link == &i->pal || !hap->advp.link) {
-			hpa_iface i = hpa_get_adjacent_iface(hpa, &hap->link_id);
-			if(&i->pal != hap->advp.link) {
-				hap->advp.link = &i->pal;
+			hpa_iface i2 = hpa_get_adjacent_iface(hpa, &hap->link_id);
+			struct pa_link *pal = i2?&i2->pal:NULL;
+			if(pal != hap->advp.link) {
+				L_DEBUG("hpa_link_link_cb: updating existing link from %s to %s",
+						hap->advp.link?hap->advp.link->name:"null",
+								pal?pal->name:"null");
+				hap->advp.link = pal;
 				pa_advp_update(&hpa->pa, &hap->advp);
 			}
 		}
