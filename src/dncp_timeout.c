@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu Feb 12 12:18:26 2015 mstenber
- * Edit time:     510 min
+ * Last modified: Wed Feb 18 14:56:48 2015 mstenber
+ * Edit time:     513 min
  *
  */
 
@@ -369,7 +369,7 @@ void dncp_run(dncp o)
 
   if (next && !o->immediate_scheduled)
     {
-      hnetd_time_t delta = next - now;
+      hnetd_time_t delta = next - dncp_io_time(o);
       if (delta < 0)
         delta = 0;
       else if (delta > (1 << 16))
