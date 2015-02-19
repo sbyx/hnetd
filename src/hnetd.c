@@ -368,7 +368,7 @@ int main(__unused int argc, char *argv[])
 						L_ERR("Unable to set dtls password");
 						return 13;
 				}
-		} else {
+		} else if (dtls_trust) {
 				dt = dncp_trust_create(h, dtls_trust);
 				if (!dt) {
 						L_ERR("Unable to create dncp trust module");
