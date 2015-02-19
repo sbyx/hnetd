@@ -280,39 +280,15 @@ static void _publish_ddzs(hncp_sd sd)
               continue;
             }
 
+          struct iface *iface = iface_get(l->ifname);
           struct prefix p;
           p.plen = ah->prefix_length_bits;
           memcpy(&p.prefix, ah->prefix_data, ROUND_BITS_TO_BYTES(p.plen));
 
-          _publish_ddz(sd, l, HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE
-                       | HNCP_T_DNS_DELEGATED_ZONE_FLAG_LEGACY_BROWSE, &p);
+          if (iface && (iface->elected & HNCP_LINK_MDNSPROXY))
+            _publish_ddz(sd, l, HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE
+              | HNCP_T_DNS_DELEGATED_ZONE_FLAG_LEGACY_BROWSE, &p);
         }
-    }
-
-  /* Second stage: publish DDZs ALSO for any other interface, but if
-   * and only if there is no corresponding DDZ already (which has
-   * browse flag set -> duplicate detection would not work). */
-  vlist_for_each_element(&sd->dncp->links, l, in_links)
-    {
-      bool found = false;
-      vlist_for_each_element(&sd->dncp->tlvs, t, in_tlvs)
-        {
-          a = &t->tlv;
-          if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX)
-            {
-              ah = tlv_data(a);
-              uint32_t link_id = ah->link_id;
-              if (link_id == l->iid)
-                {
-                  found = true;
-                  break;
-                }
-            }
-        }
-      if (found)
-        continue;
-      /* Not found -> produce forward DDZ only. */
-      _publish_ddz(sd, l, 0, NULL);
     }
 }
 
@@ -454,7 +430,7 @@ bool hncp_sd_reconfigure_ohp(hncp_sd sd)
 
   for (struct iface *iface = iface_next(NULL); iface; iface = iface_next(iface))
     {
-	  if (!(iface->elected & HNCP_LINK_MDNSPROXY))
+	  if (!iface->internal)
 	    continue;
 
       sprintf(tbuf, "%s=", iface->ifname);

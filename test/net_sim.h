@@ -800,7 +800,13 @@ void pa_update_ldp(struct pa_data *data, const struct prefix *prefix,
 
 struct iface* iface_get(const char *ifname)
 {
-	return NULL;
+	static struct {
+		struct iface iface;
+		char ifname[16];
+	} iface;
+	strcpy(iface.ifname, ifname);
+	iface.iface.elected = -1;
+	return &iface.iface;
 }
 
 struct iface* iface_next(struct iface *prev)
