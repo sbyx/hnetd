@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Tue Feb 10 18:55:07 2015 mstenber
- * Edit time:     580 min
+ * Last modified: Thu Feb 19 14:39:05 2015 mstenber
+ * Edit time:     585 min
  *
  */
 
@@ -585,7 +585,8 @@ static void
 _election_cb(struct hncp_link_user *u,
 		const char *ifname __unused, enum hncp_link_elected elected __unused)
 {
-	hncp_sd_reconfigure_ohp(container_of(u, hncp_sd_s, link));
+  hncp_sd sd = container_of(u, hncp_sd_s, link);
+  _should_update(sd, UPDATE_FLAG_OHP | UPDATE_FLAG_DDZ);
 }
 
 static void
