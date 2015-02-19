@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Thu Feb 19 15:02:51 2015 mstenber
+ * Last modified: Thu Feb 19 15:10:38 2015 mstenber
  * Edit time:     135 min
  *
  */
@@ -214,7 +214,6 @@ void test_hncp_sd(void)
   sput_fail_unless(rv, "restart dnsmasq works");
   smock_is_empty();
 
-/* FIXME: we now use iface to iterate which is problematic in net-sim case, need to think about it */
   mock_iface = true;
   /* Play with ohybridproxy */
   smock_push("execv_cmd", "s-ohp");

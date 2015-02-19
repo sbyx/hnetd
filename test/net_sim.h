@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu Feb 19 15:09:56 2015 mstenber
- * Edit time:     212 min
+ * Last modified: Thu Feb 19 15:16:14 2015 mstenber
+ * Edit time:     214 min
  *
  */
 
@@ -803,6 +803,9 @@ void pa_update_ldp(struct pa_data *data, const struct prefix *prefix,
 
 bool mock_iface = false;
 
+struct iface default_iface = {.elected = -1,
+                              .internal = true};
+
 struct iface* iface_get(const char *ifname)
 {
   if (mock_iface)
@@ -812,7 +815,7 @@ struct iface* iface_get(const char *ifname)
     char ifname[16];
   } iface;
   strcpy(iface.ifname, ifname);
-  iface.iface.elected = -1;
+  iface.iface = default_iface;
   return &iface.iface;
 }
 
@@ -832,6 +835,7 @@ void net_sim_populate_iface_next(net_node n)
   dncp_link l;
   vlist_for_each_element(&n->n.links, l, in_links)
     {
+      *i = default_iface;
       strcpy(i->ifname, l->ifname);
       smock_push("iface_next", i);
       i = (void *)i + sizeof(struct iface) + strlen(l->ifname) + 1;
