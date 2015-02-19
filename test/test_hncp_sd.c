@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Tue Dec 23 15:57:14 2014 mstenber
- * Edit time:     122 min
+ * Last modified: Thu Feb 19 15:02:51 2015 mstenber
+ * Edit time:     135 min
  *
  */
 
@@ -215,7 +215,7 @@ void test_hncp_sd(void)
   smock_is_empty();
 
 /* FIXME: we now use iface to iterate which is problematic in net-sim case, need to think about it */
-#if 0
+  mock_iface = true;
   /* Play with ohybridproxy */
   smock_push("execv_cmd", "s-ohp");
   smock_push("execv_arg", "start");
@@ -226,11 +226,13 @@ void test_hncp_sd(void)
   smock_push("execv_arg", "54");
   smock_push("execv_arg", "eth0.0=label.r.home.");
   memset(&node1->sd->ohp_state, 0, DNCP_HASH_LEN);
+  net_sim_populate_iface_next(node1);
   rv = hncp_sd_reconfigure_ohp(node1->sd);
   sput_fail_unless(rv, "reconfigure ohp works");
   smock_is_empty();
 
   /* Make sure second run is NOP */
+  net_sim_populate_iface_next(node1);
   rv = hncp_sd_reconfigure_ohp(node1->sd);
   sput_fail_unless(!rv, "reconfigure ohp works (2)");
   smock_is_empty();
@@ -245,15 +247,17 @@ void test_hncp_sd(void)
   smock_push("execv_arg", "eth1=eth1.r1.home.");
   smock_push("execv_arg", "eth2=fqdn.");
   memset(&node2->sd->ohp_state, 0, DNCP_HASH_LEN);
+  net_sim_populate_iface_next(node2);
   rv = hncp_sd_reconfigure_ohp(node2->sd);
   sput_fail_unless(rv, "reconfigure ohp works");
   smock_is_empty();
 
   /* Make sure second run is NOP */
+  net_sim_populate_iface_next(node2);
   rv = hncp_sd_reconfigure_ohp(node2->sd);
   sput_fail_unless(!rv, "reconfigure ohp works (2)");
   smock_is_empty();
-#endif
+  mock_iface = false;
 
   check_exec = false;
   debug_exec = true;

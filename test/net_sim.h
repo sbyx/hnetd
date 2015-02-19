@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Tue Feb 10 20:36:26 2015 mstenber
- * Edit time:     206 min
+ * Last modified: Thu Feb 19 15:07:48 2015 mstenber
+ * Edit time:     211 min
  *
  */
 
@@ -22,6 +22,9 @@
 
 /* We leverage the fake timers and other stuff in fake_uloop. */
 #include "fake_uloop.h"
+
+/* iface_* functions from smock queue */
+#include "smock.h"
 
 #include "pa_data.c"
 #ifdef L_PREFIX
@@ -798,14 +801,36 @@ void pa_update_ldp(struct pa_data *data, const struct prefix *prefix,
 
 /********************************************************************* iface */
 
+bool mock_iface = false;
+
 struct iface* iface_get(const char *ifname)
 {
-	return NULL;
+  if (mock_iface)
+    return smock_pull("iface_get");
+  return NULL;
 }
 
 struct iface* iface_next(struct iface *prev)
 {
-	return NULL;
+  if (mock_iface)
+    return smock_pull("iface_next");
+  return NULL;
+}
+
+void net_sim_populate_iface_next(net_node n)
+{
+  static char dummybuf[12345];
+
+  memset(&dummybuf, 0, sizeof(dummybuf));
+  struct iface *i = (struct iface *)dummybuf;
+  dncp_link l;
+  vlist_for_each_element(&n->n.links, l, in_links)
+    {
+      strcpy(i->ifname, l->ifname);
+      smock_push("iface_next", i);
+      i = (void *)i + sizeof(struct iface) + strlen(l->ifname) + 1;
+    }
+  smock_push("iface_next", NULL);
 }
 
 void iface_all_set_dhcp_send(const void *dhcpv6_data, size_t dhcpv6_len,
