@@ -371,10 +371,7 @@ void iface_unregister_user(struct iface_user *user)
 char* iface_get_fqdn(const char *ifname, char *buf, size_t len)
 {
 	dncp_link link = dncp_find_link_by_name(hncp_p, ifname, false);
-	if (!link)
-		return NULL;
-
-	hncp_sd_dump_link_fqdn(hncp_sd_p, link, buf, len);
+	hncp_sd_dump_link_fqdn(hncp_sd_p, link, ifname, buf, len);
 	return buf;
 }
 
@@ -640,6 +637,11 @@ struct iface* iface_get(const char *ifname)
 	return NULL;
 }
 
+struct iface* iface_next(struct iface *prev)
+{
+	struct list_head *p = (prev) ? &prev->head : &interfaces;
+	return (p->next != &interfaces) ? list_entry(p->next, struct iface, head) : NULL;
+}
 
 void iface_remove(struct iface *c)
 {

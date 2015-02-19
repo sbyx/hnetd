@@ -384,7 +384,9 @@ int main(__unused int argc, char *argv[])
 		return 17;
 	}
 
-	hncp_sd sd = hncp_sd_create(h, &sd_params);
+	struct hncp_link *link = hncp_link_create(h, &link_config);
+
+	hncp_sd sd = hncp_sd_create(h, &sd_params, link);
 	if (!sd) {
 		L_ERR("unable to initialize sd, exiting");
 		return 71;
@@ -392,8 +394,6 @@ int main(__unused int argc, char *argv[])
 
 	if (routing_script)
 		hncp_routing_create(h, routing_script);
-
-	struct hncp_link *link = hncp_link_create(h, &link_config);
 
 	/* Init ipc (no RPC-registrations after this point!) */
 	iface_init(h, sd, &pa, link, pd_socket_path);

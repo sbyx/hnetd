@@ -18,6 +18,7 @@
 #include "hncp_pa.h"
 #include "hncp_sd.h"
 #include "sput.h"
+#include "iface.h"
 
 /* We leverage the fake timers and other stuff in fake_uloop. */
 #include "fake_uloop.h"
@@ -117,6 +118,8 @@ typedef struct net_sim_t {
 
   bool accept_time_errors;
 } net_sim_s, *net_sim;
+
+static struct list_head net_sim_interfaces = LIST_HEAD_INIT(net_sim_interfaces);
 
 int pa_update_eap(net_node node, const struct prefix *prefix,
                   const struct pa_rid *rid,
@@ -309,7 +312,7 @@ dncp net_sim_find_hncp(net_sim s, const char *name)
 #ifndef DISABLE_HNCP_SD
   /* Add SD support */
   if (!s->disable_sd)
-    if (!(n->sd = hncp_sd_create(&n->n, &sd_params)))
+    if (!(n->sd = hncp_sd_create(&n->n, &sd_params, NULL)))
       return NULL;
 #endif /* !DISABLE_HNCP_SD */
   n->debug_subscriber.local_tlv_change_callback = net_sim_local_tlv_callback;
@@ -797,7 +800,12 @@ void pa_update_ldp(struct pa_data *data, const struct prefix *prefix,
 
 struct iface* iface_get(const char *ifname)
 {
-  return NULL;
+	return NULL;
+}
+
+struct iface* iface_next(struct iface *prev)
+{
+	return NULL;
 }
 
 void iface_all_set_dhcp_send(const void *dhcpv6_data, size_t dhcpv6_len,

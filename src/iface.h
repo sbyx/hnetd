@@ -182,6 +182,9 @@ struct iface* iface_create(const char *ifname, const char *handle, iface_flags f
 // Remove a known interface
 void iface_remove(struct iface *iface);
 
+// Interface iterator
+struct iface* iface_next(struct iface *prev);
+
 
 // Begin uplink update cycle
 void iface_update_ipv6_uplink(struct iface *c);

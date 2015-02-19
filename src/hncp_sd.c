@@ -89,7 +89,9 @@ struct hncp_sd_struct
   dncp_hash_s ohp_state;
   dncp_hash_s pcp_state;
 
+  /* Callbacks from other modules */
   struct iface_user iface;
+  struct hncp_link_user link;
 };
 
 
@@ -193,11 +195,9 @@ const char *_rewrite_ifname(const char *src, char *dst)
   _rewrite_ifname(ifname, alloca(strlen(ifname)+1))
 
 void hncp_sd_dump_link_fqdn(hncp_sd sd, dncp_link l,
-                            char *buf, size_t buf_len)
+		const char *ifname, char *buf, size_t buf_len)
 {
-  const char *ifname;
-
-  if (l->conf->dnsname[0])
+  if (l && l->conf->dnsname[0])
     {
       if (strcmp(l->ifname, l->conf->dnsname) && strchr(l->conf->dnsname, '.'))
         {
@@ -206,8 +206,6 @@ void hncp_sd_dump_link_fqdn(hncp_sd sd, dncp_link l,
         }
       ifname = l->conf->dnsname;
     }
-  else
-    ifname = l->ifname;
   ifname = REWRITE_IFNAME(ifname);
   snprintf(buf, buf_len, "%s.%s.%s",
            ifname, sd->router_name, sd->dncp->domain);
@@ -229,7 +227,7 @@ static void _publish_ddz(hncp_sd sd, dncp_link l,
   if (!dncp_get_ipv6_address(sd->dncp, l->ifname,
                              (struct in6_addr *)&dh->address))
     return;
-  hncp_sd_dump_link_fqdn(sd, l, tbuf, sizeof(tbuf));
+  hncp_sd_dump_link_fqdn(sd, l, l->ifname, tbuf, sizeof(tbuf));
   int r = escaped2ll(tbuf, dh->ll, DNS_MAX_ESCAPED_LEN);
   if (r < 0)
     return;
@@ -418,7 +416,6 @@ bool hncp_sd_restart_dnsmasq(hncp_sd sd)
   return true;
 }
 
-
 #define PUSH_ARG(s) do                                  \
     {                                                   \
       int _arg = narg++;                                \
@@ -455,10 +452,16 @@ bool hncp_sd_reconfigure_ohp(hncp_sd sd)
    * it is active on few more interfaces (well, fine, slight overhead
    * from mdnsresponder, but who cares). */
 
-  vlist_for_each_element(&sd->dncp->links, l, in_links)
+  for (struct iface *iface = iface_next(NULL); iface; iface = iface_next(iface))
     {
-      sprintf(tbuf, "%s=", l->ifname);
-      hncp_sd_dump_link_fqdn(sd, l, tbuf+strlen(tbuf), sizeof(tbuf)-strlen(tbuf));
+	  if (!(iface->elected & HNCP_LINK_MDNSPROXY))
+	    continue;
+
+      sprintf(tbuf, "%s=", iface->ifname);
+      l = dncp_find_link_by_name(sd->dncp, iface->ifname, false);
+      hncp_sd_dump_link_fqdn(sd, l, iface->ifname,
+    		  tbuf+strlen(tbuf), sizeof(tbuf)-strlen(tbuf));
+
       md5_hash(tbuf, strlen(tbuf), &ctx);
       if (first)
         {
@@ -576,6 +579,13 @@ bool hncp_sd_reconfigure_pcp(hncp_sd sd)
       return true;
     }
   return false;
+}
+
+static void
+_election_cb(struct hncp_link_user *u,
+		const char *ifname __unused, enum hncp_link_elected elected __unused)
+{
+	hncp_sd_reconfigure_ohp(container_of(u, hncp_sd_s, link));
 }
 
 static void
@@ -879,7 +889,7 @@ static void _intaddr_cb(struct iface_user *u, __unused const char *ifname,
 }
 
 
-hncp_sd hncp_sd_create(dncp h, hncp_sd_params p)
+hncp_sd hncp_sd_create(dncp h, hncp_sd_params p, struct hncp_link *l)
 {
   hncp_sd sd = calloc(1, sizeof(*sd));
 
@@ -891,6 +901,11 @@ hncp_sd hncp_sd_create(dncp h, hncp_sd_params p)
 
   sd->iface.cb_intaddr = _intaddr_cb;
   iface_register_user(&sd->iface);
+
+  sd->link.cb_elected = _election_cb;
+  if (l)
+	  hncp_link_register(l, &sd->link);
+
   /* Handle domain name */
   if (p->domain_name)
     {
