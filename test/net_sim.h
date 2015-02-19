@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu Feb 19 15:07:48 2015 mstenber
- * Edit time:     211 min
+ * Last modified: Thu Feb 19 15:09:56 2015 mstenber
+ * Edit time:     212 min
  *
  */
 
@@ -807,7 +807,13 @@ struct iface* iface_get(const char *ifname)
 {
   if (mock_iface)
     return smock_pull("iface_get");
-  return NULL;
+  static struct {
+    struct iface iface;
+    char ifname[16];
+  } iface;
+  strcpy(iface.ifname, ifname);
+  iface.iface.elected = -1;
+  return &iface.iface;
 }
 
 struct iface* iface_next(struct iface *prev)
