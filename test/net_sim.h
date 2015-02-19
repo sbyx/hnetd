@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu Feb 19 15:16:14 2015 mstenber
- * Edit time:     214 min
+ * Last modified: Thu Feb 19 15:19:01 2015 mstenber
+ * Edit time:     216 min
  *
  */
 
@@ -829,10 +829,9 @@ struct iface* iface_next(struct iface *prev)
 void net_sim_populate_iface_next(net_node n)
 {
   static char dummybuf[12345];
-
-  memset(&dummybuf, 0, sizeof(dummybuf));
   struct iface *i = (struct iface *)dummybuf;
   dncp_link l;
+
   vlist_for_each_element(&n->n.links, l, in_links)
     {
       *i = default_iface;
