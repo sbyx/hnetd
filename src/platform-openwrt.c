@@ -32,6 +32,7 @@ static struct ubus_subscriber netifd;
 static uint32_t ubus_network_interface = 0;
 static struct pa_data *pa_data = NULL;
 static dncp p_dncp = NULL;
+static uint32_t timebase = 1;
 
 static int handle_update(__unused struct ubus_context *ctx,
 		__unused struct ubus_object *obj, __unused struct ubus_request_data *req,
@@ -129,6 +130,7 @@ int platform_init(dncp dncp, struct pa_data *data, const char *pd_socket)
 	hnetd_pd_socket = pd_socket;
 	pa_data = data;
 	p_dncp = dncp;
+	timebase = hnetd_time() / HNETD_TIME_PER_SECOND;
 	return 0;
 }
 
@@ -573,7 +575,7 @@ static void platform_commit(struct uloop_timeout *t)
 	}
 
 	k = blobmsg_open_table(&b, "data");
-	blobmsg_add_u8(&b, "created", 0);
+	blobmsg_add_u32(&b, "created", timebase);
 
 	if (c->internal && c->elected && (avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr)) {
 		blobmsg_add_string(&b, "ra", "server");
@@ -828,7 +830,7 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_KEEPALIVE_INTERVAL] = { .name = "keepalive_interval", .type = BLOBMSG_TYPE_INT32 },
 	[DATA_ATTR_TRICKLE_K] = { .name = "trickle_k", .type = BLOBMSG_TYPE_INT32 },
 	[DATA_ATTR_DNSNAME] = { .name = "dnsname", .type = BLOBMSG_TYPE_STRING },
-	[DATA_ATTR_CREATED] = { .name = "created", .type = BLOBMSG_TYPE_BOOL },
+	[DATA_ATTR_CREATED] = { .name = "created", .type = BLOBMSG_TYPE_INT32 },
 };
 
 
@@ -1036,7 +1038,7 @@ static void platform_update(void *data, size_t len)
 	if ((a = tb[IFACE_ATTR_PROTO]))
 		proto = blobmsg_get_string(a);
 
-	bool created = dtb[DATA_ATTR_CREATED] && blobmsg_get_bool(dtb[DATA_ATTR_CREATED]);
+	bool created = dtb[DATA_ATTR_CREATED] && blobmsg_get_u32(dtb[DATA_ATTR_CREATED]) < timebase;
 
 	if ((!c || !c->platform) && up && !strcmp(proto, "hnet") && (c || created) && (a = tb[IFACE_ATTR_HANDLE])) {
 		c = iface_create(ifname, blobmsg_get_string(a), flags);
