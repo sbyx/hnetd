@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 20:09:23 2014 mstenber
- * Last modified: Tue Dec 23 18:48:01 2014 mstenber
+ * Last modified: Mon Feb 23 22:13:26 2015 mstenber
  * Edit time:     7 min
  *
  */
@@ -49,3 +49,5 @@ void hncp_sd_dump_link_fqdn(hncp_sd sd, dncp_link l,
 		const char *ifname, char *buf, size_t buf_len);
 
 void hncp_sd_destroy(hncp_sd sd);
+
+bool hncp_sd_busy(hncp_sd sd);

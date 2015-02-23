@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Thu Feb 19 15:10:38 2015 mstenber
- * Edit time:     135 min
+ * Last modified: Mon Feb 23 22:07:35 2015 mstenber
+ * Edit time:     138 min
  *
  */
 
@@ -16,42 +16,12 @@
 #endif /* L_LEVEL */
 #define L_LEVEL 7
 #define DISABLE_HNCP_PA
-
+#define DISABLE_HNCP_MULTICAST
 #include "net_sim.h"
 #include "sput.h"
 #include "smock.h"
 
-/* Prevent execve/vfork/waitpid/_exit definition */
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-
-/* Stub out the code that calls things */
-#define execv(cmd, argv) do                             \
-{                                                       \
-  if (check_exec || debug_exec)                         \
-    {                                                   \
-      int i;                                            \
-      L_DEBUG("execv: '%s'", cmd);                      \
-      if (check_exec)                                   \
-        smock_pull_string_is("execv_cmd", cmd);         \
-      for (i = 1; argv[i]; i++)                         \
-        {                                               \
-          L_DEBUG(" arg#%d: '%s'", i, argv[i]);         \
-          if (check_exec)                               \
-            smock_pull_string_is("execv_arg", argv[i]); \
-        }                                               \
-    }                                                   \
-  else                                                  \
-    execs++;                                            \
-} while (0)
-
-bool check_exec, debug_exec;
-int execs;
-
-#define vfork() 0
-#define waitpid(pid, x, y)
-#define _exit(code)
+#include "fake_fork_exec.h"
 
 #include "hncp_sd.c"
 
@@ -69,8 +39,8 @@ int pa_update_edp(net_node node, const struct prefix *prefix,
 { return 0; }
 
 int pa_update_eaa(net_node node, const struct in6_addr *addr,
-					const struct pa_rid *rid,
-					const char *ifname, bool to_delete)
+                  const struct pa_rid *rid,
+                  const char *ifname, bool to_delete)
 {return 0;}
 
 /*
@@ -110,33 +80,6 @@ void file_contains(const char *filename, const char *string)
 void file_does_not_contain(const char *filename, const char *string)
 {
   _file_contains(filename, string, false);
-}
-
-bool net_sim_is_busy(net_sim s)
-{
-  net_node n;
-
-  if (!list_empty(&s->messages))
-    {
-      L_DEBUG("net_sim_is_busy: messages pending");
-      return true;
-    }
-  list_for_each_entry(n, &s->nodes, h)
-    {
-      if (n->n.immediate_scheduled)
-        {
-          L_DEBUG("net_sim_is_busy: immediate scheduled");
-          return true;
-        }
-#ifndef DISABLE_HNCP_SD
-      if (!s->disable_sd && n->sd->should_update)
-        {
-          L_DEBUG("net_sim_is_busy: should_update: %d", n->sd->should_update);
-          return true;
-        }
-#endif /* !DISABLE_HNCP_SD */
-    }
-  return false;
 }
 
 void test_hncp_sd(void)

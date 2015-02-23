@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu Feb 19 15:19:01 2015 mstenber
- * Edit time:     216 min
+ * Last modified: Mon Feb 23 22:16:31 2015 mstenber
+ * Edit time:     231 min
  *
  */
 
@@ -17,6 +17,7 @@
 #include "hncp_i.h"
 #include "hncp_pa.h"
 #include "hncp_sd.h"
+#include "hncp_multicast.h"
 #include "sput.h"
 #include "iface.h"
 
@@ -80,6 +81,9 @@ typedef struct {
 #ifndef DISABLE_HNCP_PA
   hncp_glue g;
 #endif /* !DISABLE_HNCP_PA */
+#ifndef DISABLE_HNCP_MULTICAST
+  hncp_multicast multicast;
+#endif /* !DISABLE_HNCP_MULTICAST */
   hncp_sd sd;
   int updated_eap;
   int updated_edp;
@@ -104,6 +108,7 @@ typedef struct net_sim_t {
   struct list_head messages;
 
   bool disable_sd;
+  bool disable_multicast;
 
   int node_count;
   bool should_be_stable_topology;
@@ -258,6 +263,42 @@ bool net_sim_is_converged(net_sim s)
   return true;
 }
 
+bool net_sim_is_busy(net_sim s)
+{
+  net_node n;
+
+  if (!list_empty(&s->messages))
+    {
+      L_DEBUG("net_sim_is_busy: messages pending");
+      return true;
+    }
+  list_for_each_entry(n, &s->nodes, h)
+    {
+      if (n->n.immediate_scheduled)
+        {
+          L_DEBUG("net_sim_is_busy: immediate scheduled");
+          return true;
+        }
+#ifndef DISABLE_HNCP_SD
+      if (!s->disable_sd && hncp_sd_busy(n->sd))
+        {
+          L_DEBUG("net_sim_is_busy: pending sd");
+          return true;
+        }
+#endif /* !DISABLE_HNCP_SD */
+#ifndef DISABLE_HNCP_MULTICAST
+      if (!s->disable_multicast && hncp_multicast_busy(n->multicast))
+        {
+          L_DEBUG("net_sim_is_busy: pending multicast");
+          return true;
+        }
+#endif /* !DISABLE_HNCP_MULTICAST */
+    }
+  return false;
+}
+
+
+
 void net_sim_local_tlv_callback(dncp_subscriber sub,
                                 struct tlv_attr *tlv, bool add)
 {
@@ -275,13 +316,6 @@ dncp net_sim_find_hncp(net_sim s, const char *name)
 {
   net_node n;
   bool r;
-  static hncp_sd_params_s sd_params = {
-    .dnsmasq_script = "s-dnsmasq",
-    .dnsmasq_bonus_file = "/tmp/dnsmasq.conf",
-    .ohp_script = "s-ohp",
-    .pcp_script = "s-pcp",
-  };
-
 
   list_for_each_entry(n, &s->nodes, h)
     {
@@ -313,11 +347,26 @@ dncp net_sim_find_hncp(net_sim s, const char *name)
     return NULL;
 #endif /* !DISABLE_HNCP_PA */
 #ifndef DISABLE_HNCP_SD
+  static hncp_sd_params_s sd_params = {
+    .dnsmasq_script = "s-dnsmasq",
+    .dnsmasq_bonus_file = "/tmp/dnsmasq.conf",
+    .ohp_script = "s-ohp",
+    .pcp_script = "s-pcp",
+  };
+
   /* Add SD support */
   if (!s->disable_sd)
     if (!(n->sd = hncp_sd_create(&n->n, &sd_params, NULL)))
       return NULL;
 #endif /* !DISABLE_HNCP_SD */
+#ifndef DISABLE_HNCP_MULTICAST
+  static hncp_multicast_params_s multicast_params = {
+    .multicast_script = "s-mc"
+  };
+  if (!s->disable_multicast)
+    if (!(n->multicast = hncp_multicast_create(&n->n, &multicast_params)))
+      return NULL;
+#endif /* !DISABLE_HNCP_MULTICAST */
   n->debug_subscriber.local_tlv_change_callback = net_sim_local_tlv_callback;
   s->node_count++;
   dncp_subscribe(&n->n, &n->debug_subscriber);
@@ -460,6 +509,10 @@ void net_sim_remove_node(net_sim s, net_node node)
   hncp_pa_glue_destroy(node->g);
   pa_data_term(&node->pa_data);
 #endif /* !DISABLE_HNCP_PA */
+#ifndef DISABLE_HNCP_MULTICAST
+  if (!s->disable_multicast)
+    hncp_multicast_destroy(node->multicast);
+#endif /* !DISABLE_HNCP_MULTICAST */
   free(node);
 }
 

@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Feb 23 13:39:28 2015 mstenber
- * Edit time:     597 min
+ * Last modified: Mon Feb 23 22:13:38 2015 mstenber
+ * Edit time:     603 min
  *
  */
 
@@ -901,9 +901,9 @@ hncp_sd hncp_sd_create(dncp h, hncp_sd_params p, struct hncp_link *l)
     return NULL;
 
   sd->iface.cb_intaddr = _intaddr_cb;
+  sd->link.cb_elected = _election_cb;
   iface_register_user(&sd->iface);
 
-  sd->link.cb_elected = _election_cb;
   if (l)
 	  hncp_link_register(l, &sd->link);
 
@@ -949,4 +949,9 @@ void hncp_sd_destroy(hncp_sd sd)
   uloop_timeout_cancel(&sd->timeout);
   dncp_unsubscribe(sd->dncp, &sd->subscriber);
   free(sd);
+}
+
+bool hncp_sd_busy(hncp_sd sd)
+{
+  return sd->should_update;
 }
