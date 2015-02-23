@@ -187,6 +187,7 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 {
 	struct tlv_attr *tlv;
 	hncp_t_version v;
+	hncp_t_dns_router_name na;
 	struct blob_buf prefixes = {NULL, NULL, 0, NULL},
 			neighbors = {NULL, NULL, 0, NULL},
 			externals = {NULL, NULL, 0, NULL},
@@ -238,7 +239,8 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 				hd_do_in_table(&zones, NULL, hd_node_zone(tlv, &zones), goto err);
 				break;
 			case HNCP_T_DNS_ROUTER_NAME:
-				hd_a(!hd_push_string(b, "router-name", tlv_data(tlv), tlv_len(tlv)), goto err);
+				na = tlv_data(tlv);
+				hd_a(!hd_push_string(b, "router-name", na->name, tlv_len(tlv)) - sizeof(*na), goto err);
 				break;
 			case HNCP_T_DNS_DOMAIN_NAME:
 				hd_a(!hd_push_dn(b, "domain", tlv_data(tlv), tlv_len(tlv)), goto err);
