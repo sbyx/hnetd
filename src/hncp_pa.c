@@ -62,6 +62,7 @@
 
 #define HPA_PRIORITY_ADOPT    2
 #define HPA_PRIORITY_CREATE   2
+#define HPA_PRIORITY_STORE    2
 #define HPA_PRIORITY_SCARCITY 3
 #define HPA_PRIORITY_STATIC   4
 #define HPA_PRIORITY_PD       1
@@ -195,6 +196,10 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	i->aa_rand.accept_proposed_cb = hpa_accept_proposed_addr;
 	i->aa_rand.priority = HPA_PRIORITY_CREATE;
 	i->aa_rand.rule_priority = HPA_RULE_CREATE;
+
+	//Init stable storage
+	pa_store_link_init(&i->pasl, &i->pal, i->pal.name, 20);
+	pa_store_link_init(&i->aasl, &i->aal, i->aal.name, 20);
 }
 
 hpa_iface hpa_iface_goc(hncp_pa hp, const char *ifname, bool create)
@@ -476,7 +481,7 @@ static void hpa_dp_update(hncp_pa hpa, hpa_dp dp,
 			}
 		}
 
-		hpa_refresh_ec(hpa, 1); //Update dhcp data and advertised prefix
+		hpa_refresh_ec(hpa, dp->dp.local); //Update dhcp data and advertised prefix
 	}
 }
 
@@ -881,7 +886,13 @@ static void hpa_iface_set_pa_enabled(hncp_pa hpa, hpa_iface i, bool enabled)
 				break;
 			}
 		}
+
+		pa_store_link_add(&i->hpa->store, &i->pasl);
+		pa_store_link_add(&i->hpa->store, &i->aasl);
 	} else {
+		pa_store_link_remove(&i->hpa->store, &i->pasl);
+		pa_store_link_remove(&i->hpa->store, &i->aasl);
+
 		vlist_for_each_element(&i->conf, c, vle) {
 			switch(c->type) {
 			case HPA_CONF_T_PREFIX:
@@ -1754,6 +1765,21 @@ hncp_pa hncp_pa_create(dncp dncp, struct hncp_link *hncp_link)
 
 	pa_core_init(&hp->pa);
 	pa_core_init(&hp->aa);
+	pa_store_init(&hp->store, 100);
+	pa_store_bind(&hp->store, &hp->pa, &hp->store_pa_b);
+	pa_store_bind(&hp->store, &hp->aa, &hp->store_aa_b);
+
+	pa_store_rule_init(&hp->store_pa_r, &hp->store);
+	hp->store_pa_r.rule_priority = HPA_RULE_STORE;
+	hp->store_pa_r.priority = HPA_PRIORITY_STORE;
+	hp->store_pa_r.rule.name = "Prefix Storage";
+	pa_rule_add(&hp->pa, &hp->store_pa_r.rule);
+
+	pa_store_rule_init(&hp->store_aa_r, &hp->store);
+	hp->store_aa_r.rule_priority = HPA_RULE_STORE;
+	hp->store_aa_r.priority = HPA_PRIORITY_STORE;
+	hp->store_aa_r.rule.name = "Address Storage";
+	pa_rule_add(&hp->aa, &hp->store_aa_r.rule);
 
 	//Set node IDs based on dncd node ID
 	pa_core_set_node_id(&hp->pa,

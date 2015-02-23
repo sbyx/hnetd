@@ -74,12 +74,6 @@ struct pa_store {
 	/* Tree containing pa_store Links */
 	struct list_head links;
 
-	/* The PA core the module is operating on. */
-	struct pa_core *core;
-
-	/* PA user used to receive apply notifications. */
-	struct pa_user user;
-
 	/* All cached prefixes */
 	struct list_head prefixes;
 
@@ -122,7 +116,21 @@ struct pa_store {
  * @param core The associated core structure.
  * @param max_prefixes Maximum number of cached prefixes.
  */
-void pa_store_init(struct pa_store *store, struct pa_core *core, uint32_t max_prefixes);
+void pa_store_init(struct pa_store *store, uint32_t max_prefixes);
+
+/**
+ * Bound between a pa_store and a pa_core.
+ * This allows using the same pa_store with different pa_core structures.
+ */
+struct pa_store_bound {
+	struct pa_user user;
+	struct pa_store *store;
+};
+
+void pa_store_bind(struct pa_store *store, struct pa_core *core,
+		struct pa_store_bound *bound);
+
+void pa_store_unbind(struct pa_store_bound *bound);
 
 /**
  * Structure representing a given link used by PA store.

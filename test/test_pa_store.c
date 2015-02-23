@@ -105,7 +105,10 @@ void pa_store_rule_test()
 	ldp2 = list_entry(l2.ldps.next, struct pa_ldp, in_link);
 
 	struct pa_store store;
-	pa_store_init(&store, &core, 10);
+	pa_store_init(&store, 10);
+
+	struct pa_store_bound bound;
+	pa_store_bind(&store, &core, &bound);
 
 	struct pa_store_link ls1, ls2;
 	ls1.link = &l1;
@@ -182,6 +185,7 @@ void pa_store_rule_test()
 	sput_fail_if(pa_prefix_cmp(&a2.prefix, a2.plen, &ldp2->prefix, ldp2->plen), "Correct prefix");
 
 	pa_store_link_remove(&store, &ls2);
+	pa_store_unbind(&bound);
 	pa_store_term(&store);
 
 	pa_link_del(&l1);
@@ -196,7 +200,10 @@ void pa_store_delays_test()
 	INIT_LIST_HEAD(&core.users);
 
 	struct pa_store store;
-	pa_store_init(&store, &core, 4);
+	pa_store_init(&store, 4);
+
+	struct pa_store_bound bound;
+	pa_store_bind(&store, &core, &bound);
 
 	fake_files = 0;
 	const char *filepath = "/tmp/test_pa_core.store";
@@ -226,7 +233,7 @@ void pa_store_delays_test()
 	pa_store_link_init(&link, &l, "L1", 2);
 	pa_store_link_add(&store, &link);
 
-	store.user.applied(&store.user, &ldp);
+	bound.user.applied(&bound.user, &ldp);
 	sput_fail_unless(store.n_prefixes == 1, "One prefixes");
 
 	sput_fail_unless(uloop_timeout_remaining(&store.token_timer) == 10000, "Token timer pending");
@@ -240,7 +247,7 @@ void pa_store_delays_test()
 	sput_fail_unless(store.token_count == 0, "No token left");
 	sput_fail_unless(uloop_timeout_remaining(&store.token_timer) == 8000, "Token timer pending");
 
-	store.user.applied(&store.user, &ldp); //Update, but no token
+	bound.user.applied(&bound.user, &ldp); //Update, but no token
 
 	fu_loop(1);
 	sput_fail_unless(uloop_timeout_remaining(&store.token_timer) == 10000, "Token timer pending");
@@ -256,7 +263,7 @@ void pa_store_delays_test()
 	fu_loop(3);//3 more tokens
 	sput_fail_unless(store.token_count == 3, "3 tokens");
 
-	store.user.applied(&store.user, &ldp);
+	bound.user.applied(&bound.user, &ldp);
 	sput_fail_unless(uloop_timeout_remaining(&store.save_timer) == 3000, "Store timer pending");
 	fu_loop(1); //Write to file
 
@@ -265,6 +272,7 @@ void pa_store_delays_test()
 	sput_fail_unless(store.token_count == 2, "2 tokens");
 
 	unlink(filepath);
+	pa_store_unbind(&bound);
 	pa_store_term(&store);
 }
 
@@ -275,7 +283,11 @@ void pa_store_saveload_test()
 	INIT_LIST_HEAD(&core.users);
 
 	struct pa_store store;
-	pa_store_init(&store, &core, 4);
+	pa_store_init(&store, 4);
+
+	struct pa_store_bound bound;
+	pa_store_bind(&store, &core, &bound);
+
 	const char *filepath = "/tmp/test_pa_core.store";
 	struct pa_store_prefix *prefix;
 	struct pa_store_link *link;
@@ -300,9 +312,12 @@ void pa_store_saveload_test()
 	fake_files = 0;
 
 	sput_fail_if(pa_store_save(&store), "Store in file");
+
+	pa_store_unbind(&bound);
 	pa_store_term(&store); //Empty this store
 
-	pa_store_init(&store, &core, 3);
+	pa_store_init(&store, 3);
+	pa_store_bind(&store, &core, &bound);
 
 	chmod(filepath, 0);
 	sput_fail_unless(pa_store_set_file(&store, filepath, 1000, 1000), "Can't open file");
@@ -349,6 +364,7 @@ void pa_store_saveload_test()
 	sput_fail_if(pa_store_save(&store), "Store in file");
 
 	unlink(filepath);
+	pa_store_unbind(&bound);
 	pa_store_term(&store);
 }
 
@@ -359,7 +375,10 @@ void pa_store_load_test()
 	INIT_LIST_HEAD(&core.users);
 
 	struct pa_store store;
-	pa_store_init(&store, &core, 10);
+	pa_store_init(&store, 10);
+
+	struct pa_store_bound bound;
+	pa_store_bind(&store, &core, &bound);
 
 	fake_files = 1;
 	const char *filepath = "/file/path";
@@ -458,6 +477,7 @@ void pa_store_load_test()
 	sput_fail_if(strcmp("link1", link->name), "Link name");
 	sput_fail_unless(link->n_prefixes == 1, "One prefix in link1");
 
+	pa_store_unbind(&bound);
 	pa_store_term(&store);
 	fake_files = 0;
 }
@@ -536,10 +556,14 @@ void pa_store_cache_test()
 
 	struct pa_store store;
 	struct pa_store_prefix *prefix, *prefix2;
-	pa_store_init(&store, &core, 3);
-	sput_fail_if(store.user.assigned, "No assigned function");
-	sput_fail_if(store.user.published, "No published function");
-	sput_fail_unless(store.user.applied, "Applied function");
+	pa_store_init(&store, 3);
+
+	struct pa_store_bound bound;
+	pa_store_bind(&store, &core, &bound);
+
+	sput_fail_if(bound.user.assigned, "No assigned function");
+	sput_fail_if(bound.user.published, "No published function");
+	sput_fail_unless(bound.user.applied, "Applied function");
 	sput_fail_unless(list_empty(&store.links), "No links");
 
 	struct pa_link l;
@@ -552,13 +576,13 @@ void pa_store_cache_test()
 	ldp.assigned = 0;
 	ldp.applied = 0;
 
-	store.user.applied(&store.user, &ldp);
+	bound.user.applied(&bound.user, &ldp);
 	sput_fail_unless(list_empty(&store.links), "No links");
 	sput_fail_unless(store.n_prefixes == 0, "No prefixes");
 
 	ldp.assigned = 1;
 	ldp.applied = 1;
-	store.user.applied(&store.user, &ldp);
+	bound.user.applied(&bound.user, &ldp);
 	sput_fail_unless(list_empty(&store.links), "No links");
 	sput_fail_unless(store.n_prefixes == 0, "No prefixes");
 
@@ -571,14 +595,14 @@ void pa_store_cache_test()
 	sput_fail_unless(link.n_prefixes == 0, "No stored prefix");
 
 	ldp.applied = 0;
-	store.user.applied(&store.user, &ldp);
+	bound.user.applied(&bound.user, &ldp);
 	sput_fail_if(list_empty(&store.links), "One link in the list");
 	sput_fail_unless(store.n_prefixes == 0, "No prefixes");
 	sput_fail_unless(list_empty(&link.prefixes), "No stored prefix");
 	sput_fail_unless(link.n_prefixes == 0, "No stored prefix");
 
 	ldp.applied = 1;
-	store.user.applied(&store.user, &ldp);
+	bound.user.applied(&bound.user, &ldp);
 	sput_fail_unless(store.n_prefixes == 1, "One cached prefix");
 	sput_fail_unless(link.n_prefixes == 1, "One cached prefix");
 	sput_fail_if(list_empty(&store.prefixes), "One prefix in list");
@@ -588,7 +612,7 @@ void pa_store_cache_test()
 	sput_fail_unless(prefix == prefix2, "Same prefix in both lists");
 
 	//Same prefix again
-	store.user.applied(&store.user, &ldp);
+	bound.user.applied(&bound.user, &ldp);
 	sput_fail_unless(store.n_prefixes == 1, "One cached prefix");
 	sput_fail_unless(link.n_prefixes == 1, "One cached prefix");
 
@@ -602,7 +626,7 @@ void pa_store_cache_test()
 	//Another prefix for first link
 	link.max_prefixes = 1;
 	ldp.prefix = PV(2);
-	store.user.applied(&store.user, &ldp);
+	bound.user.applied(&bound.user, &ldp);
 	sput_fail_unless(store.n_prefixes == 1, "One cached prefix");
 	sput_fail_unless(link.n_prefixes == 1, "One cached prefix");
 	sput_fail_if(list_empty(&store.prefixes), "One prefix in list");
@@ -615,7 +639,7 @@ void pa_store_cache_test()
 	link.max_prefixes = 2;
 	store.max_prefixes = 1;
 	ldp.prefix = PV(3);
-	store.user.applied(&store.user, &ldp);
+	bound.user.applied(&bound.user, &ldp);
 	sput_fail_unless(store.n_prefixes == 1, "One cached prefix");
 	sput_fail_unless(link.n_prefixes == 1, "One cached prefix");
 	sput_fail_if(list_empty(&store.prefixes), "One prefix in list");
@@ -626,7 +650,7 @@ void pa_store_cache_test()
 
 	//Add the same to the other link
 	ldp.link = &l2;
-	store.user.applied(&store.user, &ldp);
+	bound.user.applied(&bound.user, &ldp);
 	sput_fail_unless(store.n_prefixes == 1, "One cached prefix");
 	sput_fail_unless(link.n_prefixes == 0, "No cached prefix");
 	sput_fail_unless(link2.n_prefixes == 1, "One cached prefix");
@@ -640,7 +664,7 @@ void pa_store_cache_test()
 	store.max_prefixes = 2;
 	link2.max_prefixes = 2;
 	ldp.prefix = PV(4);
-	store.user.applied(&store.user, &ldp);
+	bound.user.applied(&bound.user, &ldp);
 	sput_fail_unless(store.n_prefixes == 2, "Two cached prefix");
 	sput_fail_unless(link.n_prefixes == 0, "No cached prefix");
 	sput_fail_unless(link2.n_prefixes == 2, "Two cached prefix");
@@ -698,7 +722,7 @@ void pa_store_cache_test()
 	pa_store_link_add(&store, &link);
 	ldp.prefix = PV(5);
 	ldp.link = link.link;
-	store.user.applied(&store.user, &ldp);
+	bound.user.applied(&bound.user, &ldp);
 	sput_fail_unless(store.n_prefixes == 1, "1 cached prefix");
 	sput_fail_unless(link.n_prefixes == 1, "1 cached prefix");
 
@@ -708,6 +732,7 @@ void pa_store_cache_test()
 	sput_fail_unless(prefix == prefix2, "Same prefix in both lists");
 
 	pa_store_link_remove(&store, &link);
+	pa_store_unbind(&bound);
 	pa_store_term(&store);
 }
 

@@ -104,13 +104,16 @@ struct hpa_iface_struct {
 	struct pa_link pal;
 	struct pa_rule_adopt pa_adopt;
 	struct pa_rule_random pa_rand;
-	//todo: Add filters for v4 vs v6
+
 
 	char aa_name[IFNAMSIZ + HPA_LINK_NAME_LEN];
 	struct pa_link aal;
-	//struct pa_store_rule aa_store;
 	//struct pa_rule_slaac aa_slaac; //todo
 	struct pa_rule_random aa_rand;
+
+	//Stable storage
+	struct pa_store_link pasl;
+	struct pa_store_link aasl;
 
 	//If the interface is dncp enabled
 	dncp_link l;
@@ -190,6 +193,13 @@ struct hncp_pa_struct {
 	struct pa_user pa_user;
 	struct pa_core aa;
 	struct pa_user aa_user;
+
+	/* Pa storage */
+	struct pa_store store; //PA storage structure itself
+	struct pa_store_bound store_pa_b; //Get events from aa
+	struct pa_store_bound store_aa_b; //Get events from pa
+	struct pa_store_rule store_pa_r;  //Configure pa
+	struct pa_store_rule store_aa_r;  //Configure aa
 
 	struct pa_link excluded_link; //Link used to exclude prefixes
 

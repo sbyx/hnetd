@@ -275,7 +275,8 @@ static int pa_store_cache(struct pa_store *store, struct pa_store_link *link, pa
 
 static void pa_store_applied_cb(struct pa_user *user, struct pa_ldp *ldp)
 {
-	struct pa_store *store = container_of(user, struct pa_store, user);
+	struct pa_store_bound *b = container_of(user, struct pa_store_bound, user);
+	struct pa_store *store = b->store;
 	if(!ldp->applied)
 		return;
 
@@ -345,7 +346,6 @@ void pa_store_term(struct pa_store *store)
 			free(l);
 	}
 
-	pa_user_unregister(&store->user);
 	uloop_timeout_cancel(&store->save_timer);
 	uloop_timeout_cancel(&store->token_timer);
 }
@@ -399,15 +399,11 @@ int pa_store_set_file(struct pa_store *store, const char *filepath,
 	return 0;
 }
 
-void pa_store_init(struct pa_store *store, struct pa_core *core, uint32_t max_prefixes)
+void pa_store_init(struct pa_store *store, uint32_t max_prefixes)
 {
-	store->core = core;
 	store->max_prefixes = max_prefixes;
 	INIT_LIST_HEAD(&store->links);
 	INIT_LIST_HEAD(&store->prefixes);
-	store->user.applied = pa_store_applied_cb;
-	store->user.assigned = NULL;
-	store->user.published = NULL;
 	store->filepath = NULL;
 	store->n_prefixes = 0;
 	store->pending_changes = 0;
@@ -416,9 +412,22 @@ void pa_store_init(struct pa_store *store, struct pa_core *core, uint32_t max_pr
 	store->token_timer.pending = 0;
 	store->token_timer.cb = pa_token_to;
 	store->token_count = 0;
-	pa_user_register(core, &store->user);
 }
 
+void pa_store_bind(struct pa_store *store, struct pa_core *core,
+		struct pa_store_bound *bound)
+{
+	bound->store = store;
+	bound->user.applied = pa_store_applied_cb;
+	bound->user.assigned = NULL;
+	bound->user.published = NULL;
+	pa_user_register(core, &bound->user);
+}
+
+void pa_store_unbind(struct pa_store_bound *bound)
+{
+	pa_user_unregister(&bound->user);
+}
 
 pa_rule_priority pa_store_get_max_priority(struct pa_rule *rule, struct pa_ldp *ldp)
 {
