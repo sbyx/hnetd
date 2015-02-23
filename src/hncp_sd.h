@@ -15,6 +15,7 @@
 
 #include "dncp.h"
 #include "dncp_i.h"
+#include "hncp_link.h"
 
 typedef struct hncp_sd_struct hncp_sd_s, *hncp_sd;
 
@@ -42,9 +43,9 @@ typedef struct hncp_sd_params_struct
   const char *domain_name;
 } hncp_sd_params_s, *hncp_sd_params;
 
-hncp_sd hncp_sd_create(dncp h, hncp_sd_params p);
+hncp_sd hncp_sd_create(dncp h, hncp_sd_params p, struct hncp_link *l);
 
 void hncp_sd_dump_link_fqdn(hncp_sd sd, dncp_link l,
-                            char *buf, size_t buf_len);
+		const char *ifname, char *buf, size_t buf_len);
 
 void hncp_sd_destroy(hncp_sd sd);

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Tue Feb 10 20:36:26 2015 mstenber
- * Edit time:     206 min
+ * Last modified: Thu Feb 19 15:19:01 2015 mstenber
+ * Edit time:     216 min
  *
  */
 
@@ -18,9 +18,13 @@
 #include "hncp_pa.h"
 #include "hncp_sd.h"
 #include "sput.h"
+#include "iface.h"
 
 /* We leverage the fake timers and other stuff in fake_uloop. */
 #include "fake_uloop.h"
+
+/* iface_* functions from smock queue */
+#include "smock.h"
 
 #ifdef L_PREFIX
 #undef L_PREFIX
@@ -116,6 +120,8 @@ typedef struct net_sim_t {
 
   bool accept_time_errors;
 } net_sim_s, *net_sim;
+
+static struct list_head net_sim_interfaces = LIST_HEAD_INIT(net_sim_interfaces);
 
 int pa_update_eap(net_node node, const struct prefix *prefix,
                   const struct pa_rid *rid,
@@ -308,7 +314,7 @@ dncp net_sim_find_hncp(net_sim s, const char *name)
 #ifndef DISABLE_HNCP_SD
   /* Add SD support */
   if (!s->disable_sd)
-    if (!(n->sd = hncp_sd_create(&n->n, &sd_params)))
+    if (!(n->sd = hncp_sd_create(&n->n, &sd_params, NULL)))
       return NULL;
 #endif /* !DISABLE_HNCP_SD */
   n->debug_subscriber.local_tlv_change_callback = net_sim_local_tlv_callback;
@@ -794,9 +800,45 @@ void pa_update_ldp(struct pa_data *data, const struct prefix *prefix,
 
 /********************************************************************* iface */
 
+bool mock_iface = false;
+
+struct iface default_iface = {.elected = -1,
+                              .internal = true};
+
 struct iface* iface_get(const char *ifname)
 {
+  if (mock_iface)
+    return smock_pull("iface_get");
+  static struct {
+    struct iface iface;
+    char ifname[16];
+  } iface;
+  strcpy(iface.ifname, ifname);
+  iface.iface = default_iface;
+  return &iface.iface;
+}
+
+struct iface* iface_next(struct iface *prev)
+{
+  if (mock_iface)
+    return smock_pull("iface_next");
   return NULL;
+}
+
+void net_sim_populate_iface_next(net_node n)
+{
+  static char dummybuf[12345];
+  struct iface *i = (struct iface *)dummybuf;
+  dncp_link l;
+
+  vlist_for_each_element(&n->n.links, l, in_links)
+    {
+      *i = default_iface;
+      strcpy(i->ifname, l->ifname);
+      smock_push("iface_next", i);
+      i = (void *)i + sizeof(struct iface) + strlen(l->ifname) + 1;
+    }
+  smock_push("iface_next", NULL);
 }
 
 void iface_all_set_dhcp_send(const void *dhcpv6_data, size_t dhcpv6_len,

@@ -141,7 +141,7 @@ endif(${DTLS})
 #add_test(hncp_net test_hncp_net)
 #add_dependencies(check test_hncp_net)
 
-#add_executable(test_hncp_sd test/test_hncp_sd.c src/hncp.c ${DNCP_WITH_PROTO} ${BT})
+#add_executable(test_hncp_sd test/test_hncp_sd.c src/hncp.c src/hncp_link.c ${DNCP_WITH_PROTO} ${BT})
 #target_link_libraries(test_hncp_sd ubox ${BACKEND_LINK} blobmsg_json)
 #add_test(hncp_sd test_hncp_sd)
 #add_dependencies(check test_hncp_sd)

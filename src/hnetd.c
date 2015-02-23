@@ -289,7 +289,7 @@ int main(__unused int argc, char *argv[])
 						L_ERR("Unable to set dtls password");
 						return 13;
 				}
-		} else {
+		} else if (dtls_trust) {
 				dt = dncp_trust_create(h, dtls_trust);
 				if (!dt) {
 						L_ERR("Unable to create dncp trust module");
@@ -300,7 +300,9 @@ int main(__unused int argc, char *argv[])
 #endif /* DTLS */
 	}
 
-	hncp_sd sd = hncp_sd_create(h, &sd_params);
+	struct hncp_link *link = hncp_link_create(h, &link_config);
+
+	hncp_sd sd = hncp_sd_create(h, &sd_params, link);
 	if (!sd) {
 		L_ERR("unable to initialize sd, exiting");
 		return 71;
@@ -308,8 +310,6 @@ int main(__unused int argc, char *argv[])
 
 	if (routing_script)
 		hncp_routing_create(h, routing_script);
-
-	struct hncp_link *link = hncp_link_create(h, &link_config);
 
 	//Note that pa subscribes to iface. Which is possible before iface init.
 	if(!(hncp_pa = hncp_pa_create(h, link))) {
