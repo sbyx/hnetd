@@ -42,6 +42,7 @@ typedef struct hpa_advp_struct {
 
 typedef struct hpa_conf_struct {
 	struct vlist_node vle;
+	hpa_iface iface;
 	enum {
 		HPA_CONF_T_PREFIX,
 		HPA_CONF_T_ADDR,
@@ -51,7 +52,10 @@ typedef struct hpa_conf_struct {
 	} type;
 	union {
 		/* HPA_CONF_T_PREFIX */
-		struct prefix prefix;
+		struct {
+			struct prefix prefix;
+			struct pa_rule_static rule;
+		} prefix;
 
 		/* HPA_CONF_T_ADDR */
 		struct {
@@ -90,6 +94,9 @@ enum {
 struct hpa_iface_struct {
 	struct list_head le;
 	char ifname[IFNAMSIZ];
+
+	//Backpointer to main hpa struct
+	hncp_pa hpa;
 
 	//If the interface is PA enabled
 	bool pa_enabled;
@@ -282,7 +289,7 @@ static int hpa_ifconf_comp(const void *k1, const void *k2, __unused void *ptr)
 
 	switch (e1->type) {
 		case HPA_CONF_T_PREFIX: //One entry per prefix
-			return prefix_cmp(&e1->prefix, &e2->prefix);
+			return prefix_cmp(&e1->prefix.prefix, &e2->prefix.prefix);
 		case HPA_CONF_T_ADDR: //One netry per address
 			return memcmp(&e1->addr, &e2->addr, sizeof(e1->addr));
 		case HPA_CONF_T_LINK_ID:

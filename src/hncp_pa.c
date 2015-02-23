@@ -63,6 +63,7 @@
 #define HPA_PRIORITY_ADOPT    2
 #define HPA_PRIORITY_CREATE   2
 #define HPA_PRIORITY_SCARCITY 3
+#define HPA_PRIORITY_STATIC   4
 #define HPA_PRIORITY_PD       1
 #define HPA_PRIORITY_EXCLUDE  15
 
@@ -135,7 +136,7 @@ fail:
 	return ldp->dp->plen;
 }
 
-static int hpa_accept_proposed_addr(struct pa_rule_random *r, struct pa_ldp *ldp,
+static int hpa_accept_proposed_addr(__unused struct pa_rule_random *r, struct pa_ldp *ldp,
 			pa_prefix *prefix, pa_plen plen)
 {
 	//The purpose of this function is to reject IPv4 Network Addresses
@@ -217,6 +218,7 @@ hpa_iface hpa_iface_goc(hncp_pa hp, const char *ifname, bool create)
 
 	strcpy(i->ifname, ifname);
 	i->pa_enabled = 0;
+	i->hpa = hp;
 	vlist_init(&i->conf, hpa_ifconf_comp, hpa_conf_update_cb);
 	hpa_iface_init_pa(hp, i);
 	list_add(&i->le, &hp->ifaces);
@@ -851,6 +853,8 @@ static void hpa_dp_update_excluded(hncp_pa hpa, hpa_dp dp,
 
 static void hpa_iface_set_pa_enabled(hncp_pa hpa, hpa_iface i, bool enabled)
 {
+	hpa_conf c;
+
 	if(i->pa_enabled == (!!enabled))
 		return;
 
@@ -865,7 +869,31 @@ static void hpa_iface_set_pa_enabled(hncp_pa hpa, hpa_iface i, bool enabled)
 
 		pa_rule_add(&hpa->aa, &i->aa_rand.rule);
 		pa_link_add(&hpa->aa, &i->aal);
+
+		vlist_for_each_element(&i->conf, c, vle) {
+			switch(c->type) {
+			case HPA_CONF_T_PREFIX:
+				pa_rule_add(&hpa->pa, &c->prefix.rule.rule);
+				break;
+			case HPA_CONF_T_LINK_ID:
+			case HPA_CONF_T_ADDR:
+			default:
+				break;
+			}
+		}
 	} else {
+		vlist_for_each_element(&i->conf, c, vle) {
+			switch(c->type) {
+			case HPA_CONF_T_PREFIX:
+				pa_rule_del(&hpa->pa, &c->prefix.rule.rule);
+				break;
+			case HPA_CONF_T_LINK_ID:
+			case HPA_CONF_T_ADDR:
+			default:
+				break;
+			}
+		}
+
 		pa_link_del(&i->aal);
 		pa_rule_del(&hpa->aa, &i->aa_rand.rule);
 
@@ -1521,14 +1549,6 @@ void hpa_pd_del_lease(hncp_pa hp, hpa_lease l)
 
 /******* Configuration ******/
 
-//Callback for vlist. Called when a conf is updated.
-static void hpa_conf_update_cb(struct vlist_tree *tree,
-		struct vlist_node *node_new,
-		struct vlist_node *node_old)
-{
-	L_DEBUG("hpa_conf_update_cb tree:%p new:%p old%p", tree, node_new, node_old);
-}
-
 void hncp_pa_ula_conf_default(struct hncp_pa_ula_conf *conf)
 {
 	conf->use_ula = PAL_CONF_DFLT_USE_ULA;
@@ -1550,6 +1570,66 @@ int hncp_pa_ula_conf_set(hncp_pa hpa, const struct hncp_pa_ula_conf *conf)
 	return 0;
 }
 
+static int hpa_conf_filter_accept(__unused struct pa_rule *rule,
+		struct pa_ldp *ldp, void *p)
+{
+	hpa_conf conf = p;
+	return container_of(ldp->link, hpa_iface_s, pal) == conf->iface;
+}
+
+//Callback for vlist. Called when a conf is updated.
+static void hpa_conf_update_cb(struct vlist_tree *tree,
+		struct vlist_node *node_new,
+		struct vlist_node *node_old)
+{
+	L_DEBUG("hpa_conf_update_cb tree:%p new:%p old%p", tree, node_new, node_old);
+	hpa_iface i = container_of(tree, hpa_iface_s, conf);
+	hpa_conf old = node_old?container_of(node_old, hpa_conf_s, vle):NULL;
+	hpa_conf new = node_new?container_of(node_new, hpa_conf_s, vle):NULL;
+	int type = old?old->type:new->type;
+
+	switch (type) {
+		case HPA_CONF_T_PREFIX:
+			if(old && i->pa_enabled) //Remove previous rule
+				pa_rule_del(&i->hpa->pa, &old->prefix.rule.rule);
+
+			if(new) {
+				pa_rule_static_init(&new->prefix.rule);
+				new->prefix.rule.plen = new->prefix.prefix.plen;
+				memcpy(&new->prefix.rule.prefix, &new->prefix.prefix,
+						sizeof(struct in6_addr));
+				new->prefix.rule.safety = 1;
+				new->prefix.rule.priority = HPA_PRIORITY_STATIC;
+				new->prefix.rule.rule_priority = HPA_RULE_STATIC;
+				new->prefix.rule.override_priority = HPA_PRIORITY_STATIC;
+				new->prefix.rule.override_rule_priority = HPA_RULE_STATIC;
+				new->prefix.rule.rule.filter_accept = hpa_conf_filter_accept;
+				new->prefix.rule.rule.filter_private = new;
+				new->prefix.rule.rule.name = "Iface Static Prefix";
+				if(i->pa_enabled)
+					pa_rule_add(&i->hpa->pa, &new->prefix.rule.rule);
+			}
+			break;
+		case HPA_CONF_T_ADDR:
+
+			break;
+		case HPA_CONF_T_LINK_ID:
+
+			break;
+		case HPA_CONF_T_IP4_PLEN:
+
+			break;
+		case HPA_CONF_T_IP6_PLEN:
+
+			break;
+		default:
+			break;
+	}
+
+	free(old);
+}
+
+
 static int hpa_conf_mod(hncp_pa hp, const char *ifname,
 		int type, hpa_conf e, bool del)
 {
@@ -1559,6 +1639,7 @@ static int hpa_conf_mod(hncp_pa hp, const char *ifname,
 		return del?0:-1;
 
 	e->type = type;
+	e->iface = i;
 	if(del) {
 		if((e = vlist_find(&i->conf, e, e, vle))) {
 			vlist_delete(&i->conf, &e->vle);
@@ -1593,7 +1674,7 @@ void hncp_pa_conf_iface_flush(hncp_pa hp, const char *ifname)
 int hncp_pa_conf_prefix(hncp_pa hp, const char *ifname,
 		const struct prefix *p, bool del)
 {
-	hpa_conf_s e = { .prefix = *p };
+	hpa_conf_s e = { .prefix = {.prefix = *p} };
 	return hpa_conf_mod(hp, ifname, HPA_CONF_T_PREFIX, &e, del);
 }
 

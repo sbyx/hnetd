@@ -243,6 +243,10 @@ choose:
 pa_rule_priority pa_rule_static_get_max_priority(struct pa_rule *rule, struct pa_ldp *ldp)
 {
 	struct pa_rule_static *srule = container_of(rule, struct pa_rule_static, rule);
+	if((ldp->dp->plen > srule->plen) ||
+			!pa_prefix_contains(&ldp->dp->prefix, ldp->dp->plen, &srule->prefix))
+		return 0;
+
 	if(pa_rule_valid_assignment(ldp, &srule->prefix, srule->plen,
 			srule->override_rule_priority, srule->override_priority, srule->safety))
 		return srule->rule_priority;

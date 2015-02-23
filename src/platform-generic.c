@@ -766,6 +766,8 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			L_ERR("invalid interface - command:%s ifname:%s",
 			      cmd, ifname);
 		} else if (!strcmp(cmd, "ifdown")) {
+			hncp_pa_conf_iface_update(hncp_pa_p, c->ifname); //Remove hncp_pa conf
+			hncp_pa_conf_iface_flush(hncp_pa_p, c->ifname);
 			iface_remove(c);
 		} else if (!strcmp(cmd, "enable_ipv4_uplink")) {
 			struct in_addr ipv4source = {INADDR_ANY};
