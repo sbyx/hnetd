@@ -1101,7 +1101,7 @@ static void platform_update(void *data, size_t len)
 		if(c && dtb[DATA_ATTR_IP4_PLEN]
 		            && sscanf(blobmsg_get_string(dtb[DATA_ATTR_IP4_PLEN]), "%u", &ip4_plen) == 1
 		            && ip4_plen <= 32) {
-			hncp_pa_conf_set_ip4_plen(hncp_pa_p, c->ifname, ip4_plen);
+			hncp_pa_conf_set_ip4_plen(hncp_pa_p, c->ifname, ip4_plen + 98);
 		}
 
 		hncp_pa_conf_iface_flush(hncp_pa_p, c->ifname); //Stop HNCP_PA UPDATE

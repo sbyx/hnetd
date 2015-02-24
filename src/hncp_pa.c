@@ -101,6 +101,16 @@ static int hpa_iface_filter_accept(__unused struct pa_rule *rule,
 	return ldp->link == &i->pal;
 }
 
+static hpa_conf hpa_conf_get_by_type(hpa_iface i, unsigned int type)
+{
+	hpa_conf c;
+	vlist_for_each_element(&i->conf, c, vle) {
+		if(c->type == type)
+			return c;
+	}
+	return NULL;
+}
+
 static pa_plen hpa_desired_plen_cb(__unused struct pa_rule_random *rule_r,
 		struct pa_ldp *ldp,
 		uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
@@ -118,15 +128,20 @@ static pa_plen hpa_desired_plen_cb(__unused struct pa_rule_random *rule_r,
 		goto fail;
 
 	//todo: Add config
-
+	hpa_conf c;
+	hpa_iface iface = container_of(rule_r, hpa_iface_s, pa_rand);
 	hpa_dp dp = container_of(ldp->dp, hpa_dp_s, pa);
 	if(prefix_is_ipv4(&dp->dp.prefix)) {
+		if((c = hpa_conf_get_by_type(iface, HPA_CONF_T_IP4_PLEN)))
+			return c->plen; //Force length according to conf
 		if(biggest <= 112)
 			return 120;
 		if(biggest <= 120)
 			return 124;
 		goto fail;
 	} else {
+		if((c = hpa_conf_get_by_type(iface, HPA_CONF_T_IP6_PLEN)))
+			return c->plen; //Force length according to conf
 		if(biggest <= 64)
 			return 64;
 		if(biggest <= 90)
@@ -1628,10 +1643,11 @@ static void hpa_conf_update_cb(struct vlist_tree *tree,
 
 			break;
 		case HPA_CONF_T_IP4_PLEN:
-
-			break;
 		case HPA_CONF_T_IP6_PLEN:
-
+			if(i->pa_enabled) {
+				pa_rule_del(&i->hpa->pa, &i->pa_rand.rule);
+				pa_rule_add(&i->hpa->pa, &i->pa_rand.rule);
+			}
 			break;
 		default:
 			break;
@@ -1664,7 +1680,8 @@ static int hpa_conf_mod(hncp_pa hp, const char *ifname,
 		return -1;
 	}
 	memcpy(ep, e, sizeof(*e));
-	vlist_add(&i->conf, &ep->vle, &ep);
+	L_DEBUG("hpa_conf_mod: %s conf entry of type %d", del?"del":"add", type);
+	vlist_add(&i->conf, &ep->vle, ep);
 	return 0;
 }
 
@@ -1709,14 +1726,14 @@ int hncp_pa_conf_set_ip4_plen(hncp_pa hp, const char *ifname,
 		uint8_t ip4_plen)
 {
 	hpa_conf_s e = { .plen = ip4_plen };
-	return hpa_conf_mod(hp, ifname, HPA_CONF_T_IP4_PLEN, &e, ip4_plen > 32);
+	return hpa_conf_mod(hp, ifname, HPA_CONF_T_IP4_PLEN, &e, !ip4_plen);
 }
 
 int hncp_pa_conf_set_ip6_plen(hncp_pa hp, const char *ifname,
 		uint8_t ip6_plen)
 {
 	hpa_conf_s e = { .plen = ip6_plen };
-	return hpa_conf_mod(hp, ifname, HPA_CONF_T_IP6_PLEN, &e, ip6_plen > 32);
+	return hpa_conf_mod(hp, ifname, HPA_CONF_T_IP6_PLEN, &e, !ip6_plen);
 }
 
 /******* Init ******/

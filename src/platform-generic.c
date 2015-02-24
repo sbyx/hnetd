@@ -746,8 +746,8 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			unsigned ip4_plen;
 			if(iface && tb[OPT_IP4_PLEN]
 				       && sscanf(blobmsg_get_string(tb[OPT_IP4_PLEN]), "%u", &ip4_plen) == 1
-				       && ip4_plen <= 128) {
-				hncp_pa_conf_set_ip4_plen(hncp_pa_p, iface->ifname, ip4_plen);
+				       && ip4_plen <= 32) {
+				hncp_pa_conf_set_ip4_plen(hncp_pa_p, iface->ifname, ip4_plen + 96);
 			}
 
 			hncp_pa_conf_iface_flush(hncp_pa_p, iface->ifname); //Stop HNCP_PA UPDATE
