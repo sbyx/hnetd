@@ -82,6 +82,9 @@
 #define HPA_RA_FLOOD_DELAY 700
 #define HPA_ULA_MAX_BACKOFF 10000
 
+#define HPA_STORE_SAVE_DELAY    30 * HNETD_TIME_PER_SECOND
+#define HPA_STORE_TOKEN_DELAY   HNETD_TIME_PER_SECOND * 60 * 60 * 6 //6 hours
+
 static struct prefix PAL_CONF_DFLT_V4_PREFIX = {
 		.prefix = { .s6_addr = {
 				0x00,0x00, 0x00,0x00,  0x00,0x00, 0x00,0x00,
@@ -1744,9 +1747,13 @@ static int hpa_adj_avl_tree_comp(const void *k1, const void *k2,
 	return memcmp(k1, k2, sizeof(dncp_t_link_id_s));
 }
 
-int hncp_pa_storage_set(hncp_pa hncp_pa, const char *path)
+int hncp_pa_storage_set(hncp_pa hpa, const char *path)
 {
-	//todo
+	pa_store_load(&hpa->store, path);
+	int i;
+	if((i = pa_store_set_file(&hpa->store, path,
+					HPA_STORE_SAVE_DELAY, HPA_STORE_TOKEN_DELAY)))
+		return i;
 	return 0;
 }
 

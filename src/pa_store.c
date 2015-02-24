@@ -94,7 +94,7 @@ int pa_store_load(struct pa_store *store, const char *filepath)
 {
 	FILE *f;
 	if(!(f = fopen(filepath, "r"))) {
-		PA_WARNING("Cannot open file %s (read mode) - %s", store->filepath, strerror(errno));
+		PA_WARNING("Cannot open file %s (read mode) - %s", filepath, strerror(errno));
 		return -1;
 	}
 
@@ -381,10 +381,8 @@ int pa_store_set_file(struct pa_store *store, const char *filepath,
 				PA_WARNING("Malformed token entry in file");
 				fclose(f);
 				return -1;
-			} else {
-				store->token_count = token_count;
-				break;
 			}
+			break;
 		}
 	}
 	free(line);
