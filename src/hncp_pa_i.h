@@ -164,6 +164,7 @@ typedef struct hpa_dp_struct {
 		struct {
 			hpa_iface iface;
 			bool excluded;
+			struct prefix excluded_prefix;
 			struct pa_rule_static excluded_rule;
 		} iface;
 		struct {

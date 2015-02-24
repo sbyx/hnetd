@@ -243,14 +243,14 @@ choose:
 pa_rule_priority pa_rule_static_get_max_priority(struct pa_rule *rule, struct pa_ldp *ldp)
 {
 	struct pa_rule_static *srule = container_of(rule, struct pa_rule_static, rule);
-	if((ldp->dp->plen > srule->plen) ||
-			!pa_prefix_contains(&ldp->dp->prefix, ldp->dp->plen, &srule->prefix))
+	if(!srule->get_prefix || srule->get_prefix(srule, ldp, &srule->_prefix, &srule->_plen) ||
+			(ldp->dp->plen > srule->_plen) ||
+			!pa_prefix_contains(&ldp->dp->prefix, ldp->dp->plen, &srule->_prefix) ||
+			!pa_rule_valid_assignment(ldp, &srule->_prefix, srule->_plen,
+					srule->override_rule_priority, srule->override_priority, srule->safety))
 		return 0;
 
-	if(pa_rule_valid_assignment(ldp, &srule->prefix, srule->plen,
-			srule->override_rule_priority, srule->override_priority, srule->safety))
-		return srule->rule_priority;
-	return 0;
+	return srule->rule_priority;
 }
 
 enum pa_rule_target pa_rule_static_match(struct pa_rule *rule, struct pa_ldp *ldp,
@@ -262,6 +262,6 @@ enum pa_rule_target pa_rule_static_match(struct pa_rule *rule, struct pa_ldp *ld
 
 	pa_arg->rule_priority = srule->rule_priority;
 	pa_arg->priority = srule->priority;
-	pa_prefix_cpy(&srule->prefix, srule->plen, &pa_arg->prefix, pa_arg->plen);
+	pa_prefix_cpy(&srule->_prefix, srule->_plen, &pa_arg->prefix, pa_arg->plen);
 	return PA_RULE_PUBLISH;
 }

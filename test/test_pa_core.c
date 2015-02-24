@@ -176,6 +176,25 @@ static enum pa_rule_target test_rule_match(struct pa_rule *rule, struct pa_ldp *
 		sput_fail_unless((cr)->match_ctr == match, "Correct match number of calls"); \
 		(cr)->match_ctr = 0; } while(0)
 
+
+static pa_prefix sr_prefix;
+static pa_plen sr_plen;
+static int static_rule_get_prefix(__unused struct pa_rule_static *srule,
+		__unused struct pa_ldp *ldp, pa_prefix *prefix, pa_plen *plen)
+{
+	pa_prefix_cpy(&sr_prefix, sr_plen, prefix, *plen);
+	return 0;
+}
+
+static pa_prefix sr_prefix2;
+static pa_plen sr_plen2;
+static int static_rule_get_prefix2(__unused struct pa_rule_static *srule,
+		__unused struct pa_ldp *ldp, pa_prefix *prefix, pa_plen *plen)
+{
+	pa_prefix_cpy(&sr_prefix2, sr_plen2, prefix, *plen);
+	return 0;
+}
+
 void pa_core_override() {
 	fu_init();
 	fr_mask_random = 0;
@@ -190,7 +209,8 @@ void pa_core_override() {
 	s1.override_rule_priority = 0;
 	s1.priority = 3;
 	s1.rule_priority = 3;
-	pa_prefix_cpy(&advp1_01.prefix, 80, &s1.prefix, s1.plen);
+	s1.get_prefix = static_rule_get_prefix;
+	pa_prefix_cpy(&advp1_01.prefix, 80, &sr_prefix, sr_plen);
 	pa_filter_ldp_init(&f1, &l1, NULL);
 	pa_rule_set_filter(&s1.rule, &f1.filter);
 
@@ -286,7 +306,8 @@ void pa_core_override() {
 	s2.override_rule_priority = 0;
 	s2.priority = 2;
 	s2.rule_priority = 5;
-	pa_prefix_cpy(&advp1_01.prefix, 75, &s2.prefix, s2.plen); //Colliding prefix
+	s2.get_prefix = static_rule_get_prefix2;
+	pa_prefix_cpy(&advp1_01.prefix, 75, &sr_prefix2, sr_plen2); //Colliding prefix
 	pa_filter_ldp_init(&f2, &l2, NULL);
 	pa_rule_set_filter(&s2.rule, &f2.filter);
 

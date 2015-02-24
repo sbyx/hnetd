@@ -846,14 +846,21 @@ void hpa_update_extdata(hncp_pa hpa, hpa_iface i,
 	hpa_refresh_ec(hpa, 1); //Refresh and publish
 }
 
+static int hpa_excluded_get_prefix(struct pa_rule_static *srule,
+		__unused struct pa_ldp *ldp, pa_prefix *prefix, pa_plen *plen)
+{
+	hpa_dp dp = container_of(srule, hpa_dp_s, iface.excluded_rule);
+	*plen = dp->iface.excluded_prefix.plen;
+	memcpy(prefix, &dp->iface.excluded_prefix.prefix, sizeof(struct in6_addr));
+	return 0;
+}
+
 static void hpa_dp_update_excluded(hncp_pa hpa, hpa_dp dp,
 		const struct prefix *excluded)
 {
 	if((!excluded && !dp->iface.excluded) ||
 			(excluded && dp->iface.excluded &&
-					excluded->plen == dp->iface.excluded_rule.plen &&
-					!memcmp(&excluded->prefix, &dp->iface.excluded_rule.prefix,
-							sizeof(struct in6_addr))))
+					!prefix_cmp(excluded, &dp->iface.excluded_prefix)))
 		return; //No change
 
 	if(dp->iface.excluded && dp->dp.enabled)
@@ -863,10 +870,7 @@ static void hpa_dp_update_excluded(hncp_pa hpa, hpa_dp dp,
 
 	if(dp->iface.excluded) {
 		//Set the prefix, the rest is initialized already
-		dp->iface.excluded_rule.plen = excluded->plen;
-		memcpy(&dp->iface.excluded_rule.prefix, &excluded->prefix,
-				sizeof(struct in6_addr));
-
+		memcpy(&dp->iface.excluded_prefix, excluded, sizeof(*excluded));
 		if(dp->dp.enabled)
 			pa_rule_add(&hpa->pa, &dp->iface.excluded_rule.rule);
 	}
@@ -1045,6 +1049,7 @@ static void hpa_iface_prefix_cb(struct iface_user *u, const char *ifname,
 
 		//Init excluded rule (except prefix which is done in excluded update)
 		pa_rule_static_init(&dp->iface.excluded_rule);
+		dp->iface.excluded_rule.get_prefix = hpa_excluded_get_prefix;
 		dp->iface.excluded_rule.override_priority = HPA_PRIORITY_EXCLUDE;
 		dp->iface.excluded_rule.override_rule_priority = HPA_RULE_EXCLUDE;
 		dp->iface.excluded_rule.rule_priority = HPA_RULE_EXCLUDE;
@@ -1599,6 +1604,15 @@ int hncp_pa_ula_conf_set(hncp_pa hpa, const struct hncp_pa_ula_conf *conf)
 	return 0;
 }
 
+static int hpa_conf_prefix_get_prefix(struct pa_rule_static *srule,
+		__unused struct pa_ldp *ldp, pa_prefix *prefix, pa_plen *plen)
+{
+	hpa_conf c = container_of(srule, hpa_conf_s, prefix.rule);
+	*plen = c->prefix.prefix.plen;
+	memcpy(prefix, &c->prefix.prefix.prefix, sizeof(struct in6_addr));
+	return 0;
+}
+
 static int hpa_conf_filter_accept(__unused struct pa_rule *rule,
 		struct pa_ldp *ldp, void *p)
 {
@@ -1624,9 +1638,7 @@ static void hpa_conf_update_cb(struct vlist_tree *tree,
 
 			if(new) {
 				pa_rule_static_init(&new->prefix.rule);
-				new->prefix.rule.plen = new->prefix.prefix.plen;
-				memcpy(&new->prefix.rule.prefix, &new->prefix.prefix,
-						sizeof(struct in6_addr));
+				new->prefix.rule.get_prefix = hpa_conf_prefix_get_prefix;
 				new->prefix.rule.safety = 1;
 				new->prefix.rule.priority = HPA_PRIORITY_STATIC;
 				new->prefix.rule.rule_priority = HPA_RULE_STATIC;

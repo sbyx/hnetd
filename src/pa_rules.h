@@ -113,11 +113,11 @@ struct pa_rule_static {
 	/* Parent rule. Initialized with pa_rule_static_init. */
 	struct pa_rule rule;
 
-	/* The desired prefix value. */
-	pa_prefix prefix;
-
-	/* The desired prefix length. */
-	pa_plen plen;
+	/* Called in order to get the prefix and prefix length values.
+	 * Must return 0 in case of success, a non-null value otherwise.
+	 * Any prefix may be returned. If it is invalid, it will be ignored. */
+	int (*get_prefix)(struct pa_rule_static *, struct pa_ldp *,
+			pa_prefix *prefix, pa_plen *plen);
 
 	/* The internal rule priority */
 	pa_rule_priority rule_priority;
@@ -145,6 +145,10 @@ struct pa_rule_static {
 	 * Prefix Priority is lower or equal to override_priority.
 	 * When disabled, assignment loop may happen with other nodes. */
 	uint8_t safety;
+
+	/* Private */
+	pa_prefix _prefix;
+	pa_plen _plen;
 };
 
 pa_rule_priority pa_rule_static_get_max_priority(struct pa_rule *rule, struct pa_ldp *ldp);
