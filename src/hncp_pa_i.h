@@ -62,12 +62,14 @@ typedef struct hpa_conf_struct {
 			struct in6_addr addr;
 			uint8_t mask;
 			struct prefix filter;
+			struct pa_rule_static rule;
 		} addr;
 
 		/* HPA_CONF_T_LINK_ID */
 		struct {
 			uint32_t id;
 			uint8_t mask;
+			struct pa_rule_static rule;
 		} link_id;
 
 		/* HPA_CONF_T_IP4_PLEN

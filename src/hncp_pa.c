@@ -65,6 +65,7 @@
 #define HPA_PRIORITY_STORE    2
 #define HPA_PRIORITY_SCARCITY 3
 #define HPA_PRIORITY_STATIC   4
+#define HPA_PRIORITY_LINK_ID  3
 #define HPA_PRIORITY_PD       1
 #define HPA_PRIORITY_EXCLUDE  15
 
@@ -114,25 +115,10 @@ static hpa_conf hpa_conf_get_by_type(hpa_iface i, unsigned int type)
 	return NULL;
 }
 
-static pa_plen hpa_desired_plen_cb(__unused struct pa_rule_random *rule_r,
-		struct pa_ldp *ldp,
-		uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
+static pa_plen hpa_desired_plen(hpa_iface iface, struct pa_ldp *ldp,
+		pa_plen biggest)
 {
-	pa_plen biggest = 129;
-	int i;
-	for(i=0; i<=PA_RAND_MAX_PLEN; i++) {
-		if(prefix_count[i]) {
-			biggest = i;
-			break;
-		}
-	}
-
-	if(biggest == 129)
-		goto fail;
-
-	//todo: Add config
 	hpa_conf c;
-	hpa_iface iface = container_of(rule_r, hpa_iface_s, pa_rand);
 	hpa_dp dp = container_of(ldp->dp, hpa_dp_s, pa);
 	if(prefix_is_ipv4(&dp->dp.prefix)) {
 		if((c = hpa_conf_get_by_type(iface, HPA_CONF_T_IP4_PLEN)))
@@ -147,12 +133,32 @@ static pa_plen hpa_desired_plen_cb(__unused struct pa_rule_random *rule_r,
 			return c->plen; //Force length according to conf
 		if(biggest <= 64)
 			return 64;
-		if(biggest <= 90)
-			return 90;
+		if(biggest <= 80)
+			return 80;
 		goto fail;
 	}
-fail:
+	fail:
 	return ldp->dp->plen;
+}
+
+static pa_plen hpa_desired_plen_cb(struct pa_rule_random *rule_r,
+		struct pa_ldp *ldp,
+		uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
+{
+	pa_plen biggest = 129;
+	int i;
+	for(i=0; i<=PA_RAND_MAX_PLEN; i++) {
+		if(prefix_count[i]) {
+			biggest = i;
+			break;
+		}
+	}
+
+	if(biggest == 129)
+		return ldp->dp->plen;
+
+	hpa_iface iface = container_of(rule_r, hpa_iface_s, pa_rand);
+	return hpa_desired_plen(iface, ldp, biggest);
 }
 
 static int hpa_accept_proposed_addr(__unused struct pa_rule_random *r, struct pa_ldp *ldp,
@@ -903,6 +909,8 @@ static void hpa_iface_set_pa_enabled(hncp_pa hpa, hpa_iface i, bool enabled)
 				pa_rule_add(&hpa->pa, &c->prefix.rule.rule);
 				break;
 			case HPA_CONF_T_LINK_ID:
+				pa_rule_add(&hpa->pa, &c->link_id.rule.rule);
+				break;
 			case HPA_CONF_T_ADDR:
 			default:
 				break;
@@ -921,6 +929,8 @@ static void hpa_iface_set_pa_enabled(hncp_pa hpa, hpa_iface i, bool enabled)
 				pa_rule_del(&hpa->pa, &c->prefix.rule.rule);
 				break;
 			case HPA_CONF_T_LINK_ID:
+				pa_rule_del(&hpa->pa, &c->link_id.rule.rule);
+				break;
 			case HPA_CONF_T_ADDR:
 			default:
 				break;
@@ -1613,11 +1623,31 @@ static int hpa_conf_prefix_get_prefix(struct pa_rule_static *srule,
 	return 0;
 }
 
+static int hpa_conf_link_id_get_prefix(struct pa_rule_static *srule,
+		struct pa_ldp *ldp, pa_prefix *prefix, pa_plen *plen)
+{
+	hpa_conf c = container_of(srule, hpa_conf_s, link_id.rule);
+	pa_plen desired_plen = hpa_desired_plen(c->iface, ldp, ldp->dp->plen);
+
+	if(desired_plen > 128 ||
+			((int)desired_plen - (int)ldp->dp->plen) < c->link_id.mask)
+		return -1;
+
+	*plen = desired_plen;
+	uint32_t id = cpu_to_be32(c->link_id.id);
+	memset(prefix, 0, sizeof(struct in6_addr));
+	bmemcpy(prefix, &ldp->dp->prefix, 0, ldp->dp->plen);
+	bmemcpy_shift(prefix, desired_plen - c->link_id.mask,
+			&id, 32 - c->link_id.mask, c->link_id.mask);
+	return 0;
+}
+
 static int hpa_conf_filter_accept(__unused struct pa_rule *rule,
 		struct pa_ldp *ldp, void *p)
 {
 	hpa_conf conf = p;
-	return container_of(ldp->link, hpa_iface_s, pal) == conf->iface;
+	return (ldp->link->type == HPA_LINK_T_IFACE) &&
+			(container_of(ldp->link, hpa_iface_s, pal) == conf->iface);
 }
 
 //Callback for vlist. Called when a conf is updated.
@@ -1625,8 +1655,9 @@ static void hpa_conf_update_cb(struct vlist_tree *tree,
 		struct vlist_node *node_new,
 		struct vlist_node *node_old)
 {
-	L_DEBUG("hpa_conf_update_cb tree:%p new:%p old%p", tree, node_new, node_old);
 	hpa_iface i = container_of(tree, hpa_iface_s, conf);
+	L_DEBUG("hpa_conf_update_cb tree:%p new:%p old%p on iface %s",
+				tree, node_new, node_old, i->ifname);
 	hpa_conf old = node_old?container_of(node_old, hpa_conf_s, vle):NULL;
 	hpa_conf new = node_new?container_of(node_new, hpa_conf_s, vle):NULL;
 	int type = old?old->type:new->type;
@@ -1655,7 +1686,23 @@ static void hpa_conf_update_cb(struct vlist_tree *tree,
 
 			break;
 		case HPA_CONF_T_LINK_ID:
+			if(old && i->pa_enabled)
+				pa_rule_del(&i->hpa->pa, &old->link_id.rule.rule);
 
+			if(new) {
+				pa_rule_static_init(&new->link_id.rule);
+				new->link_id.rule.get_prefix = hpa_conf_link_id_get_prefix;
+				new->link_id.rule.safety = 1;
+				new->link_id.rule.priority = HPA_PRIORITY_LINK_ID;
+				new->link_id.rule.rule_priority = HPA_RULE_LINK_ID;
+				new->link_id.rule.override_priority = HPA_PRIORITY_LINK_ID;
+				new->link_id.rule.override_rule_priority = HPA_RULE_LINK_ID;
+				new->link_id.rule.rule.filter_accept = hpa_conf_filter_accept;
+				new->link_id.rule.rule.filter_private = new;
+				new->link_id.rule.rule.name = "Iface Link ID";
+				if(i->pa_enabled)
+					pa_rule_add(&i->hpa->pa, &new->link_id.rule.rule);
+			}
 			break;
 		case HPA_CONF_T_IP4_PLEN:
 		case HPA_CONF_T_IP6_PLEN:
