@@ -190,6 +190,7 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	i->pa_adopt.rule_priority = HPA_RULE_ADOPT;
 	i->pa_adopt.rule.filter_accept = hpa_iface_filter_accept;
 	i->pa_adopt.rule.filter_private = i;
+	i->pa_adopt.rule.name = "Adoption";
 
 	//Init the assignment rule
 	pa_rule_random_init(&i->pa_rand);
@@ -203,6 +204,7 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	i->pa_rand.rule_priority = HPA_RULE_CREATE;
 	i->pa_rand.rule.filter_accept = hpa_iface_filter_accept;
 	i->pa_rand.rule.filter_private = i;
+	i->pa_rand.rule.name = "Random Prefix";
 
 	//Init AA
 	sprintf(i->aa_name, HPA_LINK_NAME_ADDR"%s", i->ifname);
@@ -221,6 +223,7 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	i->aa_rand.accept_proposed_cb = hpa_accept_proposed_addr;
 	i->aa_rand.priority = HPA_PRIORITY_CREATE;
 	i->aa_rand.rule_priority = HPA_RULE_CREATE;
+	i->aa_rand.rule.name = "Random Address";
 
 	//Init stable storage
 	pa_store_link_init(&i->pasl, &i->pal, i->pal.name, 20);
@@ -1070,6 +1073,7 @@ static void hpa_iface_prefix_cb(struct iface_user *u, const char *ifname,
 		dp->iface.excluded_rule.rule_priority = HPA_RULE_EXCLUDE;
 		dp->iface.excluded_rule.priority = HPA_PRIORITY_EXCLUDE;
 		dp->iface.excluded_rule.rule.filter_accept = hpa_excluded_filter_accept;
+		dp->iface.excluded_rule.rule.name = "Excluded Prefix";
 
 		//Set the excluded prefix
 		hpa_dp_update(hpa, dp, preferred_until,
@@ -1580,6 +1584,7 @@ hpa_lease hpa_pd_add_lease(hncp_pa hp, const char *duid, uint8_t hint_len,
 	//Set the filter
 	l->rule_rand.rule.filter_accept = hpa_pd_filter_accept;
 	l->rule_rand.rule.filter_private = l;
+	l->rule_rand.rule.name = "Downstream PD Random Prefix";
 
 	//todo: Stable storage
 
@@ -1651,8 +1656,6 @@ static int hpa_conf_addr_get_prefix(struct pa_rule_static *srule,
 		struct pa_ldp *ldp, pa_prefix *prefix, pa_plen *plen)
 {
 	hpa_conf c = container_of(srule, hpa_conf_s, addr.rule);
-	L_ERR("------------ ADDR %s@%s-------", ADDR_REPR(&c->addr.addr), PREFIX_REPR(&c->addr.filter));
-
 	if(c->addr.filter.plen > ldp->dp->plen ||
 			bmemcmp(&ldp->dp->prefix, &c->addr.filter.prefix, c->addr.filter.plen) ||
 			c->addr.mask < ldp->dp->plen)

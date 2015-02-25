@@ -45,7 +45,6 @@
 
 /* Each stored object has a type. */
 #define PA_STORE_PREFIX "prefix"
-#define PA_STORE_ADDR   "address"
 #define PA_STORE_WTOKEN "write_tokens"
 #define PA_STORE_ULA    "ula"
 
