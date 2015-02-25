@@ -72,6 +72,7 @@
 #define HPA_RULE_EXCLUDE           1000
 #define HPA_RULE_STATIC            100
 #define HPA_RULE_LINK_ID           50
+#define HPA_RULE_ADDRESS           50
 #define HPA_RULE_ADOPT             30
 #define HPA_RULE_STORE             25
 #define HPA_RULE_CREATE            20
@@ -912,6 +913,8 @@ static void hpa_iface_set_pa_enabled(hncp_pa hpa, hpa_iface i, bool enabled)
 				pa_rule_add(&hpa->pa, &c->link_id.rule.rule);
 				break;
 			case HPA_CONF_T_ADDR:
+				pa_rule_add(&hpa->aa, &c->addr.rule.rule);
+				break;
 			default:
 				break;
 			}
@@ -932,6 +935,8 @@ static void hpa_iface_set_pa_enabled(hncp_pa hpa, hpa_iface i, bool enabled)
 				pa_rule_del(&hpa->pa, &c->link_id.rule.rule);
 				break;
 			case HPA_CONF_T_ADDR:
+				pa_rule_del(&hpa->aa, &c->addr.rule.rule);
+				break;
 			default:
 				break;
 			}
@@ -1642,6 +1647,25 @@ static int hpa_conf_link_id_get_prefix(struct pa_rule_static *srule,
 	return 0;
 }
 
+static int hpa_conf_addr_get_prefix(struct pa_rule_static *srule,
+		struct pa_ldp *ldp, pa_prefix *prefix, pa_plen *plen)
+{
+	hpa_conf c = container_of(srule, hpa_conf_s, addr.rule);
+	L_ERR("------------ ADDR %s@%s-------", ADDR_REPR(&c->addr.addr), PREFIX_REPR(&c->addr.filter));
+
+	if(c->addr.filter.plen > ldp->dp->plen ||
+			bmemcmp(&ldp->dp->prefix, &c->addr.filter.prefix, c->addr.filter.plen) ||
+			c->addr.mask < ldp->dp->plen)
+		return -1;
+
+	*plen = 128;
+	memset(prefix, 0, sizeof(struct in6_addr));
+	bmemcpy(prefix, &ldp->dp->prefix, 0, ldp->dp->plen);
+	bmemcpy_shift(prefix, c->addr.mask,
+			&c->addr.addr, c->addr.mask, 128 - c->addr.mask);
+	return 0;
+}
+
 static int hpa_conf_filter_accept(__unused struct pa_rule *rule,
 		struct pa_ldp *ldp, void *p)
 {
@@ -1682,9 +1706,6 @@ static void hpa_conf_update_cb(struct vlist_tree *tree,
 					pa_rule_add(&i->hpa->pa, &new->prefix.rule.rule);
 			}
 			break;
-		case HPA_CONF_T_ADDR:
-
-			break;
 		case HPA_CONF_T_LINK_ID:
 			if(old && i->pa_enabled)
 				pa_rule_del(&i->hpa->pa, &old->link_id.rule.rule);
@@ -1702,6 +1723,24 @@ static void hpa_conf_update_cb(struct vlist_tree *tree,
 				new->link_id.rule.rule.name = "Iface Link ID";
 				if(i->pa_enabled)
 					pa_rule_add(&i->hpa->pa, &new->link_id.rule.rule);
+			}
+			break;
+		case HPA_CONF_T_ADDR:
+			if(old && i->pa_enabled)
+				pa_rule_del(&i->hpa->aa, &old->addr.rule.rule);
+
+			if(new) {
+				pa_rule_static_init(&new->addr.rule);
+				new->addr.rule.get_prefix = hpa_conf_addr_get_prefix;
+				new->addr.rule.safety = 1;
+				new->addr.rule.priority = 1;
+				new->addr.rule.rule_priority = HPA_RULE_ADDRESS;
+				new->addr.rule.override_priority = 1;
+				new->addr.rule.override_rule_priority = HPA_RULE_ADDRESS;
+				new->addr.rule.rule.filter_accept = NULL;
+				new->addr.rule.rule.name = "Manual Address";
+				if(i->pa_enabled)
+					pa_rule_add(&i->hpa->aa, &new->addr.rule.rule);
 			}
 			break;
 		case HPA_CONF_T_IP4_PLEN:
