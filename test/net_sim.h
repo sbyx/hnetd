@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Wed Feb 25 15:02:29 2015 mstenber
- * Edit time:     232 min
+ * Last modified: Wed Feb 25 15:13:42 2015 mstenber
+ * Edit time:     237 min
  *
  */
 
@@ -391,7 +391,7 @@ dncp_link net_sim_dncp_find_link_by_name(dncp o, const char *name)
   l = dncp_find_link_by_name(o, name, false);
 
   sput_fail_unless(l, "dncp_find_link_by_name");
-  if (l && !n->s->disable_link_auto_address)
+  if (l)
     {
       /* Initialize the address - in rather ugly way. We just hash
        * ifname + xor that with our own hash. The result should be
@@ -413,7 +413,9 @@ dncp_link net_sim_dncp_find_link_by_name(dncp o, const char *name)
       buf[1] = 0x80;
       /* 2 .. 7 left 0 always */
       dncp_link_set_ipv6_address(l, (struct in6_addr *)buf);
-
+      l->has_ipv6_address = !n->s->disable_link_auto_address;
+      /* Internally we use the ipv6 address even if it is not
+       * officially set(!). Beautiful.. */
       /* Override the iid to be unique. */
       if (n->s->use_global_iids)
         l->iid = n->s->next_free_iid++;
@@ -690,7 +692,6 @@ void _sendto(net_sim s, void *buf, size_t len, dncp_link sl, dncp_link dl,
   sput_fail_unless(m->buf, "malloc buf");
   memcpy(m->buf, buf, len);
   m->len = len;
-  sput_fail_unless(sl->has_ipv6_address, "no ipv6 address?!?");
   memset(&m->src, 0, sizeof(m->src));
   m->src.sin6_family = AF_INET6;
   m->src.sin6_addr = sl->ipv6_address;
@@ -743,8 +744,8 @@ ssize_t dncp_io_sendto(dncp o, void *buf, size_t len,
     {
       if (n->src == l
           && (is_multicast
-              || (n->dst->has_ipv6_address
-                  && memcmp(&n->dst->ipv6_address, &dst->sin6_addr, sizeof(dst->sin6_addr)) == 0)))
+              || (memcmp(&n->dst->ipv6_address, &dst->sin6_addr,
+                         sizeof(dst->sin6_addr)) == 0)))
         {
           _sendto(s, buf, len, n->src, n->dst, &dst->sin6_addr);
           sent++;
