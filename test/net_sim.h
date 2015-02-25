@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Mon Feb 23 22:16:31 2015 mstenber
- * Edit time:     231 min
+ * Last modified: Wed Feb 25 15:02:29 2015 mstenber
+ * Edit time:     232 min
  *
  */
 
@@ -107,6 +107,7 @@ typedef struct net_sim_t {
   struct list_head neighs;
   struct list_head messages;
 
+  bool disable_link_auto_address;
   bool disable_sd;
   bool disable_multicast;
 
@@ -390,7 +391,7 @@ dncp_link net_sim_dncp_find_link_by_name(dncp o, const char *name)
   l = dncp_find_link_by_name(o, name, false);
 
   sput_fail_unless(l, "dncp_find_link_by_name");
-  if (l)
+  if (l && !n->s->disable_link_auto_address)
     {
       /* Initialize the address - in rather ugly way. We just hash
        * ifname + xor that with our own hash. The result should be

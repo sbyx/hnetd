@@ -6,8 +6,8 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 21:40:08 2015 mstenber
- * Last modified: Wed Feb 25 14:30:48 2015 mstenber
- * Edit time:     16 min
+ * Last modified: Wed Feb 25 15:04:01 2015 mstenber
+ * Edit time:     18 min
  *
  */
 
@@ -45,25 +45,22 @@ int pa_update_eaa(net_node node, const struct in6_addr *addr,
                   const char *ifname, bool to_delete)
 {return 0;}
 
-void test_hncp_multicast()
+void test_hncp_multicast_base(bool aa_enabled)
 {
   /* Create two nodes. Eventually, one of them has to be RP, and the
    * one with (fake) DP must publish it's address. */
   net_sim_s s;
   dncp n1, n2;
   dncp_link l1, l2;
-  net_node node1, node2;
 
   net_sim_init(&s);
-
+  s.disable_link_auto_address = !aa_enabled;
   n1 = net_sim_find_hncp(&s, "n1");
-  node1 = container_of(n1, net_node_s, n);
   l1 = net_sim_dncp_find_link_by_name(n1, "eth0");
   /* Fake external connection */
   dncp_add_tlv(n1, HNCP_T_EXTERNAL_CONNECTION, 0, 0, 0);
 
   n2 = net_sim_find_hncp(&s, "n2");
-  node2 = container_of(n2, net_node_s, n);
   l2 = net_sim_dncp_find_link_by_name(n2, "eth0");
 
   net_sim_set_connected(l1, l2, true);
@@ -86,9 +83,19 @@ void test_hncp_multicast()
       dncp_node_for_each_tlv_with_type(n, a, types[i])
         c++;
     L_DEBUG("tlv #%d: %d", types[i], c);
-    sput_fail_unless(c == 1, "1 of tlv");
+    sput_fail_unless(c == (aa_enabled ? 1 : 0), "1 of tlv");
   }
   net_sim_uninit(&s);
+}
+
+void test_hncp_multicast()
+{
+  test_hncp_multicast_base(true);
+}
+
+void test_hncp_multicast_noaddr()
+{
+  test_hncp_multicast_base(false);
 }
 
 int main(__unused int argc, __unused char **argv)
@@ -98,6 +105,7 @@ int main(__unused int argc, __unused char **argv)
   sput_start_testing();
   sput_enter_suite(argv[0]); /* optional */
   sput_run_test(test_hncp_multicast);
+  sput_run_test(test_hncp_multicast_noaddr);
   sput_leave_suite(); /* optional */
   sput_finish_testing();
   return sput_get_return_value();
