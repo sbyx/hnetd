@@ -60,6 +60,7 @@ struct platform_iface {
 	struct iface *iface;
 	struct uloop_timeout update;
 	struct ubus_request req;
+	struct blob_buf config;
 	char handle[];
 };
 
@@ -270,6 +271,7 @@ void platform_iface_free(struct iface *c)
 	if (iface) {
 		uloop_timeout_cancel(&iface->update);
 		ubus_abort_request(ubus, &iface->req);
+		blob_buf_free(&iface->config);
 		free(iface);
 		c->platform = NULL;
 	}
@@ -576,6 +578,11 @@ static void platform_commit(struct uloop_timeout *t)
 
 	k = blobmsg_open_table(&b, "data");
 	blobmsg_add_u32(&b, "created", timebase);
+
+	struct blob_attr *cfgattr;
+	unsigned rem;
+	blobmsg_for_each_attr(cfgattr, iface->config.head, rem)
+		blobmsg_add_blob(&b, cfgattr);
 
 	if (c->internal && c->elected && (avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr)) {
 		blobmsg_add_string(&b, "ra", "server");
@@ -1116,6 +1123,13 @@ static void platform_update(void *data, size_t len)
 		if(c && dtb[DATA_ATTR_DNSNAME] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))
 			strncpy(conf->dnsname, blobmsg_get_string(dtb[DATA_ATTR_DNSNAME]), sizeof(conf->dnsname));;
 
+		if (c) {
+			struct platform_iface *iface = c->platform;
+			blob_buf_init(&iface->config, 0);
+			for (size_t k = 0; k < DATA_ATTR_CREATED; ++k)
+				if (dtb[k])
+					blobmsg_add_blob(&iface->config, dtb[k]);
+		}
 	}
 
 	L_INFO("platform: interface update for %s detected", ifname);
