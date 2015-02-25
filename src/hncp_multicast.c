@@ -6,8 +6,8 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 20:39:45 2015 mstenber
- * Last modified: Wed Feb 25 14:34:03 2015 mstenber
- * Edit time:     87 min
+ * Last modified: Wed Feb 25 14:49:13 2015 mstenber
+ * Edit time:     89 min
  *
  */
 
@@ -92,6 +92,7 @@ static void _tlv_cb(dncp_subscriber s,
                          buf, sizeof(buf)))
             return;
           char *argv[] = {(char *)m->p.multicast_script,
+                          "bp",
                           add ? "add" : "remove",
                           n == m->dncp->own_node ? "local" : "remote",
                           buf, NULL};
@@ -118,6 +119,9 @@ static void _cb_intiface(struct iface_user *u, const char *ifname, bool enabled)
 
 static void _notify_rp(hncp_multicast m, struct in6_addr *a, bool local)
 {
+  if (memcmp(a, &m->current_rpa, sizeof(*a)) == 0)
+    return;
+  m->current_rpa = *a;
   char buf[256];
   if (!inet_ntop(AF_INET6, a, buf, sizeof(buf)))
     return;

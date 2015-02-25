@@ -1,0 +1,6 @@
+#! /bin/sh
+echo "[multicast.script] $*"
+# Insert your code here to handle the events:
+# rpa (local|remote) IPV6ADDRESS
+# bp (add|remnove) (local|remote) IPV6ADDRESS
+# ifstate IFNAME (int|ext)
