@@ -23,6 +23,7 @@
 
 #include "hncp_pa.h"
 #include "hncp_sd.h"
+#include "hncp_multicast.h"
 #include "hncp_routing.h"
 #include "hncp_proto.h"
 #include "hncp_link.h"
@@ -125,6 +126,7 @@ int usage() {
 	 "\t--trust <(DTLS) path to trust consensus store file>\n"
 	 "\t--verify-path <(DTLS) path to trusted cert file>\n"
 	 "\t--verify-dir <(DTLS) path to trusted cert directory>\n"
+	 "\t-M multicast_script (enables draft-pfister-homenet-multicast support)\n"
 	 );
     return(3);
 }
@@ -137,6 +139,7 @@ int main(__unused int argc, char *argv[])
 	hncp_iface_user_s hiu;
 	hncp_glue hg;
 	hncp_sd_params_s sd_params;
+	hncp_multicast_params_s multicast_params;
 	dncp_trust dt = NULL;
 	struct hncp_link_config link_config = {HNCP_VERSION, 0, 0, 0, 0, ""};
 
@@ -211,7 +214,7 @@ int main(__unused int argc, char *argv[])
 			{ NULL,          0,                      NULL,           0 }
 	};
 
-	while ((c = getopt_long(argc, argv, "?b::d:f:o:n:r:s:p:m:c:", longopts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "?b::d:f:o:n:r:s:p:m:c:M:", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'b':
 			pidfile = (optarg && optarg[0]) ? optarg : "/var/run/hnetd.pid";
@@ -233,6 +236,9 @@ int main(__unused int argc, char *argv[])
 			break;
 		case 'm':
 			sd_params.domain_name = optarg;
+			break;
+		case 'M':
+			multicast_params.multicast_script = optarg;
 			break;
 		case 'r':
 			routing_script = optarg;
@@ -392,6 +398,13 @@ int main(__unused int argc, char *argv[])
 		return 71;
 	}
 
+	if (multicast_params.multicast_script) {
+			hncp_multicast m = hncp_multicast_create(h, &multicast_params);
+			if (!m) {
+					L_ERR("unable to initialize multicast, exiting");
+					return 123;
+			}
+	}
 	if (routing_script)
 		hncp_routing_create(h, routing_script);
 
