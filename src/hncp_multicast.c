@@ -6,8 +6,8 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 20:39:45 2015 mstenber
- * Last modified: Wed Feb 25 15:31:20 2015 mstenber
- * Edit time:     98 min
+ * Last modified: Wed Feb 25 18:01:32 2015 mstenber
+ * Edit time:     94 min
  *
  */
 
@@ -70,6 +70,8 @@ static void _fork_execv(char *argv[])
     _exit(128);
   }
   L_DEBUG("hncp_multicast calling %s", argv[0]);
+  for (int i = 1 ; argv[i] ; i++)
+    L_DEBUG(" %s", argv[i]);
   waitpid(pid, NULL, 0);
 }
 
@@ -121,12 +123,15 @@ static void _notify_rp(hncp_multicast m, struct in6_addr *a, bool local)
 {
   if (memcmp(a, &m->current_rpa, sizeof(*a)) == 0)
     return;
+  char buf2[256];
+  if (!inet_ntop(AF_INET6, &m->current_rpa, buf2, sizeof(buf2)))
+    return;
   m->current_rpa = *a;
   char buf[256];
   if (!inet_ntop(AF_INET6, a, buf, sizeof(buf)))
     return;
   char *argv[] = {(char *)m->p.multicast_script,
-                  "rpa", local ? "local" : "remote", buf, NULL};
+                  "rpa", local ? "local" : "remote", buf, buf2, NULL};
   _fork_execv(argv);
 }
 

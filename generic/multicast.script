@@ -1,6 +1,8 @@
 #! /bin/sh
 echo "[multicast.script] $*"
 # Insert your code here to handle the events:
-# rpa (local|remote) IPV6ADDRESS
-# bp (add|remnove) (local|remote) IPV6ADDRESS
+# rpa (local|remote) IPV6ADDRESS OLD-IPV6ADDRESS
+#  (called only when RPA changes; initial-none OLD-IPV6ADDRESS is "::")
+# bp (add|remove) (local|remote) IPV6ADDRESS
+#  (called whenever TLV space changes (TBD: change to happen only on RP?))
 # ifstate IFNAME (int|ext)
