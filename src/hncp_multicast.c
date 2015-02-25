@@ -6,8 +6,8 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 20:39:45 2015 mstenber
- * Last modified: Mon Feb 23 22:50:29 2015 mstenber
- * Edit time:     65 min
+ * Last modified: Wed Feb 25 14:34:03 2015 mstenber
+ * Edit time:     87 min
  *
  */
 
@@ -144,16 +144,24 @@ static void _rp_timeout(struct uloop_timeout *t)
     }
   if (found && tlv_len(found) == sizeof(struct in6_addr))
     {
-      if (dncp_node_cmp(n, m->dncp->own_node) > 0)
-        dncp_remove_tlvs_by_type(m->dncp, HNCP_T_PIM_BORDER_PROXY);
-      _notify_rp(m, tlv_data(found), found_node == m->dncp->own_node);
-      return;
+      int ret = dncp_node_cmp(found_node, m->dncp->own_node);
+      if (ret)
+        {
+          if (ret > 0)
+            dncp_remove_tlvs_by_type(m->dncp, HNCP_T_PIM_RPA_CANDIDATE);
+          _notify_rp(m, tlv_data(found), found_node == m->dncp->own_node);
+          return;
+        }
     }
+  dncp_remove_tlvs_by_type(m->dncp, HNCP_T_PIM_RPA_CANDIDATE);
   /* Nothing found, have to announce it (just to remove it once all
    * but the fittest one is done. sigh.) */
   struct in6_addr addr;
   if (!dncp_get_ipv6_address(m->dncp, NULL, &addr))
-    return;
+    {
+      L_DEBUG("_rp_timeout no IPv6 address at all");
+      return;
+    }
   dncp_add_tlv(m->dncp, HNCP_T_PIM_RPA_CANDIDATE, &addr, 16, 0);
   _notify_rp(m, &addr, true);
 }
@@ -169,7 +177,10 @@ static void _bp_timeout(struct uloop_timeout *t)
     {
       struct in6_addr addr;
       if (!dncp_get_ipv6_address(m->dncp, NULL, &addr))
-        return;
+        {
+          L_DEBUG("_bp_timeout no IPv6 address at all");
+          return;
+        }
       dncp_add_tlv(m->dncp, HNCP_T_PIM_BORDER_PROXY, &addr, 16, 0);
       return;
     }
@@ -211,6 +222,9 @@ hncp_multicast hncp_multicast_create(dncp h, hncp_multicast_params p)
   m->iface.cb_intaddr = _cb_intaddr;
   iface_register_user(&m->iface);
 
+  /* Even if we're alone, we may want to be RP. */
+  uloop_timeout_set(&m->rp_timeout, RP_ELECTION_TIMEOUT);
+
   return m;
 }
 
@@ -227,6 +241,5 @@ void hncp_multicast_destroy(hncp_multicast m)
 
 bool hncp_multicast_busy(hncp_multicast m)
 {
-  return m->rp_timeout.pending
-    || m->bp_timeout.pending;
+  return m->rp_timeout.pending || m->bp_timeout.pending;
 }

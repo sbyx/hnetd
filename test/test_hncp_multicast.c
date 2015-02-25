@@ -6,8 +6,8 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 21:40:08 2015 mstenber
- * Last modified: Mon Feb 23 22:51:47 2015 mstenber
- * Edit time:     3 min
+ * Last modified: Wed Feb 25 14:30:48 2015 mstenber
+ * Edit time:     16 min
  *
  */
 
@@ -47,8 +47,48 @@ int pa_update_eaa(net_node node, const struct in6_addr *addr,
 
 void test_hncp_multicast()
 {
-  /* TBD - write the test code here. It seems not to crash
-   * test_hncp_net, but sanity better be checked here too. */
+  /* Create two nodes. Eventually, one of them has to be RP, and the
+   * one with (fake) DP must publish it's address. */
+  net_sim_s s;
+  dncp n1, n2;
+  dncp_link l1, l2;
+  net_node node1, node2;
+
+  net_sim_init(&s);
+
+  n1 = net_sim_find_hncp(&s, "n1");
+  node1 = container_of(n1, net_node_s, n);
+  l1 = net_sim_dncp_find_link_by_name(n1, "eth0");
+  /* Fake external connection */
+  dncp_add_tlv(n1, HNCP_T_EXTERNAL_CONNECTION, 0, 0, 0);
+
+  n2 = net_sim_find_hncp(&s, "n2");
+  node2 = container_of(n2, net_node_s, n);
+  l2 = net_sim_dncp_find_link_by_name(n2, "eth0");
+
+  net_sim_set_connected(l1, l2, true);
+  net_sim_set_connected(l2, l1, true);
+
+  SIM_WHILE(&s, 100, net_sim_is_busy(&s) || !net_sim_is_converged(&s));
+
+  /* Make sure there is exactly 1 RPA, and 1 BP */
+  int types[] = { HNCP_T_PIM_RPA_CANDIDATE,
+                  HNCP_T_PIM_BORDER_PROXY,
+                  0
+  };
+  int i;
+  for (i = 0 ; types[i] ; i++)
+  {
+    int c = 0;
+    dncp_node n;
+    struct tlv_attr *a;
+    dncp_for_each_node(n1, n)
+      dncp_node_for_each_tlv_with_type(n, a, types[i])
+        c++;
+    L_DEBUG("tlv #%d: %d", types[i], c);
+    sput_fail_unless(c == 1, "1 of tlv");
+  }
+  net_sim_uninit(&s);
 }
 
 int main(__unused int argc, __unused char **argv)
