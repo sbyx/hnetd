@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:52:55 2014 mstenber
- * Last modified: Wed Feb 11 10:29:38 2015 mstenber
- * Edit time:     4 min
+ * Last modified: Mon Feb 23 20:45:05 2015 mstenber
+ * Edit time:     8 min
  *
  */
 
@@ -16,6 +16,7 @@
 /***************************************** Structures encoded on top of DNCP */
 
 enum {
+  /* hncp draft itself */
   HNCP_T_VERSION = 32,
 
   HNCP_T_EXTERNAL_CONNECTION = 33,
@@ -30,6 +31,11 @@ enum {
   HNCP_T_DNS_ROUTER_NAME = 41, /* router name (moderately optional) */
   HNCP_T_MANAGED_PSK = 42,
 
+  /* draft-pfister-homenet-multicast */
+  HNCP_T_PIM_RPA_CANDIDATE = 191,
+  HNCP_T_PIM_BORDER_PROXY = 192,
+
+  /* proprietary */
   HNCP_T_ROUTING_PROTOCOL = 199 /* RP election (for now) from
                                    'implementation specific reserved
                                    space waiting for RP choice */
