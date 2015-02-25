@@ -6,8 +6,8 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 20:39:45 2015 mstenber
- * Last modified: Wed Feb 25 14:49:13 2015 mstenber
- * Edit time:     89 min
+ * Last modified: Wed Feb 25 15:31:20 2015 mstenber
+ * Edit time:     98 min
  *
  */
 
@@ -69,7 +69,7 @@ static void _fork_execv(char *argv[])
     execv(argv[0], argv);
     _exit(128);
   }
-  L_DEBUG("hncp_sd calling %s", argv[0]);
+  L_DEBUG("hncp_multicast calling %s", argv[0]);
   waitpid(pid, NULL, 0);
 }
 
@@ -140,13 +140,15 @@ static void _rp_timeout(struct uloop_timeout *t)
   dncp_for_each_node(m->dncp, n)
     dncp_node_for_each_tlv_with_type(n, a, HNCP_T_PIM_RPA_CANDIDATE)
     {
+      if (tlv_len(a) != sizeof(struct in6_addr))
+        continue;
       if (!found || dncp_node_cmp(n, found_node) > 0)
         {
           found = a;
           found_node = n;
         }
     }
-  if (found && tlv_len(found) == sizeof(struct in6_addr))
+  if (found)
     {
       int ret = dncp_node_cmp(found_node, m->dncp->own_node);
       if (ret)
