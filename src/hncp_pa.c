@@ -80,9 +80,14 @@
 
 #define HPA_PD_MIN_PLEN            60
 
-#define HPA_AP_FLOOD_DELAY 3000
-#define HPA_RA_FLOOD_DELAY 700
-#define HPA_ULA_MAX_BACKOFF 10000
+#define HPA_PA_ADOPT_DELAY 200
+#define HPA_PA_BACKOFF_DELAY 1000
+#define HPA_AA_ADOPT_DELAY 0
+#define HPA_AA_BACKOFF_DELAY 1000
+#define HPA_PA_FLOOD_DELAY 1000
+#define HPA_AA_FLOOD_DELAY 300
+
+#define HPA_ULA_MAX_BACKOFF 3000
 
 #define HPA_STORE_SAVE_DELAY    30 * HNETD_TIME_PER_SECOND
 #define HPA_STORE_TOKEN_DELAY   HNETD_TIME_PER_SECOND * 60 * 60 * 6 //6 hours
@@ -1912,8 +1917,12 @@ hncp_pa hncp_pa_create(dncp dncp, struct hncp_link *hncp_link)
 	pa_core_set_node_id(&hp->aa,
 			(uint32_t *)&dncp->own_node->node_identifier.buf[0]);
 
-	pa_core_set_flooding_delay(&hp->pa, HPA_AP_FLOOD_DELAY);
-	pa_core_set_flooding_delay(&hp->aa, HPA_RA_FLOOD_DELAY);
+	pa_core_set_flooding_delay(&hp->pa, HPA_PA_FLOOD_DELAY);
+	hp->pa.adopt_delay = HPA_PA_ADOPT_DELAY;
+	hp->pa.backoff_delay = HPA_PA_BACKOFF_DELAY;
+	pa_core_set_flooding_delay(&hp->aa, HPA_AA_FLOOD_DELAY);
+	hp->aa.adopt_delay = HPA_PA_ADOPT_DELAY;
+	hp->aa.backoff_delay = HPA_PA_BACKOFF_DELAY;
 
 	//Attach Address Assignment to Prefix Assignment
 	pa_ha_attach(&hp->aa, &hp->pa, 1);

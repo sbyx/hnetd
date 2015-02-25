@@ -364,8 +364,11 @@ static void pa_routine(struct pa_ldp *ldp, bool backoff)
 			//Backoff only makes sense for not assigned ldps
 			pa_ldp_unassign(ldp);
 			//If already pending, we can keep waiting.
-			if(!ldp->backoff_to.pending)
-				uloop_timeout_set(&ldp->backoff_to, PA_BACKOFF_DELAY_r(ldp));
+			if(!ldp->backoff_to.pending) {
+				int delay = PA_BACKOFF_DELAY_r(ldp);
+				L_DEBUG("Backoff delay is %d", delay);
+				uloop_timeout_set(&ldp->backoff_to, delay);
+			}
 			break;
 		case PA_RULE_DESTROY:
 			PA_DEBUG("Target: Destroy %s", pa_prefix_repr(&ldp->prefix, ldp->plen));
