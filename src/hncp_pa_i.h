@@ -304,8 +304,16 @@ static int hpa_ifconf_comp(const void *k1, const void *k2, __unused void *ptr)
 		case HPA_CONF_T_PREFIX: //One entry per prefix
 			return prefix_cmp(&e1->prefix.prefix, &e2->prefix.prefix);
 		case HPA_CONF_T_ADDR: //One netry per address
-			return memcmp(&e1->addr, &e2->addr, sizeof(e1->addr));
+			if((i = (int)e1->addr.mask - (int)e2->addr.mask) ||
+					(i = prefix_cmp(&e1->addr.filter, &e2->addr.filter)) ||
+					(i = memcmp(&e1->addr, &e2->addr, sizeof(e1->addr))))
+				return i;
+			return 0;
 		case HPA_CONF_T_LINK_ID:
+			if((i = (int)e1->link_id.mask - (int)e2->link_id.mask) ||
+					(i = (int)e1->link_id.mask - (int)e2->link_id.mask))
+				return i;
+			return 0;
 		case HPA_CONF_T_IP4_PLEN:
 		case HPA_CONF_T_IP6_PLEN:
 		default:
