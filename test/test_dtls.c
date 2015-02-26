@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:31 2014 mstenber
- * Last modified: Wed Jan 21 14:26:30 2015 mstenber
- * Edit time:     122 min
+ * Last modified: Thu Feb 26 14:21:00 2015 mstenber
+ * Edit time:     134 min
  *
  */
 
@@ -27,6 +27,9 @@
 #include <arpa/inet.h>
 #include <ctype.h>
 
+/* in ms */
+#define SINGLE_TEST_ERROR_TIMEOUT 2000
+
 int log_level = LOG_DEBUG;
 
 dtls d1, d2;
@@ -43,7 +46,12 @@ void _timeout(struct uloop_timeout *t)
 
 void _no_connections_timeout(struct uloop_timeout *t)
 {
-  uloop_timeout_set(t, 5);
+  uloop_timeout_set(t, 100);
+  L_DEBUG("waiting for closure: %d/%d <> %d/%d",
+          d1->num_data_connections,
+          d1->num_non_data_connections,
+          d2->num_data_connections,
+          d2->num_non_data_connections);
   if (d1->num_data_connections ||
       d1->num_non_data_connections ||
       d2->num_data_connections ||
@@ -142,7 +150,7 @@ static void _test_basic_i(int i)
   src.sin6_len = sizeof(src);
   dst.sin6_len = sizeof(dst);
 #endif /* __APPLE__ */
-  if (i == 0)
+  if (i & 1)
     {
       rb = dtls_set_local_cert(d1, "test/cert1.pem", "test/key1.pem");
       sput_fail_unless(rb, "dtls_set_local_cert 1");
@@ -180,12 +188,12 @@ static void _test_basic_i(int i)
   sput_fail_unless(rv == 3, "sendto failed?");
   pending_readable = 1;
 
-  uloop_timeout_set(&t, 5000);
+  uloop_timeout_set(&t, SINGLE_TEST_ERROR_TIMEOUT);
   uloop_run();
   sput_fail_unless(!pending_readable, "readable left");
 
   /* Do shutdown on one side, and expect other to behave accordingly */
-  if (i % 2)
+  if (!(i & 2))
     {
       dtls_connection dc = list_first_entry(&d2->connections,
                                             dtls_connection_s, in_connections);
@@ -280,7 +288,7 @@ static void _test_unknown_i(int i)
   sput_fail_unless(rv == 3, "sendto failed?");
   pending_unknown = 1;
 
-  uloop_timeout_set(&t, 5000);
+  uloop_timeout_set(&t, SINGLE_TEST_ERROR_TIMEOUT);
   uloop_run();
 
   dtls_destroy(d1);
@@ -290,14 +298,24 @@ static void _test_unknown_i(int i)
   sput_fail_unless(!pending_unknown, "no unknown left");
 }
 
-static void dtls_basic_1()
+static void dtls_basic_sc_cert()
 {
   _test_basic_i(0);
 }
 
-static void dtls_basic_2()
+static void dtls_basic_sc_psk()
 {
   _test_basic_i(1);
+}
+
+static void dtls_basic_cc_cert()
+{
+  _test_basic_i(2);
+}
+
+static void dtls_basic_cc_psk()
+{
+  _test_basic_i(3);
 }
 
 
@@ -323,8 +341,10 @@ int main(int argc, char **argv)
   argc -= 1;
   argv += 1;
 
-  sput_maybe_run_test(dtls_basic_1, do {} while(0));
-  sput_maybe_run_test(dtls_basic_2, do {} while(0));
+  sput_maybe_run_test(dtls_basic_sc_cert, do {} while(0));
+  sput_maybe_run_test(dtls_basic_sc_psk, do {} while(0));
+  sput_maybe_run_test(dtls_basic_cc_cert, do {} while(0));
+  sput_maybe_run_test(dtls_basic_cc_psk, do {} while(0));
   sput_maybe_run_test(dtls_unknown_1, do {} while(0));
   sput_maybe_run_test(dtls_unknown_2, do {} while(0));
   sput_leave_suite(); /* optional */
