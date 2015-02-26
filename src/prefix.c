@@ -15,7 +15,7 @@
 const char *addr_ntop(char *dst, size_t bufflen, const struct in6_addr *addr)
 {
 	if (IN6_IS_ADDR_V4MAPPED(addr)) {
-		return inet_ntop(AF_INET, &addr->s6_addr32[3], dst, bufflen);
+		return inet_ntop(AF_INET, &addr->s6_addr[12], dst, bufflen);
 	} else {
 		return inet_ntop(AF_INET6, addr, dst, bufflen);
 	}
@@ -93,11 +93,11 @@ int prefix_pton(const char *src, struct in6_addr *addr, uint8_t *plen)
 			*plen = parsed_len + 96;
 		}
 		memset(addr, 0, 10);
-		addr->s6_addr16[5] = 0xffff;
+		addr->s6_addr[10] = 0xff;
+		addr->s6_addr[11] = 0xff;
 	} else {
 		return 0;
 	}
 
 	return 1;
 }
-
