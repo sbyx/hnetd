@@ -12,7 +12,8 @@ BABEL_ARGS="-D -I $BABEL_PID "\
 "-C redistribute ip 0.0.0.0/0 eq 0 proto 3 metric 128 "\
 "-C redistribute ip 0.0.0.0/0 eq 0 metric 128 "\
 "-C redistribute ip ::/0 eq 0 metric 128 "\
-"-C redistribute eq 64 "
+"-C redistribute eq 64 "\
+"-K "
 ISIS_INIT=/usr/sbin/autoisis
 
 case "$action" in

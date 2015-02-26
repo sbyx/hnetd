@@ -1,8 +1,76 @@
 #! /bin/sh
-echo "[multicast.script] $*"
-# Insert your code here to handle the events:
+
+#
+# Called by hnetd in order to control the multicast daemon
+# 
+# Call syntax:
+#
 # rpa (local|remote) IPV6ADDRESS OLD-IPV6ADDRESS
 #  (called only when RPA changes; initial-none OLD-IPV6ADDRESS is "::")
+# 
 # bp (add|remove) (local|remote) IPV6ADDRESS
 #  (called whenever TLV space changes (TBD: change to happen only on RP?))
+#
 # ifstate IFNAME (int|ext)
+#
+
+echo "[multicast.script] $*"
+
+PIM_PROXY_PORT=15656
+
+error () {
+	echo "This script must be run by hnetd."
+	exit 1
+}
+
+if [ "$(id -u)" -ne "0" ] || [ "$1" = "" ]; then
+	error
+fi
+
+rpa () {
+	if [ -z "$2" ] || [ -z "$3" ]; then
+		exit 1
+	fi
+	if [ "$3" != "::" ]; then
+		pimbc rpa "$3" flush
+	fi
+	if [ "$2" != "::" ]; then
+		pimbc rpa "$2" add "ff00::/8"
+		pimbc rpa "$2" add "224.0.0.0/4"
+	fi
+}
+
+bp () {
+	if [ "$1" != "add" -a "$1" != "del" ]; then
+		exit 1
+	fi
+	if [ "$2" != "local" -a "$2" != "remote" ]; then
+		exit 1
+	fi
+	if [ "$3" != "" ]; then 
+		if [ "$2" = "remote" ]; then
+			pimbc proxy "$1" "$3" $PIM_PROXY_PORT
+		fi
+	fi
+}
+
+ifstate () {
+	if [ -z "$1" ]; then
+		exit 1
+	fi
+	case "$2" in
+		int) pimbc iface "$1" pim 1 ssbidir 1 querier 1;;
+		ext) pimbc iface "$1" pim 0 ssbidir 0 querier 0;;
+		*) exit 1;;
+	esac
+}
+
+
+case "$1" in
+	rpa) shift 1; rpa $@;;
+	bp) shift 1; bp $@;;
+	ifstate) shift 1; ifstate $@;;
+	*) error;;
+esac
+
+exit 0;
