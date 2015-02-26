@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Wed Feb 25 15:13:42 2015 mstenber
- * Edit time:     237 min
+ * Last modified: Thu Feb 26 14:46:39 2015 mstenber
+ * Edit time:     262 min
  *
  */
 
@@ -17,9 +17,15 @@
 #include "hncp_i.h"
 #include "hncp_pa.h"
 #include "hncp_sd.h"
+#include "hncp_link.h"
 #include "hncp_multicast.h"
 #include "sput.h"
-#include "iface.h"
+
+/* Lots of stubs here, rather not put __unused all over the place. */
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+
+/* Use the faked interfaces */
+#include "fake_iface.h"
 
 /* We leverage the fake timers and other stuff in fake_uloop. */
 #include "fake_uloop.h"
@@ -31,9 +37,6 @@
 #undef L_PREFIX
 #endif /* L_PREFIX */
 #define L_PREFIX ""
-
-/* Lots of stubs here, rather not put __unused all over the place. */
-#pragma GCC diagnostic ignored "-Wunused-parameter"
 
 /* This is abstraction that can be used to play with multiple HNCP
  * instances; no separate C module provided just due to
@@ -75,17 +78,14 @@ typedef struct {
   struct net_sim_t *s;
   char *name;
   dncp_s n;
-  struct pa_data pa_data;
-  struct pa_data_user pa_data_user;
+  struct hncp_link *link;
 #ifndef DISABLE_HNCP_PA
-  hncp_glue g;
+  hncp_pa pa;
 #endif /* !DISABLE_HNCP_PA */
 #ifndef DISABLE_HNCP_MULTICAST
   hncp_multicast multicast;
 #endif /* !DISABLE_HNCP_MULTICAST */
   hncp_sd sd;
-  int updated_eap;
-  int updated_edp;
 
   /* Received messages (timeout has moved them from global list to
    * ours readable list) */
@@ -98,6 +98,7 @@ typedef struct {
    * when the topology should be stable. */
   dncp_subscriber_s debug_subscriber;
 
+  struct list_head iface_users;
 } net_node_s, *net_node;
 
 typedef struct net_sim_t {
@@ -108,6 +109,7 @@ typedef struct net_sim_t {
 
   bool disable_link_auto_address;
   bool disable_sd;
+  bool disable_pa;
   bool disable_multicast;
 
   int node_count;
@@ -129,49 +131,6 @@ typedef struct net_sim_t {
 
 static struct list_head net_sim_interfaces = LIST_HEAD_INIT(net_sim_interfaces);
 
-int pa_update_eap(net_node node, const struct prefix *prefix,
-                  const struct pa_rid *rid,
-                  const char *ifname, bool to_delete);
-
-int pa_update_eaa(net_node node, const struct in6_addr *addr,
-					const struct pa_rid *rid,
-					const char *ifname, bool to_delete);
-
-int pa_update_edp(net_node node, const struct prefix *prefix,
-                  const struct pa_rid *rid,
-                  hnetd_time_t valid_until, hnetd_time_t preferred_until,
-                  const void *dhcpv6_data, size_t dhcpv6_len);
-
-void net_sim_pa_dps(struct pa_data_user *user, struct pa_dp *dp, uint32_t flags)
-{
-	bool todelete = !!(flags & PADF_DP_TODELETE);
-	if (!dp->local && flags) {
-		struct pa_edp *edp = container_of(dp, struct pa_edp, dp);
-		pa_update_edp(container_of(user, net_node_s, pa_data_user), &dp->prefix,
-				&edp->rid, todelete?0:dp->valid_until, todelete?0:dp->preferred_until,
-						dp->dhcp_data, dp->dhcp_len);
-	}
-}
-
-void net_sim_pa_aps(struct pa_data_user *user, struct pa_ap *ap, uint32_t flags)
-{
-	bool todelete = !!(flags & PADF_DP_TODELETE);
-	if(flags) {
-		pa_update_eap(container_of(user, net_node_s, pa_data_user),
-				&ap->prefix, &ap->rid, ap->iface?ap->iface->ifname:NULL, todelete);
-	}
-}
-
-void net_sim_pa_aas(struct pa_data_user *user, struct pa_aa *aa, uint32_t flags)
-{
-	bool todelete = !!(flags & PADF_DP_TODELETE);
-	if(flags && !aa->local) {
-		struct pa_eaa *eaa = container_of(aa, struct pa_eaa, aa);
-		pa_update_eaa(container_of(user, net_node_s, pa_data_user), &aa->address,
-				&eaa->rid, eaa->iface?eaa->iface->ifname:NULL, todelete);
-	}
-}
-
 void net_sim_init(net_sim s)
 {
   memset(s, 0, sizeof(*s));
@@ -181,6 +140,19 @@ void net_sim_init(net_sim s)
   uloop_init();
   s->start = hnetd_time();
   s->next_free_iid = 100;
+}
+
+int net_sim_dncp_tlv_type_count(dncp o, int type)
+{
+  int c = 0;
+  dncp_node n;
+  struct tlv_attr *a;
+
+  dncp_for_each_node(o, n)
+    dncp_node_for_each_tlv_with_type(n, a, type)
+      c++;
+  L_DEBUG("net_sim_dncp_tlv_type_count %d -> %d", type, c);
+  return c;
 }
 
 bool net_sim_is_converged(net_sim s)
@@ -324,6 +296,7 @@ dncp net_sim_find_hncp(net_sim s, const char *name)
     }
 
   n = calloc(1, sizeof(*n));
+  current_iface_users = &n->iface_users;
   n->name = strdup(name);
   sput_fail_unless(n, "calloc net_node");
   sput_fail_unless(n->name, "strdup name");
@@ -332,19 +305,20 @@ dncp net_sim_find_hncp(net_sim s, const char *name)
   n->n.io_init_done = true; /* our IO doesn't really need init.. */
   sput_fail_unless(r, "hncp_init");
   if (!r)
-    return NULL;
+    {
+    fail:
+      current_iface_users = NULL;
+      return NULL;
+    }
   list_add_tail(&n->h, &s->nodes);
   INIT_LIST_HEAD(&n->messages);
+  INIT_LIST_HEAD(&n->iface_users);
+  if (!(n->link = hncp_link_create(&n->n, NULL)))
+    goto fail;
 #ifndef DISABLE_HNCP_PA
-  memset(&n->pa_data_user, 0, sizeof(struct pa_data_user));
-  n->pa_data_user.dps = net_sim_pa_dps;
-  n->pa_data_user.aps = net_sim_pa_aps;
-  n->pa_data_user.aas = net_sim_pa_aas;
-  pa_data_init(&n->pa_data, NULL);
-  pa_data_subscribe(&n->pa_data, &n->pa_data_user);
   /* Glue it to pa */
-  if (!(n->g = hncp_pa_glue_create(&n->n, &n->pa_data)))
-    return NULL;
+  if (!s->disable_pa && !(n->pa = hncp_pa_create(&n->n, n->link)))
+    goto fail;
 #endif /* !DISABLE_HNCP_PA */
 #ifndef DISABLE_HNCP_SD
   static hncp_sd_params_s sd_params = {
@@ -357,7 +331,8 @@ dncp net_sim_find_hncp(net_sim s, const char *name)
   /* Add SD support */
   if (!s->disable_sd)
     if (!(n->sd = hncp_sd_create(&n->n, &sd_params, NULL)))
-      return NULL;
+      goto fail;
+
 #endif /* !DISABLE_HNCP_SD */
 #ifndef DISABLE_HNCP_MULTICAST
   static hncp_multicast_params_s multicast_params = {
@@ -372,6 +347,7 @@ dncp net_sim_find_hncp(net_sim s, const char *name)
   dncp_subscribe(&n->n, &n->debug_subscriber);
   L_DEBUG("[%s] %s net_sim_find_hncp added",
           DNCP_NODE_REPR(n->n.own_node), n->name);
+  current_iface_users = NULL;
   return &n->n;
 }
 
@@ -420,6 +396,9 @@ dncp_link net_sim_dncp_find_link_by_name(dncp o, const char *name)
         l->iid = n->s->next_free_iid++;
 
       l->ifindex = l->iid;
+
+      /* Give callback about it to iface users. */
+      net_sim_node_iface_callback(n, cb_intiface, name, true);
     }
   return l;
 }
@@ -508,8 +487,8 @@ void net_sim_remove_node(net_sim s, net_node node)
 
 #ifndef DISABLE_HNCP_PA
   /* Kill glue (has to be done _after_ hncp_uninit). */
-  hncp_pa_glue_destroy(node->g);
-  pa_data_term(&node->pa_data);
+  if (!s->disable_pa)
+    hncp_pa_destroy(node->pa);
 #endif /* !DISABLE_HNCP_PA */
 #ifndef DISABLE_HNCP_MULTICAST
   if (!s->disable_multicast)
@@ -565,6 +544,22 @@ void net_sim_advance(net_sim s, hnetd_time_t t)
       }                                                 \
     sput_fail_unless(!(criteria), "!criteria at end");  \
   } while(0)
+
+void net_sim_populate_iface_next(net_node n)
+{
+  static char dummybuf[12345];
+  struct iface *i = (struct iface *)dummybuf;
+  dncp_link l;
+
+  vlist_for_each_element(&n->n.links, l, in_links)
+    {
+      *i = default_iface;
+      strcpy(i->ifname, l->ifname);
+      smock_push("iface_next", i);
+      i = (void *)i + sizeof(struct iface) + strlen(l->ifname) + 1;
+    }
+  smock_push("iface_next", NULL);
+}
 
 /************************************************* Mocked interface - dncp_io */
 
@@ -762,159 +757,6 @@ ssize_t dncp_io_sendto(dncp o, void *buf, size_t len,
 hnetd_time_t dncp_io_time(dncp o)
 {
   return hnetd_time();
-}
-
-/**************************************** (Partially mocked) interface - pa  */
-
-void pa_update_lap(struct pa_data *data, const struct prefix *prefix, const char *ifname,
-		int to_delete)
-{
-	/* In case of no ifname, we create a CPD */
-	if(ifname) {
-		struct pa_cpl *cpl = _pa_cpl(pa_cp_get(data, prefix, PA_CPT_L, !to_delete));
-		if(!cpl)
-			return;
-		if(!to_delete) {
-			struct pa_iface *iface = pa_iface_get(data, ifname, true);
-			pa_cpl_set_iface(cpl, iface);
-			pa_cp_set_advertised(&cpl->cp, true);
-		} else {
-			pa_cp_todelete(&cpl->cp);
-		}
-		pa_cp_notify(&cpl->cp);
-	} else {
-		struct pa_cpd *cpd = _pa_cpd(pa_cp_get(data, prefix, PA_CPT_D, !to_delete));
-		if(!cpd)
-			return;
-		if(!to_delete) {
-			pa_cp_set_advertised(&cpd->cp, true);
-		} else {
-			pa_cp_todelete(&cpd->cp);
-		}
-		pa_cp_notify(&cpd->cp);
-	}
-}
-
-/* An laa can only be set for a valid chosen prefix */
-void pa_update_laa(struct pa_data *data, const struct prefix *cp_prefix,
-		const struct in6_addr *addr, const char *ifname,
-		int to_delete)
-{
-	struct pa_cpl *cpl = _pa_cpl(pa_cp_get(data, cp_prefix, PA_CPT_L, !to_delete));
-	struct pa_iface *iface = NULL;
-	struct pa_laa *laa = NULL;
-	if(!cpl)
-		return;
-
-
-	if(to_delete) {
-		if(cpl->laa)
-			pa_aa_todelete(&cpl->laa->aa);
-	} else {
-		iface = ifname?pa_iface_get(data, ifname, true):NULL;
-		pa_cpl_set_iface(cpl, iface);
-		laa = pa_laa_create(addr, cpl);
-	}
-
-	pa_cp_notify(&cpl->cp);
-	if(laa)
-		pa_aa_notify(data, &cpl->laa->aa);
-	if(iface)
-		pa_iface_notify(data, iface);
-}
-
-
-void pa_update_ldp(struct pa_data *data, const struct prefix *prefix,
-		const char *ifname,
-		hnetd_time_t valid_until, hnetd_time_t preferred_until,
-		const void *dhcp_data, size_t dhcp_len)
-{
-	struct pa_ldp *ldp;
-	struct pa_iface *iface = NULL;
-
-	if(!(ldp = pa_ldp_get(data, prefix, !!valid_until)))
-		return;
-
-	if(valid_until) {
-
-		pa_dp_set_lifetime(&ldp->dp, preferred_until, valid_until);
-		pa_dp_set_dhcp(&ldp->dp, dhcp_data, dhcp_len);
-
-		if(ifname)
-			iface = pa_iface_get(data, ifname, true);
-		pa_ldp_set_iface(ldp, iface);
-
-		if(iface)
-			pa_iface_notify(data, iface);
-	} else {
-		pa_dp_todelete(&ldp->dp);
-	}
-
-	pa_dp_notify(data, &ldp->dp);
-}
-
-/********************************************************************* iface */
-
-bool mock_iface = false;
-
-struct iface default_iface = {.elected = -1,
-                              .internal = true};
-
-struct iface* iface_get(const char *ifname)
-{
-  if (mock_iface)
-    return smock_pull("iface_get");
-  static struct {
-    struct iface iface;
-    char ifname[16];
-  } iface;
-  strcpy(iface.ifname, ifname);
-  iface.iface = default_iface;
-  return &iface.iface;
-}
-
-struct iface* iface_next(struct iface *prev)
-{
-  if (mock_iface)
-    return smock_pull("iface_next");
-  return NULL;
-}
-
-void net_sim_populate_iface_next(net_node n)
-{
-  static char dummybuf[12345];
-  struct iface *i = (struct iface *)dummybuf;
-  dncp_link l;
-
-  vlist_for_each_element(&n->n.links, l, in_links)
-    {
-      *i = default_iface;
-      strcpy(i->ifname, l->ifname);
-      smock_push("iface_next", i);
-      i = (void *)i + sizeof(struct iface) + strlen(l->ifname) + 1;
-    }
-  smock_push("iface_next", NULL);
-}
-
-void iface_all_set_dhcp_send(const void *dhcpv6_data, size_t dhcpv6_len,
-                             const void *dhcp_data, size_t dhcp_len)
-{
-}
-
-int iface_get_preferred_address(struct in6_addr *foo, bool v4)
-{
-  inet_pton(AF_INET6, (v4) ? "::ffff:192.168.1.2" : "2001:db8::f00:1", foo);
-  return 0;
-}
-
-struct iface_user;
-
-void iface_register_user(struct iface_user *user)
-{
-}
-
-void iface_unregister_user(struct iface_user *user)
-{
 }
 
 #endif /* NET_SIM_H */

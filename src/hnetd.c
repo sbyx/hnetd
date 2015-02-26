@@ -19,8 +19,7 @@
 #include <syslog.h>
 #include <fcntl.h>
 
-#include <libubox/uloop.h>
-
+#include "hnetd_time.h"
 #include "hncp_pa.h"
 #include "hncp_sd.h"
 #include "hncp_multicast.h"

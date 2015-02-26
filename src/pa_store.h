@@ -11,9 +11,9 @@
 #define PA_STORE_H_
 
 #include <libubox/avl.h>
-#include <libubox/uloop.h>
 #include <string.h>
 
+#include "hnetd_time.h"
 #include "pa_core.h"
 
 /**

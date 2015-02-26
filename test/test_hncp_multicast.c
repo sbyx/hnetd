@@ -6,8 +6,8 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 21:40:08 2015 mstenber
- * Last modified: Wed Feb 25 15:04:01 2015 mstenber
- * Edit time:     18 min
+ * Last modified: Thu Feb 26 13:33:39 2015 mstenber
+ * Edit time:     20 min
  *
  */
 
@@ -27,23 +27,6 @@
 #include "hncp_multicast.c"
 
 int log_level = LOG_DEBUG;
-
-
-int pa_update_eap(net_node node, const struct prefix *prefix,
-                  const struct pa_rid *rid,
-                  const char *ifname, bool to_delete)
-{ return 0; }
-
-int pa_update_edp(net_node node, const struct prefix *prefix,
-                  const struct pa_rid *rid,
-                  hnetd_time_t valid_until, hnetd_time_t preferred_until,
-                  const void *dhcpv6_data, size_t dhcpv6_len)
-{ return 0; }
-
-int pa_update_eaa(net_node node, const struct in6_addr *addr,
-                  const struct pa_rid *rid,
-                  const char *ifname, bool to_delete)
-{return 0;}
 
 void test_hncp_multicast_base(bool aa_enabled)
 {
@@ -73,15 +56,9 @@ void test_hncp_multicast_base(bool aa_enabled)
                   HNCP_T_PIM_BORDER_PROXY,
                   0
   };
-  int i;
-  for (i = 0 ; types[i] ; i++)
+  for (int i = 0 ; types[i] ; i++)
   {
-    int c = 0;
-    dncp_node n;
-    struct tlv_attr *a;
-    dncp_for_each_node(n1, n)
-      dncp_node_for_each_tlv_with_type(n, a, types[i])
-        c++;
+    int c = net_sim_dncp_tlv_type_count(n1, types[i]);
     L_DEBUG("tlv #%d: %d", types[i], c);
     sput_fail_unless(c == (aa_enabled ? 1 : 0), "1 of tlv");
   }

@@ -6,8 +6,8 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Tue Jan 13 15:03:51 2015 mstenber
- * Last modified: Tue Jan 20 16:52:34 2015 mstenber
- * Edit time:     47 min
+ * Last modified: Thu Feb 26 13:58:48 2015 mstenber
+ * Edit time:     48 min
  *
  */
 
@@ -18,23 +18,7 @@
 
 int log_level = LOG_DEBUG;
 
-/******************************************************* PA NOP callbacks..  */
-
-int pa_update_eap(net_node node, const struct prefix *prefix,
-                  const struct pa_rid *rid,
-                  const char *ifname, bool to_delete)
-{ return 0; }
-
-int pa_update_edp(net_node node, const struct prefix *prefix,
-                  const struct pa_rid *rid,
-                  hnetd_time_t valid_until, hnetd_time_t preferred_until,
-                  const void *dhcpv6_data, size_t dhcpv6_len)
-{ return 0; }
-
-int pa_update_eaa(net_node node, const struct in6_addr *addr,
-                  const struct pa_rid *rid,
-                  const char *ifname, bool to_delete)
-{return 0;}
+/************************************************************ NOP callbacks. */
 
 int platform_rpc_register(struct platform_rpc_method *m)
 {return 0;}

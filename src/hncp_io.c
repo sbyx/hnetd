@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Dec 23 19:01:59 2014 mstenber
- * Edit time:     295 min
+ * Last modified: Thu Feb 26 12:39:42 2015 mstenber
+ * Edit time:     296 min
  *
  */
 
@@ -306,7 +306,6 @@ hnetd_time_t dncp_io_time(dncp o __unused)
 {
   return hnetd_time();
 }
-
 
 #ifdef DTLS
 

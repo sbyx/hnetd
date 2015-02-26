@@ -6,7 +6,7 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 20:39:45 2015 mstenber
- * Last modified: Wed Feb 25 18:01:32 2015 mstenber
+ * Last modified: Thu Feb 26 13:16:06 2015 mstenber
  * Edit time:     94 min
  *
  */
@@ -27,8 +27,6 @@
 
 #include <unistd.h>
 #include <sys/wait.h>
-
-#include <libubox/uloop.h>
 
 /* No churn in local EC long -> publish TLV + declare us BP */
 #define BP_UPDATE_TIMEOUT 1000

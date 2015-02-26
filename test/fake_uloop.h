@@ -39,19 +39,22 @@
 
 #include "sput.h"
 
-#define hnetd_time() _fu_time
 #define set_hnetd_time fu_set_hnetd_time
-#define get_time() hnetd_time()
+#define get_time hnetd_time
 #define set_time set_hnetd_time
+
 #define uloop_init() fu_init()
 #define uloop_run() (void)fu_loop(-1)
 #define uloop_end() do { _fu_loop_ended = true; } while(0)
-#define uloop_timeout_set fu_timeout_set
-#define uloop_timeout_cancel fu_timeout_cancel
-#define uloop_timeout_remaining(to) (int)((to)->pending?(_to_time(&(to)->time) - _fu_time):-1)
+
 
 static hnetd_time_t _fu_time;
 LIST_HEAD(timeouts);
+
+hnetd_time_t hnetd_time()
+{
+  return _fu_time;
+}
 
 static inline void fu_init()
 {
@@ -78,7 +81,14 @@ static hnetd_time_t _to_time(struct timeval *tv)
   return (int64_t)tv->tv_sec * HNETD_TIME_PER_SECOND + tv->tv_usec;
 }
 
-static inline int fu_timeout_set(struct uloop_timeout *timeout, int ms)
+int hnetd_time_timeout_remaining(struct uloop_timeout *to)
+{
+  if (!to->pending)
+    return -1;
+  return (int)(_to_time(&(to)->time) - _fu_time);
+}
+
+int hnetd_time_timeout_set(struct uloop_timeout *timeout, int ms)
 {
   sput_fail_if(ms < 0, "Timeout delay is positive");
   hnetd_time_t v = hnetd_time() + ms;
@@ -112,7 +122,7 @@ static inline int fu_timeouts()
   return c;
 }
 
-static int fu_timeout_cancel(struct uloop_timeout *timeout)
+int hnetd_time_timeout_cancel(struct uloop_timeout *timeout)
 {
 #ifdef FU_PARANOID_TIMEOUT_CANCEL
   sput_fail_unless(timeout->pending, "Timeout pending in timeout_cancel");
