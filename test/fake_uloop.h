@@ -33,10 +33,11 @@
 #ifndef FAKE_ULOOP_H
 #define FAKE_ULOOP_H
 
+#include "hnetd.h"
+
 #include <libubox/uloop.h>
 
 #include "sput.h"
-#include "hnetd.h"
 
 #define hnetd_time() _fu_time
 #define set_hnetd_time fu_set_hnetd_time
