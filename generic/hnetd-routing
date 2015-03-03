@@ -8,11 +8,6 @@ shift 2
 
 BABEL_EXE=/usr/sbin/babeld
 BABEL_PID=/var/run/babeld-hnetd.pid
-BABEL_ARGS="-D -I $BABEL_PID "\
-"-C redistribute ip 0.0.0.0/0 eq 0 proto 3 metric 128 "\
-"-C redistribute ip 0.0.0.0/0 eq 0 metric 128 "\
-"-C redistribute ip ::/0 eq 0 metric 128 "\
-"-C redistribute eq 64 "
 ISIS_INIT=/usr/sbin/autoisis
 
 case "$action" in
@@ -34,7 +29,10 @@ case "$action" in
 				if [ "$action" != "disable" -a -n "$1" ]; then
 				    #start-stop-daemon -S -x $BABEL_EXE -- `echo $BABEL_ARGS` $*
                                     rm -f $BABEL_PID
-                                    $BABEL_EXE `echo $BABEL_ARGS` $*
+                                    $BABEL_EXE -D -I $BABEL_PID \
+                                      -C "redistribute" \
+                                      -C "redistribute local deny" \
+                                      $*
                                     # Wait for pid file to actually show up
                                     [ -f $BABEL_PID ] || sleep 1
                                     [ -f $BABEL_PID ] || sleep 2
