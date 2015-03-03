@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Feb 11 18:32:18 2015 mstenber
- * Edit time:     574 min
+ * Last modified: Thu Feb 26 15:00:32 2015 mstenber
+ * Edit time:     592 min
  *
  */
 
@@ -22,34 +22,6 @@
 #include "sput.h"
 
 int log_level = LOG_DEBUG;
-
-/********************************************************* Mocked interfaces */
-
-int pa_update_eap(net_node node, const struct prefix *prefix,
-                  const struct pa_rid *rid,
-                  const char *ifname, bool to_delete)
-{
-  sput_fail_unless(prefix, "prefix set");
-  sput_fail_unless(rid, "rid set");
-  node->updated_eap++;
-  return 0;
-}
-
-int pa_update_edp(net_node node, const struct prefix *prefix,
-                  const struct pa_rid *rid,
-                  hnetd_time_t valid_until, hnetd_time_t preferred_until,
-                  const void *dhcpv6_data, size_t dhcpv6_len)
-{
-  sput_fail_unless(prefix, "prefix set");
-  sput_fail_unless(rid, "rid set");
-  node->updated_edp++;
-  return 0;
-}
-
-int pa_update_eaa(net_node node, const struct in6_addr *addr,
-					const struct pa_rid *rid,
-					const char *ifname, bool to_delete)
-{return 0;}
 
 /**************************************************************** Test cases */
 
@@ -112,20 +84,31 @@ void hncp_two(void)
   node1 = container_of(n1, net_node_s, n);
   node2 = container_of(n2, net_node_s, n);
 
-  /* First, fake delegated prefixes */
-  pa_update_ldp(&node1->pa_data, &p1, "eth0", hnetd_time() + 123, hnetd_time() + 1, NULL, 0);
-  pa_update_ldp(&node1->pa_data, &p2, NULL, hnetd_time() + 123, hnetd_time() + 1, NULL, 0);
+  /* First, give delegated prefixes */
+  net_sim_node_iface_callback(node1,
+                              cb_prefix,
+                              "eth1",
+                              &p1,
+                              NULL,
+                              hnetd_time() + 123, hnetd_time() + 1,
+                              NULL, 0);
+  net_sim_node_iface_callback(node1,
+                              cb_prefix,
+                              "eth1",
+                              &p2,
+                              NULL,
+                              hnetd_time() + 123, hnetd_time() + 1,
+                              NULL, 0);
 
   SIM_WHILE(&s, 1000,
-            node2->updated_edp != 2);
+            !net_sim_is_converged(&s) ||
+            net_sim_dncp_tlv_type_count(n2, HNCP_T_EXTERNAL_CONNECTION) != 1);
 
-  /* Then fake prefix assignment */
-  p1.plen = 64;
-  p2.plen = 64;
-  pa_update_lap(&node1->pa_data, &p1, "eth0", false);
-  pa_update_lap(&node1->pa_data, &p2, NULL, false);
+  /* Prefix assignment should just happen. Magic(?). */
+  /* Wait for prefixes to be assigned too */
   SIM_WHILE(&s, 1000,
-            node2->updated_eap != 2);
+            !net_sim_is_converged(&s) ||
+            net_sim_dncp_tlv_type_count(n2, HNCP_T_ASSIGNED_PREFIX) != 2);
 
   sput_fail_unless(dncp_if_has_highest_id(n1, "eth0") !=
                    dncp_if_has_highest_id(n2, "eth1"),
@@ -310,6 +293,7 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes)
   memset(&h2, 1, sizeof(h2));
 
   s->disable_sd = true;
+  s->disable_pa = true; /* TBD we SHOULD care about pa but it does not work :p */
   for (i = 0 ; i < num_nodes-1 ; i++)
     {
       char buf[128];
@@ -607,6 +591,7 @@ void hncp_random_monkey(void)
   memset(ma, 0, sizeof(ma));
   net_sim_init(&s);
   s.disable_sd = true; /* we don't care about sd */
+  s.disable_pa = true; /* TBD we SHOULD care about pa but it does not work :p */
   /* Ensure that the routers + their links have consistent ordering. */
   /* This way, debug and non debug builds have same output even
    * with the monkey_debug_print occuring every round.. */

@@ -19,8 +19,7 @@
 #include <syslog.h>
 #include <fcntl.h>
 
-#include <libubox/uloop.h>
-
+#include "hnetd_time.h"
 #include "hncp_pa.h"
 #include "hncp_sd.h"
 #include "hncp_multicast.h"
@@ -111,6 +110,7 @@ int main(__unused int argc, char *argv[])
 	struct hncp_link_config link_config = {HNCP_VERSION, 0, 0, 0, 0, ""};
 
 	memset(&sd_params, 0, sizeof(sd_params));
+	memset(&multicast_params, 0, sizeof(multicast_params));
 
 	openlog("hnetd", LOG_PERROR | LOG_PID, LOG_DAEMON);
 	uloop_init();

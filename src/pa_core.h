@@ -14,7 +14,8 @@
 #define PA_CORE_H_
 
 #include <libubox/list.h>
-#include <libubox/uloop.h>
+
+#include "hnetd_time.h"
 
 #include "btrie.h"
 

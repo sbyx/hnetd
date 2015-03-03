@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Mon Feb 23 22:07:35 2015 mstenber
- * Edit time:     138 min
+ * Last modified: Thu Feb 26 13:58:26 2015 mstenber
+ * Edit time:     154 min
  *
  */
 
@@ -26,22 +26,6 @@
 #include "hncp_sd.c"
 
 int log_level = LOG_DEBUG;
-
-int pa_update_eap(net_node node, const struct prefix *prefix,
-                  const struct pa_rid *rid,
-                  const char *ifname, bool to_delete)
-{ return 0; }
-
-int pa_update_edp(net_node node, const struct prefix *prefix,
-                  const struct pa_rid *rid,
-                  hnetd_time_t valid_until, hnetd_time_t preferred_until,
-                  const void *dhcpv6_data, size_t dhcpv6_len)
-{ return 0; }
-
-int pa_update_eaa(net_node node, const struct in6_addr *addr,
-                  const struct pa_rid *rid,
-                  const char *ifname, bool to_delete)
-{return 0;}
 
 /*
  * This is minimalist piece of test code that just exercises the
@@ -82,6 +66,29 @@ void file_does_not_contain(const char *filename, const char *string)
   _file_contains(filename, string, false);
 }
 
+/* Sigh, this is definitely fragile (if and when protocol changes), but I
+ * rather not mess with new hncp_pa. */
+#define tlv_ap_update(n, p,l, auth, pref, add)                  \
+do {                                                            \
+  struct __packed {                                             \
+    hncp_t_assigned_prefix_header_s h;                          \
+    struct in6_addr addr;                                       \
+  } s = {                                                       \
+    .h = { .flags = 0,                                          \
+           .prefix_length_bits = p.plen,                        \
+           .link_id = l->iid},                                  \
+    .addr = p.prefix                                            \
+  };                                                            \
+  dncp_add_tlv(n, HNCP_T_ASSIGNED_PREFIX, &s.h,                 \
+               sizeof(s.h) + ROUND_BITS_TO_BYTES(p.plen), 0);   \
+ } while(0)
+
+#define tlv_ra_update(n, iid, a, is_add)                        \
+do {                                                            \
+  hncp_t_router_address_s h = {.address = a, .link_id = iid};   \
+  dncp_add_tlv(n, HNCP_T_ROUTER_ADDRESS, &h, sizeof(h), 0);     \
+ } while(0)
+
 void test_hncp_sd(void)
 {
   net_sim_s s;
@@ -99,10 +106,11 @@ void test_hncp_sd(void)
   node1 = container_of(n1, net_node_s, n);
   l1 = net_sim_dncp_find_link_by_name(n1, "eth0.0");
   strcpy(l1->conf->dnsname, "label");
-  sput_fail_unless(prefix_pton("2001:dead:beef::/64", &p), "prefix_pton");
-  dncp_tlv_ap_update(n1, &p, "eth0.0", false, 0, true);
-  sput_fail_unless(prefix_pton("2001:dead:beef::1/128", &p), "prefix_pton");
-  dncp_tlv_ra_update(n1, 0, &p.prefix, true);
+  sput_fail_unless(prefix_pton("2001:dead:beef::/64", &p.prefix, &p.plen), "prefix_pton");
+
+  tlv_ap_update(n1, p, l1, false, 0, true);
+  sput_fail_unless(prefix_pton("2001:dead:beef::1/128", &p.prefix, &p.plen), "prefix_pton");
+  tlv_ra_update(n1, 0, p.prefix, true);
 
   /* Make sure .home shows up even with zero conf and no TLV traffic */
   SIM_WHILE(&s, 100, !net_sim_is_converged(&s));
@@ -119,12 +127,12 @@ void test_hncp_sd(void)
   net_sim_set_connected(l1, l2, true);
   net_sim_set_connected(l2, l1, true);
 
-  sput_fail_unless(prefix_pton("1.2.3.4/24", &p), "prefix_pton");
+  sput_fail_unless(prefix_pton("1.2.3.4/24", &p.prefix, &p.plen), "prefix_pton");
   sput_fail_unless(prefix_is_ipv4(&p), "IPv4 prefix parsing failed");
-  dncp_tlv_ap_update(n1, &p, "eth0.0", false, 0, true);
-  dncp_tlv_ra_update(n1, 1, &p.prefix, true);
-  sput_fail_unless(prefix_pton("2001:feed:beef::/64", &p), "prefix_pton");
-  dncp_tlv_ap_update(n2, &p, "eth2", false, 0, true);
+  tlv_ap_update(n1, p, l1, false, 0, true);
+  tlv_ra_update(n1, 1, p.prefix, true);
+  sput_fail_unless(prefix_pton("2001:feed:beef::/64", &p.prefix, &p.plen), "prefix_pton");
+  tlv_ap_update(n2, p, l21, false, 0, true);
   SIM_WHILE(&s, 100, !net_sim_is_converged(&s)
             || fu_timeouts()>2);
   sput_fail_unless(strcmp(node1->sd->router_name, node2->sd->router_name),
@@ -226,7 +234,9 @@ void test_hncp_sd(void)
     .router_name = "xorbo",
     .domain_name = "domain."
   };
+  current_iface_users = &node3->iface_users;
   node3->sd = hncp_sd_create(&node3->n, &sd_params, NULL);
+  current_iface_users = NULL;
   s.disable_sd = false;
   l3 = net_sim_dncp_find_link_by_name(n3, "eth0");
   net_sim_set_connected(l2, l3, true);

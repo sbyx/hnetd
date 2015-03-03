@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Mon Feb 16 11:27:58 2015 mstenber
- * Edit time:     299 min
+ * Last modified: Thu Feb 26 14:42:50 2015 mstenber
+ * Edit time:     315 min
  *
  */
 
@@ -415,7 +415,11 @@ static bool _connection_poll_read(dtls_connection dc)
               return true;
             }
         }
-
+      if (SSL_get_shutdown(dc->ssl) == SSL_RECEIVED_SHUTDOWN)
+        {
+          L_DEBUG(" .. shutdown flag is set");
+          return _connection_shutdown(dc);
+        }
       if (dc->d->readable)
         {
           L_DEBUG("already readable, no need for further polling of ready");
@@ -424,8 +428,6 @@ static bool _connection_poll_read(dtls_connection dc)
       if (SSL_peek(dc->ssl, buf, 1) <= 0)
         {
           L_DEBUG("nothing in queue according to SSL_peek");
-          if (SSL_get_shutdown(dc->ssl) == SSL_RECEIVED_SHUTDOWN)
-            return _connection_shutdown(dc);
           return true;
         }
       dc->d->readable = true;
@@ -438,6 +440,7 @@ static bool _connection_poll_read(dtls_connection dc)
       rv = SSL_shutdown(dc->ssl);
       if (rv == 1)
         {
+          L_DEBUG("SSL_shutdown 2-step done");
           _connection_free(dc);
           return false;
         }
@@ -463,6 +466,7 @@ static bool _connection_poll_read(dtls_connection dc)
       else
         {
           /* Shutdown itself failed somehow. Just pretend it succeeded. */
+          L_DEBUG(" shutdown failed? -> killing connection");
           _connection_free(dc);
           return false;
         }
@@ -615,6 +619,11 @@ static void _dtls_poll(dtls d, bool is_client)
           L_DEBUG("ignoring %d bytes from unknown source on client port", rv);
           return;
         }
+      /* If it's server, let's make sure it is not DTLS alert to
+       * already closed connection. Those have funny replay
+       * properties.. */
+      if (rv > 0 && buf[0] == 21)
+        return;
       dc = _connection_create(d, false, &remote_addr);
       if (!dc)
         return;
