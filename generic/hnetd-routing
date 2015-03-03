@@ -32,6 +32,7 @@ case "$action" in
                                     $BABEL_EXE -D -I $BABEL_PID \
                                       -C "redistribute" \
                                       -C "redistribute local deny" \
+                                      -K \
                                       $*
                                     # Wait for pid file to actually show up
                                     [ -f $BABEL_PID ] || sleep 1
