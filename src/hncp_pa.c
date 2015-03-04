@@ -197,6 +197,13 @@ static int hpa_accept_proposed_addr(__unused struct pa_rule_random *r, struct pa
 	return 1;
 }
 
+static pa_plen hpa_return_128(__unused struct pa_rule_random *r,
+		__unused struct pa_ldp *ldp,
+		__unused uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
+{
+	return 128;
+}
+
 /* Initializes PA, ready to be added */
 static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 {
@@ -205,45 +212,34 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	i->pal.type = HPA_LINK_T_IFACE;
 
 	//Init the adoption rule
-	pa_rule_adopt_init(&i->pa_adopt);
-	i->pa_adopt.priority = HPA_PRIORITY_ADOPT;
-	i->pa_adopt.rule_priority = HPA_RULE_ADOPT;
+	pa_rule_adopt_init(&i->pa_adopt, "Adoption",
+			HPA_RULE_ADOPT, HPA_PRIORITY_ADOPT);
 	i->pa_adopt.rule.filter_accept = hpa_iface_filter_accept;
 	i->pa_adopt.rule.filter_private = i;
-	i->pa_adopt.rule.name = "Adoption";
 
 	//Init the assignment rule
-	pa_rule_random_init(&i->pa_rand);
-	i->pa_rand.pseudo_random_seed = (uint8_t *)i->pa_name; //todo use EUI64
-	i->pa_rand.pseudo_random_seedlen = strlen(i->pa_name);
-	i->pa_rand.pseudo_random_tentatives = HPA_PSEUDO_RAND_TENTATIVES;
-	i->pa_rand.random_set_size = HPA_RAND_SET_SIZE;
-	i->pa_rand.desired_plen_cb = hpa_desired_plen_cb;
+	pa_rule_random_init(&i->pa_rand, "Random Prefix",
+			HPA_RULE_CREATE, HPA_PRIORITY_CREATE, hpa_desired_plen_cb,
+			HPA_RAND_SET_SIZE);
+	pa_rule_random_prandconf(&i->pa_rand, HPA_PSEUDO_RAND_TENTATIVES,
+			(uint8_t *)i->pa_name, strlen(i->pa_name));
+	//todo: use UIE64 as seed
 	i->pa_rand.accept_proposed_cb = NULL;
-	i->pa_rand.priority = HPA_PRIORITY_CREATE;
-	i->pa_rand.rule_priority = HPA_RULE_CREATE;
-	i->pa_rand.override_priority = 0;
-	i->pa_rand.override_rule_priority = 0;
 	i->pa_rand.rule.filter_accept = hpa_iface_filter_accept;
 	i->pa_rand.rule.filter_private = i;
-	i->pa_rand.rule.name = "Random Prefix";
 
 	//Scarcity rule
-	pa_rule_random_init(&i->pa_override);
-	i->pa_override.pseudo_random_seed = (uint8_t *)i->pa_name; //todo use EUI64
-	i->pa_override.pseudo_random_seedlen = strlen(i->pa_name);
-	i->pa_override.pseudo_random_tentatives = HPA_PSEUDO_RAND_TENTATIVES;
-	i->pa_override.random_set_size = HPA_RAND_SET_SIZE;
-	i->pa_override.desired_plen_cb = hpa_desired_plen_override_cb;
-	i->pa_override.accept_proposed_cb = NULL;
-	i->pa_override.priority = HPA_PRIORITY_SCARCITY;
-	i->pa_override.rule_priority = HPA_RULE_CREATE_SCARCITY;
+	pa_rule_random_init(&i->pa_override, "Override Existing Prefix",
+			HPA_RULE_CREATE_SCARCITY, HPA_PRIORITY_SCARCITY,
+			hpa_desired_plen_override_cb, HPA_RAND_SET_SIZE);
+	pa_rule_random_prandconf(&i->pa_override, HPA_PSEUDO_RAND_TENTATIVES,
+			(uint8_t *)i->pa_name, strlen(i->pa_name));
+	//todo use EUI64
+	i->pa_override.override_rule_priority = HPA_RULE_CREATE_SCARCITY;
 	i->pa_override.override_priority = HPA_PRIORITY_SCARCITY;
 	i->pa_override.safety = 1;
-	i->pa_override.rule_priority = HPA_RULE_CREATE_SCARCITY;
 	i->pa_override.rule.filter_accept = hpa_iface_filter_accept;
 	i->pa_override.rule.filter_private = i;
-	i->pa_override.rule.name = "Override Existing Prefix";
 
 	//Init AA
 	sprintf(i->aa_name, HPA_LINK_NAME_ADDR"%s", i->ifname);
@@ -252,17 +248,13 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	i->aal.type = HPA_LINK_T_IFACE;
 
 	//Use first quarter of available addresses
-	pa_rule_random_init(&i->aa_rand);
-	i->aa_rand.pseudo_random_seed = (uint8_t *)i->aa_name; //todo use EUI64
-	i->aa_rand.pseudo_random_seedlen = strlen(i->aa_name);
-	i->aa_rand.pseudo_random_tentatives = HPA_PSEUDO_RAND_TENTATIVES;
-	i->aa_rand.random_set_size = HPA_RAND_SET_SIZE;
-	i->aa_rand.desired_plen_cb = NULL;
-	i->aa_rand.desired_plen = 128; //todo: Use conf
+	pa_rule_random_init(&i->aa_rand, "Random Address",
+			HPA_RULE_CREATE, HPA_PRIORITY_CREATE,
+			hpa_return_128, HPA_RAND_SET_SIZE);
+	pa_rule_random_prandconf(&i->aa_rand, HPA_PSEUDO_RAND_TENTATIVES,
+			(uint8_t *)i->aa_name, strlen(i->aa_name));
+	//todo use EUI64
 	i->aa_rand.accept_proposed_cb = hpa_accept_proposed_addr;
-	i->aa_rand.priority = HPA_PRIORITY_CREATE;
-	i->aa_rand.rule_priority = HPA_RULE_CREATE;
-	i->aa_rand.rule.name = "Random Address";
 
 	//Init stable storage
 	pa_store_link_init(&i->pasl, &i->pal, i->pal.name, 20);
@@ -1107,14 +1099,12 @@ static void hpa_iface_prefix_cb(struct iface_user *u, const char *ifname,
 		list_add(&dp->dp.le, &hpa->dps);
 
 		//Init excluded rule (except prefix which is done in excluded update)
-		pa_rule_static_init(&dp->iface.excluded_rule);
-		dp->iface.excluded_rule.get_prefix = hpa_excluded_get_prefix;
+		pa_rule_static_init(&dp->iface.excluded_rule, "Excluded Prefix",
+				hpa_excluded_get_prefix, HPA_RULE_EXCLUDE, HPA_PRIORITY_EXCLUDE);
 		dp->iface.excluded_rule.override_priority = HPA_PRIORITY_EXCLUDE;
 		dp->iface.excluded_rule.override_rule_priority = HPA_RULE_EXCLUDE;
-		dp->iface.excluded_rule.rule_priority = HPA_RULE_EXCLUDE;
-		dp->iface.excluded_rule.priority = HPA_PRIORITY_EXCLUDE;
+		dp->iface.excluded_rule.safety = 0;
 		dp->iface.excluded_rule.rule.filter_accept = hpa_excluded_filter_accept;
-		dp->iface.excluded_rule.rule.name = "Excluded Prefix";
 
 		//Set the excluded prefix
 		hpa_dp_update(hpa, dp, preferred_until,
@@ -1595,6 +1585,13 @@ static int hpa_pd_filter_accept(__unused struct pa_rule *rule, struct pa_ldp *ld
 	return !prefix_is_ipv4(&dp);
 }
 
+pa_plen hpa_lease_desired_plen_cb(struct pa_rule_random *r, struct pa_ldp *ldp,
+			uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
+{
+	hpa_lease l = container_of(r, hpa_lease_s, rule_rand);
+	return (l->hint_len < HPA_PD_MIN_PLEN)?HPA_PD_MIN_PLEN:l->hint_len;
+}
+
 hpa_lease hpa_pd_add_lease(hncp_pa hp, const char *duid, uint8_t hint_len,
 		hpa_pd_cb cb, void *priv)
 {
@@ -1612,20 +1609,12 @@ hpa_lease hpa_pd_add_lease(hncp_pa hp, const char *duid, uint8_t hint_len,
 	l->pal.type = HPA_LINK_T_LEASE;
 
 	//Init random rule
-	pa_rule_random_init(&l->rule_rand);
-	l->rule_rand.desired_plen = (l->hint_len < HPA_PD_MIN_PLEN)?
-			HPA_PD_MIN_PLEN:l->hint_len;
-	l->rule_rand.priority = HPA_PRIORITY_PD;
-	l->rule_rand.rule_priority = HPA_RULE_CREATE;
-	l->rule_rand.pseudo_random_seed = (uint8_t *)l->pa_link_name;
-	l->rule_rand.pseudo_random_seedlen = strlen(l->pa_link_name);
-	l->rule_rand.pseudo_random_tentatives = 10;
-	l->rule_rand.random_set_size = 128;
-
-	//Set the filter
+	pa_rule_random_init(&l->rule_rand, "Downstream PD Random Prefix",
+			HPA_RULE_CREATE, HPA_PRIORITY_PD, hpa_lease_desired_plen_cb, 128);
+	pa_rule_random_prandconf(&l->rule_rand, 10,
+			(uint8_t *)l->pa_link_name, strlen(l->pa_link_name));
 	l->rule_rand.rule.filter_accept = hpa_pd_filter_accept;
 	l->rule_rand.rule.filter_private = l;
-	l->rule_rand.rule.name = "Downstream PD Random Prefix";
 
 	//todo: Stable storage
 
@@ -1736,16 +1725,15 @@ static void hpa_conf_update_cb(struct vlist_tree *tree,
 				pa_rule_del(&i->hpa->pa, &old->prefix.rule.rule);
 
 			if(new) {
-				pa_rule_static_init(&new->prefix.rule);
+				pa_rule_static_init(&new->prefix.rule, "Iface Static Prefix",
+						hpa_conf_prefix_get_prefix,
+						HPA_RULE_STATIC, HPA_PRIORITY_STATIC);
 				new->prefix.rule.get_prefix = hpa_conf_prefix_get_prefix;
-				new->prefix.rule.safety = 1;
-				new->prefix.rule.priority = HPA_PRIORITY_STATIC;
-				new->prefix.rule.rule_priority = HPA_RULE_STATIC;
 				new->prefix.rule.override_priority = HPA_PRIORITY_STATIC;
 				new->prefix.rule.override_rule_priority = HPA_RULE_STATIC;
+				new->prefix.rule.safety = 1;
 				new->prefix.rule.rule.filter_accept = hpa_conf_filter_accept;
 				new->prefix.rule.rule.filter_private = new;
-				new->prefix.rule.rule.name = "Iface Static Prefix";
 				if(i->pa_enabled)
 					pa_rule_add(&i->hpa->pa, &new->prefix.rule.rule);
 			}
@@ -1755,16 +1743,15 @@ static void hpa_conf_update_cb(struct vlist_tree *tree,
 				pa_rule_del(&i->hpa->pa, &old->link_id.rule.rule);
 
 			if(new) {
-				pa_rule_static_init(&new->link_id.rule);
+				pa_rule_static_init(&new->link_id.rule, "Iface Link ID",
+						hpa_conf_link_id_get_prefix,
+						HPA_RULE_LINK_ID, HPA_PRIORITY_LINK_ID);
 				new->link_id.rule.get_prefix = hpa_conf_link_id_get_prefix;
-				new->link_id.rule.safety = 1;
-				new->link_id.rule.priority = HPA_PRIORITY_LINK_ID;
-				new->link_id.rule.rule_priority = HPA_RULE_LINK_ID;
 				new->link_id.rule.override_priority = HPA_PRIORITY_LINK_ID;
 				new->link_id.rule.override_rule_priority = HPA_RULE_LINK_ID;
+				new->link_id.rule.safety = 1;
 				new->link_id.rule.rule.filter_accept = hpa_conf_filter_accept;
 				new->link_id.rule.rule.filter_private = new;
-				new->link_id.rule.rule.name = "Iface Link ID";
 				if(i->pa_enabled)
 					pa_rule_add(&i->hpa->pa, &new->link_id.rule.rule);
 			}
@@ -1774,15 +1761,12 @@ static void hpa_conf_update_cb(struct vlist_tree *tree,
 				pa_rule_del(&i->hpa->aa, &old->addr.rule.rule);
 
 			if(new) {
-				pa_rule_static_init(&new->addr.rule);
-				new->addr.rule.get_prefix = hpa_conf_addr_get_prefix;
-				new->addr.rule.safety = 1;
-				new->addr.rule.priority = 1;
-				new->addr.rule.rule_priority = HPA_RULE_ADDRESS;
+				pa_rule_static_init(&new->addr.rule, "Manual Address",
+						hpa_conf_addr_get_prefix, HPA_RULE_ADDRESS, 1);
 				new->addr.rule.override_priority = 1;
 				new->addr.rule.override_rule_priority = HPA_RULE_ADDRESS;
+				new->addr.rule.safety = 1;
 				new->addr.rule.rule.filter_accept = NULL;
-				new->addr.rule.rule.name = "Manual Address";
 				if(i->pa_enabled)
 					pa_rule_add(&i->hpa->aa, &new->addr.rule.rule);
 			}

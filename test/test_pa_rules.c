@@ -71,6 +71,13 @@ struct in6_addr
 	sput_fail_if(pa_prefix_cmp(p, pl, &(arg)->prefix, (arg)->plen), "Correct prefix");
 	//sput_fail_unless(prio == (arg)->priority, "Correct advertise priority");
 
+pa_plen test_desired_plen = 0;
+pa_plen test_desired_plen_cb(__unused struct pa_rule_random *r,
+		__unused struct pa_ldp *ldp,
+		__unused uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
+{
+	return test_desired_plen;
+}
 
 void pa_rules_random_override()
 {
@@ -89,20 +96,13 @@ void pa_rules_random_override()
 	struct pa_ldp ldp = {.core = &core, .dp = &dp, .link = &link1};
 	struct pa_advp advp1, advp2;
 	struct pa_rule_arg arg;
-	PA_WARNING("NYAAAAA");
+
 	test_core_init(&core, 5);
 	struct pa_rule_random random;
-	pa_rule_random_init(&random);
-	random.desired_plen_cb = NULL;
-	random.accept_proposed_cb = NULL;
-	random.rule_priority = 3;
-	random.priority = 4;
+	pa_rule_random_init(&random, NULL, 3, 4, test_desired_plen_cb, 4);
 	random.pseudo_random_seed = (uint8_t *)"SEED";
 	random.pseudo_random_seedlen = 4;
 	random.pseudo_random_tentatives = 0;
-	random.random_set_size = 4;
-	random.override_priority = 0;
-	random.override_rule_priority = 0;
 
 	test_ldp_add(&core, &existing_ldp);
 	advp1.priority = 4;
@@ -110,7 +110,7 @@ void pa_rules_random_override()
 	advp1.plen = 61;
 	test_advp_add(&core, &advp1);
 
-	random.desired_plen = 62;
+	test_desired_plen = 62;
 
 	fr_random_push(0);
 	ldp.backoff = 1;
@@ -174,18 +174,12 @@ void pa_rules_random()
 	test_core_init(&core, 5);
 
 	struct pa_rule_random random;
-	pa_rule_random_init(&random);
-	random.desired_plen_cb = NULL;
-	random.desired_plen = 12;
+	pa_rule_random_init(&random, NULL, 3, 4, test_desired_plen_cb, 4);
+	test_desired_plen = 12;
 	random.accept_proposed_cb = NULL;
-	random.rule_priority = 3;
-	random.priority = 4;
 	random.pseudo_random_seed = (uint8_t *)"SEED";
 	random.pseudo_random_seedlen = 4;
 	random.pseudo_random_tentatives = 2;
-	random.random_set_size = 4;
-	random.override_priority = 0;
-	random.override_rule_priority = 0;
 
 	ldp.best_assignment = &advp;
 	ldp.assigned = 1;
@@ -213,7 +207,7 @@ void pa_rules_random()
 
 	dp.prefix = p1;
 	dp.plen = 56;
-	random.desired_plen = 60;
+	test_desired_plen = 60;
 
 	fr_md5_push(&p1);
 	test_rule_match(&random.rule, &ldp, 1, &arg, PA_RULE_PUBLISH);
@@ -227,14 +221,14 @@ void pa_rules_random()
 	test_rule_prefix(&arg, &p11, 60, 4);
 
 	//Different plen
-	random.desired_plen = 64;
+	test_desired_plen = 64;
 	fr_md5_push(&p102);
 	fr_md5_push(&p101);
 	test_rule_match(&random.rule, &ldp, 1, &arg, PA_RULE_PUBLISH);
 	test_rule_prio(&arg, 3);
 	test_rule_prefix(&arg, &p101, 64, 4);
 
-	random.desired_plen = 60;
+	test_desired_plen = 60;
 	advp.prefix = p1;
 	advp.plen = 56;
 	test_advp_add(&core, &advp);
@@ -258,7 +252,7 @@ void pa_rules_random()
 	test_advp_del(&core, &advp);
 
 	//Test random
-	random.desired_plen = 60;
+	test_desired_plen = 60;
 	random.pseudo_random_tentatives = 0;
 	fr_random_push(0);
 	test_rule_match(&random.rule, &ldp, 1, &arg, PA_RULE_PUBLISH);
@@ -307,9 +301,7 @@ void pa_rules_adopt()
 	test_core_init(&core, 5);
 
 	struct pa_rule_adopt adopt;
-	pa_rule_adopt_init(&adopt);
-	adopt.priority = 5;
-	adopt.rule_priority = 3;
+	pa_rule_adopt_init(&adopt, NULL, 3, 5);
 	ldp.assigned = 0;
 	test_rule_get_max_prio(&adopt.rule, &ldp, 0);
 

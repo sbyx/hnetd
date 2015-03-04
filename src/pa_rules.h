@@ -15,13 +15,6 @@
 
 #include "pa_core.h"
 
-#define pa_rule_init(rule, get_prio, max_prio, match_f) do{ \
-	(rule)->get_max_priority = get_prio; \
-	(rule)->max_priority = max_prio; \
-	(rule)->match = match_f; \
-	(rule)->filter_accept = NULL; \
-	(rule)->filter_private = NULL;} while(0)
-
 /**
  * Simple adoption rule.
  *
@@ -42,12 +35,8 @@ struct pa_rule_adopt {
 	pa_priority priority;
 };
 
-pa_rule_priority pa_rule_adopt_get_max_priority(struct pa_rule *rule, struct pa_ldp *ldp);
-enum pa_rule_target pa_rule_adopt_match(struct pa_rule *rule, struct pa_ldp *ldp,
-			pa_rule_priority, struct pa_rule_arg *);
-
-#define pa_rule_adopt_init(rule_adopt) pa_rule_init(&(rule_adopt)->rule, \
-						pa_rule_adopt_get_max_priority, 0, pa_rule_adopt_match)
+void pa_rule_adopt_init(struct pa_rule_adopt *r, const char *name,
+		pa_rule_priority rule_priority, pa_priority priority);
 
 /**
  * Randomized prefix selection.
@@ -56,6 +45,9 @@ enum pa_rule_target pa_rule_adopt_match(struct pa_rule *rule, struct pa_ldp *ldp
  * This rule implements the prefix selection algorithm detailed in the prefix
  * assignment specifications.
  */
+struct pa_rule_random;
+typedef pa_plen (*pa_rule_desired_plen_cb)(struct pa_rule_random *, struct pa_ldp *,
+			uint16_t prefix_count[PA_RAND_MAX_PLEN + 1]);
 struct pa_rule_random {
 	/* Parent rule. Initialized with pa_rule_random_init. */
 	struct pa_rule rule;
@@ -66,12 +58,9 @@ struct pa_rule_random {
 	/* The Advertised Prefix Priority used when publishing the new prefix. */
 	pa_priority priority;
 
-	/* The desired prefix length. When desired_plen_cb is not NULL, it is
-	 * called with the available prefix count for each prefix length.
-	 * desired_plen is used otherwise. */
-	pa_plen (*desired_plen_cb)(struct pa_rule_random *, struct pa_ldp *,
-			uint16_t prefix_count[PA_RAND_MAX_PLEN + 1]);
-	pa_plen desired_plen;
+	/* The desired prefix length callback.
+	 * It is called with the available prefix count for each prefix length. */
+	pa_rule_desired_plen_cb desired_plen_cb;
 
 	/* When set, pseudo-random or random prefixes which are suitable are
 	 * proposed by calling this function. If 0 is returned, another prefix is
@@ -102,13 +91,14 @@ struct pa_rule_random {
 	uint8_t safety;
 };
 
-pa_rule_priority pa_rule_random_get_max_priority(struct pa_rule *rule, struct pa_ldp *ldp);
-enum pa_rule_target pa_rule_random_match(struct pa_rule *rule, struct pa_ldp *ldp,
-			pa_rule_priority, struct pa_rule_arg *);
+void pa_rule_random_init(struct pa_rule_random *r, const char *name,
+		pa_rule_priority rule_priority, pa_priority priority,
+		pa_rule_desired_plen_cb desired_plen_cb,
+		uint16_t random_set_size);
 
-#define pa_rule_random_init(rule_random) pa_rule_init(&(rule_random)->rule,  \
-			pa_rule_random_get_max_priority, 0, pa_rule_random_match)
-
+void pa_rule_random_prandconf(struct pa_rule_random *r,
+		uint16_t pseudo_random_tentatives,
+		uint8_t *pseudo_random_seed, uint16_t pseudo_random_seedlen);
 
 /**
  * Prefix static configuration.
@@ -116,6 +106,9 @@ enum pa_rule_target pa_rule_random_match(struct pa_rule *rule, struct pa_ldp *ld
  * This rule is used to reflect the desire to assign a given prefix.
  * It may override existing assignment depending on overriding priorities.
  */
+struct pa_rule_static;
+typedef int (*pa_rule_get_prefix_cb)(struct pa_rule_static *, struct pa_ldp *,
+		pa_prefix *prefix, pa_plen *plen);
 struct pa_rule_static {
 	/* Parent rule. Initialized with pa_rule_static_init. */
 	struct pa_rule rule;
@@ -123,8 +116,7 @@ struct pa_rule_static {
 	/* Called in order to get the prefix and prefix length values.
 	 * Must return 0 in case of success, a non-null value otherwise.
 	 * Any prefix may be returned. If it is invalid, it will be ignored. */
-	int (*get_prefix)(struct pa_rule_static *, struct pa_ldp *,
-			pa_prefix *prefix, pa_plen *plen);
+	pa_rule_get_prefix_cb get_prefix;
 
 	/* The internal rule priority */
 	pa_rule_priority rule_priority;
@@ -158,11 +150,8 @@ struct pa_rule_static {
 	pa_plen _plen;
 };
 
-pa_rule_priority pa_rule_static_get_max_priority(struct pa_rule *rule, struct pa_ldp *ldp);
-enum pa_rule_target pa_rule_static_match(struct pa_rule *rule, struct pa_ldp *ldp,
-			pa_rule_priority, struct pa_rule_arg *);
-
-#define pa_rule_static_init(rule_static) pa_rule_init(&(rule_static)->rule,  \
-		pa_rule_static_get_max_priority, 0, pa_rule_static_match)
+void pa_rule_static_init(struct pa_rule_static *r, const char *name,
+		pa_rule_get_prefix_cb get_prefix,
+		pa_rule_priority rule_priority, pa_priority priority);
 
 #endif

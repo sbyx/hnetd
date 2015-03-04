@@ -203,13 +203,9 @@ void pa_core_override() {
 	struct pa_ldp *ldp;
 	struct pa_filter_ldp f1, f2;
 
-	pa_rule_static_init(&s1);
-	s1.rule.name = "static rule 1";
+	pa_rule_static_init(&s1, "static rule 1", static_rule_get_prefix, 3, 3);
 	s1.override_priority = 0;
 	s1.override_rule_priority = 0;
-	s1.priority = 3;
-	s1.rule_priority = 3;
-	s1.get_prefix = static_rule_get_prefix;
 	pa_prefix_cpy(&advp1_01.prefix, 80, &sr_prefix, sr_plen);
 	pa_filter_ldp_init(&f1, &l1, NULL);
 	pa_rule_set_filter(&s1.rule, &f1.filter);
@@ -300,13 +296,7 @@ void pa_core_override() {
 	s1.rule_priority = 2;
 	s1.override_rule_priority = 2;
 
-	pa_rule_static_init(&s2);
-	s2.rule.name = "static rule 1";
-	s2.override_priority = 0;
-	s2.override_rule_priority = 0;
-	s2.priority = 2;
-	s2.rule_priority = 5;
-	s2.get_prefix = static_rule_get_prefix2;
+	pa_rule_static_init(&s2, "static rule 1", static_rule_get_prefix2, 5, 2);
 	pa_prefix_cpy(&advp1_01.prefix, 75, &sr_prefix2, sr_plen2); //Colliding prefix
 	pa_filter_ldp_init(&f2, &l2, NULL);
 	pa_rule_set_filter(&s2.rule, &f2.filter);

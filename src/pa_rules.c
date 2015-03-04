@@ -15,6 +15,14 @@
 #define __unused __attribute__ ((unused))
 #endif
 
+#define pa_rule_init(rule, get_prio, max_prio, match_f, name) do{ \
+	(rule)->get_max_priority = get_prio; \
+	(rule)->max_priority = max_prio; \
+	(rule)->match = match_f; \
+	(rule)->filter_accept = NULL; \
+	(rule)->filter_private = NULL; \
+	(rule)->name = name; } while(0)
+
 void pa_rule_prefix_nth(pa_prefix *dst, pa_prefix *container, pa_plen container_len, uint32_t n, pa_plen plen)
 {
 	uint32_t i = htonl(n);
@@ -139,6 +147,15 @@ enum pa_rule_target pa_rule_adopt_match(struct pa_rule *rule, __unused struct pa
 	return PA_RULE_ADOPT;
 }
 
+void pa_rule_adopt_init(struct pa_rule_adopt *r, const char *name,
+		pa_rule_priority rule_priority, pa_priority priority)
+{
+	pa_rule_init(&(r)->rule, pa_rule_adopt_get_max_priority,
+			0, pa_rule_adopt_match, name);
+	r->rule_priority = rule_priority;
+	r->priority = priority;
+}
+
 
 /**** Random rule ****/
 
@@ -244,9 +261,7 @@ enum pa_rule_target pa_rule_random_match(struct pa_rule *rule, struct pa_ldp *ld
 	uint16_t prefix_count[PA_RAND_MAX_PLEN + 1];
 	pa_rule_prefix_count(ldp, prefix_count, PA_RAND_MAX_PLEN);
 
-	pa_plen desired_plen = (rule_r->desired_plen_cb)?
-			rule_r->desired_plen_cb(rule_r, ldp, prefix_count):rule_r->desired_plen;
-
+	pa_plen desired_plen = rule_r->desired_plen_cb(rule_r, ldp, prefix_count);
 	uint32_t found;
 	pa_plen min_plen;
 	uint32_t overflow_n;
@@ -317,6 +332,34 @@ choose:
 	return PA_RULE_PUBLISH;
 }
 
+void pa_rule_random_init(struct pa_rule_random *r, const char *name,
+		pa_rule_priority rule_priority, pa_priority priority,
+		pa_rule_desired_plen_cb desired_plen_cb,
+		uint16_t random_set_size)
+{
+	pa_rule_init(&r->rule, pa_rule_random_get_max_priority,
+			0, pa_rule_random_match, name);
+	r->rule_priority = rule_priority;
+	r->priority = priority;
+	r->desired_plen_cb = desired_plen_cb;
+	r->random_set_size = random_set_size;
+	r->override_priority = 0;
+	r->override_rule_priority = 0;
+	r->safety = 0;
+	r->pseudo_random_seed = NULL;
+	r->pseudo_random_seedlen = 0;
+	r->accept_proposed_cb = NULL;
+}
+
+void pa_rule_random_prandconf(struct pa_rule_random *r,
+		uint16_t tentatives,
+		uint8_t *seed, uint16_t seedlen)
+{
+	r->pseudo_random_seed = seed;
+	r->pseudo_random_seedlen = seedlen;
+	r->pseudo_random_tentatives = tentatives;
+}
+
 /**** Static rule ****/
 
 pa_rule_priority pa_rule_static_get_max_priority(struct pa_rule *rule, struct pa_ldp *ldp)
@@ -343,4 +386,15 @@ enum pa_rule_target pa_rule_static_match(struct pa_rule *rule, struct pa_ldp *ld
 	pa_arg->priority = srule->priority;
 	pa_prefix_cpy(&srule->_prefix, srule->_plen, &pa_arg->prefix, pa_arg->plen);
 	return PA_RULE_PUBLISH;
+}
+
+void pa_rule_static_init(struct pa_rule_static *r, const char *name,
+		pa_rule_get_prefix_cb get_prefix,
+		pa_rule_priority rule_priority, pa_priority priority)
+{
+	pa_rule_init(&(r)->rule, pa_rule_static_get_max_priority,
+			0, pa_rule_static_match, name);
+	r->get_prefix = get_prefix;
+	r->rule_priority = rule_priority;
+	r->priority = priority;
 }
