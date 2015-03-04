@@ -151,6 +151,83 @@ pa_rule_priority pa_rule_random_get_max_priority(struct pa_rule *rule, struct pa
 	return rule_r->rule_priority;
 }
 
+enum pa_rule_target pa_rule_random_override_match(struct pa_rule *rule, struct pa_ldp *ldp,
+			__unused pa_rule_priority best_match_priority, struct pa_rule_arg *pa_arg,
+			pa_plen desired_plen)
+{
+	struct pa_rule_random *rule_r = container_of(rule, struct pa_rule_random, rule);
+
+	if(!rule_r->override_priority && !rule_r->override_rule_priority)
+		return PA_RULE_NO_MATCH;
+
+	//Let's try to find a prefix we could override.
+	pa_prefix *best_p = NULL;
+	pa_plen best_plen;
+	uint8_t best_type;
+	struct pa_pentry *pe;
+	btrie_for_each_down_entry(pe, &ldp->core->prefixes,
+			(btrie_key_t *)&ldp->dp->prefix, ldp->dp->plen, be) {
+		pa_prefix *p;
+		pa_plen plen;
+		if(pe->type == PAT_ASSIGNED) {
+			struct pa_ldp *ldp2 = container_of(pe, struct pa_ldp, in_core);
+			p = &ldp2->prefix;
+			plen = ldp2->plen;
+		} else {
+			struct pa_advp *advp = container_of(pe, struct pa_advp, in_core);
+			p = &advp->prefix;
+			plen = advp->plen;
+		}
+
+		if((plen > desired_plen) || !pa_rule_valid_assignment(ldp, p, plen,
+				rule_r->override_rule_priority, rule_r->override_priority,
+				rule_r->safety))
+			continue;
+
+		if(!best_p || best_plen > plen || (best_plen == plen &&
+				best_type == PAT_ADVERTISED && pe->type == PAT_ASSIGNED)) {
+			best_p = p;
+			best_plen = plen;
+			best_type = pe->type;
+		}
+	}
+
+	if(!best_p) {
+		PA_INFO("No existing prefix can be overridden");
+		return PA_RULE_NO_MATCH;
+	}
+
+	PA_INFO("Overriding %s prefix %s",
+			(best_type==PAT_ADVERTISED)?"distant":"local",
+					pa_prefix_repr(best_p, best_plen));
+
+	uint32_t set_size = ((desired_plen - best_plen) >= 32)?
+			(1<<31):(1<<(desired_plen - best_plen));
+	if(set_size > rule_r->random_set_size)
+		set_size = rule_r->random_set_size;
+
+	/* Select a random prefix */
+	int i;
+	pa_prefix tentative;
+	for(i=0; i<100; i++) { //No more than 100 tentatives if they are all rejected
+		uint32_t id = htonl(pa_rand() % set_size);
+		memset(&tentative, 0, sizeof(tentative));
+		pa_prefix_cpy(best_p, desired_plen, &tentative, desired_plen);
+		bmemcpy_shift(&tentative, best_plen, &id, 32 - (desired_plen - best_plen),
+				desired_plen - best_plen);
+
+		if(!rule_r->accept_proposed_cb || rule_r->accept_proposed_cb(rule_r, ldp, &tentative, desired_plen)) {
+			goto choose;
+		} else {
+			PA_DEBUG("Random prefix %s was rejected by user", pa_prefix_repr(&tentative, desired_plen));
+		}
+	}
+
+choose:
+	pa_prefix_cpy(&tentative, desired_plen, &pa_arg->prefix, pa_arg->plen);
+	return PA_RULE_PUBLISH;
+}
+
 enum pa_rule_target pa_rule_random_match(struct pa_rule *rule, struct pa_ldp *ldp,
 			__unused pa_rule_priority best_match_priority, struct pa_rule_arg *pa_arg)
 {
@@ -177,8 +254,10 @@ enum pa_rule_target pa_rule_random_match(struct pa_rule *rule, struct pa_ldp *ld
 
 
 	if(!found) { //No more available prefixes
-		PA_INFO("No prefix candidates of length %d could be found in %s", (int)desired_plen, pa_prefix_repr(&ldp->dp->prefix, ldp->dp->plen));
-		return PA_RULE_NO_MATCH;
+		PA_INFO("No prefix candidates of length %d could be found in %s",
+				(int)desired_plen, pa_prefix_repr(&ldp->dp->prefix, ldp->dp->plen));
+		return pa_rule_random_override_match(rule, ldp, best_match_priority,
+				pa_arg, desired_plen);
 	}
 
 	PA_DEBUG("Found %"PRIu32" prefix candidates of length %d in %s", found, (int)desired_plen, pa_prefix_repr(&ldp->dp->prefix, ldp->dp->plen));

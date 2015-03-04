@@ -93,6 +93,13 @@ struct pa_rule_random {
 	/* Seed and seed length used for the pseudo-random tentatives. */
 	uint8_t *pseudo_random_seed;
 	uint16_t pseudo_random_seedlen;
+
+	/* If an available prefix cannot be found, another assigned prefix might
+	 * be overridden. Prefix of smaller length is preferred.
+	 */
+	pa_rule_priority override_rule_priority;
+	pa_priority override_priority;
+	uint8_t safety;
 };
 
 pa_rule_priority pa_rule_random_get_max_priority(struct pa_rule *rule, struct pa_ldp *ldp);

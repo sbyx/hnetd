@@ -8,8 +8,10 @@
 #include <stdio.h>
 #define TEST_DEBUG(format, ...) printf("TEST Debug   : "format"\n", ##__VA_ARGS__)
 
-#include "pa_core.h"
 int log_level = 8;
+#include "hnetd.h"
+
+#include "pa_core.h"
 
 void test_core_init(struct pa_core *core, uint32_t node_id)
 {
@@ -26,6 +28,17 @@ void test_advp_add(struct pa_core *core, struct pa_advp *advp)
 void test_advp_del(__unused struct pa_core *core, struct pa_advp *advp)
 {
 	btrie_remove(&advp->in_core.be);
+}
+
+void test_ldp_add(struct pa_core *core, struct pa_ldp *ldp)
+{
+	ldp->in_core.type = PAT_ASSIGNED;
+	sput_fail_if(btrie_add(&core->prefixes, &ldp->in_core.be, (btrie_key_t *)&ldp->prefix, ldp->plen), "Adding Advertised Prefix");
+}
+
+void test_ldp_del(__unused struct pa_core *core, struct pa_ldp *ldp)
+{
+	btrie_remove(&ldp->in_core.be);
 }
 
 struct in6_addr
@@ -59,6 +72,96 @@ struct in6_addr
 	//sput_fail_unless(prio == (arg)->priority, "Correct advertise priority");
 
 
+void pa_rules_random_override()
+{
+	struct in6_addr
+		x00 = {{{0x20, 0x01, 0, 0, 0, 0, 0x00, 0x00}}},
+		x01 = {{{0x20, 0x01, 0, 0, 0, 0, 0x00, 0x04}}},
+		x10 = {{{0x20, 0x01, 0, 0, 0, 0, 0x00, 0x08}}},
+		x11 = {{{0x20, 0x01, 0, 0, 0, 0, 0x00, 0x0c}}};
+	struct pa_core core;
+	struct pa_dp dp = {.prefix = x00, .plen = 60};
+	struct pa_link link1 = {.name = "L1"};
+	struct pa_link link2 = {.name = "L2"};
+	struct pa_ldp existing_ldp = {.core = &core, .dp = &dp,
+			.link = &link2, .prefix = x10, .plen = 62,
+			.rule_priority = 3, .rule = (void *)1, .assigned = 1, .published = 1};
+	struct pa_ldp ldp = {.core = &core, .dp = &dp, .link = &link1};
+	struct pa_advp advp1, advp2;
+	struct pa_rule_arg arg;
+	PA_WARNING("NYAAAAA");
+	test_core_init(&core, 5);
+	struct pa_rule_random random;
+	pa_rule_random_init(&random);
+	random.desired_plen_cb = NULL;
+	random.accept_proposed_cb = NULL;
+	random.rule_priority = 3;
+	random.priority = 4;
+	random.pseudo_random_seed = (uint8_t *)"SEED";
+	random.pseudo_random_seedlen = 4;
+	random.pseudo_random_tentatives = 0;
+	random.random_set_size = 4;
+	random.override_priority = 0;
+	random.override_rule_priority = 0;
+
+	test_ldp_add(&core, &existing_ldp);
+	advp1.priority = 4;
+	advp1.prefix = x00;
+	advp1.plen = 61;
+	test_advp_add(&core, &advp1);
+
+	random.desired_plen = 62;
+
+	fr_random_push(0);
+	ldp.backoff = 1;
+	test_rule_match(&random.rule, &ldp, 1, &arg, PA_RULE_PUBLISH);
+	test_rule_prio(&arg, 3);
+	test_rule_prefix(&arg, &x11, 62, 4);
+
+	advp2.priority = 4;
+	advp2.prefix = x11;
+	advp2.plen = 62;
+	test_advp_add(&core, &advp2);
+	test_rule_match(&random.rule, &ldp, 1, &arg, PA_RULE_NO_MATCH);
+
+	//Now let's authorize override
+	advp1.priority = 3;
+	random.override_priority = 4;
+	random.priority = 5;
+	fr_random_push(1);
+	test_rule_match(&random.rule, &ldp, 1, &arg, PA_RULE_PUBLISH);
+	test_rule_prio(&arg, 3);
+	test_rule_prefix(&arg, &x01, 62, 5);
+
+	advp2.priority = 3;
+	fr_random_push(0);
+	test_rule_match(&random.rule, &ldp, 1, &arg, PA_RULE_PUBLISH);
+	test_rule_prio(&arg, 3);
+	test_rule_prefix(&arg, &x00, 62, 5);
+
+	advp1.priority = 4;
+	fr_random_push(0);
+	test_rule_match(&random.rule, &ldp, 1, &arg, PA_RULE_PUBLISH);
+	test_rule_prio(&arg, 3);
+	test_rule_prefix(&arg, &x11, 62, 5);
+
+	existing_ldp.rule_priority = 2;
+	existing_ldp.priority = 5;
+	random.override_rule_priority = 3;
+	random.safety = 1;
+	fr_random_push(0);
+	test_rule_match(&random.rule, &ldp, 1, &arg, PA_RULE_PUBLISH);
+	test_rule_prio(&arg, 3);
+	test_rule_prefix(&arg, &x11, 62, 5);
+
+	random.safety = 0;
+	fr_random_push(0);
+	test_rule_match(&random.rule, &ldp, 1, &arg, PA_RULE_PUBLISH);
+	test_rule_prio(&arg, 3);
+	test_rule_prefix(&arg, &x10, 62, 5);
+}
+
+
 void pa_rules_random()
 {
 	struct pa_core core;
@@ -81,6 +184,8 @@ void pa_rules_random()
 	random.pseudo_random_seedlen = 4;
 	random.pseudo_random_tentatives = 2;
 	random.random_set_size = 4;
+	random.override_priority = 0;
+	random.override_rule_priority = 0;
 
 	ldp.best_assignment = &advp;
 	ldp.assigned = 1;
@@ -216,10 +321,12 @@ void pa_rules_adopt()
 }
 
 int main() {
+	openlog("hnetd", LOG_PERROR | LOG_PID, LOG_DAEMON);
 	sput_start_testing();
 	sput_enter_suite("Prefix Assignment Rules tests"); /* optional */
 	sput_run_test(pa_rules_adopt);
 	sput_run_test(pa_rules_random);
+	sput_run_test(pa_rules_random_override);
 	sput_leave_suite(); /* optional */
 	sput_finish_testing();
 	return sput_get_return_value();
