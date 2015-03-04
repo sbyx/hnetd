@@ -106,7 +106,7 @@ struct hpa_iface_struct {
 	struct pa_link pal;
 	struct pa_rule_adopt pa_adopt;
 	struct pa_rule_random pa_rand;
-
+	struct pa_rule_random pa_override;
 
 	char aa_name[IFNAMSIZ + HPA_LINK_NAME_LEN];
 	struct pa_link aal;

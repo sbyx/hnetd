@@ -121,6 +121,16 @@ static hpa_conf hpa_conf_get_by_type(hpa_iface i, unsigned int type)
 	return NULL;
 }
 
+static pa_plen hpa_get_biggest(uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
+{
+	int i;
+	for(i=0; i<=PA_RAND_MAX_PLEN; i++)
+		if(prefix_count[i])
+			return i;
+
+	return PA_RAND_MAX_PLEN+1;
+}
+
 static pa_plen hpa_desired_plen(hpa_iface iface, struct pa_ldp *ldp,
 		pa_plen biggest)
 {
@@ -151,20 +161,25 @@ static pa_plen hpa_desired_plen_cb(struct pa_rule_random *rule_r,
 		struct pa_ldp *ldp,
 		uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
 {
-	pa_plen biggest = 129;
-	int i;
-	for(i=0; i<=PA_RAND_MAX_PLEN; i++) {
-		if(prefix_count[i]) {
-			biggest = i;
-			break;
-		}
-	}
-
-	if(biggest == 129)
-		return ldp->dp->plen;
+	pa_plen biggest = hpa_get_biggest(prefix_count);
+	if(biggest > 128)
+		return 0;
 
 	hpa_iface iface = container_of(rule_r, hpa_iface_s, pa_rand);
 	return hpa_desired_plen(iface, ldp, biggest);
+}
+
+static pa_plen hpa_desired_plen_override_cb(
+		__unused struct pa_rule_random *rule_r,
+		struct pa_ldp *ldp,
+		__unused uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
+{
+	hpa_dp dp = container_of(ldp->dp, hpa_dp_s, pa);
+	if(prefix_is_ipv4(&dp->dp.prefix)) {
+		return 124;
+	} else {
+		return 80;
+	}
 }
 
 static int hpa_accept_proposed_addr(__unused struct pa_rule_random *r, struct pa_ldp *ldp,
@@ -207,9 +222,28 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	i->pa_rand.accept_proposed_cb = NULL;
 	i->pa_rand.priority = HPA_PRIORITY_CREATE;
 	i->pa_rand.rule_priority = HPA_RULE_CREATE;
+	i->pa_rand.override_priority = 0;
+	i->pa_rand.override_rule_priority = 0;
 	i->pa_rand.rule.filter_accept = hpa_iface_filter_accept;
 	i->pa_rand.rule.filter_private = i;
 	i->pa_rand.rule.name = "Random Prefix";
+
+	//Scarcity rule
+	pa_rule_random_init(&i->pa_override);
+	i->pa_override.pseudo_random_seed = (uint8_t *)i->pa_name; //todo use EUI64
+	i->pa_override.pseudo_random_seedlen = strlen(i->pa_name);
+	i->pa_override.pseudo_random_tentatives = HPA_PSEUDO_RAND_TENTATIVES;
+	i->pa_override.random_set_size = HPA_RAND_SET_SIZE;
+	i->pa_override.desired_plen_cb = hpa_desired_plen_override_cb;
+	i->pa_override.accept_proposed_cb = NULL;
+	i->pa_override.priority = HPA_PRIORITY_SCARCITY;
+	i->pa_override.rule_priority = HPA_RULE_CREATE_SCARCITY;
+	i->pa_override.override_priority = HPA_PRIORITY_SCARCITY;
+	i->pa_override.safety = 1;
+	i->pa_override.rule_priority = HPA_RULE_CREATE_SCARCITY;
+	i->pa_override.rule.filter_accept = hpa_iface_filter_accept;
+	i->pa_override.rule.filter_private = i;
+	i->pa_override.rule.name = "Override Existing Prefix";
 
 	//Init AA
 	sprintf(i->aa_name, HPA_LINK_NAME_ADDR"%s", i->ifname);
@@ -907,6 +941,7 @@ static void hpa_iface_set_pa_enabled(hncp_pa hpa, hpa_iface i, bool enabled)
 	if(i->pa_enabled) {
 		pa_rule_add(&hpa->pa, &i->pa_adopt.rule);
 		pa_rule_add(&hpa->pa, &i->pa_rand.rule);
+		pa_rule_add(&hpa->pa, &i->pa_override.rule);
 		pa_link_add(&hpa->pa, &i->pal);
 
 		pa_rule_add(&hpa->aa, &i->aa_rand.rule);
@@ -954,6 +989,7 @@ static void hpa_iface_set_pa_enabled(hncp_pa hpa, hpa_iface i, bool enabled)
 		pa_rule_del(&hpa->aa, &i->aa_rand.rule);
 
 		pa_link_del(&i->pal);
+		pa_rule_del(&hpa->pa, &i->pa_override.rule);
 		pa_rule_del(&hpa->pa, &i->pa_rand.rule);
 		pa_rule_del(&hpa->pa, &i->pa_adopt.rule);
 	}
