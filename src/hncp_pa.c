@@ -524,6 +524,12 @@ static void hpa_dp_update(hncp_pa hpa, hpa_dp dp,
 		updated = 1;
 	}
 
+	if(updated && valid_until && prefix_is_ipv6_ula(&dp->dp.prefix)) {
+		//Cache ULA
+		pa_store_cache(&hpa->store, &hpa->store_ula,
+				&dp->dp.prefix.prefix, dp->dp.prefix.plen);
+	}
+
 	if(updated && dp->dp.enabled) { //Only looks for enabled dps
 		struct pa_ldp *ldp, *addr_ldp;
 		pa_for_each_ldp_in_dp(&dp->pa, ldp) {
@@ -764,10 +770,19 @@ static void hpa_ula_to(struct uloop_timeout *to)
 		hpa->ula_backoff = now + delay;
 		L_DEBUG("ULA Spontaneous Generation: Backoff %d ms", delay);
 	} else if(hpa->ula_backoff <= now) { //Time to create
-		L_DEBUG("ULA Spontaneous Generation: Create");
 		//create ula
 		struct prefix ula;
 		if(hpa->ula_conf.use_random_ula) {
+			//first see if there is a cached ULA
+			struct pa_store_prefix *store_p;
+			pa_store_for_each_prefix(&hpa->store_ula, store_p) {
+				pa_prefix_cpy(&store_p->prefix, store_p->plen,
+						&ula.prefix, ula.plen);
+				L_DEBUG("ULA Spontaneous Generation: Used cached prefix %s", PREFIX_REPR(&ula));
+				goto found;
+			}
+
+			L_DEBUG("ULA Spontaneous Generation: Create new random prefix");
 			memcpy(&ula.prefix, &ipv6_ula_prefix.prefix,
 					sizeof(struct in6_addr));
 			//todo: Generate randomly based on RFCXXXX
@@ -778,7 +793,7 @@ static void hpa_ula_to(struct uloop_timeout *to)
 		} else {
 			ula = hpa->ula_conf.ula_prefix;
 		}
-
+found:
 		memset(&hpa->ula_dp, 0, sizeof(hpa->ula_dp));
 		hpa->ula_dp.dp.local = 1;
 		hpa->ula_dp.dp.prefix = ula;
@@ -1585,8 +1600,9 @@ static int hpa_pd_filter_accept(__unused struct pa_rule *rule, struct pa_ldp *ld
 	return !prefix_is_ipv4(&dp);
 }
 
-pa_plen hpa_lease_desired_plen_cb(struct pa_rule_random *r, struct pa_ldp *ldp,
-			uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
+pa_plen hpa_lease_desired_plen_cb(struct pa_rule_random *r,
+		__unused struct pa_ldp *ldp,
+		__unused uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
 {
 	hpa_lease l = container_of(r, hpa_lease_s, rule_rand);
 	return (l->hint_len < HPA_PD_MIN_PLEN)?HPA_PD_MIN_PLEN:l->hint_len;
@@ -1910,14 +1926,17 @@ hncp_pa hncp_pa_create(dncp dncp, struct hncp_link *hncp_link)
 	hp->v4_to.cb = hpa_v4_to;
 
 	//todo: Maybe not best place in create
-	uloop_timeout_set(&hp->ula_to, 3000);
-	uloop_timeout_set(&hp->v4_to, 3000);
+	uloop_timeout_set(&hp->ula_to, 500);
+	uloop_timeout_set(&hp->v4_to, 500);
 
 	pa_core_init(&hp->pa);
 	pa_core_init(&hp->aa);
 	pa_store_init(&hp->store, 100);
 	pa_store_bind(&hp->store, &hp->pa, &hp->store_pa_b);
 	pa_store_bind(&hp->store, &hp->aa, &hp->store_aa_b);
+
+	pa_store_link_init(&hp->store_ula, (void *)1, "ula", 1);
+	pa_store_link_add(&hp->store, &hp->store_ula);
 
 	pa_store_rule_init(&hp->store_pa_r, &hp->store);
 	hp->store_pa_r.rule_priority = HPA_RULE_STORE;

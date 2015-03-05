@@ -206,6 +206,8 @@ struct hncp_pa_struct {
 
 	struct pa_link excluded_link; //Link used to exclude prefixes
 
+	struct pa_store_link store_ula; //Used to store the ULA prefix
+
 	/* iface.c subscription callbacks */
 	struct hncp_pa_iface_user *if_cbs;
 

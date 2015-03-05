@@ -46,7 +46,6 @@
 /* Each stored object has a type. */
 #define PA_STORE_PREFIX "prefix"
 #define PA_STORE_WTOKEN "write_tokens"
-#define PA_STORE_ULA    "ula"
 
 /* Banner displayed at the beginning of the file. */
 #define PA_STORE_BANNER \
@@ -156,6 +155,13 @@ struct pa_store_link {
 	uint32_t n_prefixes;      /* Number of entries currently stored for this Link. */
 };
 
+struct pa_store_prefix {
+	struct list_head in_store;
+	struct list_head in_link;
+	pa_prefix prefix;
+	pa_plen plen;
+};
+
 /**
  * Initializes a storage link structure.
  */
@@ -217,10 +223,26 @@ void pa_store_updated(struct pa_store *store);
  */
 void pa_store_term(struct pa_store *store);
 
-
-
+/**
+ * Adds or removes a store link.
+ *
+ * When a link is added, cached entries with same link name are associated to
+ * the link. When it is removed, cached entries are kept.
+ */
 void pa_store_link_add(struct pa_store *, struct pa_store_link *);
 void pa_store_link_remove(struct pa_store *, struct pa_store_link *);
+
+/**
+ * Manually caches/stores a prefix.
+ */
+int pa_store_cache(struct pa_store *store, struct pa_store_link *link,
+		pa_prefix *prefix, pa_plen plen);
+
+/**
+ * Iterates over all stored prefix in a link.
+ */
+#define pa_store_for_each_prefix(link, prefix_entry) \
+		list_for_each_entry(prefix_entry, &(link)->prefixes, in_link)
 
 /**
  * PA core caching based rule.

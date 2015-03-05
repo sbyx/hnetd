@@ -17,15 +17,6 @@
 #include <unistd.h>
 #include <inttypes.h>
 
-struct pa_store_prefix {
-	struct list_head in_store;
-	struct list_head in_link;
-	pa_prefix prefix;
-	pa_plen plen;
-};
-
-static int pa_store_cache(struct pa_store *store, struct pa_store_link *link, pa_prefix *prefix, pa_plen plen);
-
 static struct pa_store_link *pa_store_link_goc(struct pa_store *store, const char *name, int create)
 {
 	struct pa_store_link *l;
@@ -239,7 +230,7 @@ static void pa_store_uncache_last_from_store(struct pa_store *store)
 	pa_store_uncache(store, l, p);
 }
 
-static int pa_store_cache(struct pa_store *store, struct pa_store_link *link, pa_prefix *prefix, pa_plen plen)
+int pa_store_cache(struct pa_store *store, struct pa_store_link *link, pa_prefix *prefix, pa_plen plen)
 {
 	PA_DEBUG("Caching %s %s", link->name, pa_prefix_repr(prefix, plen));
 	struct pa_store_prefix *p;
@@ -247,8 +238,12 @@ static int pa_store_cache(struct pa_store *store, struct pa_store_link *link, pa
 		if(pa_prefix_equals(prefix, plen, &p->prefix, p->plen)) {
 			//Put existing prefix at head
 			list_move(&p->in_store, &store->prefixes);
-			list_move(&p->in_link, &link->prefixes);
-			pa_store_updated(store);
+			if(p->in_link.prev != &link->prefixes) {
+				//We do not update if it is just moving the first prefix
+				//of the link.
+				list_move(&p->in_link, &link->prefixes);
+				pa_store_updated(store);
+			}
 			return 0;
 		}
 	}

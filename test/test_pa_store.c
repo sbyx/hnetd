@@ -247,6 +247,7 @@ void pa_store_delays_test()
 	sput_fail_unless(store.token_count == 0, "No token left");
 	sput_fail_unless(uloop_timeout_remaining(&store.token_timer) == 8000, "Token timer pending");
 
+	pa_store_cache(&store, &link, &ldp.prefix, 50); //Update, but no token
 	bound.user.applied(&bound.user, &ldp); //Update, but no token
 
 	fu_loop(1);
@@ -263,6 +264,7 @@ void pa_store_delays_test()
 	fu_loop(3);//3 more tokens
 	sput_fail_unless(store.token_count == 3, "3 tokens");
 
+	pa_store_cache(&store, &link, &ldp.prefix, 30);
 	bound.user.applied(&bound.user, &ldp);
 	sput_fail_unless(uloop_timeout_remaining(&store.save_timer) == 3000, "Store timer pending");
 	fu_loop(1); //Write to file
