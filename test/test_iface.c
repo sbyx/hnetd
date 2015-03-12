@@ -30,7 +30,6 @@ struct list_head *__hpa_get_dps(__unused hncp_pa hpa) {return NULL;}
 void platform_set_dhcp(__unused struct iface *c, __unused enum hncp_link_elected elected) {}
 int platform_init(__unused dncp hncp, __unused hncp_pa pa, __unused const char *pd_socket) { return 0; }
 void platform_set_address(__unused struct iface *c, __unused struct iface_addr *addr, __unused bool enable) {}
-void platform_set_route(__unused struct iface *c, __unused struct iface_route *addr, __unused bool enable) {}
 void platform_iface_free(__unused struct iface *c) {}
 void platform_set_internal(__unused struct iface *c, __unused bool internal) {}
 void platform_filter_prefix(__unused struct iface *c, __unused const struct prefix *p, __unused bool enable) {}

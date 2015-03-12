@@ -291,13 +291,6 @@ void platform_set_address(struct iface *c,
 	platform_set_internal(c, false);
 }
 
-void platform_set_route(struct iface *c,
-		__unused struct iface_route *route, __unused bool enable)
-{
-	platform_set_internal(c, false);
-}
-
-
 void platform_set_dhcp(struct iface *c,
 		__unused enum hncp_link_elected elected)
 {
@@ -356,7 +349,6 @@ static void platform_commit(struct uloop_timeout *t)
 
 	void *k, *l, *m;
 	struct iface_addr *a;
-	struct iface_route *r;
 
 	k = blobmsg_open_array(&b, "ipaddr");
 	vlist_for_each_element(&c->assigned, a, node) {
@@ -429,63 +421,7 @@ static void platform_commit(struct uloop_timeout *t)
 	}
 	blobmsg_close_array(&b, k);
 
-	k = blobmsg_open_array(&b, "routes");
-	vlist_for_each_element(&c->routes, r, node) {
-		if (!IN6_IS_ADDR_V4MAPPED(&r->to.prefix))
-			continue;
-
-		l = blobmsg_open_table(&b, NULL);
-
-		char *buf = blobmsg_alloc_string_buffer(&b, "target", INET_ADDRSTRLEN);
-		inet_ntop(AF_INET, &r->to.prefix.s6_addr[12], buf, INET_ADDRSTRLEN);
-		blobmsg_add_string_buffer(&b);
-
-		char *buf2 = blobmsg_alloc_string_buffer(&b, "netmask", 4);
-		snprintf(buf2, 4, "%u", prefix_af_length(&r->to));
-		blobmsg_add_string_buffer(&b);
-
-		char *buf3 = blobmsg_alloc_string_buffer(&b, "gateway", INET_ADDRSTRLEN);
-		inet_ntop(AF_INET, &r->via.s6_addr[12], buf3, INET_ADDRSTRLEN);
-		blobmsg_add_string_buffer(&b);
-
-		blobmsg_add_u32(&b, "metric", r->metric);
-		blobmsg_add_u8(&b, "onlink", true);
-
-		L_DEBUG("	to %s/%s via %s", buf, buf2, buf3);
-
-		blobmsg_close_table(&b, l);
-	}
-	blobmsg_close_array(&b, k);
-
 	k = blobmsg_open_array(&b, "routes6");
-	vlist_for_each_element(&c->routes, r, node) {
-		if (IN6_IS_ADDR_V4MAPPED(&r->to.prefix))
-			continue;
-
-		l = blobmsg_open_table(&b, NULL);
-
-		char *buf = blobmsg_alloc_string_buffer(&b, "target", INET6_ADDRSTRLEN);
-		inet_ntop(AF_INET6, &r->to.prefix, buf, INET6_ADDRSTRLEN);
-		blobmsg_add_string_buffer(&b);
-
-		char *buf2 = blobmsg_alloc_string_buffer(&b, "netmask", 4);
-		snprintf(buf2, 4, "%u", prefix_af_length(&r->to));
-		blobmsg_add_string_buffer(&b);
-
-		char *buf3 = blobmsg_alloc_string_buffer(&b, "gateway", INET6_ADDRSTRLEN);
-		inet_ntop(AF_INET6, &r->via, buf3, INET6_ADDRSTRLEN);
-		blobmsg_add_string_buffer(&b);
-
-		char *buf4 = blobmsg_alloc_string_buffer(&b, "source", PREFIX_MAXBUFFLEN);
-		prefix_ntopc(buf4, PREFIX_MAXBUFFLEN, &r->from.prefix, r->from.plen);
-		blobmsg_add_string_buffer(&b);
-
-		blobmsg_add_u32(&b, "metric", r->metric);
-
-		L_DEBUG("	from %s to %s/%s via %s", buf4, buf, buf2, buf3);
-
-		blobmsg_close_table(&b, l);
-	}
 	vlist_for_each_element(&c->assigned, a, node) {
 		hnetd_time_t preferred = (a->preferred_until - now) / HNETD_TIME_PER_SECOND;
 		hnetd_time_t valid = (a->valid_until - now) / HNETD_TIME_PER_SECOND;

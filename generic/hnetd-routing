@@ -1,55 +1,73 @@
 #!/bin/sh
 
-[ -z "$2" ] && echo "Error: should be run by hnetd" && exit 1
-
-action="$1"
-proto="$2"
-shift 2
-
 BABEL_EXE=/usr/sbin/babeld
 BABEL_PID=/var/run/babeld-hnetd.pid
 ISIS_INIT=/usr/sbin/autoisis
 
-case "$action" in
-	enumerate)
-		## echo PROTOCOL-ID PREFERENCE
-		## need at least fallback to qualify as router
-		echo 0 0
-		## check babel
-		[ -x "$BABEL_EXE" ] && echo 1 128
-		## check IS-IS
-		[ -x "$ISIS_INIT" ] && echo 3 128
-	;;
-	enable|reconfigure|disable)
-		case "$proto" in
-			1)
-                                [ -f $BABEL_PID ] && kill -9 `cat $BABEL_PID`
-	                        #start-stop-daemon -K -q -t -x $BABEL_EXE -p $BABEL_PID
+# Routing table for BFS (also rule priority)
+BFSTABLE=33333
+BFSPROTO=73
 
-				if [ "$action" != "disable" -a -n "$1" ]; then
-				    #start-stop-daemon -S -x $BABEL_EXE -- `echo $BABEL_ARGS` $*
-                                    rm -f $BABEL_PID
-                                    $BABEL_EXE -D -I $BABEL_PID \
-                                      -C "redistribute" \
-                                      -C "redistribute local deny" \
-                                      $*
-                                    # Wait for pid file to actually show up
-                                    [ -f $BABEL_PID ] || sleep 1
-                                    [ -f $BABEL_PID ] || sleep 2
-                                    [ -f $BABEL_PID ] || sleep 4
-				fi 
-			;;
-			3)
-				if [ "$action" = "disable" -o -z "$1" ]; then
-					$ISIS_INIT stop
-				else
-					$ISIS_INIT start "$@"
-				fi
-			;;
-			*)
-				exit 1;
-			;;
-		esac
-		exit 0;
+echo $* >> /tmp/hnetd-routing.log
+
+act=$1
+shift
+
+case "$act" in
+configure)
+	if [ -x "$BABEL_EXE" ]; then
+		[ -f $BABEL_PID ] && kill -9 `cat $BABEL_PID`
+		#start-stop-daemon -K -q -t -x $BABEL_EXE -p $BABEL_PID
+
+		if [ -n "$1" ]; then
+			#start-stop-daemon -S -x $BABEL_EXE -- `echo $BABEL_ARGS` $*
+			rm -f $BABEL_PID
+			$BABEL_EXE -D -I $BABEL_PID \
+				-C "redistribute" \
+				-C "redistribute local deny" \
+				$*
+
+			# Wait for pid file to actually show up
+			[ -f $BABEL_PID ] || sleep 1
+			[ -f $BABEL_PID ] || sleep 2
+			[ -f $BABEL_PID ] || sleep 4
+		fi
+	elif [ -x "$ISIS_INIT" ]; then
+		if [ -z "$1" ]; then
+			$ISIS_INIT stop
+		else
+			$ISIS_INIT start "$@"
+		fi
+	else
+		exit 1
+	fi
 	;;
+
+bfsprepare)
+	ip -6 rule del table "$BFSTABLE" priority "$BFSTABLE"
+	ip -4 rule del table "$BFSTABLE" priority "$BFSTABLE"
+	ip -6 rule add table "$BFSTABLE" priority "$BFSTABLE"
+	ip -4 rule add table "$BFSTABLE" priority "$BFSTABLE"
+	ip -6 route flush table "$BFSTABLE" proto $BFSPROTO
+	ip -4 route flush table "$BFSTABLE" proto $BFSPROTO
+	ip -6 route flush proto "$BFSPROTO"
+	;;
+
+bfsipv6assigned|bfsipv4assigned)
+	[ "$act" = bfsipv6assigned ] && af=-6 || af=-4
+	exec ip $af route add "$1" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO"
+	;;
+
+bfsipv6prefix|bfsipv4prefix)
+	[ "$act" = bfsipv6prefix ] && af=6 || af=4
+	ip -$af route add throw "$1" proto $BFSPROTO metric 2147483645
+
+	if [ "$af" = 6 -a -n "$4" ]; then
+		ip -6 route add default via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO" from "$1"
+		ip -6 route add default via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO" from ::/128
+	elif [ "$af" = 4 -a -n "$4" ]; then
+		ip -4 route add default via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO" onlink
+	fi
+	;;
+
 esac

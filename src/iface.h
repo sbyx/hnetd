@@ -60,16 +60,6 @@ void iface_unregister_user(struct iface_user *user);
 void iface_set_dhcp_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len, const void *dhcp_data, size_t dhcp_len);
 void iface_all_set_dhcp_send(const void *dhcpv6_data, size_t dhcpv6_len, const void *dhcp_data, size_t dhcp_len);
 
-// Begin route update cycle
-void iface_update_routes(void);
-
-// Add new routes
-void iface_add_default_route(const char *ifname, const struct prefix *from, const struct in6_addr *via, unsigned hopcount);
-void iface_add_internal_route(const char *ifname, const struct prefix *to, const struct in6_addr *via, unsigned hopcount);
-
-// Flush and commit routes to synthesize events
-void iface_commit_routes(void);
-
 // Test if iface has IPv4 address
 bool iface_has_ipv4_address(const char *ifname);
 
@@ -89,14 +79,6 @@ struct iface_addr {
 	struct uloop_timeout timer;
 	size_t dhcpv6_len;
 	uint8_t dhcpv6_data[];
-};
-
-struct iface_route {
-	struct vlist_node node;
-	struct prefix from;
-	struct prefix to;
-	struct in6_addr via;
-	unsigned metric;
 };
 
 typedef uint8_t iface_flags;
@@ -140,7 +122,6 @@ struct iface {
 	// Prefix storage
 	struct vlist_tree assigned;
 	struct vlist_tree delegated;
-	struct vlist_tree routes;
 	struct list_head chosen;
 	struct list_head addrconf;
 	struct pa_link_id_rule *id;

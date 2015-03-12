@@ -55,7 +55,7 @@ void hncp_bfs_one(void)
 	 * routers is a bore */
 	(void)dncp_remove_tlvs_by_type(hncp, HNCP_T_VERSION);
 
-	hncp_bfs bfs = hncp_routing_create(hncp, NULL);
+	hncp_bfs bfs = hncp_routing_create(hncp, NULL, true);
 
 	dncp_node_identifier_s h = {{0}};
 	dncp_node n0 = hncp->own_node;
@@ -106,8 +106,6 @@ void hncp_bfs_one(void)
 		.prefix = {{{0x20, 0x01, 0xdb, 0x8}}}
 	};
 
-	hncp_t_routing_protocol_s rp = { 0, 0 };
-
 	tlv_buf_init(&b, 0);
 
 	// N0 link 0
@@ -134,7 +132,6 @@ void hncp_bfs_one(void)
 	ap.prefix.s6_addr[7] = 1;
 	tlv_put(&b, HNCP_T_ASSIGNED_PREFIX, &ap, sizeof(ap));
 
-	tlv_put(&b, HNCP_T_ROUTING_PROTOCOL, &rp, sizeof(rp));
 	dncp_node_set(n0, 0, 0, tlv_memdup(b.head));
 
 
@@ -158,7 +155,6 @@ void hncp_bfs_one(void)
 	ap.prefix.s6_addr[7] = 1;
 	tlv_put(&b, HNCP_T_ASSIGNED_PREFIX, &ap, sizeof(ap));
 
-	tlv_put(&b, HNCP_T_ROUTING_PROTOCOL, &rp, sizeof(rp));
 	dncp_node_set(n1, 0, 0, tlv_memdup(b.head));
 
 
@@ -195,9 +191,6 @@ void hncp_bfs_one(void)
 	tlv_put(&b, HNCP_T_DELEGATED_PREFIX, &dp, sizeof(dp));
 	tlv_nest_end(&b, cookie);
 
-	tlv_put(&b, HNCP_T_ROUTING_PROTOCOL, &rp, sizeof(rp));
-	dncp_node_set(n2, 0, 0, tlv_memdup(b.head));
-
 
 	tlv_buf_init(&b, 0);
 
@@ -226,13 +219,6 @@ void hncp_bfs_one(void)
 	cookie = tlv_nest_start(&b, HNCP_T_EXTERNAL_CONNECTION, 0);
 	tlv_put(&b, HNCP_T_DELEGATED_PREFIX, &dp, sizeof(dp));
 	tlv_nest_end(&b, cookie);
-
-	tlv_put(&b, HNCP_T_ROUTING_PROTOCOL, &rp, sizeof(rp));
-	dncp_node_set(n3, 0, 0, tlv_memdup(b.head));
-
-	tlv_buf_init(&b, 0);
-	tlv_put(&b, HNCP_T_ROUTING_PROTOCOL, &rp, sizeof(rp));
-	dncp_node_set(n4, 0, 0, tlv_memdup(b.head));
 
 
 	hncp_routing_run(&bfs->t);

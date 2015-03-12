@@ -34,11 +34,6 @@ enum {
   /* draft-pfister-homenet-multicast */
   HNCP_T_PIM_RPA_CANDIDATE = 191,
   HNCP_T_PIM_BORDER_PROXY = 192,
-
-  /* proprietary */
-  HNCP_T_ROUTING_PROTOCOL = 199 /* RP election (for now) from
-                                   'implementation specific reserved
-                                   space waiting for RP choice */
 };
 
 /* HNCP_T_VERSION */
@@ -106,12 +101,6 @@ typedef struct __packed {
   struct in6_addr address;
   char name[];
 } hncp_t_dns_router_name_s, *hncp_t_dns_router_name;
-
-/* HNCP_T_ROUTING_PROTOCOL */
-typedef struct __packed {
-  uint8_t protocol;
-  uint8_t preference;
-} hncp_t_routing_protocol_s, *hncp_t_routing_protocol;
 
 /**************************************************************** Addressing */
 

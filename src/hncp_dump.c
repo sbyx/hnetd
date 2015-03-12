@@ -1,6 +1,5 @@
 #include "hncp_dump.h"
 
-#include "hncp_routing.h"
 #include "hncp_i.h"
 #include "platform.h"
 
@@ -57,18 +56,6 @@ static int hd_push_hex(struct blob_buf *b, const char *name, void *data, size_t 
 	options[data_len*2] = '\0';
 	hd_a(!blobmsg_add_string(b, name, options), free(options); return -1;);
 	free(options);
-	return 0;
-}
-
-static int hd_node_routing(struct tlv_attr *tlv, struct blob_buf *b)
-{
-	hncp_t_routing_protocol rp = (hncp_t_routing_protocol) tlv_data(tlv);
-	if(tlv_len(tlv) != sizeof(hncp_t_routing_protocol_s))
-		return -1;
-
-	hd_a(!blobmsg_add_u16(b, "protocol", rp->protocol), return -1);
-	hd_a(!blobmsg_add_string(b, "name", hncp_routing_namebyid(rp->protocol)), return -1);
-	hd_a(!blobmsg_add_u16(b, "preference", rp->preference), return -1);
 	return 0;
 }
 
@@ -192,8 +179,7 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 			neighbors = {NULL, NULL, 0, NULL},
 			externals = {NULL, NULL, 0, NULL},
 			addresses = {NULL, NULL, 0, NULL},
-			zones = {NULL, NULL, 0, NULL},
-			routing = {NULL, NULL, 0, NULL};
+			zones = {NULL, NULL, 0, NULL};
 	int ret = -1;
 
 	hd_a(!blobmsg_add_u32(b, "update", n->update_number), return -1);
@@ -206,7 +192,6 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 	hd_a(!blob_buf_init(&externals, BLOBMSG_TYPE_ARRAY), goto el);
 	hd_a(!blob_buf_init(&addresses, BLOBMSG_TYPE_ARRAY), goto ad);
 	hd_a(!blob_buf_init(&zones, BLOBMSG_TYPE_ARRAY), goto zo);
-	hd_a(!blob_buf_init(&routing, BLOBMSG_TYPE_ARRAY), goto ro);
 
 	dncp_node_for_each_tlv(n, tlv) {
 		switch (tlv_id(tlv)) {
@@ -245,9 +230,6 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 			case HNCP_T_DNS_DOMAIN_NAME:
 				hd_a(!hd_push_dn(b, "domain", tlv_data(tlv), tlv_len(tlv)), goto err);
 				break;
-			case HNCP_T_ROUTING_PROTOCOL:
-				hd_do_in_table(&routing, NULL, hd_node_routing(tlv, &routing), goto err);
-				break;
 			default:
 				break;
 		}
@@ -258,11 +240,8 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 	hd_a(!blobmsg_add_named_blob(b, "uplinks", externals.head), goto err);
 	hd_a(!blobmsg_add_named_blob(b, "addresses", addresses.head), goto err);
 	hd_a(!blobmsg_add_named_blob(b, "zones", zones.head), goto err);
-	hd_a(!blobmsg_add_named_blob(b, "routing", routing.head), goto err);
 	ret = 0;
 err:
-	blob_buf_free(&routing);
-ro:
 	blob_buf_free(&zones);
 zo:
 	blob_buf_free(&addresses);

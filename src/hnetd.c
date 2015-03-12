@@ -151,6 +151,7 @@ int main(__unused int argc, char *argv[])
 	const char *dtls_path = NULL;
 	const char *dtls_dir = NULL;
 	const char *pidfile = NULL;
+	bool strict = false;
 
 	enum {
 		GOL_IPPREFIX = 1000,
@@ -181,7 +182,7 @@ int main(__unused int argc, char *argv[])
 			{ NULL,          0,                      NULL,           0 }
 	};
 
-	while ((c = getopt_long(argc, argv, "?b::d:f:o:n:r:s:p:m:c:M:", longopts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "?b::d:f:o:n:r:s:p:m:c:M:S", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'b':
 			pidfile = (optarg && optarg[0]) ? optarg : "/var/run/hnetd.pid";
@@ -206,6 +207,9 @@ int main(__unused int argc, char *argv[])
 			break;
 		case 'M':
 			multicast_params.multicast_script = optarg;
+			break;
+		case 'S':
+			strict = true;
 			break;
 		case 'r':
 			routing_script = optarg;
@@ -322,7 +326,7 @@ int main(__unused int argc, char *argv[])
 			}
 	}
 	if (routing_script)
-		hncp_routing_create(h, routing_script);
+		hncp_routing_create(h, routing_script, !strict);
 
 	//Note that pa subscribes to iface. Which is possible before iface init.
 	if(!(hncp_pa = hncp_pa_create(h, link))) {

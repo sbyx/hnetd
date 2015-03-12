@@ -16,6 +16,7 @@
 #include <sys/socket.h>
 #ifdef __linux__
 #include <linux/rtnetlink.h>
+#include <linux/fib_rules.h>
 #endif /* __linux__ */
 
 #ifndef SOL_NETLINK
@@ -88,22 +89,24 @@ static void iface_update_dp_cb(__unused struct hncp_pa_iface_user *u,
 			if ((c->flags & IFACE_FLAG_GUEST) == IFACE_FLAG_GUEST)
 				platform_filter_prefix(c, &dp->prefix, true);
 
-		if(!prefix_is_ipv4(&dp->prefix)) {
-			//L_DEBUG("Pushing to platform "PA_DP_L, PA_DP_LA(dp));
-			platform_set_prefix_route(&dp->prefix, true);
-		} else if (!dp->local) {
-			struct iface *c;
-			list_for_each_entry(c, &interfaces, head) {
-				if (c->designatedv4) {
-					c->designatedv4 = false;
-					platform_restart_dhcpv4(c);
+		//L_DEBUG("Pushing to platform "PA_DP_L, PA_DP_LA(dp));
+		platform_set_prefix_route(&dp->prefix, true);
+
+		if(prefix_is_ipv4(&dp->prefix)) {
+			if (!dp->local) {
+				struct iface *c;
+				list_for_each_entry(c, &interfaces, head) {
+					if (c->designatedv4) {
+						c->designatedv4 = false;
+						platform_restart_dhcpv4(c);
+					}
 				}
+			} else {
+				struct iface *c;
+				list_for_each_entry(c, &interfaces, head)
+				if ((c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID)
+					platform_set_snat(c, &dp->prefix);
 			}
-		} else {
-			struct iface *c;
-			list_for_each_entry(c, &interfaces, head)
-			if ((c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID)
-				platform_set_snat(c, &dp->prefix);
 		}
 	} else {
 		//Remove DP
@@ -112,10 +115,10 @@ static void iface_update_dp_cb(__unused struct hncp_pa_iface_user *u,
 		if ((c->flags & IFACE_FLAG_GUEST) == IFACE_FLAG_GUEST)
 			platform_filter_prefix(c, &dp->prefix, false);
 
-		if(!prefix_is_ipv4(&dp->prefix)) {
-			//L_DEBUG("Removing from platform "PA_DP_L, PA_DP_LA(dp));
-			platform_set_prefix_route(&dp->prefix, false);
-		} else {
+		//L_DEBUG("Removing from platform "PA_DP_L, PA_DP_LA(dp));
+		platform_set_prefix_route(&dp->prefix, false);
+
+		if(prefix_is_ipv4(&dp->prefix)) {
 			if (dp->local) {
 				list_for_each_entry(c, &interfaces, head)
 					if ((c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID)
@@ -227,7 +230,7 @@ static struct uloop_fd rtnl_fd = { .fd = -1 };
 
 void iface_set_unreachable_route(const struct prefix *p, bool enable)
 {
-	struct {
+	struct req {
 		struct nlmsghdr nhm;
 		struct rtmsg rtm;
 		struct rtattr rta_addr;
@@ -236,11 +239,12 @@ void iface_set_unreachable_route(const struct prefix *p, bool enable)
 		uint32_t prio;
 	} req = {
 		.nhm = {sizeof(req), RTM_DELROUTE, NLM_F_REQUEST, 1, 0},
-		.rtm = {AF_INET6, p->plen, 0, 0, RT_TABLE_MAIN, RTPROT_STATIC, RT_SCOPE_NOWHERE, 0, 0},
+		.rtm = {prefix_is_ipv4(p) ? AF_INET : AF_INET6, prefix_af_length(p),
+				0, 0, RT_TABLE_MAIN, RTPROT_STATIC, RT_SCOPE_NOWHERE, 0, 0},
 		.rta_addr = {sizeof(req.rta_addr) + sizeof(req.addr), RTA_DST},
 		.addr = p->prefix,
 		.rta_prio = {sizeof(req.rta_prio) + sizeof(req.prio), RTA_PRIORITY},
-		.prio = 1000000000
+		.prio = INT32_MAX - 1,
 	};
 
 	if (enable) {
@@ -250,9 +254,8 @@ void iface_set_unreachable_route(const struct prefix *p, bool enable)
 		req.rtm.rtm_type = RTN_UNREACHABLE;
 	}
 
-	send(rtnl_fd.fd, &req, sizeof(req), 0);
+	send(rtnl_fd.fd, &req, req.nhm.nlmsg_len, 0);
 }
-
 #endif /* __linux__ */
 
 int iface_init(dncp hncp, hncp_sd sd, hncp_pa hncp_pa, struct hncp_link *link, const char *pd_socket)
@@ -330,104 +333,6 @@ void iface_all_set_dhcp_send(const void *dhcpv6_data, size_t dhcpv6_len, const v
 		iface_set_dhcp_send(c->ifname, dhcpv6_data, dhcpv6_len, dhcp_data, dhcp_len);
 }
 
-// Begin route update cycle
-void iface_update_routes(void)
-{
-	struct iface *c;
-	list_for_each_entry(c, &interfaces, head)
-		vlist_update(&c->routes);
-}
-
-// Add new routes
-void iface_add_default_route(const char *ifname, const struct prefix *from, const struct in6_addr *via, unsigned hopcount)
-{
-	struct iface *c = iface_get(ifname);
-	if (c) {
-		struct iface_route *r = calloc(1, sizeof(*r));
-		if (!IN6_IS_ADDR_V4MAPPED(via)) {
-			r->from = *from;
-		} else {
-			r->to.plen = 96;
-			r->to.prefix.s6_addr[10] = 0xff;
-			r->to.prefix.s6_addr[11] = 0xff;
-		}
-
-		r->via = *via;
-		r->metric = hopcount + 10000;
-		vlist_add(&c->routes, &r->node, r);
-
-		if (!IN6_IS_ADDR_V4MAPPED(via)) {
-			r = calloc(1, sizeof(*r));
-			r->from.plen = 128;
-			r->via = *via;
-			r->metric = hopcount + 10000;
-			vlist_add(&c->routes, &r->node, r);
-		}
-	}
-}
-
-// Add new routes
-void iface_add_internal_route(const char *ifname, const struct prefix *to, const struct in6_addr *via, unsigned hopcount)
-{
-	struct iface *c = iface_get(ifname);
-	if (c) {
-		struct iface_route *r = calloc(1, sizeof(*r));
-		r->to = *to;
-		r->via = *via;
-		r->metric = hopcount + 10000;
-		vlist_add(&c->routes, &r->node, r);
-	}
-}
-
-// Flush and commit routes to synthesize events
-void iface_commit_routes(void)
-{
-	struct iface *c;
-	list_for_each_entry(c, &interfaces, head)
-		vlist_flush(&c->routes);
-}
-
-// Compare if two addresses are identical
-static int compare_routes(const void *a, const void *b, void *ptr __attribute__((unused)))
-{
-	const struct iface_route *r1 = a, *r2 = b;
-	int c = prefix_cmp(&r1->from, &r2->from);
-
-	if (!c)
-		c = prefix_cmp(&r1->to, &r2->to);
-
-	if (!c)
-		c = memcmp(&r1->via, &r2->via, sizeof(r1->via));
-
-	if (!c)
-		c = r2->metric - r1->metric;
-
-	return c;
-}
-
-
-// Update route if necessary (node_new: route that will be present, node_old: route that was present)
-static void update_route(struct vlist_tree *t, struct vlist_node *node_new, struct vlist_node *node_old)
-{
-	struct iface_route *r_new = container_of(node_new, struct iface_route, node);
-	struct iface_route *r_old = container_of(node_old, struct iface_route, node);
-	struct iface_route *r = (node_new) ? r_new : r_old;
-	struct iface *c = container_of(t, struct iface, routes);
-
-	if (!node_new || !node_old)
-		platform_set_route(c, r, !!node_new);
-
-	L_INFO("iface: %s route %s via %s%%%s",
-			(node_new) ? (node_old) ? "updated" : "added" : "removed",
-			PREFIX_REPR(&r->to),
-			ADDR_REPR(&r->via),
-			c->ifname);
-
-	if (node_old)
-		free(r_old);
-}
-
-
 bool iface_has_ipv4_address(const char *ifname)
 {
 	struct iface_addr *a;
@@ -439,7 +344,6 @@ bool iface_has_ipv4_address(const char *ifname)
 
 	return false;
 }
-
 
 // Compare if two addresses are identical
 static int compare_addrs(const void *a, const void *b, void *ptr __attribute__((unused)))
@@ -584,7 +488,6 @@ void iface_remove(struct iface *c)
 
 	list_del(&c->head);
 	vlist_flush_all(&c->assigned);
-	vlist_flush_all(&c->routes);
 
 	if (c->platform) {
 		if ((c->flags & IFACE_FLAG_GUEST) == IFACE_FLAG_GUEST) {
@@ -739,7 +642,6 @@ struct iface* iface_create(const char *ifname, const char *handle, iface_flags f
 
 		vlist_init(&c->assigned, compare_addrs, update_addr);
 		vlist_init(&c->delegated, compare_addrs, update_prefix);
-		vlist_init(&c->routes, compare_routes, update_route);
 		INIT_LIST_HEAD(&c->chosen);
 		INIT_LIST_HEAD(&c->addrconf);
 		c->transition.cb = iface_announce_border;

@@ -35,6 +35,7 @@ static char backend[] = "/usr/sbin/hnetd-backend";
 static const char *hnetd_pd_socket = NULL;
 static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events);
 static int ipc_ifupdown(const char *method, int argc, char* const argv[]);
+static pid_t platform_run(char *argv[]);
 static struct uloop_fd ipcsock = { .cb = ipc_handle };
 static const char *ipcpath = "/var/run/hnetd.sock";
 static const char *ipcpath_client = "/var/run/hnetd-client%d.sock";
@@ -61,6 +62,9 @@ int platform_init(dncp hncp_in, hncp_pa pa, const char *pd_socket)
 		return 3;
 	}
 	uloop_fd_add(&ipcsock, ULOOP_EDGE_TRIGGER | ULOOP_READ);
+
+	char *argv[] = {backend, "setbfs", NULL};
+	platform_run(argv);
 	return 0;
 }
 
@@ -304,35 +308,6 @@ void platform_set_snat(struct iface *c, const struct prefix *p)
 			c->ifname, sbuf, pbuf, prefix, NULL};
 	platform_call(argv);
 }
-
-
-void platform_set_route(struct iface *c, struct iface_route *route, bool enable)
-{
-	char from[PREFIX_MAXBUFFLEN];
-	char to[PREFIX_MAXBUFFLEN];
-	char via[INET6_ADDRSTRLEN];
-	char metric[10];
-
-	prefix_ntopc(to, sizeof(to), &route->to.prefix, route->to.plen);
-
-	if (!IN6_IS_ADDR_V4MAPPED(&route->to.prefix))
-		inet_ntop(AF_INET6, &route->via, via, sizeof(via));
-	else
-		inet_ntop(AF_INET, &route->via.s6_addr[12], via, sizeof(via));
-
-	if (!IN6_IS_ADDR_V4MAPPED(&route->to.prefix))
-		prefix_ntopc(from, sizeof(from), &route->from.prefix, route->from.plen);
-	else
-		from[0] = 0;
-
-	snprintf(metric, sizeof(metric), "%u", route->metric);
-
-	char *argv[] = {backend, (enable) ? "newroute" : "delroute",
-			c->ifname, to, via, metric,
-			(from[0]) ? from : NULL, NULL};
-	platform_call(argv);
-}
-
 
 void platform_set_dhcp(struct iface *c, enum hncp_link_elected elected)
 {
