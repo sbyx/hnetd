@@ -54,9 +54,12 @@ bfsprepare)
 	;;
 
 bfsipv6assigned)
-	# ip -6 route add "$1" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO"
+	if grep -q chaos /etc/openwrt_release; then
+		ip -6 route add "$1" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO"
 	# IPv6 throw routes are broken in current Linux kernels...
-	ip -6 route add "$1" via "$2" dev "$3" metric "$((2140000000+$4))" proto "$BFSPROTO"
+	else
+		ip -6 route add "$1" via "$2" dev "$3" metric "$((2140000000+$4))" proto "$BFSPROTO"
+	fi
 	;;
 
 bfsipv4assigned)
