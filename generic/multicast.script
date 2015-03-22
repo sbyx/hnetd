@@ -6,3 +6,16 @@ echo "[multicast.script] $*"
 # bp (add|remove) (local|remote) IPV6ADDRESS
 #  (called whenever TLV space changes (TBD: change to happen only on RP?))
 # ifstate IFNAME (int|ext)
+
+# IETF-92 BIER demo
+#
+# (See hnet-ttin repo for the informal dump_bier.py script; and
+# netkit/kernel repo, ietf92-bier branch for the bier.diff patch which
+# adds the module.)
+
+SCRIPT=/dump_bier.py
+if [ -f $SCRIPT ]
+then
+    rmmod bier
+    modprobe bier `hnet-dump | python $SCRIPT`
+fi
