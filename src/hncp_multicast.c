@@ -6,8 +6,8 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 20:39:45 2015 mstenber
- * Last modified: Wed Feb 25 18:01:32 2015 mstenber
- * Edit time:     94 min
+ * Last modified: Sun Mar 22 23:34:38 2015 mstenber
+ * Edit time:     95 min
  *
  */
 
@@ -72,7 +72,9 @@ static void _fork_execv(char *argv[])
   L_DEBUG("hncp_multicast calling %s", argv[0]);
   for (int i = 1 ; argv[i] ; i++)
     L_DEBUG(" %s", argv[i]);
-  waitpid(pid, NULL, 0);
+  /* waitpid(pid, NULL, 0); - we do not really want to call these
+   * synchronously, the script can do it's own locking if it wants
+   * to..*/
 }
 
 static void _tlv_cb(dncp_subscriber s,
