@@ -221,7 +221,7 @@ void hncp_bfs_one(void)
 	tlv_nest_end(&b, cookie);
 
 
-	hncp_routing_run(&bfs->t);
+	hncp_routing_exec(&bfs->t);
 
 	struct iface_route up31 = {.from = {.prefix = dp.prefix, .plen = 48}, .via = dummy3.sin6_addr, .metric = 10000 + 1};
 	sput_fail_unless(!!vlist_find(&i3->routes, &up31, &up31, node), "uplink 3 #1");
