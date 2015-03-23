@@ -65,7 +65,7 @@ static void hncp_routing_intiface(struct iface_user *u, const char *ifname, bool
 		memcpy(&argv[2], bfs->ifaces, bfs->ifaces_cnt * sizeof(char*));
 		argv[2 + bfs->ifaces_cnt] = NULL;
 
-		if (fork()) {
+		if (!fork()) {
 			lockf(bfs->lockfd, F_LOCK, 0);
 			hncp_routing_spawn(argv);
 			lockf(bfs->lockfd, F_ULOCK, 0);
