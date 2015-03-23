@@ -25,6 +25,7 @@ struct hncp_routing_struct {
 	const char *script;
 	const char **ifaces;
 	size_t ifaces_cnt;
+	int lockfd;
 };
 
 static void hncp_routing_spawn(char **argv)
@@ -63,7 +64,12 @@ static void hncp_routing_intiface(struct iface_user *u, const char *ifname, bool
 		argv[1] = "configure";
 		memcpy(&argv[2], bfs->ifaces, bfs->ifaces_cnt * sizeof(char*));
 		argv[2 + bfs->ifaces_cnt] = NULL;
-		hncp_routing_spawn(argv);
+
+		if (fork()) {
+			lockf(bfs->lockfd, F_LOCK, 0);
+			hncp_routing_spawn(argv);
+			lockf(bfs->lockfd, F_ULOCK, 0);
+		}
 	}
 }
 
@@ -88,6 +94,9 @@ static void hncp_routing_callback(dncp_subscriber s, __unused dncp_node n,
 
 static void hncp_routing_run(struct uloop_timeout *t)
 {
+	if (fork())
+		return;
+
 	hncp_bfs bfs = container_of(t, hncp_bfs_s, t);
 	dncp hncp = bfs->hncp;
 	struct list_head queue = LIST_HEAD_INIT(queue);
@@ -95,6 +104,8 @@ static void hncp_routing_run(struct uloop_timeout *t)
 	bool have_v4uplink = false;
 	char dst[PREFIX_MAXBUFFLEN] = "", via[INET6_ADDRSTRLEN] = "", metric[16];
 	char *argv[] = {(char*)bfs->script, "bfsprepare", dst, via, NULL, metric, NULL};
+
+	lockf(bfs->lockfd, F_LOCK, 0);
 
 	vlist_for_each_element(&hncp->nodes, c, in_nodes) {
 		// Mark all nodes as not visited
@@ -236,15 +247,24 @@ static void hncp_routing_run(struct uloop_timeout *t)
 
 		list_del(&c->profile_data.bfs.head);
 	}
+
+	lockf(bfs->lockfd, F_ULOCK, 0);
 }
 
 hncp_bfs hncp_routing_create(dncp hncp, const char *script, bool incremental)
 {
 	hncp_bfs bfs = calloc(1, sizeof(*bfs));
+	char lockfile[] = "hnetd-XXXXXX";
 
 	bfs->hncp = hncp;
 	bfs->script = script;
 	bfs->iface.cb_intiface = hncp_routing_intiface;
+	bfs->lockfd = mkstemp(lockfile);
+
+#ifdef FD_CLOEXEC
+	fcntl(bfs->lockfd, F_SETFD, fcntl(bfs->lockfd, F_GETFD) | FD_CLOEXEC);
+#endif
+	unlink(lockfile);
 
 	if (incremental) {
 		bfs->t.cb = hncp_routing_run;
@@ -265,6 +285,7 @@ void hncp_routing_destroy(hncp_bfs bfs)
 	if (bfs->t.cb)
 		dncp_unsubscribe(bfs->hncp, &bfs->subscr);
 
+	close(bfs->lockfd);
 	free(bfs->ifaces);
 	free(bfs);
 }
