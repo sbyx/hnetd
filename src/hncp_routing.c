@@ -69,6 +69,7 @@ static void hncp_routing_intiface(struct iface_user *u, const char *ifname, bool
 			lockf(bfs->lockfd, F_LOCK, 0);
 			hncp_routing_spawn(argv);
 			lockf(bfs->lockfd, F_ULOCK, 0);
+			_exit(0);
 		}
 	}
 }
@@ -249,6 +250,7 @@ static void hncp_routing_run(struct uloop_timeout *t)
 	}
 
 	lockf(bfs->lockfd, F_ULOCK, 0);
+	_exit(0);
 }
 
 hncp_bfs hncp_routing_create(dncp hncp, const char *script, bool incremental)
