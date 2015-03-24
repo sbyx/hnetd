@@ -33,10 +33,12 @@ proto_hnet_setup() {
     logger -t proto-hnet "proto_hnet_setup $device/$interface"
 
     if [ "$interface" = "lan" -o "$interface" = "wan" -o "$interface" = "wan6" ]; then
-        logger -t proto-hnet "Ignoring hnet on 'lan' and 'wan'. Please rename your interface to avoid conflicts."
-        proto_notify_error "$interface" "INTERFACE_CONFLICT"
-        proto_block_restart "$interface"
-        return
+        logger -t proto-hnet "Interface names 'lan' and 'wan' are restricted for security reasons and do not offer border discovery!"
+	if [ "$interface" = "lan" ]; then
+		mode=internal
+	else
+		mode=external
+	fi
     fi
 
     # work around some more races

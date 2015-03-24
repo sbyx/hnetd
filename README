@@ -68,13 +68,22 @@ and select both packets in "make menuconfig" under "Network" and the submenu
 "IP Addresses and Names". Snapshot packages might be avialable in the OpenWrt
 daily snapshots folder: http://downloads.openwrt.org/snapshots/trunk/
 
-To use hnetd on an interface set its proto-option in /etc/config/network, e.g.
+To use hnetd on an interface add a config section in /etc/config/network, e.g.
 
-config interface lan
+config interface homenet0
 	option ifname eth0
 	option proto hnet
 
 or select the protocol "Automatic Homenet (HNCP)" in the web interface.
+
+IMPORTANT: Remove or comment out other config sections running DHCP or DHCPv6
+clients on the interfaces your run hnet on. Additional static configuration
+section may be kept for debugging purposes.
+
+WARNING: Do NOT set the proto of either the “lan”, “wan” or “wan6” interface
+to hnet directly. Always rename your interfaces to a different name,
+e.g. homenet0 or homenet1.
+
 
 ** Generic Firmware Integration **
 

@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Feb 23 22:13:38 2015 mstenber
- * Edit time:     603 min
+ * Last modified: Mon Mar 23 06:18:38 2015 mstenber
+ * Edit time:     607 min
  *
  */
 
@@ -105,7 +105,9 @@ static void _fork_execv(char *argv[])
     _exit(128);
   }
   L_DEBUG("hncp_sd calling %s", argv[0]);
-  waitpid(pid, NULL, 0);
+  /* waitpid(pid, NULL, 0); - e.g. dnsmasq can take too long (and kill
+   * things). Have to work around in shell script to serialize calls
+   * if it seems useful.*/
 }
 
 static void _should_update(hncp_sd sd, int v)
