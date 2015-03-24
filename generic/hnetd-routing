@@ -63,7 +63,7 @@ bfsipv6assigned)
 	;;
 
 bfsipv4assigned)
-	ip -4 route add "$1" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO"
+	ip -4 route add "$1" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO" onlink
 	;;
 
 bfsipv6prefix)
