@@ -243,6 +243,7 @@ static void pd_accept(struct uloop_fd *fd, __unused unsigned int events)
 		}
 
 		struct pd_handle *handle = calloc(1, sizeof(*handle));
+		INIT_LIST_HEAD(&handle->prefixes);
 		handle->pd = pd;
 
 		handle->fd.stream.notify_read = pd_handle_data;
