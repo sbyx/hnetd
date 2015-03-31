@@ -555,6 +555,8 @@ static void hpa_dp_set_enabled(hncp_pa hpa, hpa_dp dp, bool enabled)
 	if(dp->dp.enabled == !!enabled)
 		return;
 
+	L_DEBUG("hpa_dp_set_enabled: %s -> %s",
+			PREFIX_REPR(&dp->dp.prefix), enabled?"true":"false");
 	dp->dp.enabled = !!enabled;
 
 	//Add or remove from PA.
@@ -1602,10 +1604,18 @@ static int hpa_pd_filter_accept(__unused struct pa_rule *rule, struct pa_ldp *ld
 
 pa_plen hpa_lease_desired_plen_cb(struct pa_rule_random *r,
 		__unused struct pa_ldp *ldp,
-		__unused uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
+		uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
 {
 	hpa_lease l = container_of(r, hpa_lease_s, rule_rand);
-	return (l->hint_len < HPA_PD_MIN_PLEN)?HPA_PD_MIN_PLEN:l->hint_len;
+	pa_plen min_plen, des_plen;
+	if((min_plen = hpa_get_biggest(prefix_count)) > 128)
+		return 0;
+
+	des_plen = l->hint_len;
+	if(des_plen < HPA_PD_MIN_PLEN)
+		des_plen = HPA_PD_MIN_PLEN;
+
+	return (des_plen < min_plen)?min_plen:des_plen;
 }
 
 hpa_lease hpa_pd_add_lease(hncp_pa hp, const char *duid, uint8_t hint_len,
@@ -1642,8 +1652,9 @@ hpa_lease hpa_pd_add_lease(hncp_pa hp, const char *duid, uint8_t hint_len,
 void hpa_pd_del_lease(hncp_pa hp, hpa_lease l)
 {
 	//Removing from pa will synchronously call updates for all current leases
+	pa_rule_del(&hp->pa, &l->rule_rand.rule);
 	pa_link_del(&l->pal);
-	list_del(&hp->leases);
+	list_del(&l->le);
 	free(l);
 }
 

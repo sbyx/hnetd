@@ -6,9 +6,9 @@ action="$1"
 proto="$2"
 shift 2
 
-BABEL_EXE=/usr/sbin/babeld
+BABEL_EXE=`which babeld`
 BABEL_PID=/var/run/babeld-hnetd.pid
-ISIS_INIT=/usr/sbin/autoisis
+ISIS_INIT=`which autoisis`
 
 case "$action" in
 	enumerate)

@@ -12,6 +12,8 @@ if(${L_LEVEL})
   add_definitions(-DL_LEVEL=${L_LEVEL})
 endif(${L_LEVEL})
 
+add_definitions(-DCMAKE_INSTALL_PREFIX="${CMAKE_INSTALL_PREFIX}")
+
 if(${VERSION})
   add_definitions(-DHNETD_VERSION=${VERSION})
 else(${VERSION})

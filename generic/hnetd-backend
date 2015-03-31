@@ -1,6 +1,6 @@
 #!/bin/sh
 
-BASEDIR=$(dirname $0)
+BASEDIR=$(dirname $0)/../share/hnetd/
 . $BASEDIR/utils.script
 
 echo "[hnetd-backend] $*"
