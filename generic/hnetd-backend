@@ -1,6 +1,6 @@
 #!/bin/sh
 
-BASEDIR=$(dirname $0)
+BASEDIR=$(dirname $0)/../share/hnetd/
 . $BASEDIR/utils.script
 
 echo "[hnetd-backend] $*"
@@ -9,7 +9,7 @@ case "$1" in
 dhcpv4client)
 	[ "$2" = 1 ] && export NODEFAULT=1
 	[ -n "$3" ] && export METRIC=$3
-	exec udhcpc -f -t 0 -i "$2" -x "hostname:$(hostname)" -x "0x4d:07484f4d454e4554" -s $BASEDIR/dhcp.script
+	exec busybox udhcpc -f -t 1000000000 -i "$2" -x "hostname:$(hostname)" -x "0x4d:07484f4d454e4554" -s $BASEDIR/dhcp.script
 	;;
 
 dhcpv6client)

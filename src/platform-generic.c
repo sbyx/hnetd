@@ -31,7 +31,7 @@
 #include "dncp_trust.h"
 #include "hncp_pa.h"
 
-static char backend[] = "/usr/sbin/hnetd-backend";
+static char backend[] = CMAKE_INSTALL_PREFIX "/sbin/hnetd-backend";
 static const char *hnetd_pd_socket = NULL;
 static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events);
 static int ipc_ifupdown(const char *method, int argc, char* const argv[]);

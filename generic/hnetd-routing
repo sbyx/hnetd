@@ -1,8 +1,8 @@
 #!/bin/sh
 
-BABEL_EXE=/usr/sbin/babeld
+BABEL_EXE=`which babeld`
 BABEL_PID=/var/run/babeld-hnetd.pid
-ISIS_INIT=/usr/sbin/autoisis
+ISIS_INIT=`which autoisis`
 
 # Routing table for BFS (also rule priority)
 BFSTABLE=33333
