@@ -212,7 +212,7 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 
 								hncp_routing_spawn(argv);
 
-								tlv_for_each_in_buf(b, tlv_data(a) + flen, tlv_len(a) - flen) {
+								tlv_for_each_in_buf(b, tlv_data(a2) + flen, tlv_len(a2) - flen) {
 									hncp_t_prefix_domain d = tlv_data(b);
 									if (tlv_id(b) != HNCP_T_PREFIX_DOMAIN || tlv_len(b) < 1 || d->type > 128)
 										continue;
