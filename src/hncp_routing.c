@@ -214,8 +214,13 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 									if (tlv_len(b) < 1 + plen)
 										continue;
 
-									memcpy(&domainaddr, d->id, plen);
-									prefix_ntopc(domain, sizeof(domain), &domainaddr, d->type);
+									if (d->type == 0) {
+										strcpy(domain, "default");
+									} else {
+										memcpy(&domainaddr, d->id, plen);
+										prefix_ntopc(domain, sizeof(domain), &domainaddr, d->type);
+									}
+
 									if (!IN6_IS_ADDR_V4MAPPED(&from.prefix)) {
 										argv[1] = "bfsipv6prefix";
 										if (c->profile_data.bfs.next_hop && c->profile_data.bfs.ifname) {
