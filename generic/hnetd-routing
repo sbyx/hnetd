@@ -55,30 +55,32 @@ bfsprepare)
 
 bfsipv6assigned)
 	if grep -q chaos /etc/openwrt_release; then
-		ip -6 route add "$1" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO"
+		exec ip -6 route add "$1" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO"
 	# IPv6 throw routes are broken in current Linux kernels...
 	else
-		ip -6 route add "$1" via "$2" dev "$3" metric "$((2140000000+$4))" proto "$BFSPROTO"
+		exec ip -6 route add "$1" via "$2" dev "$3" metric "$((2140000000+$4))" proto "$BFSPROTO"
 	fi
 	;;
 
 bfsipv4assigned)
-	ip -4 route add "$1" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO" onlink
+	exec ip -4 route add "$1" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO" onlink
 	;;
 
 bfsipv6prefix)
-	ip -6 route add throw "$1" proto $BFSPROTO metric 2147483645
-	if [ -n "$4" ]; then
-		ip -6 route add "$5" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO" from "$1"
-		ip -6 route add "$5" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO" from ::/128
-	fi
+	exec ip -6 route add throw "$1" proto $BFSPROTO metric 2147483645
+	;;
+	
+bfsipv6uplink)
+	ip -6 route add "$5" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO" from ::/128
+	exec ip -6 route add "$5" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO" from "$1"
 	;;
 
 bfsipv4prefix)
-	ip -4 route add throw "$1" proto $BFSPROTO metric 2147483645
-	if [ -n "$4" ]; then
-		ip -4 route add "$5" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO" onlink
-	fi
+	exec ip -4 route add throw "$1" proto $BFSPROTO metric 2147483645
+	;;
+	
+bfsipv4uplink)
+	exec ip -4 route add "$5" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO" onlink
 	;;
 
 esac

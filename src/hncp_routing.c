@@ -205,6 +205,13 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 								else
 									metric[0] = 0;
 
+								if (!IN6_IS_ADDR_V4MAPPED(&from.prefix))
+									argv[1] = "bfsipv6prefix";
+								else
+									argv[1] = "bfsipv4prefix";
+
+								hncp_routing_spawn(argv);
+
 								tlv_for_each_in_buf(b, tlv_data(a) + flen, tlv_len(a) - flen) {
 									hncp_t_prefix_domain d = tlv_data(b);
 									if (tlv_id(b) != HNCP_T_PREFIX_DOMAIN || tlv_len(b) < 1 || d->type > 128)
@@ -218,11 +225,12 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 										strcpy(domain, "default");
 									} else {
 										memcpy(&domainaddr, d->id, plen);
-										prefix_ntopc(domain, sizeof(domain), &domainaddr, d->type);
+										memset(&domainaddr.s6_addr[plen], 0, sizeof(domainaddr) - plen);
+										prefix_ntop(domain, sizeof(domain), &domainaddr, d->type);
 									}
 
 									if (!IN6_IS_ADDR_V4MAPPED(&from.prefix)) {
-										argv[1] = "bfsipv6prefix";
+										argv[1] = "bfsipv6uplink";
 										if (c->profile_data.bfs.next_hop && c->profile_data.bfs.ifname) {
 											inet_ntop(AF_INET6, c->profile_data.bfs.next_hop, via, sizeof(via));
 										} else {
@@ -231,7 +239,7 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 										}
 										hncp_routing_spawn(argv);
 									} else {
-										argv[1] = "bfsipv4prefix";
+										argv[1] = "bfsipv4uplink";
 										if (c->profile_data.bfs.next_hop4 && c->profile_data.bfs.ifname &&
 												iface_has_ipv4_address(c->profile_data.bfs.ifname) &&
 												(d->type != 0 || !have_v4uplink)) {
