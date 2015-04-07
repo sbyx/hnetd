@@ -90,8 +90,13 @@ static int hd_node_address(struct tlv_attr *tlv, struct blob_buf *b)
 static int hd_node_externals_dp(struct tlv_attr *tlv, struct blob_buf *b)
 {
 	hncp_t_delegated_prefix_header dh;
-	int plen;
+	unsigned int plen;
 	struct prefix p;
+	struct tlv_attr *a;
+	unsigned int flen;
+	int ret = -1;
+	struct blob_buf dps = {NULL, NULL, 0, NULL};
+
 	if (!(dh = dncp_tlv_dp(tlv)))
 		return -1;
 	memset(&p, 0, sizeof(p));
@@ -101,7 +106,30 @@ static int hd_node_externals_dp(struct tlv_attr *tlv, struct blob_buf *b)
 	hd_a(!blobmsg_add_string(b, "prefix", PREFIX_REPR(&p)), return -1);
 	hd_a(!blobmsg_add_u64(b, "valid", ntohl(dh->ms_valid_at_origination)), return -1);
 	hd_a(!blobmsg_add_u64(b, "preferred", ntohl(dh->ms_preferred_at_origination)), return -1);
-	return 0;
+
+	flen = ROUND_BYTES_TO_4BYTES(sizeof(*dh) +
+			ROUND_BITS_TO_BYTES(dh->prefix_length_bits));
+
+	hd_a(!blob_buf_init(&dps, BLOBMSG_TYPE_ARRAY), return -1);
+	tlv_for_each_in_buf(a, tlv_data(tlv) + flen, tlv_len(tlv) - flen) {
+		hncp_t_prefix_domain d = tlv_data(a);
+		if (tlv_id(a) != HNCP_T_PREFIX_DOMAIN || tlv_len(a) < 1)
+			continue;
+
+		plen = ROUND_BITS_TO_BYTES(d->type);
+		if (d->type <= 128 && tlv_len(a) >= 1 + plen) {
+			p.plen = d->type;
+			memcpy(&p, d->id, plen);
+			hd_a(!blobmsg_add_string(&dps, NULL, PREFIX_REPR(&p)), return -1);
+		} else if (d->type == 129 && tlv_len(a) >= 2 && d->id[tlv_len(a) - 2] == 0) {
+			hd_a(!blobmsg_add_string(&dps, NULL, (const char*)d->id), return -1);
+		}
+	}
+	hd_a(!blobmsg_add_named_blob(b, "domains", dps.head), goto err);
+	ret = 0;
+err:
+	blob_buf_free(&dps);
+	return ret;
 }
 
 static int hd_node_external(struct tlv_attr *tlv, struct blob_buf *b)

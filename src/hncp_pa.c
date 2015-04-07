@@ -352,6 +352,17 @@ static void hpa_refresh_ec(hncp_pa hpa, bool publish)
 				st = tlv_new(&tb, type, dp->dhcp_len);
 				memcpy(tlv_data(st), dp->dhcp_data, dp->dhcp_len);
 			}
+
+			struct __packed {
+				hncp_t_prefix_domain_s d;
+				struct in6_addr dest;
+			} domain = {{0}, IN6ADDR_ANY_INIT};
+
+			/* TODO: for each prefix domain of DP */
+			size_t dlen = sizeof(domain.d) + ROUND_BITS_TO_BYTES(domain.d.type);
+			st = tlv_new(&tb, HNCP_T_PREFIX_DOMAIN, dlen);
+			memcpy(tlv_data(st), &domain, dlen);
+
 			tlv_nest_end(&tb, cookie);
 		}
 		//Sort Delegated Prefix TLVs

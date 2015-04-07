@@ -30,6 +30,7 @@ enum {
   HNCP_T_DNS_DOMAIN_NAME = 40, /* non-default domain (very optional) */
   HNCP_T_DNS_ROUTER_NAME = 41, /* router name (moderately optional) */
   HNCP_T_MANAGED_PSK = 42,
+  HNCP_T_PREFIX_DOMAIN = 43,
 
   /* draft-pfister-homenet-multicast */
   HNCP_T_PIM_RPA_CANDIDATE = 191,
@@ -101,6 +102,12 @@ typedef struct __packed {
   struct in6_addr address;
   char name[];
 } hncp_t_dns_router_name_s, *hncp_t_dns_router_name;
+
+/* HNCP_T_PREFIX_DOMAIN */
+typedef struct __packed {
+  uint8_t type;
+  uint8_t id[];
+} hncp_t_prefix_domain_s, *hncp_t_prefix_domain;
 
 /**************************************************************** Addressing */
 

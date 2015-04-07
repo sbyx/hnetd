@@ -69,15 +69,15 @@ bfsipv4assigned)
 bfsipv6prefix)
 	ip -6 route add throw "$1" proto $BFSPROTO metric 2147483645
 	if [ -n "$4" ]; then
-		ip -6 route add default via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO" from "$1"
-		ip -6 route add default via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO" from ::/128
+		ip -6 route add "$5" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO" from "$1"
+		ip -6 route add "$5" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO" from ::/128
 	fi
 	;;
 
 bfsipv4prefix)
 	ip -4 route add throw "$1" proto $BFSPROTO metric 2147483645
 	if [ -n "$4" ]; then
-		ip -4 route add default via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO" onlink
+		ip -4 route add "$5" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO" onlink
 	fi
 	;;
 
