@@ -111,19 +111,21 @@ static int hd_node_externals_dp(struct tlv_attr *tlv, struct blob_buf *b)
 			ROUND_BITS_TO_BYTES(dh->prefix_length_bits));
 
 	hd_a(!blob_buf_init(&dps, BLOBMSG_TYPE_ARRAY), return -1);
-	tlv_for_each_in_buf(a, tlv_data(tlv) + flen, tlv_len(tlv) - flen) {
-		hncp_t_prefix_domain d = tlv_data(a);
-		if (tlv_id(a) != HNCP_T_PREFIX_DOMAIN || tlv_len(a) < 1)
-			continue;
+	if (tlv_len(tlv) > flen) {
+		tlv_for_each_in_buf(a, tlv_data(tlv) + flen, tlv_len(tlv) - flen) {
+			hncp_t_prefix_domain d = tlv_data(a);
+			if (tlv_id(a) != HNCP_T_PREFIX_DOMAIN || tlv_len(a) < 1)
+				continue;
 
-		plen = ROUND_BITS_TO_BYTES(d->type);
-		if (d->type <= 128 && tlv_len(a) >= 1 + plen) {
-			p.plen = d->type;
-			memcpy(&p.prefix, d->id, plen);
-			memset(&p.prefix.s6_addr[plen], 0, sizeof(p.prefix) - plen);
-			hd_a(!blobmsg_add_string(&dps, NULL, PREFIX_REPR(&p)), return -1);
-		} else if (d->type == 129 && tlv_len(a) >= 2 && d->id[tlv_len(a) - 2] == 0) {
-			hd_a(!blobmsg_add_string(&dps, NULL, (const char*)d->id), return -1);
+			plen = ROUND_BITS_TO_BYTES(d->type);
+			if (d->type <= 128 && tlv_len(a) >= 1 + plen) {
+				p.plen = d->type;
+				memcpy(&p.prefix, d->id, plen);
+				memset(&p.prefix.s6_addr[plen], 0, sizeof(p.prefix) - plen);
+				hd_a(!blobmsg_add_string(&dps, NULL, PREFIX_REPR(&p)), return -1);
+			} else if (d->type == 129 && tlv_len(a) >= 2 && d->id[tlv_len(a) - 2] == 0) {
+				hd_a(!blobmsg_add_string(&dps, NULL, (const char*)d->id), return -1);
+			}
 		}
 	}
 	hd_a(!blobmsg_add_named_blob(b, "domains", dps.head), goto err);
