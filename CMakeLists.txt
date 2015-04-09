@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 2.8.8)
 # object library support was added in 2.8.8
 
 project(hnetd C)
+INCLUDE(FindPkgConfig)
+PKG_CHECK_MODULES(JSONC REQUIRED json-c)
 
 set(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS "")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -std=c99")
@@ -27,6 +29,7 @@ if(${DTLS_OPENSSL})
   set(DTLS_LINK crypto ssl)
   set(DTLS 1)
   add_definitions(-DDTLS=1 -DDTLS_OPENSSL=1)
+  find_package(OpenSSL REQUIRED)
 else()
   set(DTLS_SOURCE "")
   set(TRUST_SOURCE "")
