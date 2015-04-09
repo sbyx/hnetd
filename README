@@ -39,6 +39,7 @@ hnetd is designed to run on generic Linux-based routers.
 ** Compiling **
 
 hnetd depends on the following libraries:
+* json-c: https://github.com/json-c/json-c
 * libubox: http://nbd.name/gitweb.cgi?p=luci2/libubox.git
 * libubus (OpenWrt only): http://nbd.name/gitweb.cgi?p=luci2/ubus.git
 
@@ -46,6 +47,7 @@ hnetd uses the following auxiliary tools (replacable):
 * odhcp6c (DHCPv6 client): https://github.com/sbyx/odhcp6c
 * odhcpd (RA/DHCP/DHCPv6 server): https://github.com/sbyx/odhcpd
 * ohybridproxy (mDNS proxy, optional): https://github.com/sbyx/ohybridproxy
+* minimalist-pcproxy (PCP proxy, optional): https://github.com/fingon/minimalist-pcproxy
 * udhcpc (DHCP client): http://busybox.net
 
 hnetd uses cmake:
