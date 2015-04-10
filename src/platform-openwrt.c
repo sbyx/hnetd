@@ -966,6 +966,8 @@ static void platform_update(void *data, size_t len)
 				flags |= IFACE_FLAG_EXTERNAL;
 			else if (!strcmp(mode, "leaf"))
 				flags |= IFACE_FLAG_LEAF;
+			else if (!strcmp(mode, "internal"))
+				flags |= IFACE_FLAG_INTERNAL;
 			else if (strcmp(mode, "auto"))
 				L_WARN("Unknown mode '%s' for interface %s: falling back to auto", mode, ifname);
 		}

@@ -81,7 +81,7 @@ struct iface_addr {
 	uint8_t dhcpv6_data[];
 };
 
-typedef uint8_t iface_flags;
+typedef int iface_flags;
 
 #define IFACE_FLAG_INTERNAL		 0x01
 #define IFACE_FLAG_LEAF          (0x02 | IFACE_FLAG_INTERNAL)
@@ -91,6 +91,7 @@ typedef uint8_t iface_flags;
 #define IFACE_FLAG_GUEST         (0x20 | IFACE_FLAG_LEAF)
 #define IFACE_FLAG_HYBRID		 (0x40 | IFACE_FLAG_INTERNAL)
 #define IFACE_FLAG_EXTERNAL		 0x80
+#define IFACE_FLAG_NODHCP		 0x100
 
 struct iface {
 	struct list_head head;

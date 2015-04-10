@@ -211,8 +211,9 @@ void platform_iface_new(struct iface *c, __unused const char *handle)
 	assert(c->platform == NULL);
 
 	struct platform_iface *iface = calloc(1, sizeof(*iface));
-	if (!(c->flags & IFACE_FLAG_INTERNAL) ||
-			(c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID) {
+	if (!(c->flags & IFACE_FLAG_NODHCP) && (
+			!(c->flags & IFACE_FLAG_INTERNAL) ||
+			(c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID)) {
 		iface->dhcpv4 = platform_run(argv_dhcpv4);
 		iface->dhcpv6 = platform_run(argv_dhcpv6);
 	}
@@ -462,6 +463,7 @@ enum ipc_option {
 	OPT_IFNAME,
 	OPT_HANDLE,
 	OPT_PREFIX,
+	OPT_STATICPREFIX,
 	OPT_IPV4SOURCE,
 	OPT_DNS,
 	OPT_MODE,
@@ -483,6 +485,7 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_IFNAME] = {"ifname", BLOBMSG_TYPE_STRING},
 	[OPT_HANDLE] = {"handle", BLOBMSG_TYPE_STRING},
 	[OPT_PREFIX] = {"prefix", BLOBMSG_TYPE_ARRAY},
+	[OPT_STATICPREFIX] = {"staticprefix", BLOBMSG_TYPE_ARRAY},
 	[OPT_IPV4SOURCE] = {"ipv4source", BLOBMSG_TYPE_STRING},
 	[OPT_DNS] = {"dns", BLOBMSG_TYPE_ARRAY},
 	[OPT_MODE] = {"mode", BLOBMSG_TYPE_STRING},
@@ -519,15 +522,20 @@ struct blobmsg_policy ipc_prefix_policy[] = {
 int ipc_ifupdown(const char *method, int argc, char *const argv[])
 {
 	struct blob_buf b = {NULL, NULL, 0, NULL};
+	struct blob_buf b6 = {NULL, NULL, 0, NULL};
+	struct blob_buf dns = {NULL, NULL, 0, NULL};
 	blob_buf_init(&b, 0);
+	blob_buf_init(&b6, 0);
+	blob_buf_init(&dns, 0);
 
-	bool external = false;
+	bool external = false, dnsnames = false;
+	void *b6cookie = NULL;
 	void *p;
 	char *buf;
 	char *entry;
 
 	int c, i;
-	while ((c = getopt(argc, argv, "c:dp:l:i:m:n:uk:P:")) > 0) {
+	while ((c = getopt(argc, argv, "c:dp:l:i:m:n:uk:P:4:6:D:")) > 0) {
 		switch(c) {
 		case 'c':
 			blobmsg_add_string(&b, "mode", optarg);
@@ -535,7 +543,7 @@ int ipc_ifupdown(const char *method, int argc, char *const argv[])
 
 		case 'p':
 			buf = strdup(optarg);
-			p = blobmsg_open_array(&b, "prefix");
+			p = blobmsg_open_array(&b, "staticprefix");
 			for (entry = strtok(buf, ", "); entry; entry = strtok(NULL, ", "))
 				blobmsg_add_string(&b, NULL, entry);
 			blobmsg_close_array(&b, p);
@@ -578,8 +586,31 @@ int ipc_ifupdown(const char *method, int argc, char *const argv[])
 			if(sscanf(optarg, "%d", &i) == 1)
 				blobmsg_add_u32(&b, "keepalive_interval", i);
 			break;
+
+		case '4':
+			blobmsg_add_string(&b, "ipv4source", optarg);
+			break;
+
+		case '6':
+			b6cookie = blobmsg_open_table(&b6, NULL);
+			blobmsg_add_string(&b6, "address", optarg);
+			blobmsg_close_table(&b6, b6cookie);
+			break;
+
+		case 'D':
+			blobmsg_add_string(&dns, NULL, optarg);
+			dnsnames = true;
+			break;
 		}
 	}
+
+	if (b6cookie)
+		blobmsg_add_field(&b, BLOBMSG_TYPE_ARRAY, "prefix",
+				blobmsg_data(b6.head), blobmsg_len(b6.head));
+
+	if (dnsnames)
+		blobmsg_add_field(&b, BLOBMSG_TYPE_ARRAY, "dns",
+				blobmsg_data(dns.head), blobmsg_len(dns.head));
 
 	blobmsg_add_string(&b, "ifname", argv[optind]);
 
@@ -590,6 +621,104 @@ int ipc_ifupdown(const char *method, int argc, char *const argv[])
 }
 
 struct prefix zeros_64_prefix = { .prefix = { .s6_addr = {}}, .plen = 64 } ;
+
+static void ipc_handle_v6uplink(struct iface *c, struct blob_attr *tb[])
+{
+	hnetd_time_t now = hnetd_time();
+	iface_update_ipv6_uplink(c);
+
+	struct blob_attr *k;
+	unsigned rem;
+	blobmsg_for_each_attr(k, tb[OPT_PREFIX], rem) {
+		hnetd_time_t valid = HNETD_TIME_MAX, preferred = HNETD_TIME_MAX;
+
+		struct prefix addr = {IN6ADDR_ANY_INIT, 0};
+		struct prefix ex = {IN6ADDR_ANY_INIT, 0};
+		struct blob_attr *tb[PREFIX_MAX];
+		blobmsg_parse(ipc_prefix_policy, PREFIX_MAX, tb,
+				blobmsg_data(k), blobmsg_data_len(k));
+
+		if (!tb[PREFIX_ADDRESS] || !prefix_pton(blobmsg_get_string(tb[PREFIX_ADDRESS]), &addr.prefix, &addr.plen))
+			continue;
+
+		if (tb[PREFIX_EXCLUDED])
+			prefix_pton(blobmsg_get_string(tb[PREFIX_EXCLUDED]), &ex.prefix, &ex.plen);
+
+		if (tb[PREFIX_PREFERRED])
+			preferred = now + blobmsg_get_u32(tb[PREFIX_PREFERRED]) * HNETD_TIME_PER_SECOND;
+
+		if (tb[PREFIX_VALID])
+			valid = now + blobmsg_get_u32(tb[PREFIX_VALID]) * HNETD_TIME_PER_SECOND;
+
+		void *data = NULL;
+		size_t len = 0;
+
+#ifdef EXT_PREFIX_CLASS
+		struct dhcpv6_prefix_class pclass = {
+			.type = htons(DHCPV6_OPT_PREFIX_CLASS),
+			.len = htons(2),
+			.class = htons(atoi(blobmsg_get_string(a)))
+		};
+
+		if ((a = tb[PREFIX_CLASS])) {
+			data = &pclass;
+			len = sizeof(pclass);
+		}
+#endif
+		iface_add_delegated(c, &addr, (ex.plen) ? &ex : NULL, valid, preferred, data, len);
+	}
+
+
+	if (tb[OPT_PASSTHRU]) {
+		size_t buflen = blobmsg_data_len(tb[OPT_PASSTHRU]) / 2;
+		uint8_t *buf = malloc(buflen);
+		if (buf) {
+			unhexlify(buf, buflen, blobmsg_get_string(tb[OPT_PASSTHRU]));
+			iface_add_dhcpv6_received(c, buf, buflen);
+			free(buf);
+		}
+	}
+
+	iface_commit_ipv6_uplink(c);
+}
+
+static void ipc_handle_v4uplink(struct iface *c, struct blob_attr *tb[])
+{
+	struct in_addr ipv4source = {INADDR_ANY};
+	const size_t dns_max = 4;
+	size_t dns_cnt = 0;
+	struct __packed {
+		uint8_t type;
+		uint8_t len;
+		struct in_addr addr[dns_max];
+	} dns;
+
+	if (tb[OPT_IPV4SOURCE])
+		inet_pton(AF_INET, blobmsg_get_string(tb[OPT_IPV4SOURCE]), &ipv4source);
+
+	if (tb[OPT_DNS]) {
+		struct blob_attr *k;
+		unsigned rem;
+
+		blobmsg_for_each_attr(k, tb[OPT_DNS], rem) {
+			if (dns_cnt >= dns_max || blobmsg_type(k) != BLOBMSG_TYPE_STRING ||
+					inet_pton(AF_INET, blobmsg_data(k), &dns.addr[dns_cnt]) < 1)
+				continue;
+
+			++dns_cnt;
+		}
+	}
+
+	if (dns_cnt) {
+		dns.type = DHCPV4_OPT_DNSSERVER;
+		dns.len = 4 * dns_cnt;
+	}
+
+	iface_update_ipv4_uplink(c);
+	iface_add_dhcp_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns));
+	iface_set_ipv4_uplink(c, &ipv4source, 24);
+	iface_commit_ipv4_uplink(c);
+}
 
 // Handle internal IPC message
 static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
@@ -645,18 +774,24 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 
 			if (tb[OPT_MODE]) {
 				const char *mode = blobmsg_get_string(tb[OPT_MODE]);
-				if (!strcmp(mode, "adhoc"))
+				if (!strcmp(mode, "adhoc")) {
 					flags |= IFACE_FLAG_ADHOC;
-				else if (!strcmp(mode, "guest"))
+				} else if (!strcmp(mode, "guest")) {
 					flags |= IFACE_FLAG_GUEST;
-				else if (!strcmp(mode, "hybrid"))
+				} else if (!strcmp(mode, "hybrid")) {
 					flags |= IFACE_FLAG_HYBRID;
-				else if (!strcmp(mode, "leaf"))
+				} else if (!strcmp(mode, "leaf")) {
 					flags |= IFACE_FLAG_LEAF;
-				else if (!strcmp(mode, "external"))
+				} else if (!strcmp(mode, "external")) {
 					tb[OPT_HANDLE] = NULL;
-				else if (strcmp(mode, "auto"))
+				} else if (!strcmp(mode, "static")) {
+					tb[OPT_HANDLE] = NULL;
+					flags |= IFACE_FLAG_NODHCP;
+				} else if (!strcmp(mode, "internal")) {
+					flags |= IFACE_FLAG_INTERNAL;
+				} else if (strcmp(mode, "auto")) {
 					L_WARN("Unknown mode '%s' for interface %s: falling back to auto", mode, ifname);
+				}
 			}
 
 			if (tb[OPT_DISABLE_PA] && blobmsg_get_bool(tb[OPT_DISABLE_PA]))
@@ -669,11 +804,11 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 					blobmsg_get_string(tb[OPT_HANDLE]), flags);
 
 			hncp_pa_conf_iface_update(hncp_pa_p, iface->ifname);
-			if (iface && tb[OPT_PREFIX]) {
+			if (iface && tb[OPT_STATICPREFIX]) {
 				struct blob_attr *k;
 				unsigned rem;
 
-				blobmsg_for_each_attr(k, tb[OPT_PREFIX], rem) {
+				blobmsg_for_each_attr(k, tb[OPT_STATICPREFIX], rem) {
 					struct prefix p;
 					if (blobmsg_type(k) == BLOBMSG_TYPE_STRING &&
 							prefix_pton(blobmsg_get_string(k), &p.prefix, &p.plen) == 1)
@@ -737,6 +872,11 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			if(iface && tb[OPT_DNSNAME] && (conf = dncp_if_find_conf_by_name(hncp, iface->ifname)))
 				strncpy(conf->dnsname, blobmsg_get_string(tb[OPT_DNSNAME]), sizeof(conf->dnsname));
 
+			if (tb[OPT_IPV4SOURCE])
+				ipc_handle_v4uplink(c, tb);
+
+			if (tb[OPT_PREFIX])
+				ipc_handle_v6uplink(c, tb);
 		} else if (!c) {
 			L_ERR("invalid interface - command:%s ifname:%s",
 			      cmd, ifname);
@@ -745,100 +885,12 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			hncp_pa_conf_iface_flush(hncp_pa_p, c->ifname);
 			iface_remove(c);
 		} else if (!strcmp(cmd, "enable_ipv4_uplink")) {
-			struct in_addr ipv4source = {INADDR_ANY};
-			const size_t dns_max = 4;
-			size_t dns_cnt = 0;
-			struct __packed {
-				uint8_t type;
-				uint8_t len;
-				struct in_addr addr[dns_max];
-			} dns;
-
-			if (tb[OPT_IPV4SOURCE])
-				inet_pton(AF_INET, blobmsg_get_string(tb[OPT_IPV4SOURCE]), &ipv4source);
-
-			if (tb[OPT_DNS]) {
-				struct blob_attr *k;
-				unsigned rem;
-
-				blobmsg_for_each_attr(k, tb[OPT_DNS], rem) {
-					if (dns_cnt >= dns_max || blobmsg_type(k) != BLOBMSG_TYPE_STRING ||
-							inet_pton(AF_INET, blobmsg_data(k), &dns.addr[dns_cnt]) < 1)
-						continue;
-
-					++dns_cnt;
-				}
-			}
-
-			if (dns_cnt) {
-				dns.type = DHCPV4_OPT_DNSSERVER;
-				dns.len = 4 * dns_cnt;
-			}
-
-			iface_update_ipv4_uplink(c);
-			iface_add_dhcp_received(c, &dns, ((uint8_t*)&dns.addr[dns_cnt]) - ((uint8_t*)&dns));
-			iface_set_ipv4_uplink(c, &ipv4source, 24);
-			iface_commit_ipv4_uplink(c);
+			ipc_handle_v4uplink(c, tb);
 		} else if (!strcmp(cmd, "disable_ipv4_uplink")) {
 			iface_update_ipv4_uplink(c);
 			iface_commit_ipv4_uplink(c);
 		} else if (!strcmp(cmd, "enable_ipv6_uplink")) {
-			hnetd_time_t now = hnetd_time();
-			iface_update_ipv6_uplink(c);
-
-			struct blob_attr *k;
-			unsigned rem;
-			blobmsg_for_each_attr(k, tb[OPT_PREFIX], rem) {
-				hnetd_time_t valid = HNETD_TIME_MAX, preferred = HNETD_TIME_MAX;
-
-				struct prefix addr = {IN6ADDR_ANY_INIT, 0};
-				struct prefix ex = {IN6ADDR_ANY_INIT, 0};
-				struct blob_attr *tb[PREFIX_MAX];
-				blobmsg_parse(ipc_prefix_policy, PREFIX_MAX, tb,
-						blobmsg_data(k), blobmsg_data_len(k));
-
-				if (!tb[PREFIX_ADDRESS] || !prefix_pton(blobmsg_get_string(tb[PREFIX_ADDRESS]), &addr.prefix, &addr.plen))
-					continue;
-
-				if (tb[PREFIX_EXCLUDED])
-					prefix_pton(blobmsg_get_string(tb[PREFIX_EXCLUDED]), &ex.prefix, &ex.plen);
-
-				if (tb[PREFIX_PREFERRED])
-					preferred = now + blobmsg_get_u32(tb[PREFIX_PREFERRED]) * HNETD_TIME_PER_SECOND;
-
-				if (tb[PREFIX_VALID])
-					valid = now + blobmsg_get_u32(tb[PREFIX_VALID]) * HNETD_TIME_PER_SECOND;
-
-				void *data = NULL;
-				size_t len = 0;
-
-#ifdef EXT_PREFIX_CLASS
-				struct dhcpv6_prefix_class pclass = {
-					.type = htons(DHCPV6_OPT_PREFIX_CLASS),
-					.len = htons(2),
-					.class = htons(atoi(blobmsg_get_string(a)))
-				};
-
-				if ((a = tb[PREFIX_CLASS])) {
-					data = &pclass;
-					len = sizeof(pclass);
-				}
-#endif
-				iface_add_delegated(c, &addr, (ex.plen) ? &ex : NULL, valid, preferred, data, len);
-			}
-
-
-			if (tb[OPT_PASSTHRU]) {
-				size_t buflen = blobmsg_data_len(tb[OPT_PASSTHRU]) / 2;
-				uint8_t *buf = malloc(buflen);
-				if (buf) {
-					unhexlify(buf, buflen, blobmsg_get_string(tb[OPT_PASSTHRU]));
-					iface_add_dhcpv6_received(c, buf, buflen);
-					free(buf);
-				}
-			}
-
-			iface_commit_ipv6_uplink(c);
+			ipc_handle_v6uplink(c, tb);
 		} else if (!strcmp(cmd, "disable_ipv6_uplink")) {
 			iface_update_ipv6_uplink(c);
 			iface_commit_ipv6_uplink(c);
