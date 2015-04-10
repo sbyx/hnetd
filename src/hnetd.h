@@ -6,8 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  */
 
-#ifndef HNETD_H
-#define HNETD_H
+#pragma once
 
 /* Anything up to INFO is compiled in by default; syslog can be used
  * to filter them out. DEBUG can be quite spammy and isn't enabled by
@@ -46,21 +45,14 @@
 #include <syslog.h>
 #include <sys/types.h>
 #include <libubox/utils.h>
+#include <inttypes.h>
 
 #define STR_EXPAND(tok) #tok
 #define STR(tok) STR_EXPAND(tok)
 
-typedef int64_t hnetd_time_t;
-#define HNETD_TIME_MAX INT64_MAX
-#define HNETD_TIME_PER_SECOND INT64_C(1000)
+#define PRItime PRId64
 
-// Get current monotonic clock with millisecond granularity
-static inline hnetd_time_t hnetd_time(void) {
-	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return ((hnetd_time_t)ts.tv_sec * HNETD_TIME_PER_SECOND) +
-			((hnetd_time_t)ts.tv_nsec / (1000000000 / HNETD_TIME_PER_SECOND));
-}
+#include "hnetd_time.h"
 
 extern int log_level;
 
@@ -116,5 +108,3 @@ do {                                            \
 #ifndef __unused
 #define __unused __attribute__((unused))
 #endif
-
-#endif /* !HNETD_H */

@@ -6,13 +6,13 @@
  * HNCP database dump tool.
  *
  */
-#ifndef HNCP_DUMP_H_
-#define HNCP_DUMP_H_
+
+#pragma once
 
 //#include <libubox/blob.h>
 #include <libubox/blobmsg.h>
 
-#include "hncp.h"
+#include "dncp.h"
 
 /* Returns a blob buffer containing hncp data or NULL in case of error.
  * Dump format is the following (Will be updated as new elements are added).
@@ -95,6 +95,5 @@
  * }
  *
  */
-int hncp_dump(struct blob_buf *b, hncp o);
-
-#endif /* HNCP_DUMP_H_ */
+void hd_init(dncp o);
+void hd_register_rpc(void);

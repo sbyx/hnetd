@@ -6,77 +6,61 @@
 
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/stat.h>
+#include <sys/file.h>
 
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <string.h>
 #include <fcntl.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "hncp_routing.h"
 #include "hncp_i.h"
 #include "iface.h"
 
-static void hncp_routing_run(struct uloop_timeout *t);
-static void hncp_routing_callback(hncp_subscriber s, __unused hncp_node n,
-		__unused struct tlv_attr *tlv, __unused bool add);
-
-static const char *hncp_routing_names[HNCP_ROUTING_MAX] = {
-		[HNCP_ROUTING_NONE] = "Fallback routing",
-		[HNCP_ROUTING_BABEL] = "Babel",
-		[HNCP_ROUTING_OSPF] = "OSPF",
-		[HNCP_ROUTING_ISIS] = "IS-IS",
-		[HNCP_ROUTING_RIP] = "RIP",
-};
-
 struct hncp_routing_struct {
-	hncp_subscriber_s subscr;
-	hncp hncp;
+	dncp_subscriber_s subscr;
+	dncp hncp;
 	struct uloop_timeout t;
-	enum hncp_routing_protocol active;
-	struct tlv_attr *tlv[HNCP_ROUTING_MAX];
 	struct iface_user iface;
 	const char *script;
 	const char **ifaces;
 	size_t ifaces_cnt;
+	struct uloop_process configure_proc;
+	struct uloop_process routing_proc;
+	bool configure_pending;
+	bool routing_pending;
 };
 
-static int call_backend(hncp_bfs bfs, const char *action, int stdin)
+static void hncp_routing_spawn(char **argv)
 {
-	if (!bfs->script)
-		return 0;
-
-	char protobuf[4];
-	snprintf(protobuf, sizeof(protobuf), "%u", bfs->active);
-
-	char **argv = malloc((bfs->ifaces_cnt + 4) * sizeof(char*));
-	argv[0] = (char*)bfs->script;
-	argv[1] = (char*)action;
-	argv[2] = protobuf;
-	memcpy(&argv[3], bfs->ifaces, bfs->ifaces_cnt * sizeof(char*));
-	argv[3 + bfs->ifaces_cnt] = NULL;
-
-	pid_t pid = fork();
+	pid_t pid = vfork();
 	if (pid == 0) {
-		if (stdin >= 0) {
-			dup2(stdin, STDOUT_FILENO);
-			close(stdin);
-		}
-
 		execv(argv[0], argv);
 		_exit(128);
 	}
 
-	if (stdin >= 0)
-		close(stdin);
+	waitpid(pid, NULL, 0);
+}
 
-	free(argv);
+static void hncp_configure_exec(struct uloop_process *p, __unused int ret)
+{
+	hncp_bfs bfs = container_of(p, hncp_bfs_s, configure_proc);
+	if (bfs->configure_pending && !bfs->configure_proc.pending) {
+		char **argv = alloca((bfs->ifaces_cnt + 3) * sizeof(char*));
+		argv[0] = (char*)bfs->script;
+		argv[1] = "configure";
+		memcpy(&argv[2], bfs->ifaces, bfs->ifaces_cnt * sizeof(char*));
+		argv[2 + bfs->ifaces_cnt] = NULL;
 
-	int status;
-	waitpid(pid, &status, 0);
-	return status;
+		bfs->configure_proc.cb = hncp_configure_exec;
+		bfs->configure_proc.pid = vfork();
+		if (!bfs->configure_proc.pid) {
+			execv(argv[0], argv);
+			_exit(128);
+		}
+		uloop_process_add(&bfs->configure_proc);
+		bfs->configure_pending = false;
+	}
 }
 
 static void hncp_routing_intiface(struct iface_user *u, const char *ifname, bool enable)
@@ -87,6 +71,7 @@ static void hncp_routing_intiface(struct iface_user *u, const char *ifname, bool
 	for (i = 0; i < bfs->ifaces_cnt; ++i)
 		if (!strcmp(bfs->ifaces[i], ifname))
 			break;
+
 	if (enable && i == bfs->ifaces_cnt) {
 		bfs->ifaces = realloc(bfs->ifaces, ++bfs->ifaces_cnt * sizeof(char*));
 		bfs->ifaces[bfs->ifaces_cnt - 1] = ifname;
@@ -96,7 +81,11 @@ static void hncp_routing_intiface(struct iface_user *u, const char *ifname, bool
 		/* routing setup did not change -> skip reconfigure */
 		return;
 	}
-	call_backend(bfs, "reconfigure", -1);
+
+	if (bfs->script) {
+		bfs->configure_pending = true;
+		hncp_configure_exec(&bfs->configure_proc, 0);
+	}
 }
 
 static void hncp_routing_intaddr(struct iface_user *u, __unused const char *ifname,
@@ -104,55 +93,239 @@ static void hncp_routing_intaddr(struct iface_user *u, __unused const char *ifna
 {
 	// Reschedule routing run when we have an IPv4-address on link
 	hncp_bfs bfs = container_of(u, hncp_bfs_s, iface);
-	if (bfs->active == HNCP_ROUTING_NONE && addr4)
+	if (addr4)
 		uloop_timeout_set(&bfs->t, 0);
 }
 
-hncp_bfs hncp_routing_create(hncp hncp, const char *script)
+static void hncp_routing_callback(dncp_subscriber s, __unused dncp_node n,
+		struct tlv_attr *tlv, __unused bool add)
+{
+	hncp_bfs bfs = container_of(s, hncp_bfs_s, subscr);
+	if (tlv_id(tlv) == HNCP_T_ASSIGNED_PREFIX || tlv_id(tlv) == HNCP_T_DELEGATED_PREFIX ||
+			tlv_id(tlv) == DNCP_T_NODE_DATA_NEIGHBOR || tlv_id(tlv) == HNCP_T_EXTERNAL_CONNECTION ||
+			tlv_id(tlv) == HNCP_T_ROUTER_ADDRESS)
+		uloop_timeout_set(&bfs->t, 0);
+}
+
+static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
+{
+	hncp_bfs bfs = container_of(p, hncp_bfs_s, routing_proc);
+	if (bfs->routing_pending && !bfs->routing_proc.pending) {
+		bfs->routing_proc.cb = hncp_routing_exec;
+		bfs->routing_proc.pid = fork();
+		if (!bfs->routing_proc.pid) {
+			dncp hncp = bfs->hncp;
+			struct list_head queue = LIST_HEAD_INIT(queue);
+			dncp_node c, n;
+			bool have_v4uplink = false;
+			char dst[PREFIX_MAXBUFFLEN] = "", via[INET6_ADDRSTRLEN] = "";
+			char domain[PREFIX_MAXBUFFLEN] = "", metric[16];
+			char *argv[] = {(char*)bfs->script, "bfsprepare", dst, via, NULL, metric, domain, NULL};
+
+			vlist_for_each_element(&hncp->nodes, c, in_nodes) {
+				// Mark all nodes as not visited
+				c->profile_data.bfs.next_hop = NULL;
+				c->profile_data.bfs.next_hop4 = NULL;
+				c->profile_data.bfs.hopcount = 0;
+			}
+
+			hncp_routing_spawn(argv);
+			list_add_tail(&hncp->own_node->profile_data.bfs.head, &queue);
+
+			while (!list_empty(&queue)) {
+				c = container_of(list_first_entry(&queue, struct hncp_bfs_head, head), dncp_node_s, profile_data.bfs);
+				argv[4] = (char*)c->profile_data.bfs.ifname;
+				L_WARN("Router %s", DNCP_NODE_REPR(c));
+
+				struct tlv_attr *a, *a2;
+				dncp_node_for_each_tlv(c, a) {
+					hncp_t_assigned_prefix_header ap;
+					dncp_t_node_data_neighbor ne;
+					if ((ne = dncp_tlv_neighbor(a))) {
+
+						n = dncp_find_node_by_node_identifier(hncp,
+							&ne->neighbor_node_identifier, false);
+
+						if (!(n = dncp_node_find_neigh_bidir(c, ne)))
+							continue; // Connection not mutual
+
+						if (n->profile_data.bfs.next_hop || n == hncp->own_node)
+							continue; // Already visited
+
+
+						if (c == hncp->own_node) { // We are at the start, lookup neighbor
+							dncp_link link = dncp_find_link_by_id(hncp, ne->link_id);
+							if (!link)
+								continue;
+							dncp_tlv tlv = dncp_find_tlv(hncp, DNCP_T_NODE_DATA_NEIGHBOR, ne, sizeof(*ne));
+							dncp_neighbor neigh = tlv ? dncp_tlv_get_extra(tlv) : NULL;
+							if (neigh) {
+								n->profile_data.bfs.next_hop = &neigh->last_sa6.sin6_addr;
+								n->profile_data.bfs.ifname = link->ifname;
+							}
+
+							struct tlv_attr *na;
+							hncp_t_router_address ra;
+							dncp_node_for_each_tlv_with_type(n, na, HNCP_T_ROUTER_ADDRESS) {
+								if ((ra = dncp_tlv_router_address(na))) {
+									if (ra->link_id == ne->neighbor_link_id &&
+										IN6_IS_ADDR_V4MAPPED(&ra->address)) {
+										n->profile_data.bfs.next_hop4 = &ra->address;
+										break;
+									}
+								}
+							}
+						} else { // Inherit next-hop from predecessor
+							n->profile_data.bfs.next_hop = c->profile_data.bfs.next_hop;
+							n->profile_data.bfs.next_hop4 = c->profile_data.bfs.next_hop4;
+							n->profile_data.bfs.ifname = c->profile_data.bfs.ifname;
+						}
+
+						if (!n->profile_data.bfs.next_hop || !n->profile_data.bfs.ifname)
+							continue;
+
+						n->profile_data.bfs.hopcount = c->profile_data.bfs.hopcount + 1;
+						list_add_tail(&n->profile_data.bfs.head, &queue);
+					} else if (tlv_id(a) == HNCP_T_EXTERNAL_CONNECTION) {
+						hncp_t_delegated_prefix_header dp;
+						tlv_for_each_attr(a2, a)
+							if ((dp = dncp_tlv_dp(a2))) {
+								struct prefix from = { .plen = dp->prefix_length_bits };
+								size_t plen = ROUND_BITS_TO_BYTES(from.plen);
+								unsigned int flen = ROUND_BYTES_TO_4BYTES(sizeof(*dp) +
+										ROUND_BITS_TO_BYTES(dp->prefix_length_bits));
+								struct in6_addr domainaddr;
+								struct tlv_attr *b;
+
+								memcpy(&from.prefix, &dp[1], plen);
+								prefix_ntop(dst, sizeof(dst), &from.prefix, from.plen);
+
+								if (c != hncp->own_node)
+									snprintf(metric, sizeof(metric), "%u", c->profile_data.bfs.hopcount);
+								else
+									metric[0] = 0;
+
+								if (!IN6_IS_ADDR_V4MAPPED(&from.prefix))
+									argv[1] = "bfsipv6prefix";
+								else
+									argv[1] = "bfsipv4prefix";
+
+								hncp_routing_spawn(argv);
+
+								if (tlv_len(a2) < flen)
+									continue;
+
+								tlv_for_each_in_buf(b, tlv_data(a2) + flen, tlv_len(a2) - flen) {
+									hncp_t_prefix_domain d = tlv_data(b);
+									if (tlv_id(b) != HNCP_T_PREFIX_DOMAIN || tlv_len(b) < 1 || d->type > 128)
+										continue;
+
+									plen = ROUND_BITS_TO_BYTES(d->type);
+									if (tlv_len(b) < 1 + plen)
+										continue;
+
+									if (d->type == 0) {
+										strcpy(domain, "default");
+									} else {
+										memcpy(&domainaddr, d->id, plen);
+										memset(&domainaddr.s6_addr[plen], 0, sizeof(domainaddr) - plen);
+										prefix_ntop(domain, sizeof(domain), &domainaddr, d->type);
+									}
+
+									if (!IN6_IS_ADDR_V4MAPPED(&from.prefix)) {
+										argv[1] = "bfsipv6uplink";
+										if (c->profile_data.bfs.next_hop && c->profile_data.bfs.ifname) {
+											inet_ntop(AF_INET6, c->profile_data.bfs.next_hop, via, sizeof(via));
+										} else {
+											metric[0] = 0;
+											via[0] = 0;
+										}
+										hncp_routing_spawn(argv);
+									} else {
+										argv[1] = "bfsipv4uplink";
+										if (c->profile_data.bfs.next_hop4 && c->profile_data.bfs.ifname &&
+												iface_has_ipv4_address(c->profile_data.bfs.ifname) &&
+												(d->type != 0 || !have_v4uplink)) {
+											inet_ntop(AF_INET, &c->profile_data.bfs.next_hop4->s6_addr[12], via, sizeof(via));
+											if (d->type == 0)
+												have_v4uplink = true;
+										} else {
+											metric[0] = 0;
+											via[0] = 0;
+										}
+										hncp_routing_spawn(argv);
+									}
+								}
+							}
+					} else if ((ap = dncp_tlv_ap(a)) && c != hncp->own_node) {
+						dncp_link link = dncp_find_link_by_name(hncp, c->profile_data.bfs.ifname, false);
+						struct iface *ifo = link ? iface_get(c->profile_data.bfs.ifname) : NULL;
+						// Skip routes for prefixes on connected links
+						if (link && ifo && (ifo->flags & IFACE_FLAG_ADHOC) != IFACE_FLAG_ADHOC && c->profile_data.bfs.hopcount == 1) {
+							dncp_t_node_data_neighbor_s np = {
+								.neighbor_node_identifier = c->node_identifier,
+								.neighbor_link_id = ap->link_id,
+								.link_id = link->iid
+							};
+							if (dncp_find_tlv(hncp, DNCP_T_NODE_DATA_NEIGHBOR, &np, sizeof(np)))
+								continue;
+						}
+
+						struct prefix to = { .plen = ap->prefix_length_bits };
+						size_t plen = ROUND_BITS_TO_BYTES(to.plen);
+						memcpy(&to.prefix, &ap[1], plen);
+						unsigned linkid = (link) ? link->iid : 0;
+						prefix_ntop(dst, sizeof(dst), &to.prefix, to.plen);
+						snprintf(metric, sizeof(metric), "%u", c->profile_data.bfs.hopcount << 8 | linkid);
+
+						if (!IN6_IS_ADDR_V4MAPPED(&to.prefix)) {
+							if (c->profile_data.bfs.next_hop && c->profile_data.bfs.ifname) {
+								inet_ntop(AF_INET6, c->profile_data.bfs.next_hop, via, sizeof(via));
+								argv[1] = "bfsipv6assigned";
+								hncp_routing_spawn(argv);
+							}
+						} else {
+							if (c->profile_data.bfs.next_hop4 && c->profile_data.bfs.ifname && iface_has_ipv4_address(c->profile_data.bfs.ifname)) {
+								inet_ntop(AF_INET, &c->profile_data.bfs.next_hop4->s6_addr[12], via, sizeof(via));
+								argv[1] = "bfsipv4assigned";
+								hncp_routing_spawn(argv);
+							}
+						}
+					}
+				}
+
+				list_del(&c->profile_data.bfs.head);
+			}
+			_exit(0);
+		}
+		uloop_process_add(&bfs->routing_proc);
+		bfs->routing_pending = false;
+	}
+}
+
+static void hncp_routing_schedule(struct uloop_timeout *t)
+{
+	hncp_bfs bfs = container_of(t, hncp_bfs_s, t);
+	bfs->routing_pending = true;
+	hncp_routing_exec(&bfs->routing_proc, 0);
+}
+
+hncp_bfs hncp_routing_create(dncp hncp, const char *script, bool incremental)
 {
 	hncp_bfs bfs = calloc(1, sizeof(*bfs));
-	bfs->subscr.tlv_change_callback = hncp_routing_callback;
+
 	bfs->hncp = hncp;
-	bfs->t.cb = hncp_routing_run;
-	bfs->active = HNCP_ROUTING_MAX;
 	bfs->script = script;
 	bfs->iface.cb_intiface = hncp_routing_intiface;
-	bfs->iface.cb_intaddr = hncp_routing_intaddr;
-	hncp_subscribe(hncp, &bfs->subscr);
-	iface_register_user(&bfs->iface);
 
-	// Load supported protocols and preferences
-	if (script) {
-		int fd[2];
-		pipe(fd);
-		fcntl(fd[0], F_SETFD, fcntl(fd[0], F_GETFD) | FD_CLOEXEC);
-		call_backend(bfs, "enumerate", fd[1]);
-
-		FILE *fp = fdopen(fd[0], "r");
-		if (fp) {
-			char buf[128];
-			while (fgets(buf, sizeof(buf), fp)) {
-				unsigned proto, preference;
-				if (sscanf(buf, "%u %u", &proto, &preference) == 2 &&
-						proto < HNCP_ROUTING_MAX && preference < 256 &&
-						!bfs->tlv[proto]) {
-					struct {
-						struct tlv_attr hdr;
-						uint8_t proto;
-						uint8_t preference;
-					} tlv;
-					tlv_init(&tlv.hdr, HNCP_T_ROUTING_PROTOCOL, 6);
-					tlv.proto = proto;
-					tlv.preference = preference;
-					bfs->tlv[proto] = hncp_add_tlv(hncp, &tlv.hdr);
-				}
-			}
-			fclose(fp);
-		} else {
-			syslog(LOG_WARNING, "Failed to run routing script: %s", strerror(errno));
-		}
+	if (incremental) {
+		bfs->t.cb = hncp_routing_schedule;
+		bfs->iface.cb_intaddr = hncp_routing_intaddr;
+		bfs->subscr.tlv_change_callback = hncp_routing_callback;
+		dncp_subscribe(hncp, &bfs->subscr);
 	}
 
+	iface_register_user(&bfs->iface);
 	return bfs;
 }
 
@@ -160,210 +333,10 @@ void hncp_routing_destroy(hncp_bfs bfs)
 {
 	uloop_timeout_cancel(&bfs->t);
 	iface_unregister_user(&bfs->iface);
-	hncp_unsubscribe(bfs->hncp, &bfs->subscr);
 
-	for (size_t i = 0; i < HNCP_ROUTING_MAX; ++i) {
-		if (!bfs->tlv[i])
-			continue;
+	if (bfs->t.cb)
+		dncp_unsubscribe(bfs->hncp, &bfs->subscr);
 
-		hncp_remove_tlv(bfs->hncp, bfs->tlv[i]);
-		free(bfs->tlv[i]);
-	}
+	free(bfs->ifaces);
 	free(bfs);
-}
-
-static void hncp_routing_callback(hncp_subscriber s, __unused hncp_node n,
-		__unused struct tlv_attr *tlv, __unused bool add)
-{
-	hncp_bfs bfs = container_of(s, hncp_bfs_s, subscr);
-	uloop_timeout_set(&bfs->t, 0);
-}
-
-static void hncp_routing_run(struct uloop_timeout *t)
-{
-	hncp_bfs bfs = container_of(t, hncp_bfs_s, t);
-	hncp hncp = bfs->hncp;
-	struct list_head queue = LIST_HEAD_INIT(queue);
-	hncp_node c, n;
-
-	size_t routercnt = 0;
-	unsigned routing_preference[HNCP_ROUTING_MAX] = {0};
-	unsigned routing_supported[HNCP_ROUTING_MAX] = {0};
-
-	vlist_for_each_element(&hncp->nodes, c, in_nodes) {
-		bool have_routing = false;
-
-		// Mark all nodes as not visited
-		c->bfs.next_hop = NULL;
-		c->bfs.next_hop4 = NULL;
-		c->bfs.hopcount = 0;
-
-		struct tlv_attr *a;
-		hncp_node_for_each_tlv_with_type(c, a, HNCP_T_ROUTING_PROTOCOL) {
-			if (tlv_len(a) >= sizeof(hncp_t_routing_protocol_s)) {
-				hncp_t_routing_protocol p = tlv_data(a);
-				if (p->protocol < HNCP_ROUTING_MAX) {
-					++routing_supported[p->protocol];
-					routing_preference[p->protocol] += p->preference;
-				}
-				have_routing = true;
-			}
-		}
-
-		if (have_routing)
-			++routercnt;
-	}
-
-	// Elect routing protocol
-	size_t current_pref = 0;
-	size_t current_proto = HNCP_ROUTING_NONE;
-
-	for (size_t i = 1; i < HNCP_ROUTING_MAX; ++i) {
-		if (routing_supported[i] == routercnt &&
-				routing_preference[i] >= current_pref) {
-			current_proto = i;
-			current_pref = routing_preference[i];
-		}
-	}
-
-	// Disable old routing protocol
-	if (current_proto != bfs->active) {
-		if (bfs->active == HNCP_ROUTING_NONE) {
-			iface_update_routes();
-			iface_commit_routes();
-		} else {
-			call_backend(bfs, "disable", -1);
-		}
-
-		bfs->active = current_proto;
-		if (current_proto != HNCP_ROUTING_NONE)
-			call_backend(bfs, "enable", -1);
-	}
-
-	if (bfs->active != HNCP_ROUTING_NONE)
-		return;
-
-	// Run BFS fallback algorithm
-	bool have_v4uplink = false;
-
-	iface_update_routes();
-	list_add_tail(&hncp->own_node->bfs.head, &queue);
-
-	while (!list_empty(&queue)) {
-		c = container_of(list_first_entry(&queue, struct hncp_bfs_head, head), hncp_node_s, bfs);
-		L_WARN("Router %d", c->node_identifier_hash.buf[0]);
-
-		struct tlv_attr *a, *a2;
-		hncp_node_for_each_tlv(c, a) {
-			hncp_t_assigned_prefix_header ap;
-			hncp_t_node_data_neighbor ne;
-			if ((ne = hncp_tlv_neighbor(a))) {
-
-				n = hncp_find_node_by_hash(hncp,
-					&ne->neighbor_node_identifier_hash, false);
-
-				if (!(n = hncp_node_find_neigh_bidir(c, ne)))
-					continue; // Connection not mutual
-
-				if (n->bfs.next_hop || n == hncp->own_node)
-					continue; // Already visited
-
-
-				if (c == hncp->own_node) { // We are at the start, lookup neighbor
-					hncp_link link = hncp_find_link_by_id(hncp, be32_to_cpu(ne->link_id));
-					if (!link)
-						continue;
-
-					hncp_neighbor_s *neigh, query = {
-						.node_identifier_hash = ne->neighbor_node_identifier_hash,
-						.iid = be32_to_cpu(ne->neighbor_link_id)
-					};
-
-					neigh = vlist_find(&link->neighbors, &query, &query, in_neighbors);
-					if (neigh) {
-						n->bfs.next_hop = &neigh->last_address;
-						n->bfs.ifname = link->ifname;
-					}
-
-					struct tlv_attr *na;
-					hncp_t_router_address ra;
-					hncp_node_for_each_tlv_with_type(n, na, HNCP_T_ROUTER_ADDRESS) {
-						if ((ra = hncp_tlv_router_address(na))) {
-							if (ra->link_id == ne->neighbor_link_id &&
-							    IN6_IS_ADDR_V4MAPPED(&ra->address)) {
-								n->bfs.next_hop4 = &ra->address;
-								break;
-							}
-						}
-					}
-				} else { // Inherit next-hop from predecessor
-					n->bfs.next_hop = c->bfs.next_hop;
-					n->bfs.next_hop4 = c->bfs.next_hop4;
-					n->bfs.ifname = c->bfs.ifname;
-				}
-
-				if (!n->bfs.next_hop || !n->bfs.ifname)
-					continue;
-
-				n->bfs.hopcount = c->bfs.hopcount + 1;
-				list_add_tail(&n->bfs.head, &queue);
-			} else if (tlv_id(a) == HNCP_T_EXTERNAL_CONNECTION && c != hncp->own_node) {
-				hncp_t_delegated_prefix_header dp;
-				tlv_for_each_attr(a2, a)
-					if ((dp = hncp_tlv_dp(a2))) {
-						struct prefix from = { .plen = dp->prefix_length_bits };
-						size_t plen = ROUND_BITS_TO_BYTES(from.plen);
-						memcpy(&from.prefix, &dp[1], plen);
-
-						if (!IN6_IS_ADDR_V4MAPPED(&from.prefix)) {
-							if (c->bfs.next_hop && c->bfs.ifname)
-								iface_add_default_route(c->bfs.ifname, &from, c->bfs.next_hop, c->bfs.hopcount);
-						} else {
-							if (c->bfs.next_hop4 && c->bfs.ifname && !have_v4uplink && iface_has_ipv4_address(c->bfs.ifname)) {
-								iface_add_default_route(c->bfs.ifname, NULL, c->bfs.next_hop4, c->bfs.hopcount);
-								have_v4uplink = true;
-							}
-						}
-					}
-			} else if ((ap = hncp_tlv_ap(a)) && c != hncp->own_node) {
-				hncp_link link = hncp_find_link_by_name(hncp, c->bfs.ifname, false);
-				struct iface *ifo = link ? iface_get(c->bfs.ifname) : NULL;
-				// Skip routes for prefixes on connected links
-				if (link && ifo && (ifo->flags & IFACE_FLAG_ADHOC) != IFACE_FLAG_ADHOC && c->bfs.hopcount == 1) {
-					hncp_neighbor_s query = {
-						.node_identifier_hash = c->node_identifier_hash,
-						.iid = be32_to_cpu(ap->link_id)
-					};
-					if (vlist_find(&link->neighbors, &query, &query, in_neighbors))
-						continue;
-				}
-
-				struct prefix to = { .plen = ap->prefix_length_bits };
-				size_t plen = ROUND_BITS_TO_BYTES(to.plen);
-				memcpy(&to.prefix, &ap[1], plen);
-				unsigned linkid = (link) ? link->iid : 0;
-
-				if (!IN6_IS_ADDR_V4MAPPED(&to.prefix)) {
-					if (c->bfs.next_hop && c->bfs.ifname)
-						iface_add_internal_route(c->bfs.ifname, &to, c->bfs.next_hop,
-								c->bfs.hopcount << 8 | linkid);
-				} else {
-					if (c->bfs.next_hop4 && c->bfs.ifname && iface_has_ipv4_address(c->bfs.ifname))
-						iface_add_internal_route(c->bfs.ifname, &to, c->bfs.next_hop4,
-								c->bfs.hopcount << 8 | linkid);
-				}
-			}
-		}
-
-		list_del(&c->bfs.head);
-	}
-	iface_commit_routes();
-}
-
-const char *hncp_routing_namebyid(enum hncp_routing_protocol id)
-{
-	if(id >= HNCP_ROUTING_MAX)
-		return "Unknown routing protocol";
-
-	return hncp_routing_names[id];
 }

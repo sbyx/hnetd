@@ -7,11 +7,11 @@
 #include <unistd.h>
 
 #include "fake_uloop.h"
-#include "prefix_utils.c"
+#include "prefix_utils.h"
 #include "iface.c"
 
 int log_level = LOG_DEBUG;
-
+/*
 void pa_data_subscribe(__unused struct pa_data *data, __unused struct pa_data_user *user) {}
 struct pa_iface* pa_iface_get(__unused struct pa_data *d, __unused const char *ifname, __unused bool goc){ return NULL; }
 void pa_core_static_prefix_init(__unused struct pa_static_prefix_rule *rule, __unused const char *ifname,
@@ -24,10 +24,12 @@ void pa_core_iface_addr_init(__unused struct pa_iface_addr *addr, __unused const
 		__unused struct in6_addr *address, __unused uint8_t mask, __unused struct prefix *filter) {}
 void pa_core_iface_addr_add(__unused struct pa_core *core, __unused struct pa_iface_addr *addr) {}
 void pa_core_iface_addr_del(__unused struct pa_core *core, __unused struct pa_iface_addr *addr) {}
-void platform_set_owner(__unused struct iface *c, __unused bool enable) {}
-int platform_init(__unused hncp hncp, __unused struct pa_data *data, __unused const char *pd_socket) { return 0; }
+*/
+void hncp_pa_iface_user_register(__unused hncp_pa hp, __unused struct hncp_pa_iface_user *user) {}
+struct list_head *__hpa_get_dps(__unused hncp_pa hpa) {return NULL;}
+void platform_set_dhcp(__unused struct iface *c, __unused enum hncp_link_elected elected) {}
+int platform_init(__unused dncp hncp, __unused hncp_pa pa, __unused const char *pd_socket) { return 0; }
 void platform_set_address(__unused struct iface *c, __unused struct iface_addr *addr, __unused bool enable) {}
-void platform_set_route(__unused struct iface *c, __unused struct iface_route *addr, __unused bool enable) {}
 void platform_iface_free(__unused struct iface *c) {}
 void platform_set_internal(__unused struct iface *c, __unused bool internal) {}
 void platform_filter_prefix(__unused struct iface *c, __unused const struct prefix *p, __unused bool enable) {}
@@ -37,8 +39,9 @@ void platform_set_dhcpv6_send(__unused struct iface *c, __unused const void *dhc
 void platform_set_prefix_route(__unused const struct prefix *p, __unused bool enable) {}
 void platform_restart_dhcpv4(__unused struct iface *c) {}
 void platform_set_snat(__unused struct iface *c, __unused const struct prefix *p) {}
-void hncp_sd_dump_link_fqdn(__unused hncp_sd sd, __unused hncp_link l, __unused char *buf, __unused size_t buf_len) {}
-hncp_link hncp_find_link_by_name(__unused hncp h, __unused const char *ifname, __unused bool create) { return NULL; }
+void hncp_sd_dump_link_fqdn(__unused hncp_sd sd, __unused dncp_link l, __unused const char *ifname, __unused char *buf, __unused size_t buf_len) {}
+dncp_link dncp_find_link_by_name(__unused dncp h, __unused const char *ifname, __unused bool create) { return NULL; }
+void hncp_link_register(__unused struct hncp_link *c, __unused struct hncp_link_user *u) {}
 
 void intiface_mock(__unused struct iface_user *u, __unused const char *ifname, bool enabled)
 {
@@ -143,7 +146,7 @@ void iface_test_new_managed(void)
 	iface_commit_ipv6_uplink(iface);
 
 	smock_pull_bool_is("test0", false);
-	sput_fail_unless(!prefix_cmp(&p, smock_pull("prefix_prefix")), "prefix address");
+	sput_fail_unless(!prefix_cmp(&p, (struct prefix *)smock_pull("prefix_prefix")), "prefix address");
 	smock_pull_int64_is("prefix_valid", HNETD_TIME_MAX);
 	smock_pull_int64_is("prefix_preferred", 0);
 	sput_fail_unless(!strcmp(smock_pull("dhcpv6_data"), "test"), "dhcpv6_data");

@@ -78,7 +78,7 @@ tlv_id(const struct tlv_attr *attr)
 static inline unsigned int
 tlv_len(const struct tlv_attr *attr)
 {
-	return (be32_to_cpu(attr->id_len) & TLV_ATTR_LEN_MASK) - sizeof(struct tlv_attr);
+	return (be32_to_cpu(attr->id_len) & TLV_ATTR_LEN_MASK);
 }
 
 /*

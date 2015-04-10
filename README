@@ -107,14 +107,24 @@ Once both services are running, you can use the hnet CLI tools:
 
 hnet-ifup [-c category] [-a] [-d] [-u] [-p prefix] [-l id[/idmask]]
 	[-i id/idmask [filter-prefix]] [-m ip6_plen] [-k trickle_k] 
-	[-P ping_interval] <interfacename>
+	[-P ping_interval] [-4 global-IPv4-address] [-6 delegated prefix]
+	[-D dns-server] <interfacename>
 adds the network interface <interfacename> (e.g. eth0) to the homenet.
 -c is an optional parameter declaring the interface category
-	auto: auto-detect (default)
-	external: fixed-external
-	guest: guest-mode (fixed-internal)
-	adhoc: ad-hoc mode (fixed-internal)
-	hybrid: hybrid mode (fixed-internal)
+   (see https://tools.ietf.org/html/draft-ietf-homenet-hncp-04#page-5)
+	auto: auto-detect if interface is internal or external (default)
+	external: interface is always external / towards an ISP
+	static: like external, but does not run a DHCP or DHCPv6 client
+	internal: interface is always internal / towards interior nodes
+	leaf: like internal but connects to clients-only (no routers)
+	guest: like leaf, but clients should only reach the internet
+	hybrid: like internal, but connected to trusted, legacy CPE (experimental)
+	adhoc: like internal, but link is non-transitive (e.g. mesh) (experimental)
+static:
+-4 is an optional parameter indicating the public IPv4 address of the interface
+-6 is an optional parameter indicating an IPv6-prefix delegated to the interface
+-D is an optional parameter indicating a public recursive DNS server
+internal / leaf / guest / hybrid / adhoc:
 -p is an optional parameter indicating one or more static prefixes.
 -l is an optional parameter setting the link-id and id-mask.
 -i is an optional parameter indicating one or more iface ids.

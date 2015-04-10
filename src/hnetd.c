@@ -19,15 +19,21 @@
 #include <syslog.h>
 #include <fcntl.h>
 
-#include <libubox/uloop.h>
-
+#include "hnetd_time.h"
 #include "hncp_pa.h"
 #include "hncp_sd.h"
+#include "hncp_multicast.h"
 #include "hncp_routing.h"
-#include "ipc.h"
+#include "hncp_proto.h"
+#include "hncp_link.h"
+#include "hncp_dump.h"
 #include "platform.h"
-#include "pa.h"
 #include "pd.h"
+#include "dncp_trust.h"
+
+#ifdef DTLS
+#include "dtls.h"
+#endif /* DTLS */
 
 #define FLOODING_DELAY 2 * HNETD_TIME_PER_SECOND
 
@@ -35,8 +41,7 @@ int log_level = LOG_INFO;
 
 typedef struct {
 	struct iface_user iu;
-	hncp hncp;
-	hncp_glue glue;
+	dncp hncp;
 } hncp_iface_user_s, *hncp_iface_user;
 
 
@@ -45,8 +50,7 @@ void hncp_iface_intaddr_callback(struct iface_user *u, const char *ifname,
 								 const struct prefix *addr4 __unused)
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
-
-	hncp_if_set_ipv6_address(hiu->hncp, ifname, addr6 ? &addr6->prefix : NULL);
+	dncp_if_set_ipv6_address(hiu->hncp, ifname, addr6 ? &addr6->prefix : NULL);
 }
 
 
@@ -55,46 +59,17 @@ void hncp_iface_intiface_callback(struct iface_user *u,
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
 	struct iface *c = iface_get(ifname);
-	hncp_if_set_enabled(hiu->hncp, ifname, enabled &&
+	dncp_if_set_enabled(hiu->hncp, ifname, enabled &&
 			(c->flags & IFACE_FLAG_LEAF) != IFACE_FLAG_LEAF);
 }
 
-
-void hncp_iface_extdata_callback(struct iface_user *u,
-								 const char *ifname,
-								 const void *dhcpv6_data,
-								 size_t dhcpv6_len)
-{
-	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
-
-	hncp_pa_set_external_link(hiu->glue, ifname, dhcpv6_data, dhcpv6_len,
-							  HNCP_PA_EXTDATA_IPV6);
-}
-
-void hncp_iface_ext4data_callback(struct iface_user *u,
-								  const char *ifname,
-								  const void *dhcpv4_data,
-								  size_t dhcpv4_len)
-{
-	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
-
-	hncp_pa_set_external_link(hiu->glue, ifname, dhcpv4_data, dhcpv4_len,
-							  HNCP_PA_EXTDATA_IPV4);
-}
-
-
-void hncp_iface_glue(hncp_iface_user hiu, hncp h, hncp_glue g)
+void hncp_iface_glue(hncp_iface_user hiu, dncp h)
 {
 	/* Initialize hiu appropriately */
 	memset(hiu, 0, sizeof(*hiu));
 	hiu->iu.cb_intiface = hncp_iface_intiface_callback;
 	hiu->iu.cb_intaddr = hncp_iface_intaddr_callback;
-	hiu->iu.cb_extdata = hncp_iface_extdata_callback;
-	hiu->iu.cb_ext4data = hncp_iface_ext4data_callback;
 	hiu->hncp = h;
-	hiu->glue = g;
-
-	/* We don't care about other callbacks for now. */
 	iface_register_user(&hiu->iu);
 }
 
@@ -112,45 +87,30 @@ int usage() {
 	 "\t--ulaprefix v:x:y:z::/prefix\n"
 	 "\t--ulamode [on,off,ifnov6]\n"
 	 "\t--loglevel [0-9]\n"
+	 "\t--password <DTLS password for auth>\n"
+	 "\t--certificate <(DTLS) path to local certificate>\n"
+	 "\t--privatekey <(DTLS) path to local private key>\n"
+	 "\t--trust <(DTLS) path to trust consensus store file>\n"
+	 "\t--verify-path <(DTLS) path to trusted cert file>\n"
+	 "\t--verify-dir <(DTLS) path to trusted cert directory>\n"
+	 "\t-M multicast_script (enables draft-pfister-homenet-multicast support)\n"
 	 );
     return(3);
 }
 
 int main(__unused int argc, char *argv[])
 {
-	hncp h;
-	struct pa pa;
+	dncp h;
 	int c;
 	hncp_iface_user_s hiu;
-	hncp_glue hg;
+	hncp_pa hncp_pa;
 	hncp_sd_params_s sd_params;
+	hncp_multicast_params_s multicast_params;
+	dncp_trust dt = NULL;
+	struct hncp_link_config link_config = {HNCP_VERSION, 0, 0, 0, 0, ""};
 
 	memset(&sd_params, 0, sizeof(sd_params));
-	if (strstr(argv[0], "hnet-ifresolve")) {
-		if (!argv[1])
-			return 1;
-
-		int ifindex = if_nametoindex(argv[1]);
-		if (ifindex) {
-			printf("%i\n", ifindex);
-			return 0;
-		} else {
-			return 2;
-		}
-	}
-#ifdef WITH_IPC
-	else if (strstr(argv[0], "hnet-call")) {
-		if(argc < 2)
-			return 3;
-		return ipc_client(argv[1]);
-	} else if (strstr(argv[0], "hnet-dump")) {
-		return ipc_dump();
-	} else if ((strstr(argv[0], "hnet-ifup") || strstr(argv[0], "hnet-ifdown"))) {
-		if(argc < 2)
-			return 3;
-		return ipc_ifupdown(argc, argv);
-	}
-#endif
+	memset(&multicast_params, 0, sizeof(multicast_params));
 
 	openlog("hnetd", LOG_PERROR | LOG_PID, LOG_DAEMON);
 	uloop_init();
@@ -160,12 +120,15 @@ int main(__unused int argc, char *argv[])
 		return 2;
 	}
 
-#ifdef WITH_IPC
-	if (ipc_init()) {
-		L_ERR("Failed to init IPC: %s", strerror(errno));
-		return 5;
-	}
+	// Register multicalls
+	hd_register_rpc();
+#ifdef DTLS
+	dncp_trust_register_multicall();
 #endif
+
+	int ret = platform_rpc_multicall(argc, argv);
+	if (ret >= 0)
+		return ret;
 
 	int urandom_fd;
 	if ((urandom_fd = open("/dev/urandom", O_CLOEXEC | O_RDONLY)) >= 0) {
@@ -181,12 +144,26 @@ int main(__unused int argc, char *argv[])
 	const char *pa_ip4prefix = NULL;
 	const char *pa_ulaprefix = NULL;
 	const char *pa_ulamode = NULL;
+	const char *dtls_password = NULL;
+	const char *dtls_trust = NULL;
+	const char *dtls_cert = NULL;
+	const char *dtls_key = NULL;
+	const char *dtls_path = NULL;
+	const char *dtls_dir = NULL;
+	const char *pidfile = NULL;
+	bool strict = false;
 
 	enum {
 		GOL_IPPREFIX = 1000,
 		GOL_ULAPREFIX,
 		GOL_ULAMODE,
 		GOL_LOGLEVEL,
+		GOL_PASSWORD, /* DTLS password */
+		GOL_CERT, /* DTLS certificate */
+		GOL_KEY, /* DTLS (private) key */
+		GOL_TRUST, /* DTLS trust cache filename */
+		GOL_DIR, /* DTLS trusted cert dir */
+		GOL_PATH, /* DTLS trusted cert file path */
 	};
 
 	struct option longopts[] = {
@@ -195,12 +172,21 @@ int main(__unused int argc, char *argv[])
 			{ "ulaprefix",   required_argument,      NULL,           GOL_ULAPREFIX },
 			{ "ulamode",     required_argument,      NULL,           GOL_ULAMODE },
 			{ "loglevel",    required_argument,      NULL,           GOL_LOGLEVEL },
+			{ "password",    required_argument,      NULL,           GOL_PASSWORD },
+			{ "trust",    required_argument,      NULL,           GOL_TRUST },
+			{ "certificate",    required_argument,      NULL,           GOL_CERT },
+			{ "privatekey",    required_argument,      NULL,           GOL_KEY },
+			{ "verifydir",    required_argument,      NULL,           GOL_DIR },
+			{ "verifypath",    required_argument,      NULL,           GOL_PATH },
 			{ "help",	 no_argument,		 NULL,           '?' },
 			{ NULL,          0,                      NULL,           0 }
 	};
 
-	while ((c = getopt_long(argc, argv, "?d:f:o:n:r:s:p:m:c:", longopts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "?b::d:f:o:n:r:s:p:m:c:M:S", longopts, NULL)) != -1) {
 		switch (c) {
+		case 'b':
+			pidfile = (optarg && optarg[0]) ? optarg : "/var/run/hnetd.pid";
+			break;
 		case 'd':
 			sd_params.dnsmasq_script = optarg;
 			break;
@@ -218,6 +204,12 @@ int main(__unused int argc, char *argv[])
 			break;
 		case 'm':
 			sd_params.domain_name = optarg;
+			break;
+		case 'M':
+			multicast_params.multicast_script = optarg;
+			break;
+		case 'S':
+			strict = true;
 			break;
 		case 'r':
 			routing_script = optarg;
@@ -240,58 +232,30 @@ int main(__unused int argc, char *argv[])
 		case GOL_LOGLEVEL:
 			log_level = atoi(optarg);
 			break;
+		case GOL_PASSWORD:
+			dtls_password = optarg;
+			break;
+		case GOL_TRUST:
+			dtls_trust = optarg;
+			break;
+		case GOL_DIR:
+			dtls_dir = optarg;
+			break;
+		case GOL_PATH:
+			dtls_path = optarg;
+			break;
+		case GOL_KEY:
+			dtls_key = optarg;
+			break;
+		case GOL_CERT:
+			dtls_cert = optarg;
+			break;
 		default:
 			L_ERR("Unrecognized option");
-		case '?': return usage();
-			  break;
-		}
-	}
-
-	pa_init(&pa, NULL);
-	if(pa_store_file)
-		pa_store_setfile(&pa.store, pa_store_file);
-
-	if(pa_ip4prefix) {
-		if(!prefix_pton(pa_ip4prefix, &pa.local.conf.v4_prefix)) {
-			L_ERR("Unable to parse ipv4 prefix option '%s'", pa_ip4prefix);
-			return 40;
-		} else if (!prefix_is_ipv4(&pa.local.conf.v4_prefix)) {
-			L_ERR("The ip4prefix option '%s' is not an IPv4 prefix", pa_ip4prefix);
-			return 41;
-		} else {
-			L_INFO("Setting %s as IPv4 prefix", PREFIX_REPR(&pa.local.conf.v4_prefix));
-		}
-	}
-
-	if(pa_ulaprefix) {
-		if(!prefix_pton(pa_ulaprefix, &pa.local.conf.ula_prefix)) {
-			L_ERR("Unable to parse ula prefix option '%s'", pa_ulaprefix);
-			return 40;
-		} else if (prefix_is_ipv4(&pa.local.conf.ula_prefix)) {
-			L_ERR("The ulaprefix option '%s' is an IPv4 prefix", pa_ulaprefix);
-			return 41;
-		} else {
-			if (!prefix_is_ipv6_ula(&pa.local.conf.ula_prefix)) {
-				L_WARN("The provided ULA prefix %s is not an ULA. I hope you know what you are doing.",
-						PREFIX_REPR(&pa.local.conf.ula_prefix));
-			}
-			pa.local.conf.use_random_ula = false;
-			L_INFO("Setting %s as ULA prefix", PREFIX_REPR(&pa.local.conf.ula_prefix));
-		}
-	}
-
-	if(pa_ulamode) {
-		if(!strcmp(pa_ulamode, "off")) {
-			pa.local.conf.use_ula = 0;
-		} else if(!strcmp(pa_ulamode, "ifnov6")) {
-			pa.local.conf.use_ula = 1;
-			pa.local.conf.no_ula_if_glb_ipv6 = 1;
-		} else if(!strcmp(pa_ulamode, "on")) {
-			pa.local.conf.use_ula = 1;
-			pa.local.conf.no_ula_if_glb_ipv6 = 0;
-		} else {
-			L_ERR("Invalid ulamode option (Can be on, off or ifnov6)");
-			return 43;
+			//no break
+		case '?':
+			return usage();
+			break;
 		}
 	}
 
@@ -301,38 +265,156 @@ int main(__unused int argc, char *argv[])
 		return 42;
 	}
 
-	if (!(hg = hncp_pa_glue_create(h, &pa.data))) {
-		L_ERR("Unable to connect hncp and pa");
-		return 17;
+	hd_init(h);
+
+	if (sd_params.dnsmasq_script && sd_params.dnsmasq_bonus_file && sd_params.ohp_script)
+		link_config.cap_mdnsproxy = 4;
+
+	link_config.cap_prefixdel = link_config.cap_hostnames = link_config.cap_legacy = 4;
+	snprintf(link_config.agent, sizeof(link_config.agent), "hnetd/%s", STR(HNETD_VERSION));
+
+	if (dtls_password || dtls_trust || dtls_dir || dtls_path) {
+#ifdef DTLS
+		dtls d;
+		if (!(d = dtls_create(HNCP_DTLS_SERVER_PORT))) {
+			L_ERR("Unable to create dtls");
+			return 13;
+		}
+		if (dtls_key && dtls_cert) {
+				if (!dtls_set_local_cert(d, dtls_cert, dtls_key)) {
+						L_ERR("Unable to set certificate+key");
+						return 13;
+				}
+		}
+		if (dtls_dir || dtls_path) {
+				if (!dtls_set_verify_locations(d, dtls_path, dtls_dir)) {
+						L_ERR("Unable to set verify locations");
+						return 13;
+				}
+		}
+		hncp_set_dtls(h, d);
+		if (dtls_password) {
+				if (!(dtls_set_psk(d,
+								   dtls_password, strlen(dtls_password)))) {
+						L_ERR("Unable to set dtls password");
+						return 13;
+				}
+		} else if (dtls_trust) {
+				dt = dncp_trust_create(h, dtls_trust);
+				if (!dt) {
+						L_ERR("Unable to create dncp trust module");
+						return 13;
+				}
+		}
+		dtls_start(d);
+#endif /* DTLS */
 	}
 
-	hncp_sd sd = hncp_sd_create(h, &sd_params);
+	struct hncp_link *link = hncp_link_create(h, &link_config);
+
+	hncp_sd sd = hncp_sd_create(h, &sd_params, link);
 	if (!sd) {
 		L_ERR("unable to initialize sd, exiting");
 		return 71;
 	}
 
+	if (multicast_params.multicast_script) {
+			hncp_multicast m = hncp_multicast_create(h, &multicast_params);
+			if (!m) {
+					L_ERR("unable to initialize multicast, exiting");
+					return 123;
+			}
+	}
 	if (routing_script)
-		hncp_routing_create(h, routing_script);
+		hncp_routing_create(h, routing_script, !strict);
 
-	/* Init ipc */
-	iface_init(h, sd, &pa, pd_socket_path);
+	//Note that pa subscribes to iface. Which is possible before iface init.
+	if(!(hncp_pa = hncp_pa_create(h, link))) {
+		L_ERR("Unable to initialize PA");
+		return 17;
+	}
+
+	//PA configuration
+
+	if(pa_store_file && hncp_pa_storage_set(hncp_pa, pa_store_file)) {
+		L_ERR("Could not set prefix storage file (%s): %s",
+				pa_store_file, strerror(errno));
+		return 18;
+	}
+
+	struct hncp_pa_ula_conf ula_conf;
+	hncp_pa_ula_conf_default(&ula_conf);
+	if(pa_ip4prefix) {
+		if(!prefix_pton(pa_ip4prefix, &ula_conf.v4_prefix.prefix, &ula_conf.v4_prefix.plen)) {
+			L_ERR("Unable to parse ipv4 prefix option '%s'", pa_ip4prefix);
+			return 40;
+		} else if (!prefix_is_ipv4(&ula_conf.v4_prefix)) {
+			L_ERR("The ip4prefix option '%s' is not an IPv4 prefix", pa_ip4prefix);
+			return 41;
+		} else {
+			L_INFO("Setting %s as IPv4 prefix", PREFIX_REPR(&ula_conf.v4_prefix));
+		}
+	}
+
+	if(pa_ulaprefix) {
+		if(!prefix_pton(pa_ulaprefix, &ula_conf.ula_prefix.prefix, &ula_conf.ula_prefix.plen)) {
+			L_ERR("Unable to parse ula prefix option '%s'", pa_ulaprefix);
+			return 40;
+		} else if (prefix_is_ipv4(&ula_conf.ula_prefix)) {
+			L_ERR("The ulaprefix option '%s' is an IPv4 prefix", pa_ulaprefix);
+			return 41;
+		} else {
+			if (!prefix_is_ipv6_ula(&ula_conf.ula_prefix)) {
+				L_WARN("The provided ULA prefix %s is not an ULA. I hope you know what you are doing.",
+						PREFIX_REPR(&ula_conf.ula_prefix));
+			}
+			ula_conf.use_random_ula = false;
+			L_INFO("Setting %s as ULA prefix", PREFIX_REPR(&ula_conf.ula_prefix));
+		}
+	}
+
+	if(pa_ulamode) {
+		if(!strcmp(pa_ulamode, "off")) {
+			ula_conf.use_ula = 0;
+		} else if(!strcmp(pa_ulamode, "ifnov6")) {
+			ula_conf.use_ula = 1;
+			ula_conf.no_ula_if_glb_ipv6 = 1;
+		} else if(!strcmp(pa_ulamode, "on")) {
+			ula_conf.use_ula = 1;
+			ula_conf.no_ula_if_glb_ipv6 = 0;
+		} else {
+			L_ERR("Invalid ulamode option (Can be on, off or ifnov6)");
+			return 43;
+		}
+	}
+
+	hncp_pa_ula_conf_set(hncp_pa, &ula_conf);
+
+	//End of PA conf
+
+	/* Init ipc (no RPC-registrations after this point!)*/
+	iface_init(h, sd, hncp_pa, link, pd_socket_path);
 
 	/* Glue together HNCP, PA-glue and and iface */
-	hncp_iface_glue(&hiu, h, hg);
+	hncp_iface_glue(&hiu, h);
 
-	/* PA */
-	pd_create(&pa.pd, pd_socket_path);
-	pa_set_hncp(&pa, h);
+	/* Sub PD */
+	pd_create(hncp_pa, pd_socket_path);
 
-	/* Fire up the prefix assignment code. */
-	pa_start(&pa);
+	if (pidfile && !daemon(0, 0)) {
+		FILE *fp = fopen(pidfile, "w");
+		if (fp) {
+			fprintf(fp, "%d\n", getpid());
+			fclose(fp);
+		}
 
-#ifdef WITH_IPC
-	/* Configure ipc */
-	ipc_conf(h);
-#endif
+		closelog();
+		openlog("hnetd", LOG_PID, LOG_DAEMON);
+	}
 
 	uloop_run();
+
+	if (pidfile)
+		unlink(pidfile);
 	return 0;
 }

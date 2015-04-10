@@ -6,16 +6,16 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 20:09:23 2014 mstenber
- * Last modified: Thu May 22 13:10:44 2014 mstenber
+ * Last modified: Mon Feb 23 22:13:26 2015 mstenber
  * Edit time:     7 min
  *
  */
 
-#ifndef HNCP_SD_H
-#define HNCP_SD_H
+#pragma once
 
-#include "hncp.h"
-#include "hncp_i.h"
+#include "dncp.h"
+#include "dncp_i.h"
+#include "hncp_link.h"
 
 typedef struct hncp_sd_struct hncp_sd_s, *hncp_sd;
 
@@ -43,11 +43,11 @@ typedef struct hncp_sd_params_struct
   const char *domain_name;
 } hncp_sd_params_s, *hncp_sd_params;
 
-hncp_sd hncp_sd_create(hncp h, hncp_sd_params p);
+hncp_sd hncp_sd_create(dncp h, hncp_sd_params p, struct hncp_link *l);
 
-void hncp_sd_dump_link_fqdn(hncp_sd sd, hncp_link l,
-                            char *buf, size_t buf_len);
+void hncp_sd_dump_link_fqdn(hncp_sd sd, dncp_link l,
+		const char *ifname, char *buf, size_t buf_len);
 
 void hncp_sd_destroy(hncp_sd sd);
 
-#endif /* HNCP_SD_H */
+bool hncp_sd_busy(hncp_sd sd);

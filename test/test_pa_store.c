@@ -1,301 +1,753 @@
-/*
- * Author: Pierre Pfister
- *
- * Prefix assignment stable storage API tester.
- *
- */
+#include <sys/stat.h>
 
-#include "pa.h"
-#include "pa_store.h"
+#include <stdio.h>
+#define TEST_DEBUG(format, ...) printf("TEST Debug   : "format"\n", ##__VA_ARGS__)
+
+#include "fake_uloop.h"
+
+int log_level = 8;
+#include "pa_core.c"
+
+/* Fake file handling */
+int fake_files = 0;
+
+FILE *test_fopen_ret = NULL;
+const char *test_fopen_path = NULL;
+const char *test_fopen_mode = NULL;
+FILE *test_fopen(const char *path, const char *mode)
+{
+	test_fopen_mode = mode;
+	test_fopen_path = path;
+	return fake_files?test_fopen_ret:fopen(path, mode);
+}
+
+#include <sys/types.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+const char *test_open_pathname = NULL;
+int test_open_flags = 0;
+int test_open_mode = 0;
+int test_open_ret = -1;
+int test_open(const char *pathname, int flags, mode_t mode)
+{
+	test_open_pathname = pathname;
+	test_open_flags = flags;
+	test_open_mode = mode;
+	return fake_files?test_open_ret:open(pathname,flags, mode);
+}
+
+char test_getline_lines[30][200];
+int test_getline_n = 0;
+int test_getline_max = 0;
+ssize_t test_getline(char **lineptr, size_t *n, FILE *stream)
+{
+	if(!fake_files)
+		return getline(lineptr, n, stream);
+
+	if(test_getline_n >= test_getline_max) {
+		*lineptr = NULL;
+		return -1;
+	}
+	*lineptr = test_getline_lines[test_getline_n++];
+	*n = strlen(*lineptr)+1;
+	return *n - 1;
+}
+
+FILE *test_close_fp = NULL;
+int test_fclose(FILE *fp)
+{
+	test_close_fp = fp;
+	return fake_files?0:fclose(fp);
+}
+
+int test_close(int fd) {
+	return fake_files?0:close(fd);
+}
+
+#define fopen test_fopen
+#define fclose test_fclose
+#define open test_open
+#define getline test_getline
+#define close test_close
+
+#include "pa_store.c"
+
 #include "sput.h"
 
-int log_level = LOG_DEBUG;
+static struct in6_addr p = {{{0x20, 0x01, 0, 0, 0, 0, 0x01, 0x00}}};
+static struct in6_addr v4 = {{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff}}};
+#define PV(i) (p.s6_addr[7] = i, p)
+#define PP(i) (p.s6_addr[7] = i, &p)
+#define PP4(i, u) (v4.s6_addr[12] = i, v4.s6_addr[13] = u, &v4)
 
-static struct pa pa;
-#define store (&pa.store)
-
-#include "prefixes_library.h"
-
-static struct prefix p1 = PL_P1;
-static struct prefix p2 = PL_P2;
-static struct prefix p1_20 = PL_P1_01;
-static struct prefix p1_21 = PL_P1_02;
-static struct prefix p2_20 = PL_P2_01;
-static struct prefix p_ula = PL_ULA1;
-static struct prefix p_ula2 = PL_ULA2;
-static struct prefix p_global = PL_P3;
-
-static struct pa_rid rid = { .id = {0x20} };
-
-struct pa_iface *if1, *if2;
-#define TEST_PAS_FILE "/tmp/hnetd_pa.db"
-
-const struct prefix *pa_prefix_getcollision(__unused struct pa *pa, __unused const struct prefix *prefix) {return NULL;};
-void pa_core_rule_init(__unused struct pa_rule *rule, __unused const char *name, __unused uint32_t rule_priority, __unused rule_try try) {};
-void pa_core_rule_add(__unused struct pa_core *core, __unused struct pa_rule *rule) {};
-void pa_core_rule_del(__unused struct pa_core *core, __unused struct pa_rule *rule) {};
-uint8_t pa_core_default_plen(__unused struct pa_dp *dp, __unused bool scarcity) {return 200;};
-
-static void test_pa_file_reset() {
-	FILE *f;
-		sput_fail_unless(f = fopen(TEST_PAS_FILE, "w"), "Erase test db file");
-		if(f)
-			fclose(f);
-}
-
-static void test_pa_store_init() {
-	pa_data_init(&pa.data, NULL);
-	pa_store_init(store);
-	pa_store_start(store);
-
-	if1 = pa_iface_get(&pa.data, PL_IFNAME1, true);
-	if2 = pa_iface_get(&pa.data, PL_IFNAME2, true);
-	pa_iface_notify(&pa.data, if1);
-	pa_iface_notify(&pa.data, if2);
-}
-
-static void test_pa_store_term() {
-	pa_iface_todelete(if1);
-	pa_iface_todelete(if2);
-	pa_iface_notify(&pa.data, if1);
-	pa_iface_notify(&pa.data, if2);
-
-	pa_store_stop(store);
-	pa_store_term(store);
-	pa_data_term(&pa.data);
-}
-
-static void test_pa_store_sps() {
-	struct pa_cp *cp1_20, *cp2_20, *cp1_21, *cp1, *cp2;
-	struct pa_sp *sp;
-	struct pa_laa *la1_20, *la2_20, *la1_21;
-	struct pa_sa *sa;
-
-	test_pa_file_reset();
-	test_pa_store_init();
-	pa.data.conf.max_sp = 3;
-	pa.data.conf.max_sp_per_if = 2;
-	pa.data.conf.max_sa = 2;
-	pa_store_setfile(store, TEST_PAS_FILE);
-
-	cp1_20 = pa_cp_get(&pa.data, &p1_20, PA_CPT_L, true);
-	pa_cpl_set_iface(_pa_cpl(cp1_20), if1);
-	pa_cp_notify(cp1_20);
-
-	la1_20 = pa_laa_create(&p1_20.prefix, _pa_cpl(cp1_20));
-	pa_aa_notify(&pa.data, &la1_20->aa);
-
-	sput_fail_unless(list_empty(&pa.data.sps), "No sp");
-	sput_fail_unless(!pa.data.sp_count, "sp_count equals zero");
-	sput_fail_unless(list_empty(&pa.data.sas), "No sa");
-	sput_fail_unless(!pa.data.sa_count, "sa_count equals zero");
-
-	pa_cp_set_applied(cp1_20, true);
-	pa_cp_notify(cp1_20);
-
-	sput_fail_unless(!list_empty(&pa.data.sps), "One sp");
-	sput_fail_unless(pa.data.sp_count == 1, "sp_count equals 1");
-	sput_fail_unless(if1->sp_count == 1, "One sp for if1");
-	sput_fail_unless(if2->sp_count == 0, "Zero sp for if2");
-	sput_fail_unless(pa.data.sa_count == 0, "No sa yet");
-
-	pa_laa_set_applied(la1_20, true);
-	pa_aa_notify(&pa.data, &la1_20->aa);
-	sput_fail_unless(pa.data.sa_count == 1, "One sa");
-	sa = list_first_entry(&pa.data.sas, struct pa_sa, le);
-	sput_fail_unless(!memcmp(&sa->addr, &la1_20->aa.address, sizeof(struct in6_addr)), "Address value");
-
-	cp2_20 = pa_cp_get(&pa.data, &p2_20, PA_CPT_L, true);
-	pa_cpl_set_iface(_pa_cpl(cp2_20), if1);
-	pa_cp_set_applied(cp2_20, true);
-	pa_cp_notify(cp2_20);
-
-	la2_20 = pa_laa_create(&p2_20.prefix, _pa_cpl(cp2_20));
-	pa_laa_set_applied(la2_20, true);
-	pa_aa_notify(&pa.data, &la2_20->aa);
-
-	bool first = true;
-	pa_for_each_sp_in_iface(sp, if1) {
-		if(first) {
-			sput_fail_unless(!prefix_cmp(&sp->prefix, &p2_20), "Correct prefix");
-			sput_fail_unless(sp->iface == if1, "Correct iface");
-			first = false;
-		} else {
-			sput_fail_unless(!prefix_cmp(&sp->prefix, &p1_20), "Correct prefix");
-			sput_fail_unless(sp->iface == if1, "Correct iface");
-		}
-	}
-	first = true;
-	pa_for_each_sa(sa, &pa.data) {
-		if(first) {
-			sput_fail_unless(!memcmp(&sa->addr, &la2_20->aa.address, sizeof(struct in6_addr)), "Address value");
-			first = false;
-		} else {
-			sput_fail_unless(!memcmp(&sa->addr, &la1_20->aa.address, sizeof(struct in6_addr)), "Address value");
-		}
-	}
-	sput_fail_unless(pa.data.sp_count == 2, "sp_count equals 2");
-	sput_fail_unless(pa.data.sa_count == 2, "sa_count equals 2");
-	sput_fail_unless(if1->sp_count == 2, "One sp for if1");
-	sput_fail_unless(if2->sp_count == 0, "Zero sp for if2");
-
-	cp1_21 = pa_cp_get(&pa.data, &p1_21, PA_CPT_L, true);
-	pa_cpl_set_iface(_pa_cpl(cp1_21), if1);
-	pa_cp_set_applied(cp1_21, true);
-	pa_cp_notify(cp1_21);
-
-	la1_21 = pa_laa_create(&p1_21.prefix, _pa_cpl(cp1_21));
-	pa_laa_set_applied(la1_21, true);
-	pa_aa_notify(&pa.data, &la1_21->aa);
-
-	first = true;
-	pa_for_each_sp_in_iface(sp, if1) {
-		if(first) {
-			sput_fail_unless(!prefix_cmp(&sp->prefix, &p1_21), "Correct prefix");
-			sput_fail_unless(sp->iface == if1, "Correct iface");
-			first = false;
-		} else {
-			sput_fail_unless(!prefix_cmp(&sp->prefix, &p2_20), "Correct prefix");
-			sput_fail_unless(sp->iface == if1, "Correct iface");
-		}
-	}
-
-	first = true;
-	pa_for_each_sa(sa, &pa.data) {
-		if(first) {
-			sput_fail_unless(!memcmp(&sa->addr, &la1_21->aa.address, sizeof(struct in6_addr)), "Address value");
-			first = false;
-		} else {
-			sput_fail_unless(!memcmp(&sa->addr, &la2_20->aa.address, sizeof(struct in6_addr)), "Address value");
-		}
-	}
-	sput_fail_unless(pa.data.sp_count == 2, "sp_count equals 2");
-	sput_fail_unless(pa.data.sa_count == 2, "sa_count equals 2");
-	sput_fail_unless(if1->sp_count == 2, "2 sp for if1");
-	sput_fail_unless(if2->sp_count == 0, "0 sp for if2");
-
-	cp1 = pa_cp_get(&pa.data, &p1, PA_CPT_L, true);
-	pa_cpl_set_iface(_pa_cpl(cp1), if2);
-	pa_cp_set_applied(cp1, true);
-	pa_cp_notify(cp1);
-
-	sput_fail_unless(pa.data.sp_count == 3, "sp_count equals 3");
-	sput_fail_unless(if1->sp_count == 2, "Two sp for if1");
-	sput_fail_unless(if2->sp_count == 1, "1 sp for if2");
-
-	cp2 = pa_cp_get(&pa.data, &p2, PA_CPT_L, true);
-	pa_cpl_set_iface(_pa_cpl(cp2), if2);
-	pa_cp_set_applied(cp2, true);
-	pa_cp_notify(cp2);
-
-
-	first = true;
-	pa_for_each_sp_in_iface(sp, if2) {
-		if(first) {
-			sput_fail_unless(!prefix_cmp(&sp->prefix, &p2), "Correct prefix");
-			sput_fail_unless(sp->iface == if2, "Correct iface");
-			first = false;
-		} else {
-			sput_fail_unless(!prefix_cmp(&sp->prefix, &p1), "Correct prefix");
-			sput_fail_unless(sp->iface == if2, "Correct iface");
-		}
-	}
-	pa_for_each_sp_in_iface(sp, if1)
-		sput_fail_unless(!prefix_cmp(&sp->prefix, &p1_21), "Correct prefix");
-	sput_fail_unless(pa.data.sp_count == 3, "sp_count equals 3");
-	sput_fail_unless(if1->sp_count == 1, "One sp for if1");
-	sput_fail_unless(if2->sp_count == 2, "Two sp for if2");
-
-	sput_fail_unless(store->t.t.pending, "Timeout pending");
-	sput_fail_unless(store->save_delay == INT64_C(10*60)*HNETD_TIME_PER_SECOND, "5 min delay");
-	store->t.cb(&store->t);
-	test_pa_store_term();
-
-	/* reloading */
-	test_pa_store_init();
-	pa_store_setfile(store, TEST_PAS_FILE);
-	sput_fail_unless(store->save_delay == INT64_C(20*60)*HNETD_TIME_PER_SECOND, "10 min delay now");
-
-	first = true;
-	pa_for_each_sp_in_iface(sp, if2) {
-		if(first) {
-			sput_fail_unless(!prefix_cmp(&sp->prefix, &p2), "Correct prefix");
-			sput_fail_unless(sp->iface == if2, "Correct iface");
-			first = false;
-		} else {
-			sput_fail_unless(!prefix_cmp(&sp->prefix, &p1), "Correct prefix");
-			sput_fail_unless(sp->iface == if2, "Correct iface");
-		}
-	}
-	pa_for_each_sp_in_iface(sp, if1)
-		sput_fail_unless(!prefix_cmp(&sp->prefix, &p1_21), "Correct prefix");
-
-	first = true;
-	pa_for_each_sa(sa, &pa.data) {
-		if(first) {
-			sput_fail_unless(!memcmp(&sa->addr, &p1_21.prefix, sizeof(struct in6_addr)), "Address value");
-			first = false;
-		} else {
-			sput_fail_unless(!memcmp(&sa->addr, &p2_20.prefix, sizeof(struct in6_addr)), "Address value");
-		}
-	}
-	sput_fail_unless(pa.data.sa_count == 2, "sa_count equals 2");
-	sput_fail_unless(pa.data.sp_count == 3, "sp_count equals 3");
-	sput_fail_unless(if1->sp_count == 1, "One sp for if1");
-	sput_fail_unless(if2->sp_count == 2, "Zero sp for if2");
-
-	test_pa_store_term();
-}
-
-void test_pa_store_ulas()
+void pa_store_rule_test()
 {
-	struct pa_ldp *ldp_global, *ldp_ula, *ldp_ula2;
-	struct pa_edp *edp;
+	fu_init();
+	fake_files = 0;
 
-	test_pa_file_reset();
-	test_pa_store_init();
-	pa_store_setfile(store, TEST_PAS_FILE);
+	struct pa_core core;
+	struct pa_link
+			l1 = {.name = "link1"},
+			l2 = {.name = "link2"};
 
-	sput_fail_if(pa_store_ula_get(store), "No ula for now");
+	struct pa_dp dp = {.prefix = PV(0), .plen = 56};
 
-	ldp_global = pa_ldp_get(&pa.data, &p_global, true);
-	pa_dp_notify(&pa.data, &ldp_global->dp);
-	sput_fail_if(pa_store_ula_get(store), "Global is not valid");
+	core.node_id[0] = 5;
+	pa_core_init(&core);
+	pa_link_add(&core, &l1);
+	pa_link_add(&core, &l2);
+	pa_dp_add(&core, &dp);
 
-	edp = pa_edp_get(&pa.data, &p_global, &rid, true);
-	pa_dp_notify(&pa.data, &edp->dp);
-	sput_fail_if(pa_store_ula_get(store), "External is not valid");
+	struct pa_ldp *ldp1, *ldp2;
+	ldp1 = list_entry(l1.ldps.next, struct pa_ldp, in_link);
+	ldp2 = list_entry(l2.ldps.next, struct pa_ldp, in_link);
 
-	ldp_ula = pa_ldp_get(&pa.data, &p_ula, true);
-	pa_dp_notify(&pa.data, &ldp_ula->dp);
-	sput_fail_unless(!prefix_cmp(pa_store_ula_get(store), &p_ula), "Set a ula address");
+	struct pa_store store;
+	pa_store_init(&store, 10);
 
-	ldp_ula2 = pa_ldp_get(&pa.data, &p_ula2, true);
-	pa_dp_notify(&pa.data, &ldp_ula2->dp);
-	sput_fail_unless(!prefix_cmp(pa_store_ula_get(store), &p_ula2), "Set a ula address");
+	struct pa_store_bound bound;
+	pa_store_bind(&store, &core, &bound);
 
-	pa_dp_todelete(&ldp_global->dp);
-	pa_dp_notify(&pa.data, &ldp_global->dp);
-	pa_dp_todelete(&ldp_ula->dp);
-	pa_dp_notify(&pa.data, &ldp_ula->dp);
-	pa_dp_todelete(&ldp_ula2->dp);
-	pa_dp_notify(&pa.data, &ldp_ula2->dp);
-	pa_dp_todelete(&edp->dp);
-	pa_dp_notify(&pa.data, &edp->dp);
+	struct pa_store_link ls1, ls2;
+	ls1.link = &l1;
+	strcpy(ls1.name, "stored_link1");
+	ls2.link = &l2;
+	strcpy(ls2.name, "stored_link2");
 
-	test_pa_store_term();
+	fu_loop(2);//Execute for the two ldps.
+
+	sput_fail_if(ldp1->assigned, "No prefix on link");
+	sput_fail_if(ldp2->assigned, "No prefix on link");
+
+	struct pa_advp a1, a2;
+	pa_prefix_cpy(PP(1), 64, &a1.prefix, a1.plen);
+	a1.priority = 2;
+	a1.link = &l1;
+	a1.node_id[0] = 2;
+	pa_prefix_cpy(PP(2), 64, &a2.prefix, a2.plen);
+	a2.priority = 5;
+	a2.link = &l2;
+	a2.node_id[0] = 3;
+
+	pa_advp_add(&core, &a1);
+	fu_loop(3);//Execute both ldp1 and ldp2 routine and apply ldp1 with a1
+
+	sput_fail_if(store.n_prefixes, "No prefixes");
+	sput_fail_unless(list_empty(&store.links), "No links");
+	sput_fail_if(pa_prefix_cmp(&a1.prefix, a1.plen, &ldp1->prefix, ldp1->plen), "Correct prefix");
+
+	ls1.max_prefixes = 3;
+	pa_store_link_add(&store, &ls1);
+	pa_store_link_add(&store, &ls2);
+
+	a2.link = &l1;
+	pa_advp_add(&core, &a2);
+	fu_loop(3);//Execute both ldp1 and ldp2 routine and apply ldp1 with a2
+	//Apply should trigger caching of a2 prefix (PP(2))
+
+	sput_fail_if(pa_prefix_cmp(&a2.prefix, a2.plen, &ldp1->prefix, ldp1->plen), "Correct prefix");
+
+	pa_advp_del(&core, &a2);
+	pa_advp_del(&core, &a1);
+
+	fu_loop(2); //Unassign both
+	sput_fail_if(ldp1->assigned, "No prefix on link");
+	sput_fail_if(ldp2->assigned, "No prefix on link");
+
+	struct pa_store_rule srule;
+	srule.priority = 4;
+	srule.rule_priority = 3;
+	srule.rule.name = "Cached Prefix";
+	pa_store_rule_init(&srule, &store);
+	pa_rule_add(&core, &srule.rule);
+	fu_loop(4);//Execute both ldp1 and ldp2 routine, backoff timer and apply ldp1 with a2
+
+	sput_fail_unless(ldp1->assigned, "Prefix assigned on link");
+	sput_fail_if(pa_prefix_cmp(&a2.prefix, a2.plen, &ldp1->prefix, ldp1->plen), "Correct prefix");
+	sput_fail_unless(ldp1->priority == 4, "Correct priority");
+	sput_fail_unless(ldp1->rule_priority == 3, "Correct rule priority");
+	sput_fail_if(ldp2->assigned, "No prefix on link");
+
+	a2.link = &l2;
+	pa_advp_add(&core, &a2);
+	fu_loop(3); //Execute both, apply a2 on l2 (ldp1 is unassigned)
+	sput_fail_if(ldp1->assigned, "No prefix on link");
+	sput_fail_unless(ldp2->assigned, "Prefix assigned on link");
+	sput_fail_if(pa_prefix_cmp(&a2.prefix, a2.plen, &ldp2->prefix, ldp2->plen), "Correct prefix");
+
+	pa_store_link_remove(&store, &ls1);
+	pa_advp_del(&core, &a2);
+	fu_loop(4); //Execute both, but only l2 will get the prefix
+	sput_fail_if(ldp1->assigned, "No prefix on link");
+	sput_fail_unless(ldp2->assigned, "Prefix assigned on link");
+	sput_fail_if(pa_prefix_cmp(&a2.prefix, a2.plen, &ldp2->prefix, ldp2->plen), "Correct prefix");
+
+	pa_store_link_remove(&store, &ls2);
+	pa_store_unbind(&bound);
+	pa_store_term(&store);
+
+	pa_link_del(&l1);
+	pa_link_del(&l2);
+	pa_dp_del(&dp);
 }
 
-int main(__attribute__((unused)) int argc, __attribute__((unused))char **argv)
+void pa_store_delays_test()
 {
-	openlog("hnetd_test_pa", LOG_PERROR | LOG_PID, LOG_DAEMON);
-	uloop_init();
+	fu_init();
+	struct pa_core core;
+	INIT_LIST_HEAD(&core.users);
+
+	struct pa_store store;
+	pa_store_init(&store, 4);
+
+	struct pa_store_bound bound;
+	pa_store_bind(&store, &core, &bound);
+
+	fake_files = 0;
+	const char *filepath = "/tmp/test_pa_core.store";
+	unlink(filepath);
+	sput_fail_if(pa_store_set_file(&store, filepath, 2000, 10000), "Could open file");
+	sput_fail_unless(store.save_delay = 2000, "Correct save delay");
+	sput_fail_unless(store.token_delay = 10000, "Correct token delay");
+	sput_fail_unless(store.token_count = PA_STORE_WTOKENS_DEFAULT, "Default number of tokens");
+	sput_fail_unless(uloop_timeout_remaining(&store.token_timer) == 10000, "Token timer pending");
+	sput_fail_unless(!store.save_timer.pending, "Store timer not pending");
+
+	fu_loop(1);
+	sput_fail_unless(store.token_count == PA_STORE_WTOKENS_DEFAULT+1, "One more token");
+	store.token_count = 0;
+
+	struct pa_link l;
+	struct pa_dp d;
+	struct pa_ldp ldp;
+	ldp.link = &l;
+	ldp.dp = &d;
+	ldp.prefix = PV(0);
+	ldp.plen = 64;
+	ldp.assigned = 0;
+	ldp.applied = 1;
+
+	struct pa_store_link link;
+	pa_store_link_init(&link, &l, "L1", 2);
+	pa_store_link_add(&store, &link);
+
+	bound.user.applied(&bound.user, &ldp);
+	sput_fail_unless(store.n_prefixes == 1, "One prefixes");
+
+	sput_fail_unless(uloop_timeout_remaining(&store.token_timer) == 10000, "Token timer pending");
+	sput_fail_unless(!store.save_timer.pending, "Store timer not pending");
+
+	fu_loop(1);
+	sput_fail_unless(store.token_count == 1, "One token");
+	sput_fail_unless(uloop_timeout_remaining(&store.save_timer) == 2000, "Store timer pending");
+
+	fu_loop(1);
+	sput_fail_unless(store.token_count == 0, "No token left");
+	sput_fail_unless(uloop_timeout_remaining(&store.token_timer) == 8000, "Token timer pending");
+
+	pa_store_cache(&store, &link, &ldp.prefix, 50); //Update, but no token
+	bound.user.applied(&bound.user, &ldp); //Update, but no token
+
+	fu_loop(1);
+	sput_fail_unless(uloop_timeout_remaining(&store.token_timer) == 10000, "Token timer pending");
+	sput_fail_unless(uloop_timeout_remaining(&store.save_timer) == 2000, "Store timer pending");
+
+	fu_loop(1);
+	sput_fail_unless(store.token_count == 0, "No token left");
+
+	store.token_count = 2;
+	sput_fail_if(pa_store_set_file(&store, filepath, 3000, 11000), "Could open file");
+	sput_fail_unless(store.token_count == 0, "No more tokens");
+
+	fu_loop(3);//3 more tokens
+	sput_fail_unless(store.token_count == 3, "3 tokens");
+
+	pa_store_cache(&store, &link, &ldp.prefix, 30);
+	bound.user.applied(&bound.user, &ldp);
+	sput_fail_unless(uloop_timeout_remaining(&store.save_timer) == 3000, "Store timer pending");
+	fu_loop(1); //Write to file
+
+	store.token_count = 10;
+	sput_fail_if(pa_store_set_file(&store, filepath, 2000, 10000), "Could open file");
+	sput_fail_unless(store.token_count == 2, "2 tokens");
+
+	unlink(filepath);
+	pa_store_unbind(&bound);
+	pa_store_term(&store);
+}
+
+void pa_store_saveload_test()
+{
+	fu_init();
+	struct pa_core core;
+	INIT_LIST_HEAD(&core.users);
+
+	struct pa_store store;
+	pa_store_init(&store, 4);
+
+	struct pa_store_bound bound;
+	pa_store_bind(&store, &core, &bound);
+
+	const char *filepath = "/tmp/test_pa_core.store";
+	struct pa_store_prefix *prefix;
+	struct pa_store_link *link;
+	unlink(filepath);
+
+	fake_files = 1;
+
+	test_open_ret = 1;
+	test_fopen_ret = (FILE *)1;
+	test_getline_n = 0;
+	test_getline_max = 0;
+	pa_store_set_file(&store, filepath, 1000, 1000);
+	sput_fail_if(strcmp(store.filepath, filepath), "Correct file path");
+	strcpy(test_getline_lines[0], "prefix link0 2001:0:0:100::/62");
+	strcpy(test_getline_lines[1], "prefix link1 2001:0:0:101::/63");
+	strcpy(test_getline_lines[2], "prefix link0 2001:0:0:102::/64");
+	strcpy(test_getline_lines[3], "prefix link1 2001:0:0:103::/65");
+	test_getline_n = 0;
+	test_getline_max = 4;
+	sput_fail_unless(pa_store_load(&store, filepath) == 0, "Can load virtual file");
+
+	fake_files = 0;
+
+	sput_fail_if(pa_store_save(&store), "Store in file");
+
+	pa_store_unbind(&bound);
+	pa_store_term(&store); //Empty this store
+
+	pa_store_init(&store, 3);
+	pa_store_bind(&store, &core, &bound);
+
+	chmod(filepath, 0);
+	sput_fail_unless(pa_store_set_file(&store, filepath, 1000, 1000), "Can't open file");
+
+	chmod(filepath, S_IRUSR);
+	sput_fail_unless(pa_store_set_file(&store, filepath, 1000, 1000), "Can't open file");
+
+	chmod(filepath, S_IRUSR | S_IWUSR);
+	sput_fail_if(pa_store_set_file(&store, filepath, 1000, 1000), "Can open file");
+
+	sput_fail_if(strcmp(store.filepath, filepath), "Correct file path");
+	sput_fail_unless(pa_store_load(&store, filepath) == 0, "Can load virtual file");
+	sput_fail_unless(store.n_prefixes == 3, "3 cached entries");
+
+
+	//Check values
+	link = list_entry(store.links.next, struct pa_store_link, le);
+	sput_fail_if(strcmp(link->name, "link1"), "Correct link name");
+	sput_fail_unless(link->n_prefixes == 2,"Two cached prefix");
+
+	prefix = list_entry(link->prefixes.next, struct pa_store_prefix, in_link);
+	sput_fail_if(pa_prefix_cmp(PP(3), 65, &prefix->prefix, prefix->plen), "Correct prefix");
+
+	prefix = list_entry(link->prefixes.prev, struct pa_store_prefix, in_link);
+	sput_fail_if(pa_prefix_cmp(PP(1), 63, &prefix->prefix, prefix->plen), "Correct prefix");
+
+	link = list_entry(store.links.prev, struct pa_store_link, le);
+	sput_fail_if(strcmp(link->name, "link0"), "Correct link name");
+	sput_fail_unless(link->n_prefixes == 1,"One cached prefix");
+
+	prefix = list_entry(link->prefixes.next, struct pa_store_prefix, in_link);
+	sput_fail_if(pa_prefix_cmp(PP(2), 64, &prefix->prefix, prefix->plen), "Correct prefix");
+
+	//Load and save
+	sput_fail_if(pa_store_save(&store), "Store in file");
+	sput_fail_unless(pa_store_load(&store, filepath) == 0, "Can load virtual file");
+	sput_fail_unless(store.n_prefixes == 3, "3 cached entries");
+
+	//Remove file and load again
+	unlink(filepath);
+	sput_fail_unless(pa_store_load(&store, filepath) == -1, "Cannot load virtual file");
+
+	//Save again
+	sput_fail_if(pa_store_save(&store), "Store in file");
+
+	unlink(filepath);
+	pa_store_unbind(&bound);
+	pa_store_term(&store);
+}
+
+void pa_store_load_test()
+{
+	fu_init();
+	struct pa_core core;
+	INIT_LIST_HEAD(&core.users);
+
+	struct pa_store store;
+	pa_store_init(&store, 10);
+
+	struct pa_store_bound bound;
+	pa_store_bind(&store, &core, &bound);
+
+	fake_files = 1;
+	const char *filepath = "/file/path";
+
+	sput_fail_unless(pa_store_load(&store, filepath) == -1, "No specified file");
+
+	test_open_ret = -1;
+	sput_fail_unless(pa_store_set_file(&store, filepath, 1000, 1000), "Can't set file");
+	sput_fail_if(store.filepath != NULL, "No file path");
+
+	test_open_ret = 0;
+	test_fopen_ret = (FILE *)1;
+	test_getline_n = 0;
+	test_getline_max = 0;
+	sput_fail_if(pa_store_set_file(&store, filepath, 1000, 1000), "Set file OK");
+	sput_fail_if(strcmp(store.filepath, filepath), "Correct file path");
+
+	test_fopen_ret = NULL;
+	sput_fail_unless(pa_store_load(&store, filepath) == -1, "Cannot load file");
+
+	test_fopen_ret = (FILE *)1;
+	test_getline_n = 0;
+	test_getline_max = 0;
+	sput_fail_unless(pa_store_load(&store, filepath) == 0, "Can load file");
+	sput_fail_unless(!strcmp(test_fopen_path, filepath), "Correct filepath");
+
+	strcpy(test_getline_lines[0], "#\n");
+	strcpy(test_getline_lines[1], " #\n");
+	strcpy(test_getline_lines[2], "\t#");
+	strcpy(test_getline_lines[3], "#\n");
+	test_getline_n = 0;
+	test_getline_max = 4;
+	sput_fail_unless(pa_store_load(&store, filepath) == 0, "Can load file");
+	sput_fail_unless(test_getline_n == 4, "5 getline calls");
+
+#define pa_store_load_line(line, ret) do { \
+		test_getline_n = 0;\
+		test_getline_max = 1;\
+		strcpy(test_getline_lines[0], line);\
+		sput_fail_unless(pa_store_load(&store, filepath) == ret, "Load single line");\
+		sput_fail_unless(test_getline_n == 1, "2 getline calls"); \
+	} while(0)
+
+	pa_store_load_line("  \n", 0);
+	pa_store_load_line(" #\n", 0);
+	pa_store_load_line("#### #### ### ### ###\n", 0);
+	pa_store_load_line(" \t\t\n", 0);
+	pa_store_load_line("\t", 0);
+	pa_store_load_line("", 0);
+
+	pa_store_load_line("aa", -1);
+	pa_store_load_line(" aa aa  aa\t a", -1);
+	pa_store_load_line("prefix ", -1);
+	pa_store_load_line("prefix nya notaprefix", -1);
+	pa_store_load_line("prefix nya ::/0 tomanyargs", -1);
+
+	struct pa_store_prefix *prefix;
+	struct pa_store_link *link;
+	pa_store_load_line("prefix link0 2001:0:0:100::/64", 0);
+	sput_fail_unless(store.n_prefixes == 1, "Correct number of prefixes");
+	prefix = list_entry(store.prefixes.next, struct pa_store_prefix, in_store);
+	sput_fail_if(pa_prefix_cmp(&prefix->prefix, prefix->plen, PP(0), 64), "Correct prefix");
+	link = list_entry(store.links.next, struct pa_store_link, le);
+	sput_fail_if(strcmp("link0", link->name), "Link name");
+	sput_fail_if(link->link, "Private link");
+	sput_fail_unless(link->n_prefixes == 1, "One single prefix");
+	sput_fail_unless(store.links.next->next == &store.links, "One single link");
+
+	//Load same prefix again
+	pa_store_load_line("prefix link0 2001:0:0:100::/64", 0);
+	sput_fail_unless(store.n_prefixes == 1, "Correct number of prefixes");
+	prefix = list_entry(store.prefixes.next, struct pa_store_prefix, in_store);
+	sput_fail_if(pa_prefix_cmp(&prefix->prefix, prefix->plen, PP(0), 64), "Correct prefix");
+	link = list_entry(store.links.next, struct pa_store_link, le);
+	sput_fail_if(strcmp("link0", link->name), "Link name");
+	sput_fail_if(link->link, "Private link");
+	sput_fail_unless(link->n_prefixes == 1, "One single prefix");
+	sput_fail_unless(store.links.next->next == &store.links, "One single link");
+
+	//Uncache
+	pa_store_uncache(&store, link, prefix);
+	sput_fail_unless(list_empty(&store.links), "No link");
+
+	//Load multiple prefixes
+	strcpy(test_getline_lines[0], "#\n");
+	strcpy(test_getline_lines[1], "prefix link0 2001:0:0:100::/64\n");
+	strcpy(test_getline_lines[2], "prefix link0 2001:0:0:101::/64\n");
+	strcpy(test_getline_lines[3], "prefix link1 2001:0:0:101::/64\n");
+	test_getline_n = 0;
+	test_getline_max = 4;
+	sput_fail_unless(pa_store_load(&store, filepath) == 0, "Can load file");
+	sput_fail_unless(store.n_prefixes == 3, "3 prefixes");
+	prefix = list_entry(store.prefixes.next, struct pa_store_prefix, in_store);
+	sput_fail_if(pa_prefix_cmp(&prefix->prefix, prefix->plen, PP(1), 64), "Correct prefix");
+	link = list_entry(store.links.next, struct pa_store_link, le);
+	sput_fail_if(strcmp("link1", link->name), "Link name");
+	sput_fail_unless(link->n_prefixes == 1, "One prefix in link1");
+
+	pa_store_unbind(&bound);
+	pa_store_term(&store);
+	fake_files = 0;
+}
+
+//Test prefix parsing
+void pa_store_cache_parsing()
+{
+	char str[PA_PREFIX_STRLEN];
+	struct in6_addr a;
+	uint8_t plen, b;
+	pa_prefix_tostring(str, PP(0), (plen = 64));
+	sput_fail_if(strcmp(str, "2001:0:0:100::/64"), "Ok string");
+	sput_fail_unless(pa_prefix_fromstring(str, &a, &b), "Ok parse");
+	sput_fail_if(pa_prefix_cmp(&p, plen, &a, b), "Ok prefix");
+
+	pa_prefix_tostring(str, PP(1), (plen = 64));
+	sput_fail_if(strcmp(str, "2001:0:0:101::/64"), "Ok string");
+	sput_fail_unless(pa_prefix_fromstring(str, &a, &b), "Ok parse");
+	sput_fail_if(pa_prefix_cmp(&p, plen, &a, b), "Ok prefix");
+
+	pa_prefix_tostring(str, PP(1), (plen = 63));
+	sput_fail_if(strcmp(str, "2001:0:0:100::/63"), "Ok string");
+	sput_fail_unless(pa_prefix_fromstring(str, &a, &b), "Ok parse");
+	sput_fail_if(pa_prefix_cmp(&p, plen, &a, b), "Ok prefix");
+
+	pa_prefix_tostring(str, PP(2), (plen = 63));
+	sput_fail_if(strcmp(str, "2001:0:0:102::/63"), "Ok string");
+	sput_fail_unless(pa_prefix_fromstring(str, &a, &b), "Ok parse");
+	sput_fail_if(pa_prefix_cmp(&p, plen, &a, b), "Ok prefix");
+
+	pa_prefix_tostring(str, PP(1), (plen = 8));
+	sput_fail_if(strcmp(str, "2000::/8"), "Ok string");
+	sput_fail_unless(pa_prefix_fromstring(str, &a, &b), "Ok parse");
+	sput_fail_if(pa_prefix_cmp(&p, plen, &a, b), "Ok prefix");
+
+	pa_prefix_tostring(str, PP4(10, 10), (plen = 104));
+	sput_fail_if(strcmp(str, "10.0.0.0/8"), "Ok string");
+	sput_fail_unless(pa_prefix_fromstring(str, &a, &b), "Ok parse");
+	sput_fail_if(pa_prefix_cmp(&v4, plen, &a, b), "Ok prefix");
+	sput_fail_unless(pa_prefix_fromstring("::ffff:a00:0/104", &a, &b)==1, "Ok parse");
+	sput_fail_if(pa_prefix_cmp(&v4, plen, &a, b), "Ok prefix");
+
+	pa_prefix_tostring(str, PP4(10, 1), (plen = 111));
+	sput_fail_if(strcmp(str, "10.0.0.0/15"), "Ok string");
+	sput_fail_unless(pa_prefix_fromstring(str, &a, &b), "Ok parse");
+	sput_fail_if(pa_prefix_cmp(&v4, plen, &a, b), "Ok prefix");
+
+	pa_prefix_tostring(str, PP4(10, 1), (plen = 112));
+	sput_fail_if(strcmp(str, "10.1.0.0/16"), "Ok string");
+	sput_fail_unless(pa_prefix_fromstring(str, &a, &b), "Ok parse");
+	sput_fail_if(pa_prefix_cmp(&v4, plen, &a, b), "Ok prefix");
+
+	pa_prefix_tostring(str, PP(1), (plen = 128));
+	sput_fail_if(strcmp(str, "2001:0:0:101::/128"), "Ok string");
+	sput_fail_unless(pa_prefix_fromstring(str, &a, &b), "Ok parse");
+	sput_fail_if(pa_prefix_cmp(&p, plen, &a, b), "Ok prefix");
+	sput_fail_unless(pa_prefix_fromstring("2001:0:0:101::", &a, &b), "Ok parse");
+	sput_fail_if(pa_prefix_cmp(&p, plen, &a, b), "Ok prefix");
+
+	pa_prefix_tostring(str, PP4(10, 1), (plen = 96));
+	sput_fail_if(strcmp(str, "0.0.0.0/0"), "Ok string");
+	sput_fail_unless(pa_prefix_fromstring(str, &a, &b), "Ok parse");
+	sput_fail_if(pa_prefix_cmp(&v4, plen, &a, b), "Ok prefix");
+
+	pa_prefix_tostring(str, PP(1), (plen = 0));
+	sput_fail_if(strcmp(str, "::/0"), "Ok string");
+	sput_fail_unless(pa_prefix_fromstring(str, &a, &b), "Ok parse");
+	sput_fail_if(pa_prefix_cmp(&p, plen, &a, b), "Ok prefix");
+}
+
+
+void pa_store_cache_test()
+{
+	struct pa_core core;
+	INIT_LIST_HEAD(&core.users);
+
+	struct pa_store store;
+	struct pa_store_prefix *prefix, *prefix2;
+	pa_store_init(&store, 3);
+
+	struct pa_store_bound bound;
+	pa_store_bind(&store, &core, &bound);
+
+	sput_fail_if(bound.user.assigned, "No assigned function");
+	sput_fail_if(bound.user.published, "No published function");
+	sput_fail_unless(bound.user.applied, "Applied function");
+	sput_fail_unless(list_empty(&store.links), "No links");
+
+	struct pa_link l;
+	struct pa_dp d;
+	struct pa_ldp ldp;
+	ldp.link = &l;
+	ldp.dp = &d;
+	ldp.prefix = PV(0);
+	ldp.plen = 64;
+	ldp.assigned = 0;
+	ldp.applied = 0;
+
+	bound.user.applied(&bound.user, &ldp);
+	sput_fail_unless(list_empty(&store.links), "No links");
+	sput_fail_unless(store.n_prefixes == 0, "No prefixes");
+
+	ldp.assigned = 1;
+	ldp.applied = 1;
+	bound.user.applied(&bound.user, &ldp);
+	sput_fail_unless(list_empty(&store.links), "No links");
+	sput_fail_unless(store.n_prefixes == 0, "No prefixes");
+
+	struct pa_store_link link;
+	pa_store_link_init(&link, &l, "L1", 2);
+	pa_store_link_add(&store, &link);
+	sput_fail_if(list_empty(&store.links), "One link in the list");
+	sput_fail_unless(store.n_prefixes == 0, "No prefixes");
+	sput_fail_unless(list_empty(&link.prefixes), "No stored prefix");
+	sput_fail_unless(link.n_prefixes == 0, "No stored prefix");
+
+	ldp.applied = 0;
+	bound.user.applied(&bound.user, &ldp);
+	sput_fail_if(list_empty(&store.links), "One link in the list");
+	sput_fail_unless(store.n_prefixes == 0, "No prefixes");
+	sput_fail_unless(list_empty(&link.prefixes), "No stored prefix");
+	sput_fail_unless(link.n_prefixes == 0, "No stored prefix");
+
+	ldp.applied = 1;
+	bound.user.applied(&bound.user, &ldp);
+	sput_fail_unless(store.n_prefixes == 1, "One cached prefix");
+	sput_fail_unless(link.n_prefixes == 1, "One cached prefix");
+	sput_fail_if(list_empty(&store.prefixes), "One prefix in list");
+	prefix = list_entry(store.prefixes.next, struct pa_store_prefix, in_store);
+	sput_fail_if(pa_prefix_cmp(&prefix->prefix, prefix->plen, PP(0), 64), "Correct prefix");
+	prefix2 = list_entry(link.prefixes.next, struct pa_store_prefix, in_link);
+	sput_fail_unless(prefix == prefix2, "Same prefix in both lists");
+
+	//Same prefix again
+	bound.user.applied(&bound.user, &ldp);
+	sput_fail_unless(store.n_prefixes == 1, "One cached prefix");
+	sput_fail_unless(link.n_prefixes == 1, "One cached prefix");
+
+	struct pa_link l2;
+	struct pa_store_link link2;
+	pa_store_link_init(&link2, &l2, "L2", 2);
+	pa_store_link_add(&store, &link2);
+	sput_fail_unless(list_empty(&link2.prefixes), "No stored prefix");
+	sput_fail_unless(link2.n_prefixes == 0, "No stored prefix");
+
+	//Another prefix for first link
+	link.max_prefixes = 1;
+	ldp.prefix = PV(2);
+	bound.user.applied(&bound.user, &ldp);
+	sput_fail_unless(store.n_prefixes == 1, "One cached prefix");
+	sput_fail_unless(link.n_prefixes == 1, "One cached prefix");
+	sput_fail_if(list_empty(&store.prefixes), "One prefix in list");
+	prefix = list_entry(store.prefixes.next, struct pa_store_prefix, in_store);
+	sput_fail_if(pa_prefix_cmp(&prefix->prefix, prefix->plen, PP(2), 64), "Correct prefix");
+	prefix2 = list_entry(link.prefixes.next, struct pa_store_prefix, in_link);
+	sput_fail_unless(prefix == prefix2, "Same prefix in both lists");
+
+	//Another prefix removed by storage limitation
+	link.max_prefixes = 2;
+	store.max_prefixes = 1;
+	ldp.prefix = PV(3);
+	bound.user.applied(&bound.user, &ldp);
+	sput_fail_unless(store.n_prefixes == 1, "One cached prefix");
+	sput_fail_unless(link.n_prefixes == 1, "One cached prefix");
+	sput_fail_if(list_empty(&store.prefixes), "One prefix in list");
+	prefix = list_entry(store.prefixes.next, struct pa_store_prefix, in_store);
+	sput_fail_if(pa_prefix_cmp(&prefix->prefix, prefix->plen, PP(3), 64), "Correct prefix");
+	prefix2 = list_entry(link.prefixes.next, struct pa_store_prefix, in_link);
+	sput_fail_unless(prefix == prefix2, "Same prefix in both lists");
+
+	//Add the same to the other link
+	ldp.link = &l2;
+	bound.user.applied(&bound.user, &ldp);
+	sput_fail_unless(store.n_prefixes == 1, "One cached prefix");
+	sput_fail_unless(link.n_prefixes == 0, "No cached prefix");
+	sput_fail_unless(link2.n_prefixes == 1, "One cached prefix");
+	sput_fail_if(list_empty(&store.prefixes), "One prefix in list");
+	prefix = list_entry(store.prefixes.next, struct pa_store_prefix, in_store);
+	sput_fail_if(pa_prefix_cmp(&prefix->prefix, prefix->plen, PP(3), 64), "Correct prefix");
+	prefix2 = list_entry(link2.prefixes.next, struct pa_store_prefix, in_link);
+	sput_fail_unless(prefix == prefix2, "Same prefix in both lists");
+
+	//Check the order
+	store.max_prefixes = 2;
+	link2.max_prefixes = 2;
+	ldp.prefix = PV(4);
+	bound.user.applied(&bound.user, &ldp);
+	sput_fail_unless(store.n_prefixes == 2, "Two cached prefix");
+	sput_fail_unless(link.n_prefixes == 0, "No cached prefix");
+	sput_fail_unless(link2.n_prefixes == 2, "Two cached prefix");
+
+	prefix = list_entry(store.prefixes.next, struct pa_store_prefix, in_store);
+	sput_fail_if(pa_prefix_cmp(&prefix->prefix, prefix->plen, PP(4), 64), "Correct prefix");
+	prefix2 = list_entry(link2.prefixes.next, struct pa_store_prefix, in_link);
+	sput_fail_unless(prefix == prefix2, "Same prefix in both lists");
+
+	prefix = list_entry(store.prefixes.prev, struct pa_store_prefix, in_store);
+	sput_fail_if(pa_prefix_cmp(&prefix->prefix, prefix->plen, PP(3), 64), "Correct prefix");
+	prefix2 = list_entry(link2.prefixes.prev, struct pa_store_prefix, in_link);
+	sput_fail_unless(prefix == prefix2, "Same prefix in both lists");
+
+
+	pa_store_link_remove(&store, &link);
+	pa_store_link_remove(&store, &link2); //This should create a private link
+	sput_fail_unless(store.n_prefixes == 2, "Two cached prefix");
+
+	//Now let's add link one with link2 name, it should take precedent link2
+	strcpy(link.name, "L2");
+	link.max_prefixes = 2;
+	pa_store_link_add(&store, &link);
+	sput_fail_unless(store.n_prefixes == 2, "Two cached prefix");
+	sput_fail_unless(link.n_prefixes == 2, "Two cached prefix");
+
+	prefix = list_entry(store.prefixes.next, struct pa_store_prefix, in_store);
+	sput_fail_if(pa_prefix_cmp(&prefix->prefix, prefix->plen, PP(4), 64), "Correct prefix");
+	prefix2 = list_entry(link2.prefixes.next, struct pa_store_prefix, in_link);
+	sput_fail_unless(prefix == prefix2, "Same prefix in both lists");
+
+	prefix = list_entry(store.prefixes.prev, struct pa_store_prefix, in_store);
+	sput_fail_if(pa_prefix_cmp(&prefix->prefix, prefix->plen, PP(3), 64), "Correct prefix");
+	prefix2 = list_entry(link2.prefixes.prev, struct pa_store_prefix, in_link);
+	sput_fail_unless(prefix == prefix2, "Same prefix in both lists");
+
+	//Remove again, and add with less max prefixes
+	pa_store_link_remove(&store, &link);
+	link.max_prefixes = 1;
+	pa_store_link_add(&store, &link);
+
+	sput_fail_unless(store.n_prefixes == 1, "1 cached prefix");
+	sput_fail_unless(link.n_prefixes == 1, "1 cached prefix");
+
+	prefix = list_entry(store.prefixes.next, struct pa_store_prefix, in_store);
+	sput_fail_if(pa_prefix_cmp(&prefix->prefix, prefix->plen, PP(4), 64), "Correct prefix");
+	prefix2 = list_entry(link.prefixes.next, struct pa_store_prefix, in_link);
+	sput_fail_unless(prefix == prefix2, "Same prefix in both lists");
+
+	//Just to remove a prefix from private entry
+	pa_store_link_remove(&store, &link);
+	store.max_prefixes = 1;
+	link.max_prefixes = 1;
+	strcpy(link.name, "L22");
+	pa_store_link_add(&store, &link);
+	ldp.prefix = PV(5);
+	ldp.link = link.link;
+	bound.user.applied(&bound.user, &ldp);
+	sput_fail_unless(store.n_prefixes == 1, "1 cached prefix");
+	sput_fail_unless(link.n_prefixes == 1, "1 cached prefix");
+
+	prefix = list_entry(store.prefixes.next, struct pa_store_prefix, in_store);
+	sput_fail_if(pa_prefix_cmp(&prefix->prefix, prefix->plen, PP(5), 64), "Correct prefix");
+	prefix2 = list_entry(link.prefixes.next, struct pa_store_prefix, in_link);
+	sput_fail_unless(prefix == prefix2, "Same prefix in both lists");
+
+	pa_store_link_remove(&store, &link);
+	pa_store_unbind(&bound);
+	pa_store_term(&store);
+}
+
+int main() {
 	sput_start_testing();
-	sput_enter_suite("Prefix assignment stable storage (pa_store.c)"); /* optional */
-	sput_run_test(test_pa_store_sps);
-	sput_run_test(test_pa_store_ulas);
+	sput_enter_suite("Prefix Assignment Storage tests"); /* optional */
+	sput_run_test(pa_store_cache_parsing);
+	sput_run_test(pa_store_cache_test);
+	sput_run_test(pa_store_load_test);
+	sput_run_test(pa_store_saveload_test);
+	sput_run_test(pa_store_delays_test);
+	sput_run_test(pa_store_rule_test);
 	sput_leave_suite(); /* optional */
 	sput_finish_testing();
 	return sput_get_return_value();
 }
-

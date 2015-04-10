@@ -32,6 +32,7 @@ tlv_buffer_grow(struct tlv_buf *buf, int minlen)
 void
 tlv_init(struct tlv_attr *attr, int id, unsigned int len)
 {
+	len -= sizeof(*attr);
 	len &= TLV_ATTR_LEN_MASK;
 	len |= (id << TLV_ATTR_ID_SHIFT) & TLV_ATTR_ID_MASK;
 	attr->id_len = cpu_to_be32(len);
@@ -116,6 +117,7 @@ void
 tlv_set_raw_len(struct tlv_attr *attr, unsigned int len)
 {
 	int id = tlv_id(attr);
+	len -= sizeof(*attr);
 	len &= TLV_ATTR_LEN_MASK;
 	len |= (id << TLV_ATTR_ID_SHIFT) & TLV_ATTR_ID_MASK;
 	attr->id_len = cpu_to_be32(len);

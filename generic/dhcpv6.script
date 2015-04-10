@@ -2,7 +2,8 @@
 echo "[dhcpv6.script] $*"
 [ -z "$2" ] && echo "Error: should be run by odhcpc6c" && exit 1
 
-. /usr/share/hnetd/utils.script
+BASEDIR=$(dirname $0)
+. $BASEDIR/utils.script
 
 PROTO=72
 
@@ -70,7 +71,7 @@ setup_interface () {
 	
 	[ -n "$CER" ] && cerid=", \"cerid\": \"$CER\""
 	[ -n "$PASSTHRU" ] && passthru=", \"passthru\": \"$PASSTHRU\""
-	hnet-call "{\"command\": \"enable_ipv6_uplink\", \"ifname\": \"$device\", \"prefix\": [$prefixpart], \"dns\": [$dnspart]$cerid$passthru}"
+	hnet-call enable_ipv6_uplink "{\"ifname\": \"$device\", \"prefix\": [$prefixpart], \"dns\": [$dnspart]$cerid$passthru}"
 
 	ip -6 route flush dev "$device" proto $PROTO
 
@@ -129,28 +130,30 @@ teardown_interface() {
 	local device="$1"
 	ip -6 route flush dev "$device" proto $PROTO
 	ip -6 address flush dev "$device" scope global
-	hnet-call "{\"command\": \"disable_ipv6_uplink\", \"ifname\": \"$device\"}"
+	hnet-call disable_ipv6_uplink "{\"ifname\": \"$device\"}"
 	update_resolv "dhcpv6" "$device" ""
 }
 
-case "$2" in
-	bound)
-		teardown_interface "$1"
-		setup_interface "$1"
-	;;
-	informed|updated|rebound|ra-updated)
-		setup_interface "$1"
-	;;
-	stopped|unbound)
-		teardown_interface "$1"
-	;;
-	started)
-		hnet-call "{\"command\": \"ifup\", \"ifname\": \"$1\"}"
-		teardown_interface "$1"
-	;;
-esac
+(
+	flock 8
+	case "$2" in
+		bound)
+			teardown_interface "$1"
+			setup_interface "$1"
+		;;
+		informed|updated|rebound|ra-updated)
+			setup_interface "$1"
+		;;
+		stopped|unbound)
+			teardown_interface "$1"
+		;;
+		started)
+			hnet-call ifup "{\"ifname\": \"$1\"}"
+			teardown_interface "$1"
+		;;
+	esac
 
-# user rules
-[ -f /etc/odhcp6c.user ] && . /etc/odhcp6c.user
-
-exit 0
+	# user rules
+	[ -f /etc/odhcp6c.user ] && . /etc/odhcp6c.user
+) 8>/tmp/odhcp6c.lock.$1
+rm -f /tmp/odhcp6c.lock.$1

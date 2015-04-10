@@ -18,6 +18,7 @@
 #include <sys/socket.h>
 
 #include <libubox/blobmsg.h>
+#include <libubox/blobmsg_json.h>
 #include <libubus.h>
 
 #include "dhcpv6.h"
@@ -29,8 +30,9 @@
 static struct ubus_context *ubus = NULL;
 static struct ubus_subscriber netifd;
 static uint32_t ubus_network_interface = 0;
-static struct pa_data *pa_data = NULL;
-static hncp p_hncp = NULL;
+static hncp_pa hncp_pa_p;
+static dncp p_dncp = NULL;
+static uint32_t timebase = 1;
 
 static int handle_update(__unused struct ubus_context *ctx,
 		__unused struct ubus_object *obj, __unused struct ubus_request_data *req,
@@ -38,15 +40,11 @@ static int handle_update(__unused struct ubus_context *ctx,
 static void handle_dump(__unused struct ubus_request *req,
 		__unused int type, struct blob_attr *msg);
 
-static int hnet_dump(struct ubus_context *ctx, __unused struct ubus_object *obj,
-		struct ubus_request_data *req, __unused const char *method,
-		__unused struct blob_attr *msg);
-
 static struct ubus_request req_dump = { .list = LIST_HEAD_INIT(req_dump.list) };
 
-static struct ubus_method hnet_object_methods[] = {
-	{.name = "dump", .handler = hnet_dump},
-};
+static struct ubus_method hnet_object_methods[PLATFORM_RPC_MAX];
+static struct platform_rpc_method *hnet_rpc_methods[PLATFORM_RPC_MAX];
+
 static struct ubus_object_type hnet_object_type =
 		UBUS_OBJECT_TYPE("hnet", hnet_object_methods);
 
@@ -54,7 +52,7 @@ static struct ubus_object main_object = {
         .name = "hnet",
         .type = &hnet_object_type,
         .methods = hnet_object_methods,
-        .n_methods = ARRAY_SIZE(hnet_object_methods),
+        .n_methods = 0,
 };
 
 static void platform_commit(struct uloop_timeout *t);
@@ -62,6 +60,7 @@ struct platform_iface {
 	struct iface *iface;
 	struct uloop_timeout update;
 	struct ubus_request req;
+	struct blob_buf config;
 	char handle[];
 };
 
@@ -109,26 +108,136 @@ static void handle_event(__unused struct ubus_context *ctx, __unused struct ubus
 static struct ubus_event_handler event_handler = { .cb = handle_event };
 static const char *hnetd_pd_socket = NULL;
 
-int platform_init(hncp hncp, struct pa_data *data, const char *pd_socket)
+int platform_init(dncp dncp, hncp_pa hncp_pa, const char *pd_socket)
 {
+
 	if (!(ubus = ubus_connect(NULL))) {
 		L_ERR("Failed to connect to ubus: %s", strerror(errno));
 		return -1;
 	}
 
+	ubus_add_uloop(ubus);
+
+	hnet_object_type.n_methods = main_object.n_methods;
+	ubus_add_object(ubus, &main_object);
+
 	netifd.cb = handle_update;
 	ubus_register_subscriber(ubus, &netifd);
 
-	ubus_add_uloop(ubus);
-	ubus_add_object(ubus, &main_object);
 	ubus_register_event_handler(ubus, &event_handler, "ubus.object.add");
 	if (!ubus_lookup_id(ubus, "network.interface", &ubus_network_interface))
 		sync_netifd(true);
 
 	hnetd_pd_socket = pd_socket;
-	pa_data = data;
-	p_hncp = hncp;
+	hncp_pa_p = hncp_pa;
+	p_dncp = dncp;
+	timebase = hnetd_time() / HNETD_TIME_PER_SECOND;
 	return 0;
+}
+
+static void platform_rpc_call_cb(struct ubus_request *req,
+		__unused int type, struct blob_attr *msg)
+{
+	struct blob_attr **out = req->priv;
+	*out = blob_memdup(msg);
+}
+
+int platform_rpc_cli(const char *method, struct blob_attr *in)
+{
+	struct blob_attr *out = NULL;
+	struct ubus_context *ubus = ubus_connect(NULL);
+
+	if (!ubus) {
+		L_ERR("Failed to connect to ubus: %s", strerror(errno));
+		return 2;
+	}
+
+	uint32_t self;
+	if (ubus_lookup_id(ubus, main_object.name, &self)) {
+		L_ERR("Failed to lookup hnetd: is it running?");
+		return 3;
+	}
+
+	if (ubus_invoke(ubus, self, method, in, platform_rpc_call_cb, &out, 3000)) {
+		L_ERR("Failed to invoke hnetd method %s", method);
+		return 3;
+	}
+
+	if (out) {
+		char *json = blobmsg_format_json_indent(out, true, true);
+		if (json) {
+			puts(json);
+			return 0;
+		}
+	}
+
+	return 4;
+}
+
+static int platform_rpc_handle(struct ubus_context *ctx, __unused struct ubus_object *obj,
+		struct ubus_request_data *req, const char *method, struct blob_attr *msg)
+{
+	static struct blob_buf b = {NULL, NULL, 0, NULL};
+	blob_buf_init(&b, 0);
+
+	ssize_t i;
+	for (i = 0; i < main_object.n_methods && strcmp(hnet_rpc_methods[i]->name, method); ++i);
+	if (i == main_object.n_methods || !hnet_rpc_methods[i]->cb)
+		return UBUS_STATUS_METHOD_NOT_FOUND;
+
+	int ret = hnet_rpc_methods[i]->cb(hnet_rpc_methods[i], msg, &b);
+
+	if (ret < 0)
+		return UBUS_STATUS_UNKNOWN_ERROR;
+
+	if (ret > 0)
+		ubus_send_reply(ctx, req, b.head);
+
+	return UBUS_STATUS_OK;
+}
+
+int platform_rpc_register(struct platform_rpc_method *m)
+{
+	if (main_object.n_methods >= PLATFORM_RPC_MAX)
+		return -ENOBUFS;
+
+	size_t i = main_object.n_methods++;
+	hnet_object_methods[i].name = m->name;
+	hnet_object_methods[i].policy = m->policy;
+	hnet_object_methods[i].n_policy = m->policy_cnt;
+	hnet_object_methods[i].mask = 0;
+	hnet_object_methods[i].handler = platform_rpc_handle;
+
+	hnet_rpc_methods[i] = m;
+
+	return 0;
+}
+
+int platform_rpc_multicall(int argc, char *const argv[])
+{
+	char *method = strstr(argv[0], "hnet-");
+	if (method) {
+		method += 5;
+
+		if (!strcmp(method, "ifresolve")) {
+			if (argc < 2)
+				return 1;
+
+			int ifindex = if_nametoindex(argv[1]);
+			if (ifindex) {
+				printf("%i\n", ifindex);
+				return 0;
+			} else {
+				return 2;
+			}
+		} else {
+			ssize_t i;
+			for (i = 0; i < main_object.n_methods && strcmp(hnet_rpc_methods[i]->name, method); ++i);
+			if (i < main_object.n_methods && hnet_rpc_methods[i]->main)
+				return hnet_rpc_methods[i]->main(hnet_rpc_methods[i], argc, argv);
+		}
+	}
+	return -1;
 }
 
 // Constructor for openwrt-specific interface part
@@ -162,6 +271,7 @@ void platform_iface_free(struct iface *c)
 	if (iface) {
 		uloop_timeout_cancel(&iface->update);
 		ubus_abort_request(ubus, &iface->req);
+		blob_buf_free(&iface->config);
 		free(iface);
 		c->platform = NULL;
 	}
@@ -181,15 +291,8 @@ void platform_set_address(struct iface *c,
 	platform_set_internal(c, false);
 }
 
-void platform_set_route(struct iface *c,
-		__unused struct iface_route *route, __unused bool enable)
-{
-	platform_set_internal(c, false);
-}
-
-
-void platform_set_owner(struct iface *c,
-		__unused bool enable)
+void platform_set_dhcp(struct iface *c,
+		__unused enum hncp_link_elected elected)
 {
 	platform_set_internal(c, false);
 }
@@ -246,7 +349,6 @@ static void platform_commit(struct uloop_timeout *t)
 
 	void *k, *l, *m;
 	struct iface_addr *a;
-	struct iface_route *r;
 
 	k = blobmsg_open_array(&b, "ipaddr");
 	vlist_for_each_element(&c->assigned, a, node) {
@@ -319,63 +421,7 @@ static void platform_commit(struct uloop_timeout *t)
 	}
 	blobmsg_close_array(&b, k);
 
-	k = blobmsg_open_array(&b, "routes");
-	vlist_for_each_element(&c->routes, r, node) {
-		if (!IN6_IS_ADDR_V4MAPPED(&r->to.prefix))
-			continue;
-
-		l = blobmsg_open_table(&b, NULL);
-
-		char *buf = blobmsg_alloc_string_buffer(&b, "target", INET_ADDRSTRLEN);
-		inet_ntop(AF_INET, &r->to.prefix.s6_addr[12], buf, INET_ADDRSTRLEN);
-		blobmsg_add_string_buffer(&b);
-
-		char *buf2 = blobmsg_alloc_string_buffer(&b, "netmask", 4);
-		snprintf(buf2, 4, "%u", prefix_af_length(&r->to));
-		blobmsg_add_string_buffer(&b);
-
-		char *buf3 = blobmsg_alloc_string_buffer(&b, "gateway", INET_ADDRSTRLEN);
-		inet_ntop(AF_INET, &r->via.s6_addr[12], buf3, INET_ADDRSTRLEN);
-		blobmsg_add_string_buffer(&b);
-
-		blobmsg_add_u32(&b, "metric", r->metric);
-		blobmsg_add_u8(&b, "onlink", true);
-
-		L_DEBUG("	to %s/%s via %s", buf, buf2, buf3);
-
-		blobmsg_close_table(&b, l);
-	}
-	blobmsg_close_array(&b, k);
-
 	k = blobmsg_open_array(&b, "routes6");
-	vlist_for_each_element(&c->routes, r, node) {
-		if (IN6_IS_ADDR_V4MAPPED(&r->to.prefix))
-			continue;
-
-		l = blobmsg_open_table(&b, NULL);
-
-		char *buf = blobmsg_alloc_string_buffer(&b, "target", INET6_ADDRSTRLEN);
-		inet_ntop(AF_INET6, &r->to.prefix, buf, INET6_ADDRSTRLEN);
-		blobmsg_add_string_buffer(&b);
-
-		char *buf2 = blobmsg_alloc_string_buffer(&b, "netmask", 4);
-		snprintf(buf2, 4, "%u", prefix_af_length(&r->to));
-		blobmsg_add_string_buffer(&b);
-
-		char *buf3 = blobmsg_alloc_string_buffer(&b, "gateway", INET6_ADDRSTRLEN);
-		inet_ntop(AF_INET6, &r->via, buf3, INET6_ADDRSTRLEN);
-		blobmsg_add_string_buffer(&b);
-
-		char *buf4 = blobmsg_alloc_string_buffer(&b, "source", PREFIX_MAXBUFFLEN);
-		prefix_ntop(buf4, PREFIX_MAXBUFFLEN, &r->from, true);
-		blobmsg_add_string_buffer(&b);
-
-		blobmsg_add_u32(&b, "metric", r->metric);
-
-		L_DEBUG("	from %s to %s/%s via %s", buf4, buf, buf2, buf3);
-
-		blobmsg_close_table(&b, l);
-	}
 	vlist_for_each_element(&c->assigned, a, node) {
 		hnetd_time_t preferred = (a->preferred_until - now) / HNETD_TIME_PER_SECOND;
 		hnetd_time_t valid = (a->valid_until - now) / HNETD_TIME_PER_SECOND;
@@ -467,17 +513,26 @@ static void platform_commit(struct uloop_timeout *t)
 	}
 
 	k = blobmsg_open_table(&b, "data");
-	blobmsg_add_u8(&b, "created", 0);
+	blobmsg_add_u32(&b, "created", timebase);
 
-	const char *service = (c->internal && c->linkowner && strncmp(c->ifname, "lo", 2)
-			&& (avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr))
-					? "server" : "disabled";
-	blobmsg_add_string(&b, "ra", service);
-	blobmsg_add_string(&b, "dhcpv4", service);
-	blobmsg_add_string(&b, "dhcpv6", service);
-	blobmsg_add_u32(&b, "ra_management", 1);
+	struct blob_attr *cfgattr;
+	unsigned rem;
+	blobmsg_for_each_attr(cfgattr, iface->config.head, rem)
+		blobmsg_add_blob(&b, cfgattr);
 
-	if (c->internal && c->linkowner) {
+	if (c->internal && c->elected && (avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr)) {
+		blobmsg_add_string(&b, "ra", "server");
+		blobmsg_add_string(&b, "dhcpv4", (c->elected & HNCP_LINK_LEGACY) ? "server" : "disabled");
+		blobmsg_add_string(&b, "dhcpv6", (c->elected & (HNCP_LINK_PREFIXDEL | HNCP_LINK_HOSTNAMES | HNCP_LINK_STATELESS)) ?
+				"server" : "disabled");
+		blobmsg_add_u32(&b, "ra_management", !!(c->elected & (HNCP_LINK_HOSTNAMES | HNCP_LINK_OTHERMNGD)));
+	} else {
+		blobmsg_add_string(&b, "ra", "disabled");
+		blobmsg_add_string(&b, "dhcpv4", "disabled");
+		blobmsg_add_string(&b, "dhcpv6", "disabled");
+	}
+
+	if (c->internal && c->elected) {
 		char *dst = blobmsg_alloc_string_buffer(&b, "dhcpv6_raw", c->dhcpv6_len_out * 2 + 1);
 		dst[0] = 0;
 
@@ -490,18 +545,18 @@ static void platform_commit(struct uloop_timeout *t)
 
 		blobmsg_add_u32(&b, "ra_default", (c->flags & IFACE_FLAG_ULA_DEFAULT) ? 1 : 0);
 		blobmsg_add_string(&b, "filter_class", "HOMENET");
+
+		if (hnetd_pd_socket && (c->elected & HNCP_LINK_PREFIXDEL))
+			blobmsg_add_string(&b, "pd_manager", hnetd_pd_socket);
 	}
 
-
-	if (c->internal && c->linkowner)
-		blobmsg_add_string(&b, "pd_manager", hnetd_pd_socket);
 
 	const char *zone = (c->internal) ? "lan" : "wan";
 	blobmsg_add_string(&b, "zone", zone);
 
-	L_DEBUG("	RA/DHCP/DHCPv6: %s, Zone: %s", service, zone);
+	L_DEBUG("	Elected(SMPHL): %x, Zone: %s", c->internal ? c->elected : 0, zone);
 
-	if (domain_cnt && c->internal && c->linkowner) {
+	if (domain_cnt && c->internal && c->elected) {
 		char fqdnbuf[256];
 		char *fqdn = iface_get_fqdn(c->ifname, fqdnbuf, sizeof(fqdnbuf));
 
@@ -540,8 +595,8 @@ static void platform_commit(struct uloop_timeout *t)
 
 	l = blobmsg_open_array(&b, "firewall");
 	if ((c->flags & IFACE_FLAG_GUEST) == IFACE_FLAG_GUEST) {
-		struct pa_dp *dp;
-		pa_for_each_dp(dp, pa_data) {
+		struct hncp_pa_dp *dp;
+		hncp_pa_for_each_dp(dp, hncp_pa_p) {
 			for (int i = 0; i <= 1; ++i) {
 				m = blobmsg_open_table(&b, NULL);
 
@@ -556,7 +611,7 @@ static void platform_commit(struct uloop_timeout *t)
 				blobmsg_add_string(&b, "family", family);
 
 				char *buf = blobmsg_alloc_string_buffer(&b, (i) ? "dest_ip" : "src_ip", PREFIX_MAXBUFFLEN);
-				prefix_ntop(buf, PREFIX_MAXBUFFLEN, &dp->prefix, true);
+				prefix_ntopc(buf, PREFIX_MAXBUFFLEN, &dp->prefix.prefix, dp->prefix.plen);
 				blobmsg_add_string_buffer(&b);
 
 				blobmsg_close_table(&b, m);
@@ -567,8 +622,8 @@ static void platform_commit(struct uloop_timeout *t)
 
 	if ((c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID && c->v4_saddr.s_addr) {
 		if (c->designatedv4) {
-			struct pa_dp *dp;
-			pa_for_each_dp(dp, pa_data) {
+			struct hncp_pa_dp *dp;
+			hncp_pa_for_each_dp(dp, hncp_pa_p) {
 				if (!IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
 					continue;
 
@@ -578,7 +633,7 @@ static void platform_commit(struct uloop_timeout *t)
 				blobmsg_add_string(&b, "family", "inet");
 				blobmsg_add_string(&b, "target", "ACCEPT");
 				char *buf = blobmsg_alloc_string_buffer(&b, "dest_ip", PREFIX_MAXBUFFLEN);
-				prefix_ntop(buf, PREFIX_MAXBUFFLEN, &dp->prefix, true);
+				prefix_ntopc(buf, PREFIX_MAXBUFFLEN, &dp->prefix.prefix, dp->prefix.plen);
 				blobmsg_add_string_buffer(&b);
 
 				blobmsg_close_table(&b, m);
@@ -678,7 +733,7 @@ enum {
 	DATA_ATTR_DISABLE_PA,
 	DATA_ATTR_PASSTHRU,
 	DATA_ATTR_ULA_DEFAULT_ROUTER,
-	DATA_ATTR_PING_INTERVAL,
+	DATA_ATTR_KEEPALIVE_INTERVAL,
 	DATA_ATTR_TRICKLE_K,
 	DATA_ATTR_DNSNAME,
 	DATA_ATTR_CREATED,
@@ -715,10 +770,10 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_DISABLE_PA] = { .name = "disable_pa", .type = BLOBMSG_TYPE_BOOL },
 	[DATA_ATTR_PASSTHRU] = { .name = "passthru", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_ULA_DEFAULT_ROUTER] = { .name = "ula_default_router", .type = BLOBMSG_TYPE_BOOL },
-	[DATA_ATTR_PING_INTERVAL] = { .name = "ping_interval", .type = BLOBMSG_TYPE_INT32 },
+	[DATA_ATTR_KEEPALIVE_INTERVAL] = { .name = "keepalive_interval", .type = BLOBMSG_TYPE_INT32 },
 	[DATA_ATTR_TRICKLE_K] = { .name = "trickle_k", .type = BLOBMSG_TYPE_INT32 },
 	[DATA_ATTR_DNSNAME] = { .name = "dnsname", .type = BLOBMSG_TYPE_STRING },
-	[DATA_ATTR_CREATED] = { .name = "created", .type = BLOBMSG_TYPE_BOOL },
+	[DATA_ATTR_CREATED] = { .name = "created", .type = BLOBMSG_TYPE_INT32 },
 };
 
 
@@ -757,7 +812,7 @@ static void update_interface(struct iface *c,
 				valid = now + (blobmsg_get_u32(a) * HNETD_TIME_PER_SECOND);
 
 			if ((a = tb[PREFIX_ATTR_EXCLUDED]))
-				prefix_pton(blobmsg_get_string(a), &ex);
+				prefix_pton(blobmsg_get_string(a), &ex.prefix, &ex.plen);
 
 			void *data = NULL;
 			size_t len = 0;
@@ -911,6 +966,8 @@ static void platform_update(void *data, size_t len)
 				flags |= IFACE_FLAG_EXTERNAL;
 			else if (!strcmp(mode, "leaf"))
 				flags |= IFACE_FLAG_LEAF;
+			else if (!strcmp(mode, "internal"))
+				flags |= IFACE_FLAG_INTERNAL;
 			else if (strcmp(mode, "auto"))
 				L_WARN("Unknown mode '%s' for interface %s: falling back to auto", mode, ifname);
 		}
@@ -926,11 +983,12 @@ static void platform_update(void *data, size_t len)
 	if ((a = tb[IFACE_ATTR_PROTO]))
 		proto = blobmsg_get_string(a);
 
-	bool created = dtb[DATA_ATTR_CREATED] && blobmsg_get_bool(dtb[DATA_ATTR_CREATED]);
+	bool created = dtb[DATA_ATTR_CREATED] && blobmsg_get_u32(dtb[DATA_ATTR_CREATED]) < timebase;
 
 	if ((!c || !c->platform) && up && !strcmp(proto, "hnet") && (c || created) && (a = tb[IFACE_ATTR_HANDLE])) {
 		c = iface_create(ifname, blobmsg_get_string(a), flags);
 
+		hncp_pa_conf_iface_update(hncp_pa_p, c->ifname); //Start HNCP PA Conf Update
 		if (c && dtb[DATA_ATTR_PREFIX]) {
 			struct blob_attr *k;
 			unsigned rem;
@@ -938,18 +996,17 @@ static void platform_update(void *data, size_t len)
 			blobmsg_for_each_attr(k, dtb[DATA_ATTR_PREFIX], rem) {
 				if (blobmsg_type(k) == BLOBMSG_TYPE_STRING) {
 					struct prefix p;
-					if (prefix_pton(blobmsg_get_string(k), &p) == 1)
-						iface_add_chosen_prefix(c, &p);
+					if (prefix_pton(blobmsg_get_string(k), &p.prefix, &p.plen) == 1)
+						hncp_pa_conf_prefix(hncp_pa_p, c->ifname, &p, 0);
 				}
 			}
-
 		}
 
 		unsigned link_id, link_mask = 8;
 		if (c && dtb[DATA_ATTR_LINK_ID] && sscanf(
 				blobmsg_get_string(dtb[DATA_ATTR_LINK_ID]),
 				"%x/%u", &link_id, &link_mask) >= 1)
-			iface_set_link_id(c, link_id, link_mask);
+			hncp_pa_conf_set_link_id(hncp_pa_p, c->ifname, link_id, link_mask);
 
 		if (c && dtb[DATA_ATTR_IFACE_ID]) {
 			struct blob_attr *k;
@@ -964,7 +1021,8 @@ static void platform_update(void *data, size_t len)
 					if (at)
 						*at = ' ';
 					int res = sscanf(buf, "%54s %54s", astr, fstr);
-					if(res <= 0 || !prefix_pton(astr, &addr) || (res > 1 && !prefix_pton(fstr, &filter))) {
+					if(res <= 0 || !prefix_pton(astr, &addr.prefix, &addr.plen) ||
+							(res > 1 && !prefix_pton(fstr, &filter.prefix, &filter.plen))) {
 						L_ERR("Incorrect iface_id syntax %s", blobmsg_get_string(k));
 						continue;
 					}
@@ -972,7 +1030,7 @@ static void platform_update(void *data, size_t len)
 						addr.plen = 64;
 					if(res == 1)
 						filter.plen = 0;
-					iface_add_addrconf(c, &addr.prefix, 128 - addr.plen, &filter);
+					hncp_pa_conf_address(hncp_pa_p, c->ifname, &addr.prefix, 128 - addr.plen, &filter, 0);
 				}
 			}
 		}
@@ -981,31 +1039,35 @@ static void platform_update(void *data, size_t len)
 		if(c && dtb[DATA_ATTR_IP6_PLEN]
 		               && sscanf(blobmsg_get_string(dtb[DATA_ATTR_IP6_PLEN]), "%u", &ip6_plen) == 1
 		               && ip6_plen <= 128) {
-			c->ip6_plen = ip6_plen;
+			hncp_pa_conf_set_ip6_plen(hncp_pa_p, c->ifname, ip6_plen);
 		}
 
 		unsigned ip4_plen;
 		if(c && dtb[DATA_ATTR_IP4_PLEN]
 		            && sscanf(blobmsg_get_string(dtb[DATA_ATTR_IP4_PLEN]), "%u", &ip4_plen) == 1
 		            && ip4_plen <= 32) {
-			c->ip4_plen = ip4_plen;
+			hncp_pa_conf_set_ip4_plen(hncp_pa_p, c->ifname, ip4_plen + 96);
 		}
 
-		hncp_link_conf conf;
-		if(c && dtb[DATA_ATTR_PING_INTERVAL] && (conf = hncp_if_find_conf_by_name(p_hncp, c->ifname))) {
-			conf->ping_worried_t = (((hnetd_time_t) blobmsg_get_u32(dtb[DATA_ATTR_PING_INTERVAL])) * HNETD_TIME_PER_SECOND) / 1000;
-			conf->ping_retry_base_t = conf->ping_worried_t / 8;
-			if(conf->ping_retry_base_t < 100)
-				conf->ping_retry_base_t = 100;
-			conf->ping_retries = 3;
-		}
+		hncp_pa_conf_iface_flush(hncp_pa_p, c->ifname); //Stop HNCP_PA UPDATE
 
-		if(c && dtb[DATA_ATTR_TRICKLE_K] && (conf = hncp_if_find_conf_by_name(p_hncp, c->ifname)))
+		dncp_link_conf conf;
+		if(c && dtb[DATA_ATTR_KEEPALIVE_INTERVAL] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))
+			conf->keepalive_interval = (hnetd_time_t) blobmsg_get_u32(dtb[DATA_ATTR_KEEPALIVE_INTERVAL]);
+
+		if(c && dtb[DATA_ATTR_TRICKLE_K] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))
 			conf->trickle_k = (int) blobmsg_get_u32(dtb[DATA_ATTR_TRICKLE_K]);
 
-		if(c && dtb[DATA_ATTR_DNSNAME] && (conf = hncp_if_find_conf_by_name(p_hncp, c->ifname)))
+		if(c && dtb[DATA_ATTR_DNSNAME] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))
 			strncpy(conf->dnsname, blobmsg_get_string(dtb[DATA_ATTR_DNSNAME]), sizeof(conf->dnsname));;
 
+		if (c) {
+			struct platform_iface *iface = c->platform;
+			blob_buf_init(&iface->config, 0);
+			for (size_t k = 0; k < DATA_ATTR_CREATED; ++k)
+				if (dtb[k])
+					blobmsg_add_blob(&iface->config, dtb[k]);
+		}
 	}
 
 	L_INFO("platform: interface update for %s detected", ifname);
@@ -1129,17 +1191,5 @@ static void handle_dump(__unused struct ubus_request *req,
 		platform_update(blobmsg_data(c), blobmsg_data_len(c));
 
 	iface_commit();
-}
-
-static int hnet_dump(struct ubus_context *ctx, __unused struct ubus_object *obj,
-		struct ubus_request_data *req, __unused const char *method,
-		__unused struct blob_attr *msg)
-{
-	struct blob_buf b = {NULL, NULL, 0, NULL};
-	blob_buf_init(&b, 0);
-	hncp_dump(&b, p_hncp);
-	ubus_send_reply(ctx, req, b.head);
-	blob_buf_free(&b);
-	return 0;
 }
 

@@ -7,10 +7,10 @@
 #ifndef PD_H_
 #define PD_H_
 
-#include "pa_pd.h"
+#include "hncp_pa.h"
 
 struct pd;
-struct pd* pd_create(struct pa_pd *pa_pd, const char *path);
+struct pd* pd_create(hncp_pa hncp_pa, const char *path);
 void pd_destroy(struct pd *pd);
 
 #endif /* PD_H_ */

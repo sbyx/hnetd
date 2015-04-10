@@ -1,30 +1,30 @@
 /*
- * $Id: hncp_notify.c $
+ * $Id: dncp_notify.c $
  *
  * Author: Markus Stenberg <markus stenberg@iki.fi>
  *
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 10:04:30 2013 mstenber
- * Last modified: Mon Feb 17 15:58:40 2014 mstenber
- * Edit time:     44 min
+ * Last modified: Tue Dec 23 18:57:46 2014 mstenber
+ * Edit time:     45 min
  *
  */
 
 /*
- * This module implements the HNCP subscription API.
+ * This module implements the DNCP subscription API.
  */
 
-#include "hncp_i.h"
+#include "dncp_i.h"
 
 #define NODE_CHANGE_CALLBACK(s, n, add)         \
   if (s->node_change_callback)                  \
     s->node_change_callback(s, n, add)
 
-void hncp_subscribe(hncp o, hncp_subscriber s)
+void dncp_subscribe(dncp o, dncp_subscriber s)
 {
-  hncp_node n;
-  hncp_tlv t;
+  dncp_node n;
+  dncp_tlv t;
   struct tlv_attr *a;
 
   list_add(&s->lh, &o->subscribers);
@@ -33,33 +33,33 @@ void hncp_subscribe(hncp o, hncp_subscriber s)
       vlist_for_each_element(&o->tlvs, t, in_tlvs)
         s->local_tlv_change_callback(s, &t->tlv, true);
     }
-  hncp_for_each_node(o, n)
+  dncp_for_each_node(o, n)
     {
       NODE_CHANGE_CALLBACK(s, n, true);
       if (s->tlv_change_callback)
         {
-          hncp_node_for_each_tlv(n, a)
+          dncp_node_for_each_tlv(n, a)
             s->tlv_change_callback(s, n, a, true);
         }
     }
 }
 
-void hncp_unsubscribe(hncp o, hncp_subscriber s)
+void dncp_unsubscribe(dncp o, dncp_subscriber s)
 {
-  hncp_node n;
+  dncp_node n;
   struct tlv_attr *a;
-  hncp_tlv t;
+  dncp_tlv t;
 
   if (s->local_tlv_change_callback)
     {
       vlist_for_each_element(&o->tlvs, t, in_tlvs)
         s->local_tlv_change_callback(s, &t->tlv, false);
     }
-  hncp_for_each_node(o, n)
+  dncp_for_each_node(o, n)
     {
       if (s->tlv_change_callback)
         {
-          hncp_node_for_each_tlv(n, a)
+          dncp_node_for_each_tlv(n, a)
             s->tlv_change_callback(s, n, a, false);
         }
       NODE_CHANGE_CALLBACK(s, n, false);
@@ -82,11 +82,11 @@ void hncp_unsubscribe(hncp o, hncp_subscriber s)
       break;                                    \
     }
 
-void hncp_notify_subscribers_tlvs_changed(hncp_node n,
+void dncp_notify_subscribers_tlvs_changed(dncp_node n,
                                           struct tlv_attr *a_old,
                                           struct tlv_attr *a_new)
 {
-  hncp_subscriber s;
+  dncp_subscriber s;
   void *old_end = (void *)a_old + (a_old ? tlv_pad_len(a_old) : 0);
   void *new_end = (void *)a_new + (a_new ? tlv_pad_len(a_new) : 0);
   int r;
@@ -95,7 +95,7 @@ void hncp_notify_subscribers_tlvs_changed(hncp_node n,
    * then we add new ones. Otherwise, there may be confusion if we get
    * first new + then remove, and the underlying TLV has same
    * key.. :-p */
-  list_for_each_entry(s, &n->hncp->subscribers, lh)
+  list_for_each_entry(s, &n->dncp->subscribers, lh)
     {
       struct tlv_attr *op = a_old ? tlv_data(a_old) : NULL;
       struct tlv_attr *np = a_new ? tlv_data(a_new) : NULL;
@@ -141,7 +141,7 @@ void hncp_notify_subscribers_tlvs_changed(hncp_node n,
           op = tlv_next(op);
         }
     }
-  list_for_each_entry(s, &n->hncp->subscribers, lh)
+  list_for_each_entry(s, &n->dncp->subscribers, lh)
     {
       struct tlv_attr *op = a_old ? tlv_data(a_old) : NULL;
       struct tlv_attr *np = a_new ? tlv_data(a_new) : NULL;
@@ -189,41 +189,41 @@ void hncp_notify_subscribers_tlvs_changed(hncp_node n,
     }
 }
 
-void hncp_notify_subscribers_local_tlv_changed(hncp o,
+void dncp_notify_subscribers_local_tlv_changed(dncp o,
                                                struct tlv_attr *a,
                                                bool add)
 {
-  hncp_subscriber s;
+  dncp_subscriber s;
 
   list_for_each_entry(s, &o->subscribers, lh)
     if (s->local_tlv_change_callback)
       s->local_tlv_change_callback(s, a, add);
 }
 
-void hncp_notify_subscribers_node_changed(hncp_node n, bool add)
+void dncp_notify_subscribers_node_changed(dncp_node n, bool add)
 {
-  hncp_subscriber s;
+  dncp_subscriber s;
 
-  list_for_each_entry(s, &n->hncp->subscribers, lh)
+  list_for_each_entry(s, &n->dncp->subscribers, lh)
     NODE_CHANGE_CALLBACK(s, n, add);
 }
 
 
-void hncp_notify_subscribers_about_to_republish_tlvs(hncp_node n)
+void dncp_notify_subscribers_about_to_republish_tlvs(dncp_node n)
 {
-  hncp_subscriber s;
+  dncp_subscriber s;
 
-  list_for_each_entry(s, &n->hncp->subscribers, lh)
+  list_for_each_entry(s, &n->dncp->subscribers, lh)
     if (s->republish_callback)
       s->republish_callback(s);
 }
 
 
-void hncp_notify_subscribers_link_changed(hncp_link l)
+void dncp_notify_subscribers_link_changed(dncp_link l, enum dncp_subscriber_event event)
 {
-  hncp_subscriber s;
+  dncp_subscriber s;
 
-  list_for_each_entry(s, &l->hncp->subscribers, lh)
+  list_for_each_entry(s, &l->dncp->subscribers, lh)
     if (s->link_change_callback)
-      s->link_change_callback(s);
+      s->link_change_callback(s, l->ifname, event);
 }

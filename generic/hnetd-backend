@@ -1,6 +1,7 @@
 #!/bin/sh
 
-. /usr/share/hnetd/utils.script
+BASEDIR=$(dirname $0)/../share/hnetd/
+. $BASEDIR/utils.script
 
 echo "[hnetd-backend] $*"
 
@@ -8,11 +9,11 @@ case "$1" in
 dhcpv4client)
 	[ "$2" = 1 ] && export NODEFAULT=1
 	[ -n "$3" ] && export METRIC=$3
-	exec busybox udhcpc -f -t 1000000000 -i "$2" -x "hostname:$(hostname)" -x "0x4d:07484f4d454e4554" -s /usr/share/hnetd/dhcp.script
+	exec busybox udhcpc -f -t 1000000000 -i "$2" -x "hostname:$(hostname)" -x "0x4d:07484f4d454e4554" -s $BASEDIR/dhcp.script
 	;;
 
 dhcpv6client)
-	exec odhcp6c -t120 -P0 -F -s /usr/share/hnetd/dhcpv6.script -u HOMENET "$2"
+	exec odhcp6c -t120 -P0 -F -s $BASEDIR/dhcpv6.script -u HOMENET "$2"
 	;;
 
 setfilter|unsetfilter)
@@ -48,18 +49,28 @@ newaddr|deladdr)
 	killall -q -SIGHUP odhcpd
 	;;
 
+newprefixroute|delprefixroute)
+	[ "$1" = "newprefixroute" ] && act="replace" || act="del"
+	ip -6 route "$act" unreachable "$3" metric 2147483646
+	;;
+
 newroute|delroute)
 	[ "$1" = "newroute" ] && act="replace" || act="del"
 	if [ -n "$6" ]; then
-		ip -6 route "$act" "$3" from "$6" via "$4" dev "$2" metric "$5"
+		if [ -n "$2" -a -n "$4" ]; then
+			ip -6 route "$act" "$3" from "$6" via "$4" dev "$2" metric "$5" table "$BFSRT"
+		else
+			ip -6 route "$act" unreachable "$3" table "$BFSRT"
+			ip -6 route "$act" throw "$3"
+		fi
 	else
-		ip route "$act" "$3" via "$4" dev "$2" metric "$5" onlink
+		if [ -n "$2" -a -n "$4" ]; then
+			ip -4 route "$act" "$3" via "$4" dev "$2" metric "$5" onlink table "$BFSRT"
+		else
+			ip -4 route "$act" unreachable "$3" table "$BFSRT"
+			ip -4 route "$act" throw "$3"
+		fi
 	fi
-	;;
-
-newprefixroute|delprefixroute)
-	[ "$1" = "newprefixroute" ] && act="replace" || act="del"
-	ip -6 route "$act" unreachable "$2"
 	;;
 
 newblocked|delblocked)
@@ -83,13 +94,22 @@ newblocked|delblocked)
 	;;
 
 startdhcp)
+	dhcpv4=disabled
+	dhcpv6=disabled
+	stateful=0
+
+	[ -n "$3" ] && dhcpv4=server
+	[ -n "$4" ] && stateful=1
+	[ -n "$5" ] && dhcpv6=server
+
 	uci batch <<-EOF
 	set dhcp.$2=dhcp
 	set dhcp.$2.ifname=$2
-	set dhcp.$2.dhcpv6=server
-	set dhcp.$2.dhcpv4=server
 	set dhcp.$2.ra=server
-	set dhcp.$2.pd_manager=$3
+	set dhcp.$2.dhcpv4=$dhcpv4
+	set dhcp.$2.dhcpv6=$dhcpv6
+	set dhcp.$2.pd_manager=$6
+	set dhcp.$2.ra_management=$stateful
 	set dhcp.$2.filter_class=HOMENET
 	commit dhcp
 EOF

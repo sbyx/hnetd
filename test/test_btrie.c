@@ -29,6 +29,7 @@ void *test_malloc(size_t size)
 
 #define malloc test_malloc
 #include "btrie.c"
+#include "prefix_utils.h"
 
 #include "sput.h"
 #include "smock.h"
@@ -447,7 +448,8 @@ static void test_check_prefix(struct btrie_pentry *pentry)
 	struct prefix cmp;
 	cmp.plen = btrie_get_keylen(&pentry->e);
 	btrie_get_key(&pentry->e, (btrie_key_t *)&cmp.prefix);
-	sput_fail_if(prefix_cmp(&cmp, pentry->p), "Correct prefix");
+	sput_fail_unless(cmp.plen == pentry->p->plen &&
+			!bmemcmp(&cmp.prefix, &pentry->p->prefix, cmp.plen), "Correct prefix");
 }
 
 static void test_btrie_prefix()
@@ -737,12 +739,11 @@ static void test_btrie_available()
 void test_btrie_available_list(struct btrie *root)
 {
 	struct btrie *n;
-	struct prefix available, can;
+	struct prefix available;
 	printf("Listing available prefixes \n");
 	btrie_for_each_available(root, n, (btrie_key_t *)&available.prefix, &available.plen, NULL, 0)
 	{
-		prefix_canonical(&can, &available);
-		printf("Available prefix: %s\n", PREFIX_REPR(&can));
+		printf("Available prefix: %s\n", PREFIX_REPR_C(&available));
 	}
 	printf("\n");
 }

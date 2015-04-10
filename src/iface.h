@@ -8,9 +8,11 @@
 #define _IFACE_H
 
 #include "hnetd.h"
-#include "hncp.h"
-#include "hncp_i.h"
+#include "dncp.h"
+#include "dncp_i.h"
 #include "hncp_sd.h"
+#include "hncp_link.h"
+#include "hncp_pa.h"
 #include "prefix_utils.h"
 
 #include <libubox/list.h>
@@ -58,18 +60,11 @@ void iface_unregister_user(struct iface_user *user);
 void iface_set_dhcp_send(const char *ifname, const void *dhcpv6_data, size_t dhcpv6_len, const void *dhcp_data, size_t dhcp_len);
 void iface_all_set_dhcp_send(const void *dhcpv6_data, size_t dhcpv6_len, const void *dhcp_data, size_t dhcp_len);
 
-// Begin route update cycle
-void iface_update_routes(void);
-
-// Add new routes
-void iface_add_default_route(const char *ifname, const struct prefix *from, const struct in6_addr *via, unsigned hopcount);
-void iface_add_internal_route(const char *ifname, const struct prefix *to, const struct in6_addr *via, unsigned hopcount);
-
-// Flush and commit routes to synthesize events
-void iface_commit_routes(void);
-
 // Test if iface has IPv4 address
 bool iface_has_ipv4_address(const char *ifname);
+
+// Get preferred interface address
+int iface_get_preferred_address(struct in6_addr *addr, bool v4);
 
 
 // Internal API to platform
@@ -86,15 +81,7 @@ struct iface_addr {
 	uint8_t dhcpv6_data[];
 };
 
-struct iface_route {
-	struct vlist_node node;
-	struct prefix from;
-	struct prefix to;
-	struct in6_addr via;
-	unsigned metric;
-};
-
-typedef uint8_t iface_flags;
+typedef int iface_flags;
 
 #define IFACE_FLAG_INTERNAL		 0x01
 #define IFACE_FLAG_LEAF          (0x02 | IFACE_FLAG_INTERNAL)
@@ -104,6 +91,7 @@ typedef uint8_t iface_flags;
 #define IFACE_FLAG_GUEST         (0x20 | IFACE_FLAG_LEAF)
 #define IFACE_FLAG_HYBRID		 (0x40 | IFACE_FLAG_INTERNAL)
 #define IFACE_FLAG_EXTERNAL		 0x80
+#define IFACE_FLAG_NODHCP		 0x100
 
 struct iface {
 	struct list_head head;
@@ -113,7 +101,6 @@ struct iface {
 
 	// Interface status
 	bool unused;
-	bool linkowner;
 	bool internal;
 	bool carrier;
 	bool designatedv4;
@@ -121,6 +108,7 @@ struct iface {
 	bool had_ipv6_uplink;
 
 	// Flags
+	enum hncp_link_elected elected;
 	iface_flags flags;
 
 	// LL-address
@@ -135,7 +123,6 @@ struct iface {
 	// Prefix storage
 	struct vlist_tree assigned;
 	struct vlist_tree delegated;
-	struct vlist_tree routes;
 	struct list_head chosen;
 	struct list_head addrconf;
 	struct pa_link_id_rule *id;
@@ -164,10 +151,9 @@ struct iface {
 	char ifname[];
 };
 
-#include "pa.h"
-
 // Generic initializer to be called by main()
-int iface_init(hncp hncp, hncp_sd sd, struct pa *pa, const char *pd_socket);
+int iface_init(dncp hncp, hncp_sd sd, hncp_pa pa,
+		struct hncp_link *link, const char *pd_socket);
 
 // Get an interface by name
 struct iface* iface_get(const char *ifname);
@@ -177,6 +163,9 @@ struct iface* iface_create(const char *ifname, const char *handle, iface_flags f
 
 // Remove a known interface
 void iface_remove(struct iface *iface);
+
+// Interface iterator
+struct iface* iface_next(struct iface *prev);
 
 
 // Begin uplink update cycle
