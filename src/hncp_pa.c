@@ -306,6 +306,32 @@ static void hpa_refresh_ec(hncp_pa hpa, bool publish)
 	if (publish)
 		dncp_remove_tlvs_by_type(dncp, HNCP_T_EXTERNAL_CONNECTION);
 
+	/* add the SD domain always to search path (if present) */
+	if (dncp->domain[0])
+	{
+		/* domain is _ascii_ representation of domain (same as what
+		 * DHCPv4 expects). DHCPv6 needs ll-escaped string, though. */
+		uint8_t ll[DNS_MAX_LL_LEN];
+		int len;
+		len = escaped2ll(dncp->domain, ll, sizeof(ll));
+		if (len > 0)
+		{
+			uint16_t fake_header[2];
+			uint8_t fake4_header[2];
+
+			fake_header[0] = cpu_to_be16(DHCPV6_OPT_DNS_DOMAIN);
+			fake_header[1] = cpu_to_be16(len);
+			APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
+					&fake_header[0], 4);
+			APPEND_BUF(dhcpv6_options, dhcpv6_options_len, ll, len);
+
+			fake4_header[0] = DHCPV4_OPT_DOMAIN;
+			fake4_header[1] = strlen(dncp->domain);
+			APPEND_BUF(dhcp_options, dhcp_options_len, fake4_header, 2);
+			APPEND_BUF(dhcp_options, dhcp_options_len, dncp->domain, fake4_header[1]);
+		}
+	}
+
 	//Create External Connexion TLVs for all prefixes from iface
 	hpa_for_each_dp(hpa, dp2) {
 		if(!dp2->dp.enabled || dp2->pa.type != HPA_DP_T_IFACE)
@@ -425,32 +451,6 @@ static void hpa_refresh_ec(hncp_pa hpa, bool publish)
 
 	dncp_node n;
 	struct tlv_attr *a, *a2;
-
-	/* add the SD domain always to search path (if present) */
-	if (dncp->domain[0])
-	{
-		/* domain is _ascii_ representation of domain (same as what
-		 * DHCPv4 expects). DHCPv6 needs ll-escaped string, though. */
-		uint8_t ll[DNS_MAX_LL_LEN];
-		int len;
-		len = escaped2ll(dncp->domain, ll, sizeof(ll));
-		if (len > 0)
-		{
-			uint16_t fake_header[2];
-			uint8_t fake4_header[2];
-
-			fake_header[0] = cpu_to_be16(DHCPV6_OPT_DNS_DOMAIN);
-			fake_header[1] = cpu_to_be16(len);
-			APPEND_BUF(dhcpv6_options, dhcpv6_options_len,
-					&fake_header[0], 4);
-			APPEND_BUF(dhcpv6_options, dhcpv6_options_len, ll, len);
-
-			fake4_header[0] = DHCPV4_OPT_DOMAIN;
-			fake4_header[1] = strlen(dncp->domain);
-			APPEND_BUF(dhcp_options, dhcp_options_len, fake4_header, 2);
-			APPEND_BUF(dhcp_options, dhcp_options_len, dncp->domain, fake4_header[1]);
-		}
-	}
 
 	//Aggregate DHCP info from other External Connection TLVs
 	dncp_for_each_node(dncp, n)

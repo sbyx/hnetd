@@ -538,7 +538,7 @@ static void platform_commit(struct uloop_timeout *t)
 
 		// Filter DNS-server and DNS-domain which we handle separatly
 		dhcpv6_for_each_option(c->dhcpv6_data_out, ((uint8_t*)c->dhcpv6_data_out) + c->dhcpv6_len_out, otype, olen, odata)
-			if (otype != DHCPV6_OPT_DNS_SERVERS)
+			if (otype != DHCPV6_OPT_DNS_SERVERS && otype != DHCPV6_OPT_DNS_DOMAIN)
 				hexlify(dst + strlen(dst), &odata[-4], olen + 4);
 
 		blobmsg_add_string_buffer(&b);
