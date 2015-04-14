@@ -690,7 +690,7 @@ dncp_sha256 dncp_trust_next_hash(dncp_trust t, const dncp_sha256 prev)
     {
       dncp_trust_node last = avl_last_element(&t->tree.avl, n, in_tree.avl);
       n = _trust_node_find(t, prev);
-      if (n == last)
+      if (n == last || !n)
         return NULL;
       n = avl_next_element(n, in_tree.avl);
     }

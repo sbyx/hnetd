@@ -142,10 +142,6 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 					hncp_t_assigned_prefix_header ap;
 					dncp_t_node_data_neighbor ne;
 					if ((ne = dncp_tlv_neighbor(a))) {
-
-						n = dncp_find_node_by_node_identifier(hncp,
-							&ne->neighbor_node_identifier, false);
-
 						if (!(n = dncp_node_find_neigh_bidir(c, ne)))
 							continue; // Connection not mutual
 

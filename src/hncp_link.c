@@ -96,7 +96,7 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 			dncp_node peer = dncp_find_node_by_node_identifier(l->dncp,
 					&cn->neighbor_node_identifier, false);
 
-			if (!peer)
+			if (!peer || !peers)
 				continue;
 
 			bool mutual = false;

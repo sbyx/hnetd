@@ -55,10 +55,12 @@ dncp_io_get_hwaddrs(unsigned char *buf, int buf_left)
   for (p = ia ; p ; p = p->ifa_next)
     if (p->ifa_addr && p->ifa_addr->sa_family == AF_LINK)
       {
-        void *a = &p->ifa_addr->sa_data[0];
+        void *a;
 #ifdef __linux__
         struct sockaddr_ll *sll = (struct sockaddr_ll *) p->ifa_addr;
         a = sll->sll_addr;
+#else
+        a = &p->ifa_addr->sa_data[0];
 #endif /* __linux__ */
         if (memcmp(a, zeroed_addr, sizeof(zeroed_addr)) == 0)
           continue;

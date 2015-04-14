@@ -598,7 +598,7 @@ static void hpa_dp_set_enabled(hncp_pa hpa, hpa_dp dp, bool enabled)
 static int hpa_dp_compute_enabled(hncp_pa hpa, hpa_dp dp) {
 	//A little bit brute-force. Using a btrie would help avoiding that.
 	hpa_dp dp2;
-	bool passed;
+	bool passed = 0;
 	hpa_for_each_dp(hpa, dp2) {
 		if(dp2 == dp) {
 			passed = 1;
@@ -1750,6 +1750,9 @@ static void hpa_conf_update_cb(struct vlist_tree *tree,
 		struct vlist_node *node_new,
 		struct vlist_node *node_old)
 {
+	if (!node_new && !node_old)
+		return;
+
 	hpa_iface i = container_of(tree, hpa_iface_s, conf);
 	L_DEBUG("hpa_conf_update_cb tree:%p new:%p old%p on iface %s",
 				tree, node_new, node_old, i->ifname);

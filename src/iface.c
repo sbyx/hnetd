@@ -369,6 +369,9 @@ static void update_addr(struct vlist_tree *t, struct vlist_node *node_new, struc
 	bool enable = !!node_new;
 	hnetd_time_t now = hnetd_time();
 
+	if (!node_new && !node_old)
+		return;
+
 	if (!enable && !IN6_IS_ADDR_V4MAPPED(&a_old->prefix.prefix)) {
 		// Don't actually remove addresses, but deprecate them so the change is announced
 		enable = true;
@@ -425,6 +428,8 @@ static void update_prefix(struct vlist_tree *t, struct vlist_node *node_new, str
 
 	if (node_old && !node_new)
 		a_old->valid_until = -1;
+	else if (!node_new && !node_old)
+		return;
 
 	struct iface_user *u;
 	list_for_each_entry(u, &users, head)

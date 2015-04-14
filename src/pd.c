@@ -165,7 +165,6 @@ static void pd_handle_data(struct ustream *s, __unused int bytes_new)
 
 		if (hint > 64)
 			hint = 64;
-		hint = 20;
 
 		if(!(c->lease = hpa_pd_add_lease(c->pd->hncp_pa, seed, hint, pd_cb, c))){
 			pd_handle_done(s);
