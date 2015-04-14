@@ -188,7 +188,7 @@ int platform_rpc_multicall(int argc, char *const argv[])
 // Run platform script
 static pid_t platform_run(char *argv[])
 {
-	pid_t pid = vfork();
+	pid_t pid = fork();
 	if (pid == 0) {
 		execv(argv[0], argv);
 		_exit(128);

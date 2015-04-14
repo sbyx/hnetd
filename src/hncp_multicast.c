@@ -61,7 +61,7 @@ struct hncp_multicast_struct
 /* Utility function glommed from platform-generic platform_exec/call. */
 static void _fork_execv(char *argv[])
 {
-  pid_t pid = vfork();
+  pid_t pid = fork();
 
   if (pid == 0) {
     execv(argv[0], argv);
