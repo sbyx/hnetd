@@ -31,6 +31,7 @@
 #define SINGLE_TEST_ERROR_TIMEOUT 2000
 
 int log_level = LOG_DEBUG;
+void (*hnetd_log)(int priority, const char *format, ...) = syslog;
 
 dtls d1, d2;
 

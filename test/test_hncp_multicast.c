@@ -27,6 +27,7 @@
 #include "hncp_multicast.c"
 
 int log_level = LOG_DEBUG;
+void (*hnetd_log)(int priority, const char *format, ...) = syslog;
 
 void test_hncp_multicast_base(bool aa_enabled)
 {

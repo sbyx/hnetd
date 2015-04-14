@@ -16,6 +16,7 @@
 #include "sput.h"
 
 int log_level = LOG_DEBUG;
+void (*hnetd_log)(int priority, const char *format, ...) = syslog;
 
 /* Ensure that tlv stuff we add works. Note that some of the failures
  * are obvious only on valgrind (e.g. wrong accesses in tlv_iter). */

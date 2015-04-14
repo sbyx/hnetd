@@ -6,6 +6,7 @@
 #include "fake_uloop.h"
 
 int log_level = 8;
+void (*hnetd_log)(int priority, const char *format, ...) = syslog;
 #include "pa_core.c"
 
 /* Fake file handling */

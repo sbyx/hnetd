@@ -26,6 +26,7 @@
 #include "hncp_sd.c"
 
 int log_level = LOG_DEBUG;
+void (*hnetd_log)(int priority, const char *format, ...) = NULL;
 
 /*
  * This is minimalist piece of test code that just exercises the

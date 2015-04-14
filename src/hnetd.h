@@ -58,10 +58,12 @@ extern int log_level;
 
 // Logging macros
 
+extern void (*hnetd_log)(int priority, const char *format, ...);
+
 #define L_INTERNAL(level, ...)                  \
 do {                                            \
-  if (log_level >= level)                       \
-    syslog(level, L_PREFIX __VA_ARGS__);        \
+  if (hnetd_log && log_level >= level)                       \
+    hnetd_log(level, L_PREFIX __VA_ARGS__);        \
  } while(0)
 
 #if L_LEVEL >= LOG_ERR
