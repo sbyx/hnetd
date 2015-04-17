@@ -8,8 +8,6 @@ ISIS_INIT=`which autoisis`
 BFSTABLE=33333
 BFSPROTO=73
 
-echo $* >> /tmp/hnetd-routing.log
-
 act=$1
 shift
 
