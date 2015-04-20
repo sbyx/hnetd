@@ -260,7 +260,7 @@ void platform_set_address(struct iface *c, struct iface_addr *a, bool enable)
 {
 	hnetd_time_t now = hnetd_time();
 	char abuf[PREFIX_MAXBUFFLEN], pbuf[10] = "", vbuf[10] = "", cbuf[10] = "";
-	prefix_ntopc(abuf, sizeof(abuf), &a->prefix.prefix, a->prefix.plen);
+	prefix_ntop(abuf, sizeof(abuf), &a->prefix.prefix, a->prefix.plen);
 
 	if (!IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix)) {
 		hnetd_time_t valid = (a->valid_until - now) / HNETD_TIME_PER_SECOND;
