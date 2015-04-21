@@ -6,7 +6,7 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 21:02:53 2015 mstenber
- * Last modified: Mon Feb 23 21:03:08 2015 mstenber
+ * Last modified: Tue Apr 21 14:14:35 2015 mstenber
  * Edit time:     0 min
  *
  */
@@ -42,6 +42,7 @@ bool check_exec, debug_exec;
 int execs;
 
 #define vfork() 0
+#define fork() 0
 #define waitpid(pid, x, y)
 #define _exit(code)
 
