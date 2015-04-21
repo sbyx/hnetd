@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu Feb 26 14:46:39 2015 mstenber
+ * Last modified: Tue Apr 21 13:27:12 2015 mstenber
  * Edit time:     262 min
  *
  */
@@ -215,8 +215,8 @@ bool net_sim_is_converged(net_sim s)
               return false;
             }
           if (!s->accept_time_errors
-              && abs(n2->n.own_node->origination_time
-                     - hn->origination_time) > acceptable_offset)
+              && llabs(n2->n.own_node->origination_time
+                       - hn->origination_time) > acceptable_offset)
             {
               L_DEBUG("origination time mismatch at "
                       "%s: %lld !=~ %lld for %s [update number %d]",
