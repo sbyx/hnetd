@@ -23,6 +23,7 @@ configure)
 			$BABEL_EXE -D -I $BABEL_PID \
 				-C "redistribute" \
 				-C "redistribute local deny" \
+				-C "ipv6-subtrees yes" \
 				$*
 
 			# Wait for pid file to actually show up
