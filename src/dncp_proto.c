@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Feb 18 13:43:58 2015 mstenber
- * Edit time:     742 min
+ * Last modified: Tue Apr 21 14:12:08 2015 mstenber
+ * Edit time:     809 min
  *
  */
 
@@ -60,6 +60,7 @@ static bool _push_network_state_tlv(struct tlv_buf *tb, dncp o)
   if (!a)
     return false;
   c = tlv_data(a);
+  dncp_calculate_network_hash(o);
   memcpy(c, &o->network_hash, DNCP_HASH_LEN);
   return true;
 }
@@ -106,7 +107,6 @@ void dncp_link_send_network_state(dncp_link l,
   tlv_buf_init(&tb, 0); /* not passed anywhere */
   if (!_push_link_id_tlv(&tb, l))
     goto done;
-  dncp_calculate_network_hash(o);
   if (!_push_network_state_tlv(&tb, o))
     goto done;
 
@@ -162,7 +162,7 @@ void dncp_link_send_node_data(dncp_link l,
       && _push_node_state_tlv(&tb, n)
       && _push_node_data_tlv(&tb, n))
     {
-      L_DEBUG("dncp_link_send_node_state %s -> " SA6_F " %%" DNCP_LINK_F,
+      L_DEBUG("dncp_link_send_node_data %s -> " SA6_F " %%" DNCP_LINK_F,
               DNCP_NODE_REPR(n), SA6_D(dst), DNCP_LINK_D(l));
       dncp_io_sendto(l->dncp, tlv_data(tb.head), tlv_len(tb.head), dst);
     }
@@ -198,7 +198,7 @@ void dncp_link_send_req_node_data(dncp_link l,
   if (_push_link_id_tlv(&tb, l)
       && (a = tlv_new(&tb, DNCP_T_REQ_NODE_DATA, DNCP_HASH_LEN)))
     {
-      L_DEBUG("dncp_link_send_req_node_state -> " SA6_F "%%" DNCP_LINK_F,
+      L_DEBUG("dncp_link_send_req_node_data -> " SA6_F "%%" DNCP_LINK_F,
               SA6_D(dst), DNCP_LINK_D(l));
       memcpy(tlv_data(a), &ns->node_identifier, DNCP_NI_LEN);
       dncp_io_sendto(l->dncp, tlv_data(tb.head), tlv_len(tb.head), dst);
@@ -253,21 +253,20 @@ handle_message(dncp_link l,
                bool multicast)
 {
   dncp o = l->dncp;
-  struct tlv_attr *a;
+  struct tlv_attr *a, *a2;
   dncp_node n;
   dncp_t_link_id lid = NULL;
-  unsigned char *nethash = NULL;
-  int nodestates = 0;
   dncp_tlv tne = NULL;
   dncp_neighbor ne = NULL;
-  dncp_t_node_state ns;
-  dncp_t_node_data_header nd;
-  unsigned char *nd_data = NULL;
   int nd_len = 0;
   struct tlv_buf tb;
   uint32_t new_update_number;
+  bool should_request_network_state = false;
+  bool updated_or_requested_state = false;
+  bool got_response = false;
 
-  /* Validate that link id exists. */
+  /* Validate that link id exists (if this were TCP, we would keep
+   * track of the remote link id on per-stream basis). */
   tlv_for_each_in_buf(a, data, len)
     if (tlv_id(a) == DNCP_T_LINK_ID)
       {
@@ -285,15 +284,9 @@ handle_message(dncp_link l,
         lid = tlv_data(a);
       }
 
-  if (!lid)
-    {
-      L_INFO("did not get link ids - ignoring");
-      return;
-    }
-
   bool is_local = memcmp(&lid->node_identifier, &o->own_node->node_identifier,
                          DNCP_NI_LEN) == 0;
-  if (!is_local)
+  if (!is_local && lid)
     {
       tne = _heard(l, lid, src, multicast);
       if (!tne && !multicast)
@@ -301,296 +294,183 @@ handle_message(dncp_link l,
       ne = tne ? dncp_tlv_get_extra(tne) : NULL;
     }
 
-  /* Estimates what's in the payload + handles the few
-   * request messages we support. */
   tlv_for_each_in_buf(a, data, len)
     {
       switch (tlv_id(a))
         {
-        case DNCP_T_NETWORK_HASH:
-          if (tlv_len(a) != DNCP_HASH_LEN)
-            {
-              L_DEBUG("got invalid network hash length: %d", tlv_len(a));
-              return;
-            }
-          if (nethash)
-            {
-              L_DEBUG("ignoring message with multiple network hashes");
-              return;
-            }
-          nethash = tlv_data(a);
-          break;
-        case DNCP_T_NODE_STATE:
-          nodestates++;
-          break;
         case DNCP_T_REQ_NET_HASH:
           /* Ignore if in multicast. */
           if (multicast)
-            {
-              L_INFO("ignoring req-net-hash in multicast");
-              return;
-            }
-          dncp_link_send_network_state(l, src, 0);
-          return;
+            L_INFO("ignoring req-net-hash in multicast");
+          else
+            dncp_link_send_network_state(l, src, 0);
+          break;
+
         case DNCP_T_REQ_NODE_DATA:
           /* Ignore if in multicast. */
           if (multicast)
             {
-              L_INFO("ignoring req-net-hash in unicast");
-              return;
+              L_INFO("ignoring req-node-data in multicast");
+              break;
             }
-          tlv_for_each_in_buf(a, data, len)
+          void *p = tlv_data(a);
+          if (tlv_len(a) != DNCP_HASH_LEN)
+            break;
+          n = dncp_find_node_by_node_identifier(o, p, false);
+          if (!n)
+            break;
+          if (n != o->own_node)
             {
-              if (tlv_id(a) == DNCP_T_REQ_NODE_DATA)
+              if (o->graph_dirty)
                 {
-                  void *p = tlv_data(a);
-                  int len = tlv_len(a);
-                  if (!len || tlv_len(a) != DNCP_HASH_LEN)
-                    continue;
-                  n = dncp_find_node_by_node_identifier(o, p, false);
-                  if (!n)
-                    continue;
-                  if (n != o->own_node)
-                    {
-                      if (o->graph_dirty)
-                        {
-                          L_DEBUG("prune pending, ignoring node data request");
-                          continue;
-                        }
+                  L_DEBUG("prune pending, ignoring node data request");
+                  break;
+                }
 
-                      if (n->last_reachable_prune != o->last_prune)
-                        {
-                          L_DEBUG("not reachable request, ignoring");
-                          continue;
-                        }
-                    }
-                  dncp_link_send_node_data(l, src, n);
+              if (n->last_reachable_prune != o->last_prune)
+                {
+                  L_DEBUG("not reachable request, ignoring");
+                  break;
                 }
             }
-          return;
-        }
-    }
+          dncp_link_send_node_data(l, src, n);
+          break;
 
-  /* Requests were handled above. So what's left is response
-   * processing here. If it was unicast, it was probably solicited
-   * response, so we can mark the node as having been in touch with us
-   * recently. */
-  if (!multicast)
-    {
-      L_DEBUG("unicast received from %s %s on " DNCP_LINK_F,
-              is_local ? "local" : ne ? "remote" : "unknown remote",
-              DNCP_NODE_REPR(lid), DNCP_LINK_D(l));
-      if (ne)
-        ne->last_sync = dncp_time(l->dncp);
-    }
-
-  /* Three different cases to be handled for solicited/unsolicited responses:
-     - raw network hash
-     - network hash + node states
-     - node state + node data
-  */
-  if (nethash)
-    {
-      /* We don't care, if network hash state IS same. */
-      if (memcmp(nethash, &o->network_hash, DNCP_HASH_LEN) == 0)
-        {
-          L_DEBUG("received network state which is consistent (%s)",
-                  is_local ? "local" : ne ? "remote" : "unknown remote");
-
-          /* Increment Trickle count + last in sync time.*/
-          if (ne)
+        case DNCP_T_NETWORK_HASH:
+          if (tlv_len(a) != DNCP_HASH_LEN)
             {
-              l->trickle_c++;
-              ne->last_sync = dncp_time(l->dncp);
+              L_DEBUG("got invalid network hash length: %d", tlv_len(a));
+              break;
             }
-          else if (!is_local)
+          unsigned char *nethash = tlv_data(a);
+          if (memcmp(nethash, &o->network_hash, DNCP_HASH_LEN) == 0)
             {
-              /* Send an unicast request, to potentially set up the
-               * peer structure. */
-              dncp_link_send_req_network_state(l, src);
+              L_DEBUG("received network state which is consistent (%s)",
+                      is_local ? "local" : ne ? "remote" : "unknown remote");
+
+              /* Increment Trickle count + last in sync time.*/
+              if (ne)
+                {
+                  l->trickle_c++;
+                  ne->last_sync = dncp_time(l->dncp);
+                }
+              else if (!is_local)
+                {
+                  /* Send an unicast request, to potentially set up the
+                   * peer structure. */
+                  should_request_network_state = true;
+                }
             }
-          return;
-        }
-
-      bool should_unicast = multicast;
-      if (multicast)
-        {
-          /* No need to reset Trickle anymore, but log the fact */
-          L_DEBUG("received inconsistent multicast network state %s != %s %s",
-                  HEX_REPR(nethash, DNCP_HASH_LEN),
-                  HEX_REPR(&o->network_hash, DNCP_HASH_LEN),
-                  ne ? "" : "(from unknown)");
-        }
-
-      /* Short form (raw network hash) */
-      if (!nodestates)
-        {
-          if (multicast)
-            dncp_link_send_req_network_state(l, src);
           else
-            L_INFO("unicast short form network status received - ignoring");
-          return;
+            should_request_network_state = true;
+          break;
+
+        case DNCP_T_NODE_STATE:
+          if (tlv_len(a) != sizeof(dncp_t_node_state_s))
+            {
+              L_INFO("invalid length node state TLV received - ignoring");
+              break;
+            }
+          got_response = true;
+          dncp_t_node_state ns = tlv_data(a);
+          n = dncp_find_node_by_node_identifier(o, &ns->node_identifier,
+                                                false);
+          new_update_number = be32_to_cpu(ns->update_number);
+          bool interesting = !n
+            || (dncp_update_number_gt(n->update_number, new_update_number)
+                || (new_update_number == n->update_number
+                    && memcmp(&n->node_data_hash,
+                              &ns->node_data_hash,
+                              sizeof(n->node_data_hash)) != 0));
+          L_DEBUG("saw something %s for %s/%p (update number %d)",
+                  interesting ? "new" : "old",
+                  DNCP_NODE_REPR(ns), n, new_update_number);
+          if (!interesting)
+            break;
+          bool found_data = false;
+          if (!multicast)
+            {
+              dncp_t_node_data_header nd = NULL;
+              unsigned char *nd_data = NULL;
+              /* We don't accept node data via multicast. */
+              tlv_for_each_in_buf(a2, data, len)
+                if (tlv_id(a2) == DNCP_T_NODE_DATA)
+                  {
+                    nd_len = tlv_len(a2) - sizeof(dncp_t_node_data_header_s);
+                    if (nd_len < 0)
+                      {
+                        L_INFO("received invalid node data TLV, ignoring");
+                        continue;
+                      }
+                    nd = tlv_data(a2);
+                    nd_data = (unsigned char *)nd + sizeof(*nd);
+                    /* Both node identifier and update# must match */
+                    /* If they're for different nodes, not interested. */
+                    if (memcmp(&ns->node_identifier, &nd->node_identifier,
+                               DNCP_NI_LEN)
+                        || ns->update_number != nd->update_number)
+                      continue;
+
+                    n = n ? n: dncp_find_node_by_node_identifier(o, &ns->node_identifier, true);
+                    if (!n)
+                      return; /* OOM */
+                    if (dncp_node_is_self(n))
+                      {
+                        L_DEBUG("received %d update number from network, own %d",
+                                new_update_number, n->update_number);
+                        if (o->collided)
+                          {
+                            if (dncp_profile_handle_collision(o))
+                              return;
+                          }
+                        else
+                          o->collided = true;
+                        n->update_number = new_update_number;
+                        o->republish_tlvs = true;
+                        dncp_schedule(o);
+                        return;
+                      }
+                    /* Ok. nd contains more recent TLV data than what we have
+                     * already. Woot. */
+                    memset(&tb, 0, sizeof(tb));
+                    tlv_buf_init(&tb, 0); /* not passed anywhere */
+                    if (tlv_put_raw(&tb, nd_data, nd_len))
+                      {
+                        dncp_node_set(n, new_update_number,
+                                      dncp_time(o) - be32_to_cpu(ns->ms_since_origination),
+                                      tb.head);
+                      }
+                    else
+                      {
+                        L_DEBUG("tlv_put_raw failed");
+                        tlv_buf_free(&tb);
+                      }
+                    found_data = true;
+                    break;
+                  }
+            }
+          if (!found_data)
+            {
+              L_DEBUG("node data %s for %s",
+                      multicast ? "not supplied" : "missing",
+                      DNCP_NODE_REPR(ns));
+              dncp_link_send_req_node_data(l, src, ns);
+            }
+          updated_or_requested_state = true;
+          break;
+        default:
+          /* Unknown TLV - MUST ignore. */
+          continue;
         }
 
-      /* TBD: The section below is essentially an attack vector. We
-       * should definitely add some sort of rate limiting here, as now
-       * this provides nice amplification attack (send packet with src
-       * = your enemy, with alleged set of new data.. current
-       * req-per-node code below sends N packets. oops). */
-
-      /* Long form (has node states). */
-      /* The exercise becomes just to ask for any node state that
-       * differs from local and is more recent. */
-      tlv_for_each_in_buf(a, data, len)
-        if (tlv_id(a) == DNCP_T_NODE_STATE)
-          {
-            if (tlv_len(a) != sizeof(dncp_t_node_state_s))
-              {
-                L_INFO("invalid length node state TLV received - ignoring");
-                return;
-              }
-            ns = tlv_data(a);
-            n = dncp_find_node_by_node_identifier(o, &ns->node_identifier,
-                                                  false);
-            new_update_number = be32_to_cpu(ns->update_number);
-            bool interesting = !n
-              || (dncp_update_number_gt(n->update_number, new_update_number)
-                  || (new_update_number == n->update_number
-                      && memcmp(&n->node_data_hash,
-                                &ns->node_data_hash,
-                                sizeof(n->node_data_hash)) != 0));
-            if (interesting)
-              {
-                L_DEBUG("saw something new for %s/%p (update number %d)",
-                        DNCP_NODE_REPR(ns), n, new_update_number);
-                dncp_link_send_req_node_data(l, src, ns);
-                should_unicast = false;
-              }
-            else
-              {
-                L_DEBUG("saw something old for %s/%p (update number %d)",
-                        DNCP_NODE_REPR(ns), n, new_update_number);
-              }
-          }
-
-      if (should_unicast && ne)
-        {
-          /* They did not have anything newer than what we did -> by
-           * implication, we probably have something they are lacking.
-           */
-          dncp_link_send_network_state(l, src, 0);
-
-          /* This is needed to keep keepalive ticking */
-          if (dncp_neighbor_interval(o, &tne->tlv))
-            dncp_link_send_req_network_state(l, src);
-        }
-      return;
-    }
-  /* We don't accept node data via multicast. */
-  if (multicast)
-    {
-      L_INFO("received node data via multicast, ignoring");
-      return;
     }
 
-  /* Look for node state + node data. */
-  ns = NULL;
-  nd = NULL;
-  tlv_for_each_in_buf(a, data, len)
-    switch(tlv_id(a))
-      {
-      case DNCP_T_NODE_STATE:
-        if (ns)
-          {
-            L_INFO("received multiple node state TLVs, ignoring");
-            return;
-          }
-        if (tlv_len(a) != sizeof(dncp_t_node_state_s))
-          {
-            L_INFO("received invalid node state TLVs, ignoring");
-            return;
-          }
-        ns = tlv_data(a);
-        break;
-      case DNCP_T_NODE_DATA:
-        if (nd)
-          {
-            L_INFO("received multiple node data TLVs, ignoring");
-            return;
-          }
-        nd_len = tlv_len(a) - sizeof(dncp_t_node_data_header_s);
-        if (nd_len < 0)
-          {
-            L_INFO("received invalid node data TLV, ignoring");
-            return;
-          }
-        nd = tlv_data(a);
-        nd_data = (unsigned char *)nd + sizeof(dncp_t_node_data_header_s);
-        break;
-      }
-  if (!ns || !nd)
-    {
-      L_INFO("node data or node state TLV missing, ignoring");
-      return;
-    }
-  /* If they're for different nodes, not interested. */
-  if (memcmp(&ns->node_identifier, &nd->node_identifier, DNCP_NI_LEN))
-    {
-      L_INFO("node data and state identifier mismatch, ignoring");
-      return;
-    }
-  /* Is it actually valid? Should be same update #. */
-  if (ns->update_number != nd->update_number)
-    {
-      L_INFO("node data and state update number mismatch, ignoring");
-      return;
-    }
-  /* Let's see if it's more recent. */
-  n = dncp_find_node_by_node_identifier(o, &ns->node_identifier, true);
-  if (!n)
-    return;
-  new_update_number = be32_to_cpu(ns->update_number);
-  if (dncp_update_number_gt(new_update_number, n->update_number)
-      || (n->update_number == new_update_number
-          && !memcmp(&n->node_data_hash,
-                     &ns->node_data_hash,
-                     sizeof(n->node_data_hash))))
-    {
-      L_DEBUG("received update number %d, but already have %d",
-              new_update_number, n->update_number);
-      return;
-    }
-  if (dncp_node_is_self(n))
-    {
-      L_DEBUG("received %d update number from network, own %d",
-              new_update_number, n->update_number);
-      if (o->collided)
-        {
-          if (dncp_profile_handle_collision(o))
-            return;
-        }
-      else
-        o->collided = true;
-      n->update_number = new_update_number;
-      o->republish_tlvs = true;
-      dncp_schedule(o);
-      return;
-    }
-  /* Ok. nd contains more recent TLV data than what we have
-   * already. Woot. */
-  memset(&tb, 0, sizeof(tb));
-  tlv_buf_init(&tb, 0); /* not passed anywhere */
-  if (tlv_put_raw(&tb, nd_data, nd_len))
-    {
-      dncp_node_set(n, new_update_number,
-                    dncp_time(o) - be32_to_cpu(ns->ms_since_origination),
-                    tb.head);
-    }
-  else
-    {
-      L_DEBUG("tlv_put_raw failed");
-      tlv_buf_free(&tb);
-    }
+  /* Shared 'got _response_ from the other party' handling. */
+  if (!multicast && got_response && ne)
+    ne->last_sync = dncp_time(l->dncp);
+
+  if (should_request_network_state && !updated_or_requested_state)
+    dncp_link_send_req_network_state(l, src);
 }
 
 
