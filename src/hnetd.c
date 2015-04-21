@@ -106,7 +106,9 @@ int main(__unused int argc, char *argv[])
 	hncp_pa hncp_pa;
 	hncp_sd_params_s sd_params;
 	hncp_multicast_params_s multicast_params;
+#ifdef DTLS
 	dncp_trust dt = NULL;
+#endif /* DTLS */
 	struct hncp_link_config link_config = {HNCP_VERSION, 0, 0, 0, 0, ""};
 
 	memset(&sd_params, 0, sizeof(sd_params));
