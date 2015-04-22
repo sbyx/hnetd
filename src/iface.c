@@ -68,7 +68,8 @@ void iface_link_cb(struct hncp_link_user *user __unused, const char *ifname,
 	elected &= HNCP_LINK_HOSTNAMES | HNCP_LINK_LEGACY |
 			HNCP_LINK_PREFIXDEL | HNCP_LINK_STATELESS;
 
-	if (c && c->elected != elected && strcmp(c->ifname, "lo")) {
+	if (c && c->elected != elected && strcmp(c->ifname, "lo") &&
+			!(c->flags & IFACE_FLAG_HYBRID)) {
 		platform_set_dhcp(c, elected);
 		c->elected = elected;
 	}

@@ -520,7 +520,8 @@ static void platform_commit(struct uloop_timeout *t)
 	blobmsg_for_each_attr(cfgattr, iface->config.head, rem)
 		blobmsg_add_blob(&b, cfgattr);
 
-	if (c->internal && c->elected && (avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr)) {
+	if (c->internal && c->elected && !(c->flags & IFACE_FLAG_HYBRID) &&
+			(avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr)) {
 		blobmsg_add_string(&b, "ra", "server");
 		blobmsg_add_string(&b, "dhcpv4", (c->elected & HNCP_LINK_LEGACY) ? "server" : "disabled");
 		blobmsg_add_string(&b, "dhcpv6", (c->elected & (HNCP_LINK_PREFIXDEL | HNCP_LINK_HOSTNAMES | HNCP_LINK_STATELESS)) ?
