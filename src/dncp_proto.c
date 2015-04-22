@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue Apr 21 14:12:08 2015 mstenber
- * Edit time:     809 min
+ * Last modified: Wed Apr 22 12:08:25 2015 mstenber
+ * Edit time:     811 min
  *
  */
 
@@ -289,8 +289,12 @@ handle_message(dncp_link l,
   if (!is_local && lid)
     {
       tne = _heard(l, lid, src, multicast);
-      if (!tne && !multicast)
-        return;
+      if (!tne)
+        {
+          if (!multicast)
+            return;
+          should_request_network_state = true;
+        }
       ne = tne ? dncp_tlv_get_extra(tne) : NULL;
     }
 
