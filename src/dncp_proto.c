@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Apr 22 12:08:25 2015 mstenber
- * Edit time:     811 min
+ * Last modified: Thu Apr 23 15:02:00 2015 mstenber
+ * Edit time:     824 min
  *
  */
 
@@ -21,11 +21,13 @@
 
 /***************************************************** Low-level TLV pushing */
 
-static bool _push_node_state_tlv(struct tlv_buf *tb, dncp_node n)
+static bool _push_node_state_tlv(struct tlv_buf *tb, dncp_node n,
+                                 bool incl_data)
 {
   hnetd_time_t now = dncp_time(n->dncp);
   dncp_t_node_state s;
-  struct tlv_attr *a = tlv_new(tb, DNCP_T_NODE_STATE, sizeof(*s));
+  int l = incl_data && n->tlv_container ? tlv_len(n->tlv_container) : 0;
+  struct tlv_attr *a = tlv_new(tb, DNCP_T_NODE_STATE, sizeof(*s) + l);
 
   if (!a)
     return false;
@@ -34,27 +36,14 @@ static bool _push_node_state_tlv(struct tlv_buf *tb, dncp_node n)
   s->update_number = cpu_to_be32(n->update_number);
   s->ms_since_origination = cpu_to_be32(now - n->origination_time);
   s->node_data_hash = n->node_data_hash;
-  return true;
-}
-
-static bool _push_node_data_tlv(struct tlv_buf *tb, dncp_node n)
-{
-  int s = n->tlv_container ? tlv_len(n->tlv_container) : 0;
-  dncp_t_node_data_header h;
-  struct tlv_attr *a = tlv_new(tb, DNCP_T_NODE_DATA, sizeof(*h) + s);
-
-  if (!a)
-    return false;
-  h = tlv_data(a);
-  h->node_identifier = n->node_identifier;
-  h->update_number = cpu_to_be32(n->update_number);
-  memcpy((void *)h + sizeof(*h), tlv_data(n->tlv_container), s);
+  if (l)
+    memcpy((void *)s + sizeof(*s), tlv_data(n->tlv_container), l);
   return true;
 }
 
 static bool _push_network_state_tlv(struct tlv_buf *tb, dncp o)
 {
-  struct tlv_attr *a = tlv_new(tb, DNCP_T_NETWORK_HASH, DNCP_HASH_LEN);
+  struct tlv_attr *a = tlv_new(tb, DNCP_T_NET_STATE, DNCP_HASH_LEN);
   unsigned char *c;
 
   if (!a)
@@ -67,7 +56,7 @@ static bool _push_network_state_tlv(struct tlv_buf *tb, dncp o)
 
 static bool _push_link_id_tlv(struct tlv_buf *tb, dncp_link l)
 {
-  struct tlv_attr *a = tlv_new(tb, DNCP_T_LINK_ID, sizeof(dncp_t_link_id_s));
+  struct tlv_attr *a = tlv_new(tb, DNCP_T_ENDPOINT_ID, sizeof(dncp_t_link_id_s));
   dncp_t_link_id lid;
 
   if (!a)
@@ -125,7 +114,7 @@ void dncp_link_send_network_state(dncp_link l,
         {
           dncp_for_each_node(o, n)
             {
-              if (!_push_node_state_tlv(&tb, n))
+              if (!_push_node_state_tlv(&tb, n, false))
                 goto done;
             }
         }
@@ -146,21 +135,16 @@ void dncp_link_send_network_state(dncp_link l,
   tlv_buf_free(&tb);
 }
 
-void dncp_link_send_node_data(dncp_link l,
-                              struct sockaddr_in6 *dst,
-                              dncp_node n)
+void dncp_link_send_node_state(dncp_link l,
+                               struct sockaddr_in6 *dst,
+                               dncp_node n)
 {
-  /* Send two things:
-     - node state tlv
-     - node data tlv
-  */
   struct tlv_buf tb;
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
   if (_push_link_id_tlv(&tb, l)
-      && _push_node_state_tlv(&tb, n)
-      && _push_node_data_tlv(&tb, n))
+      && _push_node_state_tlv(&tb, n, true))
     {
       L_DEBUG("dncp_link_send_node_data %s -> " SA6_F " %%" DNCP_LINK_F,
               DNCP_NODE_REPR(n), SA6_D(dst), DNCP_LINK_D(l));
@@ -177,7 +161,7 @@ void dncp_link_send_req_network_state(dncp_link l,
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
   if (_push_link_id_tlv(&tb, l)
-      && tlv_new(&tb, DNCP_T_REQ_NET_HASH, 0))
+      && tlv_new(&tb, DNCP_T_REQ_NET_STATE, 0))
     {
       L_DEBUG("dncp_link_send_req_network_state -> " SA6_F "%%" DNCP_LINK_F,
               SA6_D(dst), DNCP_LINK_D(l));
@@ -196,7 +180,7 @@ void dncp_link_send_req_node_data(dncp_link l,
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
   if (_push_link_id_tlv(&tb, l)
-      && (a = tlv_new(&tb, DNCP_T_REQ_NODE_DATA, DNCP_HASH_LEN)))
+      && (a = tlv_new(&tb, DNCP_T_REQ_NODE_STATE, DNCP_HASH_LEN)))
     {
       L_DEBUG("dncp_link_send_req_node_data -> " SA6_F "%%" DNCP_LINK_F,
               SA6_D(dst), DNCP_LINK_D(l));
@@ -212,13 +196,13 @@ static dncp_tlv
 _heard(dncp_link l, dncp_t_link_id lid, struct sockaddr_in6 *src,
        bool multicast)
 {
-  dncp_t_node_data_neighbor_s np = {
+  dncp_t_neighbor_s np = {
     .neighbor_node_identifier = lid->node_identifier,
     .neighbor_link_id = lid->link_id,
     .link_id = l->iid
   };
   dncp_neighbor n;
-  dncp_tlv t = dncp_find_tlv(l->dncp, DNCP_T_NODE_DATA_NEIGHBOR,
+  dncp_tlv t = dncp_find_tlv(l->dncp, DNCP_T_NEIGHBOR,
                              &np, sizeof(np));
   if (!t)
     {
@@ -226,7 +210,7 @@ _heard(dncp_link l, dncp_t_link_id lid, struct sockaddr_in6 *src,
       if (multicast)
         return NULL;
       t =
-        dncp_add_tlv(l->dncp, DNCP_T_NODE_DATA_NEIGHBOR, &np, sizeof(np),
+        dncp_add_tlv(l->dncp, DNCP_T_NEIGHBOR, &np, sizeof(np),
                      sizeof(*n));
       if (!t)
         return NULL;
@@ -253,12 +237,11 @@ handle_message(dncp_link l,
                bool multicast)
 {
   dncp o = l->dncp;
-  struct tlv_attr *a, *a2;
+  struct tlv_attr *a;
   dncp_node n;
   dncp_t_link_id lid = NULL;
   dncp_tlv tne = NULL;
   dncp_neighbor ne = NULL;
-  int nd_len = 0;
   struct tlv_buf tb;
   uint32_t new_update_number;
   bool should_request_network_state = false;
@@ -268,7 +251,7 @@ handle_message(dncp_link l,
   /* Validate that link id exists (if this were TCP, we would keep
    * track of the remote link id on per-stream basis). */
   tlv_for_each_in_buf(a, data, len)
-    if (tlv_id(a) == DNCP_T_LINK_ID)
+    if (tlv_id(a) == DNCP_T_ENDPOINT_ID)
       {
         /* Error to have multiple top level link id's. */
         if (lid)
@@ -302,7 +285,7 @@ handle_message(dncp_link l,
     {
       switch (tlv_id(a))
         {
-        case DNCP_T_REQ_NET_HASH:
+        case DNCP_T_REQ_NET_STATE:
           /* Ignore if in multicast. */
           if (multicast)
             L_INFO("ignoring req-net-hash in multicast");
@@ -310,7 +293,7 @@ handle_message(dncp_link l,
             dncp_link_send_network_state(l, src, 0);
           break;
 
-        case DNCP_T_REQ_NODE_DATA:
+        case DNCP_T_REQ_NODE_STATE:
           /* Ignore if in multicast. */
           if (multicast)
             {
@@ -337,10 +320,10 @@ handle_message(dncp_link l,
                   break;
                 }
             }
-          dncp_link_send_node_data(l, src, n);
+          dncp_link_send_node_state(l, src, n);
           break;
 
-        case DNCP_T_NETWORK_HASH:
+        case DNCP_T_NET_STATE:
           if (tlv_len(a) != DNCP_HASH_LEN)
             {
               L_DEBUG("got invalid network hash length: %d", tlv_len(a));
@@ -370,7 +353,7 @@ handle_message(dncp_link l,
           break;
 
         case DNCP_T_NODE_STATE:
-          if (tlv_len(a) != sizeof(dncp_t_node_state_s))
+          if (tlv_len(a) < sizeof(dncp_t_node_state_s))
             {
               L_INFO("invalid length node state TLV received - ignoring");
               break;
@@ -386,72 +369,57 @@ handle_message(dncp_link l,
                     && memcmp(&n->node_data_hash,
                               &ns->node_data_hash,
                               sizeof(n->node_data_hash)) != 0));
-          L_DEBUG("saw something %s for %s/%p (update number %d)",
+          L_DEBUG("saw %s %s for %s/%p (update number %d)",
                   interesting ? "new" : "old",
+                  tlv_len(a) == sizeof(*ns) ? "state" : "state+data",
                   DNCP_NODE_REPR(ns), n, new_update_number);
           if (!interesting)
             break;
           bool found_data = false;
           if (!multicast)
             {
-              dncp_t_node_data_header nd = NULL;
-              unsigned char *nd_data = NULL;
               /* We don't accept node data via multicast. */
-              tlv_for_each_in_buf(a2, data, len)
-                if (tlv_id(a2) == DNCP_T_NODE_DATA)
-                  {
-                    nd_len = tlv_len(a2) - sizeof(dncp_t_node_data_header_s);
-                    if (nd_len < 0)
-                      {
-                        L_INFO("received invalid node data TLV, ignoring");
-                        continue;
-                      }
-                    nd = tlv_data(a2);
-                    nd_data = (unsigned char *)nd + sizeof(*nd);
-                    /* Both node identifier and update# must match */
-                    /* If they're for different nodes, not interested. */
-                    if (memcmp(&ns->node_identifier, &nd->node_identifier,
-                               DNCP_NI_LEN)
-                        || ns->update_number != nd->update_number)
-                      continue;
+              int nd_len = tlv_len(a) - sizeof(*ns);
+              if (nd_len > 0)
+                {
+                  unsigned char *nd_data = (unsigned char *)ns + sizeof(*ns);
 
-                    n = n ? n: dncp_find_node_by_node_identifier(o, &ns->node_identifier, true);
-                    if (!n)
-                      return; /* OOM */
-                    if (dncp_node_is_self(n))
-                      {
-                        L_DEBUG("received %d update number from network, own %d",
-                                new_update_number, n->update_number);
-                        if (o->collided)
-                          {
-                            if (dncp_profile_handle_collision(o))
-                              return;
-                          }
-                        else
-                          o->collided = true;
-                        n->update_number = new_update_number;
-                        o->republish_tlvs = true;
-                        dncp_schedule(o);
-                        return;
-                      }
-                    /* Ok. nd contains more recent TLV data than what we have
-                     * already. Woot. */
-                    memset(&tb, 0, sizeof(tb));
-                    tlv_buf_init(&tb, 0); /* not passed anywhere */
-                    if (tlv_put_raw(&tb, nd_data, nd_len))
-                      {
-                        dncp_node_set(n, new_update_number,
-                                      dncp_time(o) - be32_to_cpu(ns->ms_since_origination),
-                                      tb.head);
-                      }
-                    else
-                      {
-                        L_DEBUG("tlv_put_raw failed");
-                        tlv_buf_free(&tb);
-                      }
-                    found_data = true;
-                    break;
-                  }
+                  n = n ? n: dncp_find_node_by_node_identifier(o, &ns->node_identifier, true);
+                  if (!n)
+                    return; /* OOM */
+                  if (dncp_node_is_self(n))
+                    {
+                      L_DEBUG("received %d update number from network, own %d",
+                              new_update_number, n->update_number);
+                      if (o->collided)
+                        {
+                          if (dncp_profile_handle_collision(o))
+                            return;
+                        }
+                      else
+                        o->collided = true;
+                      n->update_number = new_update_number;
+                      o->republish_tlvs = true;
+                      dncp_schedule(o);
+                      return;
+                    }
+                  /* Ok. nd contains more recent TLV data than what we have
+                   * already. Woot. */
+                  memset(&tb, 0, sizeof(tb));
+                  tlv_buf_init(&tb, 0); /* not passed anywhere */
+                  if (tlv_put_raw(&tb, nd_data, nd_len))
+                    {
+                      dncp_node_set(n, new_update_number,
+                                    dncp_time(o) - be32_to_cpu(ns->ms_since_origination),
+                                    tb.head);
+                    }
+                  else
+                    {
+                      L_DEBUG("tlv_put_raw failed");
+                      tlv_buf_free(&tb);
+                    }
+                  found_data = true;
+                }
             }
           if (!found_data)
             {

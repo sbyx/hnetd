@@ -79,7 +79,7 @@ static void _node_set_reachable(dncp_node n, bool value)
 static void _prune_rec(dncp_node n)
 {
   struct tlv_attr *tlvs, *a;
-  dncp_t_node_data_neighbor ne;
+  dncp_t_neighbor ne;
   dncp_node n2;
 
   if (!n)
@@ -179,10 +179,10 @@ do {                                                            \
 hnetd_time_t
 dncp_neighbor_interval(dncp o, struct tlv_attr *neighbor_tlv)
 {
-  dncp_t_node_data_neighbor neigh = dncp_tlv_neighbor(neighbor_tlv);
+  dncp_t_neighbor neigh = dncp_tlv_neighbor(neighbor_tlv);
   if (!neigh)
     {
-      L_ERR("invalid (internally generated) dncp_t_node_data_neighbor");
+      L_ERR("invalid (internally generated) dncp_t_neighbor");
       return 1;
     }
   dncp_node n = dncp_find_node_by_node_identifier(o, &neigh->neighbor_node_identifier, false);
@@ -334,7 +334,7 @@ void dncp_run(dncp o)
   /* Look at neighbors we should be worried about.. */
   /* vlist_for_each_element(&l->neighbors, n, in_neighbors) */
   dncp_for_each_local_tlv_safe(o, t, t2)
-    if (tlv_id(&t->tlv) == DNCP_T_NODE_DATA_NEIGHBOR)
+    if (tlv_id(&t->tlv) == DNCP_T_NEIGHBOR)
       {
         dncp_neighbor n = dncp_tlv_get_extra(t);
 
@@ -357,7 +357,7 @@ void dncp_run(dncp o)
 
         /* Zap the neighbor */
 #if L_LEVEL >= 7
-        dncp_t_node_data_neighbor ne = tlv_data(&t->tlv);
+        dncp_t_neighbor ne = tlv_data(&t->tlv);
         l = dncp_find_link_by_id(o, ne->link_id);
         L_DEBUG("Neighbor %s gone on " DNCP_LINK_F " - nothing in %d ms",
                 DNCP_STRUCT_REPR(ne->neighbor_node_identifier),

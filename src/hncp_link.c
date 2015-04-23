@@ -72,7 +72,7 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 	if (link && enable) {
 		struct tlv_attr *c;
 		dncp_node_for_each_tlv(l->dncp->own_node, c) {
-			dncp_t_node_data_neighbor ne = dncp_tlv_neighbor(c);
+			dncp_t_neighbor ne = dncp_tlv_neighbor(c);
 			hncp_t_assigned_prefix_header ah = dncp_tlv_ap(c);
 
 			if (ne && ne->link_id == link->iid)
@@ -88,7 +88,7 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 				"neighbors on iface %d", (int)peercnt, (int)link->iid);
 
 		dncp_node_for_each_tlv(l->dncp->own_node, c) {
-			dncp_t_node_data_neighbor cn = dncp_tlv_neighbor(c);
+			dncp_t_neighbor cn = dncp_tlv_neighbor(c);
 
 			if (!cn || cn->link_id != link->iid)
 				continue;
@@ -108,7 +108,7 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 						tlv_len(pc) > sizeof(*peervertlv))
 					peervertlv = tlv_data(pc);
 
-				dncp_t_node_data_neighbor pn = dncp_tlv_neighbor(pc);
+				dncp_t_neighbor pn = dncp_tlv_neighbor(pc);
 				if (!pn || pn->link_id != cn->neighbor_link_id ||
 						memcmp(&pn->neighbor_node_identifier,
 								&l->dncp->own_node->node_identifier, DNCP_NI_LEN))
@@ -206,7 +206,7 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 		struct tlv_attr *tlv, bool add __unused)
 {
 	struct hncp_link *l = container_of(s, struct hncp_link, subscr);
-	dncp_t_node_data_neighbor ne = dncp_tlv_neighbor(tlv);
+	dncp_t_neighbor ne = dncp_tlv_neighbor(tlv);
 	dncp_link link = NULL;
 
 	if (ne) {

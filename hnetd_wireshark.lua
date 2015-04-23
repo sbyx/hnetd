@@ -7,8 +7,8 @@
 -- Copyright (c) 2013 cisco Systems, Inc.
 --
 -- Created:       Tue Dec  3 11:13:05 2013 mstenber
--- Last modified: Wed Feb 11 11:02:44 2015 mstenber
--- Edit time:     119 min
+-- Last modified: Thu Apr 23 14:32:28 2015 mstenber
+-- Edit time:     121 min
 --
 
 -- This is Lua module which provides VERY basic dissector for TLVs we
@@ -22,7 +22,7 @@ local f_id = ProtoField.uint16('hncp.id', 'TLV id')
 local f_len = ProtoField.uint16('hncp.len', 'TLV len')
 local f_data = ProtoField.bytes('hncp.data', 'TLV data', base.HEX)
 
-local f_nid_hash = ProtoField.bytes('hncp.node_identifier_hash', 
+local f_nid_hash = ProtoField.bytes('hncp.node_identifier_hash',
                                     'Node identifier', base.HEX)
 local f_data_hash = ProtoField.bytes('hncp.data_hash',
                                      'Node data hash', base.HEX)
@@ -32,7 +32,7 @@ local f_network_hash = ProtoField.bytes('hncp.network_hash',
 local f_lid = ProtoField.uint32('hncp.llid', 'Local link identifier')
 local f_rlid = ProtoField.uint32('hncp.rlid', 'Remote link identifier')
 local f_upd = ProtoField.uint32('hncp.update_number', 'Update number')
-local f_ms = ProtoField.uint32('hncp.ms_since_origination', 
+local f_ms = ProtoField.uint32('hncp.ms_since_origination',
                                'Time since origination (ms)')
 local f_interval_ms = ProtoField.uint32('hncp.keepalive_interval',
                                'Keep-alive interval (ms)')
@@ -43,39 +43,35 @@ p_hncp.fields = {f_id, f_len, f_data,
 
 local tlvs = {
    -- dncp content
-   [1]={name='link-id', 
+   [1]={name='req-net-state'},
+   [2]={name='req-node-state',
+        contents={{4, f_nid_hash}},
+   },
+   [3]={name='endpoint-id',
         contents={{4, f_nid_hash},
                   {4, f_lid}},
    },
-   [2]={name='req-net-hash'},
-   [3]={name='req-node-data',
-        contents={{4, f_nid_hash}},
-   },
-
-   [10]={name='network-hash',
+   [4]={name='net-state',
         contents={{8, f_network_hash}}},
-
-   [11]={name='node-state',
+   [5]={name='node-state',
         contents={{4, f_nid_hash},
                   {4, f_upd},
                   {4, f_ms},
                   {8, f_data_hash},
-        }
+        },
+        recurse=true
    },
-   [12]={name='node-data', 
-        contents={{4, f_nid_hash},
-                  {4, f_upd}},
-        recurse=true},
-   [13]={name='node-data-neighbor', contents={{4, f_nid_hash},
-                                              {4, f_rlid},
-                                              {4, f_lid},
-                                             },
+   [6]={name='custom'},
+   [7]={name='fragment-count'},
+   [8]={name='neighbor', contents={{4, f_nid_hash},
+                                   {4, f_rlid},
+                                   {4, f_lid},
+                                  },
    },
-   [14]={name='keepalive-interval', contents={{4, f_lid},
+   [9]={name='keepalive-interval', contents={{4, f_lid},
                                               {4, f_interval_ms}},
    },
-   [15]={name='custom'},
-   [16]={name='trust-verdict'},
+   [10]={name='trust-verdict'},
 
    -- hncp content
    [32]={name='version'},
@@ -113,7 +109,7 @@ function p_hncp.dissector(buffer, pinfo, tree)
          left = left - elen
          ofs = ofs + elen
       end
-      if tlv.recurse 
+      if tlv.recurse
       then
          rec_decode(ofs, left, tree)
       end
@@ -128,7 +124,7 @@ function p_hncp.dissector(buffer, pinfo, tree)
       local rid = buffer(ofs, 2)
       local rlen = buffer(ofs+2, 2)
       local id = rid:uint()
-      local len = rlen:uint() 
+      local len = rlen:uint()
       local bs = ''
       local ps = ''
       local tlv = tlvs[id] or {}
@@ -142,7 +138,7 @@ function p_hncp.dissector(buffer, pinfo, tree)
          ps = ' (partial)'
          partial = true
       end
-      local tree2 = tree:add(buffer(ofs, len + 4), 
+      local tree2 = tree:add(buffer(ofs, len + 4),
                              string.format('TLV %d%s - %d value bytes%s',
                                            id, bs, len, ps))
       if partial

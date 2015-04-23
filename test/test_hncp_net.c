@@ -41,9 +41,9 @@ bool link_has_neighbors(dncp_link l)
 
   dncp_for_each_local_tlv(l->dncp, t)
     {
-      if (tlv_id(&t->tlv) == DNCP_T_NODE_DATA_NEIGHBOR)
+      if (tlv_id(&t->tlv) == DNCP_T_NEIGHBOR)
         {
-          dncp_t_node_data_neighbor ne = tlv_data(&t->tlv);
+          dncp_t_neighbor ne = tlv_data(&t->tlv);
           if (ne->link_id == l->iid)
             return true;
         }
@@ -419,14 +419,14 @@ dncp_link net_sim_dncp_find_link_n(dncp o, int i)
   ma[r1] &= ~MONKEY_MASK(p1, r2, p2)
 
 
-dncp_t_node_data_neighbor monkey_neighbor(dncp n1, dncp_link l1,
+dncp_t_neighbor monkey_neighbor(dncp n1, dncp_link l1,
                                           dncp n2, dncp_link l2)
 {
-  dncp_t_node_data_neighbor nh;
+  dncp_t_neighbor nh;
   struct tlv_attr *a;
 
   dncp_node_for_each_tlv_with_type(n1->own_node, a,
-                                   DNCP_T_NODE_DATA_NEIGHBOR)
+                                   DNCP_T_NEIGHBOR)
     if ((nh = dncp_tlv_neighbor(a)))
       {
         if (nh->link_id != l1->iid)
@@ -451,9 +451,9 @@ bool monkey_ok(int *ma,
     MONKEY_CONNECTED(ma, j, p2, i, p1) && i != j;
 
   /* Look at the _published_ state only. */
-  dncp_t_node_data_neighbor nh1 = monkey_neighbor(n1, l1, n2, l2);
+  dncp_t_neighbor nh1 = monkey_neighbor(n1, l1, n2, l2);
   bool found1 = nh1 && dncp_node_find_neigh_bidir(n1->own_node, nh1);
-  dncp_t_node_data_neighbor nh2 = monkey_neighbor(n2, l2, n1, l1);
+  dncp_t_neighbor nh2 = monkey_neighbor(n2, l2, n1, l1);
   bool found2 = nh2 && dncp_node_find_neigh_bidir(n2->own_node, nh2);
 
   if (found1 != found2)
