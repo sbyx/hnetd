@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Tue Apr 28 14:47:13 2015 mstenber
- * Edit time:     161 min
+ * Last modified: Tue Apr 28 14:59:55 2015 mstenber
+ * Edit time:     162 min
  *
  */
 
@@ -140,6 +140,13 @@ struct dncp_subscriber_struct {
    *
    * This is called whenever a message is received, either unicast or
    * multicast, on one of the socket(s) controlled by DNCP.
+   *
+   * NOTE: This is very low-level message handling callback; NO CHECKS
+   * HAVE BEEN PERFORMED ON THE PAYLOAD (or that src/dst are really
+   * allowed to send us something). Only in the (global) DTLS mode
+   * handling this without address checks is probably ok, as the
+   * authentication and authorization has happened before this
+   * callback is called.
    */
   void (*msg_received_callback)(dncp_subscriber s,
                                 const char *ifname,
