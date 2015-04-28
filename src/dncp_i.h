@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Feb 12 11:49:06 2015 mstenber
+ * Last modified: Tue Apr 28 14:28:39 2015 mstenber
  * Edit time:     325 min
  *
  */
@@ -109,7 +109,7 @@ struct dncp_struct {
   struct uloop_timeout timeout;
 
   /* List of subscribers to change notifications. */
-  struct list_head subscribers;
+  struct list_head subscribers[NUM_DNCP_CALLBACKS];
 
   /* search domain provided to clients. */
   char domain[DNS_MAX_ESCAPED_LEN];

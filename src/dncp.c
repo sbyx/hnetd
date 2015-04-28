@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Apr 23 14:46:30 2015 mstenber
- * Edit time:     845 min
+ * Last modified: Tue Apr 28 14:29:12 2015 mstenber
+ * Edit time:     846 min
  *
  */
 
@@ -265,9 +265,11 @@ dncp_find_node_by_node_identifier(dncp o, dncp_node_identifier ni, bool create)
 bool dncp_init(dncp o, const void *node_identifier, int len)
 {
   dncp_hash_s h;
+  int i;
 
   memset(o, 0, sizeof(*o));
-  INIT_LIST_HEAD(&o->subscribers);
+  for (i = 0 ; i < NUM_DNCP_CALLBACKS; i++)
+    INIT_LIST_HEAD(&o->subscribers[i]);
   vlist_init(&o->nodes, compare_nodes, update_node);
   o->nodes.keep_old = true;
   vlist_init(&o->tlvs, compare_tlvs, update_tlv);

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu Apr 23 15:02:00 2015 mstenber
- * Edit time:     824 min
+ * Last modified: Tue Apr 28 14:53:33 2015 mstenber
+ * Edit time:     837 min
  *
  */
 
@@ -233,8 +233,8 @@ _heard(dncp_link l, dncp_t_link_id lid, struct sockaddr_in6 *src,
 static void
 handle_message(dncp_link l,
                struct sockaddr_in6 *src,
-               unsigned char *data, ssize_t len,
-               bool multicast)
+               struct in6_addr *dst,
+               struct tlv_attr *msg)
 {
   dncp o = l->dncp;
   struct tlv_attr *a;
@@ -247,10 +247,19 @@ handle_message(dncp_link l,
   bool should_request_network_state = false;
   bool updated_or_requested_state = false;
   bool got_response = false;
+  bool multicast = IN6_IS_ADDR_MULTICAST(dst);
+
+  /* Make sure source is IPv6 link-local (for now..) */
+  if (!IN6_IS_ADDR_LINKLOCAL(&src->sin6_addr))
+    return;
+
+  /* Non-multicast destination has to be too. */
+  if (!multicast && !IN6_IS_ADDR_LINKLOCAL(dst))
+    return;
 
   /* Validate that link id exists (if this were TCP, we would keep
    * track of the remote link id on per-stream basis). */
-  tlv_for_each_in_buf(a, data, len)
+  tlv_for_each_attr(a, msg)
     if (tlv_id(a) == DNCP_T_ENDPOINT_ID)
       {
         /* Error to have multiple top level link id's. */
@@ -281,7 +290,7 @@ handle_message(dncp_link l,
       ne = tne ? dncp_tlv_get_extra(tne) : NULL;
     }
 
-  tlv_for_each_in_buf(a, data, len)
+  tlv_for_each_attr(a, msg)
     {
       switch (tlv_id(a))
         {
@@ -448,37 +457,26 @@ handle_message(dncp_link l,
 
 void dncp_poll(dncp o)
 {
-  unsigned char buf[DNCP_MAXIMUM_PAYLOAD_SIZE];
+  unsigned char buf[DNCP_MAXIMUM_PAYLOAD_SIZE+sizeof(struct tlv_attr)];
+  struct tlv_attr *msg = (struct tlv_attr *)buf;
   ssize_t read;
   char srcif[IFNAMSIZ];
   struct sockaddr_in6 src;
   struct in6_addr dst;
   dncp_link l;
+  dncp_subscriber s;
 
-  while ((read = dncp_io_recvfrom(o, buf, sizeof(buf), srcif, &src, &dst)) > 0)
+  while ((read = dncp_io_recvfrom(o, msg->data, DNCP_MAXIMUM_PAYLOAD_SIZE,
+                                  srcif, &src, &dst)) > 0)
     {
       /* First off. If it's off some link we aren't supposed to use, ignore. */
       l = dncp_find_link_by_name(o, srcif, false);
       if (!l)
         continue;
-      /* If it's multicast, it's valid if and only if it's aimed at
-       * the multicast address. */
-      if (IN6_IS_ADDR_MULTICAST(&dst))
-        {
-#if 0
-          /* XXX - should we care about this? if so, should hook it up
-           * somewhere profile specific. */
-          if (memcmp(&dst, &o->multicast_address, sizeof(dst)) != 0)
-            continue;
-#endif /* 0 */
-
-          /* XXX - should we care about source address too? */
-          handle_message(l, &src, buf, read, true);
-          continue;
-        }
-      /* If it's not aimed _a_ linklocal address, we don't care. */
-      if (!IN6_IS_ADDR_LINKLOCAL(&dst))
-        continue;
-      handle_message(l, &src, buf, read, false);
+      tlv_init(msg, 0, read + sizeof(struct tlv_attr));
+      handle_message(l, &src, &dst, msg);
+      list_for_each_entry(s, &o->subscribers[DNCP_CALLBACK_SOCKET_MSG],
+                          lhs[DNCP_CALLBACK_SOCKET_MSG])
+        s->msg_received_callback(s, l->ifname, &src, &dst, msg);
     }
 }
