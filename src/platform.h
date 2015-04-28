@@ -65,6 +65,7 @@ int platform_rpc_cli(const char *name, struct blob_attr *in);
 // Multicall RPC dispatcher
 int platform_rpc_multicall(int argc, char *const argv[]);
 
-
+// Set platform
+void platform_set_iface(const char *name, bool enable);
 
 #define PLATFORM_RPC_MAX 32

@@ -458,6 +458,15 @@ void platform_set_dhcpv6_send(struct iface *c, const void *dhcpv6_data, size_t l
 	waitpid(pid, NULL, 0);
 }
 
+void platform_set_iface(const char *name, bool enable)
+{
+	if (enable) {
+		iface_create(name, name, IFACE_FLAG_INTERNAL);
+	} else {
+		iface_remove(iface_get(name));
+	}
+}
+
 enum ipc_option {
 	OPT_COMMAND,
 	OPT_IFNAME,

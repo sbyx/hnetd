@@ -182,13 +182,20 @@ static void iface_update_address_cb(__unused struct hncp_pa_iface_user *i,
 	}
 }
 
-static void iface_notify_internal_state(struct iface *c)
+// Notify
+static void iface_notify_internal_state(struct iface *c, bool enable)
 {
 	struct iface_user *u;
-	list_for_each_entry(u, &users, head)
-		if (u->cb_intiface)
-			u->cb_intiface(u, c->ifname, c->internal);
-	platform_set_internal(c, c->internal);
+	list_for_each_entry(u, &users, head) {
+		if (u->cb_intiface && (enable || c->internal))
+			u->cb_intiface(u, c->ifname, enable && c->internal);
+
+		if (u->cb_extiface && (enable || !c->internal))
+			u->cb_extiface(u, c->ifname, enable && !c->internal);
+	}
+
+	if (enable || c->internal)
+		platform_set_internal(c, enable && c->internal);
 }
 
 
@@ -487,10 +494,7 @@ void iface_remove(struct iface *c)
 	iface_commit_ipv4_uplink(c);
 
 	// If interface was internal, let subscribers know of removal
-	if (c->internal) {
-		c->internal = false;
-		iface_notify_internal_state(c);
-	}
+	iface_notify_internal_state(c, false);
 
 	list_del(&c->head);
 	vlist_flush_all(&c->assigned);
@@ -537,7 +541,7 @@ void iface_update_init(struct iface *c)
 static void iface_announce_border(struct uloop_timeout *t)
 {
 	struct iface *c = container_of(t, struct iface, transition);
-	iface_notify_internal_state(c);
+	iface_notify_internal_state(c, true);
 
 	if (!c->internal)
 		uloop_timeout_set(&c->preferred, 100);
