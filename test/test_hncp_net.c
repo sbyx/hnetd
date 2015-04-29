@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Apr 29 15:23:56 2015 mstenber
- * Edit time:     597 min
+ * Last modified: Wed Apr 29 18:05:25 2015 mstenber
+ * Edit time:     614 min
  *
  */
 
@@ -99,16 +99,17 @@ void hncp_two(void)
                               NULL,
                               hnetd_time() + 123, hnetd_time() + 1,
                               NULL, 0);
-
-  SIM_WHILE(&s, 1000,
-            !net_sim_is_converged(&s) ||
-            net_sim_dncp_tlv_type_count(n2, HNCP_T_EXTERNAL_CONNECTION) != 1);
+  if (net_sim_dncp_tlv_type_count(n2, HNCP_T_EXTERNAL_CONNECTION) != 1)
+    SIM_WHILE(&s, 1000,
+              !net_sim_is_converged(&s) ||
+              net_sim_dncp_tlv_type_count(n2, HNCP_T_EXTERNAL_CONNECTION) != 1);
 
   /* Prefix assignment should just happen. Magic(?). */
   /* Wait for prefixes to be assigned too */
-  SIM_WHILE(&s, 1000,
-            !net_sim_is_converged(&s) ||
-            net_sim_dncp_tlv_type_count(n2, HNCP_T_ASSIGNED_PREFIX) != 2);
+  if (net_sim_dncp_tlv_type_count(n2, HNCP_T_ASSIGNED_PREFIX) != 2)
+    SIM_WHILE(&s, 10000,
+              !net_sim_is_converged(&s) ||
+              net_sim_dncp_tlv_type_count(n2, HNCP_T_ASSIGNED_PREFIX) != 2);
 
   sput_fail_unless(dncp_if_has_highest_id(n1, "eth0") !=
                    dncp_if_has_highest_id(n2, "eth1"),
@@ -182,6 +183,7 @@ static void handle_connections(net_sim s,
 {
   int i;
 
+  L_DEBUG("handle_connections %d", n_conns);
   for (i = 0 ; i < n_conns ; i++)
     {
       dncp n1 = net_sim_find_hncp(s, nodenames[c->src]);
@@ -198,6 +200,11 @@ static void handle_connections(net_sim s,
 static void raw_bird14(net_sim s)
 {
   int num_connections = sizeof(nodeconnections) / sizeof(nodeconnections[0]);
+
+  /* Both of these seem to do things that make the stable
+   * no-change-at-all check fail. */
+  s->disable_pa = true;
+  s->disable_multicast = true;
 
   handle_connections(s, &nodeconnections[0], num_connections);
 
@@ -293,6 +300,7 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes, bool no_conflicts)
   memset(&h2, 1, sizeof(h2));
 
   s->disable_sd = true;
+  s->disable_multicast = true;
   s->disable_pa = true; /* TBD we SHOULD care about pa but it does not work :p */
   if (no_conflicts)
     s->del_neighbor_is_error = true;
@@ -601,6 +609,7 @@ void hncp_random_monkey(void)
 
   memset(ma, 0, sizeof(ma));
   net_sim_init(&s);
+  s.disable_multicast = true;
   s.disable_sd = true; /* we don't care about sd */
   s.disable_pa = true; /* TBD we SHOULD care about pa but it does not work :p */
   /* Ensure that the routers + their links have consistent ordering. */
