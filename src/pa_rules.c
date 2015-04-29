@@ -239,6 +239,8 @@ enum pa_rule_target pa_rule_random_override_match(struct pa_rule *rule, struct p
 			PA_DEBUG("Random prefix %s was rejected by user", pa_prefix_repr(&tentative, desired_plen));
 		}
 	}
+	PA_DEBUG("All random prefixes were rejected by user");
+	return PA_RULE_NO_MATCH;
 
 choose:
 	pa_prefix_cpy(&tentative, desired_plen, &pa_arg->prefix, pa_arg->plen);
@@ -326,6 +328,8 @@ enum pa_rule_target pa_rule_random_match(struct pa_rule *rule, struct pa_ldp *ld
 			PA_DEBUG("Random prefix %s was rejected by user", pa_prefix_repr(&tentative, desired_plen));
 		}
 	}
+	PA_DEBUG("All random prefixes were rejected by user");
+	return PA_RULE_NO_MATCH;
 
 choose:
 	pa_prefix_cpy(&tentative, desired_plen, &pa_arg->prefix, pa_arg->plen);

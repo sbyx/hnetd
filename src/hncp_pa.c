@@ -189,7 +189,7 @@ static struct in6_addr addr_allzeroes = { .s6_addr = {}};
 
 static int hpa_accept_proposed_addr(__unused struct pa_rule_random *r,
 		struct pa_ldp *ldp,
-		pa_prefix *prefix, pa_plen plen)
+		pa_prefix *prefix, __unused pa_plen plen)
 {
 	/* In IPv4, neither the network addresses (first) nor the broadcast address (last)
 	 * can be used. Linux also does not like IPv6 network address.
@@ -205,14 +205,18 @@ static int hpa_accept_proposed_addr(__unused struct pa_rule_random *r,
 
 	/* Forbid broadcast address */
 	memcpy(&a, &ldp->dp->prefix, sizeof(struct in6_addr));
-	bmemcpy(&a, &addr_allones, plen, 128 - plen);
-	if(!memcmp(&a, prefix, sizeof(struct in6_addr)))
+	bmemcpy(&a, &addr_allones, ldp->dp->plen, 128 - ldp->dp->plen);
+	if(!memcmp(&a, prefix, sizeof(struct in6_addr))) {
+		L_DEBUG("Rejecting all-ones address %s", ADDR_REPR(&a));
 		return 0;
+	}
 
 	/* Forbid network address */
-	bmemcpy(&a, &addr_allzeroes, plen, 128 - plen);
-	if(!memcmp(&a, prefix, sizeof(struct in6_addr)))
+	bmemcpy(&a, &addr_allzeroes, ldp->dp->plen, 128 - ldp->dp->plen);
+	if(!memcmp(&a, prefix, sizeof(struct in6_addr))) {
+		L_DEBUG("Rejecting all-zeroes address %s", ADDR_REPR(&a));
 		return 0;
+	}
 
 	return 1;
 }
