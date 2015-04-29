@@ -6,8 +6,8 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 21:02:53 2015 mstenber
- * Last modified: Tue Apr 21 14:14:35 2015 mstenber
- * Edit time:     0 min
+ * Last modified: Wed Apr 29 16:45:08 2015 mstenber
+ * Edit time:     1 min
  *
  */
 
@@ -46,3 +46,9 @@ int execs;
 #define waitpid(pid, x, y)
 #define _exit(code)
 
+pid_t hncp_run(char *argv[])
+{
+  /* Pretend we ran something. */
+  execv(argv[0], argv);
+  return 0;
+}

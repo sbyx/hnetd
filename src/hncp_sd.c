@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Mar 23 06:18:38 2015 mstenber
- * Edit time:     607 min
+ * Last modified: Wed Apr 29 16:39:05 2015 mstenber
+ * Edit time:     609 min
  *
  */
 
@@ -93,22 +93,6 @@ struct hncp_sd_struct
   struct iface_user iface;
   struct hncp_link_user link;
 };
-
-
-/* Utility function glommed from platform-generic platform_exec/call. */
-static void _fork_execv(char *argv[])
-{
-  pid_t pid = fork();
-
-  if (pid == 0) {
-    execv(argv[0], argv);
-    _exit(128);
-  }
-  L_DEBUG("hncp_sd calling %s", argv[0]);
-  /* waitpid(pid, NULL, 0); - e.g. dnsmasq can take too long (and kill
-   * things). Have to work around in shell script to serialize calls
-   * if it seems useful.*/
-}
 
 static void _should_update(hncp_sd sd, int v)
 {
@@ -415,7 +399,7 @@ bool hncp_sd_restart_dnsmasq(hncp_sd sd)
 {
   char *args[] = { (char *)sd->p.dnsmasq_script, "restart", NULL};
 
-  _fork_execv(args);
+  hncp_run(args);
   return true;
 }
 
@@ -488,7 +472,7 @@ bool hncp_sd_reconfigure_ohp(hncp_sd sd)
   args[narg] = NULL;
   if (_sh_changed(&ctx, &sd->ohp_state))
     {
-      _fork_execv(args);
+      hncp_run(args);
       return true;
     }
   return false;
@@ -578,7 +562,7 @@ bool hncp_sd_reconfigure_pcp(hncp_sd sd)
   args[narg] = NULL;
   if (_sh_changed(&ctx, &sd->pcp_state))
     {
-      _fork_execv(args);
+      hncp_run(args);
       return true;
     }
   return false;

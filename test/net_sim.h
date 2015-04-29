@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Wed Apr 29 15:46:28 2015 mstenber
- * Edit time:     271 min
+ * Last modified: Wed Apr 29 16:45:54 2015 mstenber
+ * Edit time:     276 min
  *
  */
 
@@ -32,6 +32,9 @@
 
 /* iface_* functions from smock queue */
 #include "smock.h"
+
+/* hncp_run and friends */
+#include "fake_fork_exec.h"
 
 #ifdef L_PREFIX
 #undef L_PREFIX

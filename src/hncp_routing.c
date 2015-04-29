@@ -33,12 +33,7 @@ struct hncp_routing_struct {
 
 static void hncp_routing_spawn(char **argv)
 {
-	pid_t pid = fork();
-	if (pid == 0) {
-		execv(argv[0], argv);
-		_exit(128);
-	}
-
+	pid_t pid = hncp_run(argv);
 	waitpid(pid, NULL, 0);
 }
 
@@ -53,11 +48,7 @@ static void hncp_configure_exec(struct uloop_process *p, __unused int ret)
 		argv[2 + bfs->ifaces_cnt] = NULL;
 
 		bfs->configure_proc.cb = hncp_configure_exec;
-		bfs->configure_proc.pid = fork();
-		if (!bfs->configure_proc.pid) {
-			execv(argv[0], argv);
-			_exit(128);
-		}
+		bfs->configure_proc.pid = hncp_run(argv);
 		uloop_process_add(&bfs->configure_proc);
 		bfs->configure_pending = false;
 	}

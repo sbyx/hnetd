@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Thu Feb 26 13:58:26 2015 mstenber
- * Edit time:     154 min
+ * Last modified: Wed Apr 29 16:46:01 2015 mstenber
+ * Edit time:     155 min
  *
  */
 
@@ -17,11 +17,10 @@
 #define L_LEVEL 7
 #define DISABLE_HNCP_PA
 #define DISABLE_HNCP_MULTICAST
+#include "hncp.h"
 #include "net_sim.h"
 #include "sput.h"
 #include "smock.h"
-
-#include "fake_fork_exec.h"
 
 #include "hncp_sd.c"
 

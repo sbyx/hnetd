@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:30:01 2014 mstenber
- * Last modified: Tue Dec 23 19:00:32 2014 mstenber
- * Edit time:     4 min
+ * Last modified: Wed Apr 29 16:37:31 2015 mstenber
+ * Edit time:     5 min
  *
  */
 
@@ -44,6 +44,11 @@ void dncp_if_set_ipv6_address(dncp o,
  */
 void hncp_set_dtls(dncp o, dtls d);
 #endif /* DTLS */
+
+/**
+ * Fork+run an utility script, and return the PID.
+ */
+pid_t hncp_run(char *argv[]);
 
 /**
  * Create HNCP instance

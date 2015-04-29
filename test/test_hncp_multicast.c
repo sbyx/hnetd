@@ -6,7 +6,7 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 21:40:08 2015 mstenber
- * Last modified: Thu Feb 26 13:33:39 2015 mstenber
+ * Last modified: Wed Apr 29 16:43:05 2015 mstenber
  * Edit time:     20 min
  *
  */
@@ -22,9 +22,7 @@
 #include "sput.h"
 #include "smock.h"
 
-#include "fake_fork_exec.h"
-
-#include "hncp_multicast.c"
+#include "hncp_multicast.h"
 
 int log_level = LOG_DEBUG;
 
