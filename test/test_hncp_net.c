@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Thu Feb 26 15:00:32 2015 mstenber
- * Edit time:     592 min
+ * Last modified: Wed Apr 29 15:23:56 2015 mstenber
+ * Edit time:     597 min
  *
  */
 
@@ -222,7 +222,8 @@ static void raw_bird14(net_sim s)
 #endif /* L_LEVEL >= LOG_NOTICE */
   hnetd_time_t convergence_time = hnetd_time();
 
-  s->should_be_stable_topology = true;
+  s->add_neighbor_is_error = true;
+  s->del_neighbor_is_error = true;
   L_DEBUG("assume stable topology");
   SIM_WHILE(s, 100000, !net_sim_is_converged(s) ||
             (hnetd_time() - convergence_time) < (DNCP_KEEPALIVE_INTERVAL*
@@ -240,7 +241,8 @@ static void raw_bird14(net_sim s)
                    "converged count rising");
 
   L_DEBUG("assume unstable topology");
-  s->should_be_stable_topology = false;
+  s->add_neighbor_is_error = false;
+  s->del_neighbor_is_error = false;
 
   /* Make sure it will converge after remove + re-add in reasonable
    * timeframe too. */
@@ -281,9 +283,7 @@ void hncp_bird14_unique()
   raw_bird14(&s);
 }
 
-bool no_conflicts = false;
-
-static void raw_hncp_tube(net_sim s, unsigned int num_nodes)
+static void raw_hncp_tube(net_sim s, unsigned int num_nodes, bool no_conflicts)
 {
   /* A LOT of routers connected in a tube (R1 R2 R3 .. RN). */
   unsigned int i;
@@ -294,6 +294,9 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes)
 
   s->disable_sd = true;
   s->disable_pa = true; /* TBD we SHOULD care about pa but it does not work :p */
+  if (no_conflicts)
+    s->del_neighbor_is_error = true;
+
   for (i = 0 ; i < num_nodes-1 ; i++)
     {
       char buf[128];
@@ -348,7 +351,7 @@ void hncp_tube_small(void)
   net_sim_s s;
 
   net_sim_init(&s);
-  raw_hncp_tube(&s, 6);
+  raw_hncp_tube(&s, 6, false);
 }
 
 
@@ -361,19 +364,27 @@ void hncp_tube_medium(void)
   net_sim_s s;
 
   net_sim_init(&s);
-  raw_hncp_tube(&s, MEDIUM_TUBE_LENGTH);
+  raw_hncp_tube(&s, MEDIUM_TUBE_LENGTH, false);
+}
+
+void hncp_tube_medium_nc(void)
+{
+  net_sim_s s;
+
+  net_sim_init(&s);
+  raw_hncp_tube(&s, MEDIUM_TUBE_LENGTH, true);
 }
 
   /* Intentionally pick a number that is >> IPv6 MTU / node state
    * (network state hash etc left as rounding errors) */
 #define BIG_TUBE_LENGTH 3000 / sizeof(dncp_t_node_state_s)
 
-void hncp_tube_beyond_multicast(void)
+void hncp_tube_beyond_multicast_nc(void)
 {
   net_sim_s s;
 
   net_sim_init(&s);
-  raw_hncp_tube(&s, BIG_TUBE_LENGTH);
+  raw_hncp_tube(&s, BIG_TUBE_LENGTH, true);
 }
 
 void hncp_tube_beyond_multicast_unique(void)
@@ -382,7 +393,7 @@ void hncp_tube_beyond_multicast_unique(void)
 
   net_sim_init(&s);
   s.use_global_iids = true;
-  raw_hncp_tube(&s, BIG_TUBE_LENGTH);
+  raw_hncp_tube(&s, BIG_TUBE_LENGTH, false);
 }
 
 /* Note: As we play with bitmasks,
@@ -658,15 +669,12 @@ int main(__unused int argc, __unused char **argv)
   int seed = (int)hnetd_time();
   int c;
 
-  while ((c = getopt(argc, argv, "nr:")) > 0)
+  while ((c = getopt(argc, argv, "r:")) > 0)
     {
       switch (c)
         {
         case 'r':
           seed = atoi(optarg);
-          break;
-        case 'n':
-          no_conflicts = true;
           break;
         }
     }
@@ -684,7 +692,8 @@ int main(__unused int argc, __unused char **argv)
   maybe_run_test(hncp_bird14_unique);
   maybe_run_test(hncp_tube_small);
   maybe_run_test(hncp_tube_medium);
-  maybe_run_test(hncp_tube_beyond_multicast);
+  maybe_run_test(hncp_tube_medium_nc);
+  maybe_run_test(hncp_tube_beyond_multicast_nc);
   maybe_run_test(hncp_tube_beyond_multicast_unique);
   maybe_run_test(hncp_random_monkey);
   sput_leave_suite(); /* optional */

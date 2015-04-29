@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu Apr 23 14:55:57 2015 mstenber
- * Edit time:     264 min
+ * Last modified: Wed Apr 29 15:25:25 2015 mstenber
+ * Edit time:     268 min
  *
  */
 
@@ -113,7 +113,8 @@ typedef struct net_sim_t {
   bool disable_multicast;
 
   int node_count;
-  bool should_be_stable_topology;
+  bool add_neighbor_is_error;
+  bool del_neighbor_is_error;
   hnetd_time_t start;
 
   int sent_unicast;
@@ -277,11 +278,11 @@ void net_sim_local_tlv_callback(dncp_subscriber sub,
   net_node n = container_of(sub, net_node_s, debug_subscriber);
   net_sim s = n->s;
 
-  if (s->should_be_stable_topology)
-    if (tlv_id(tlv) == DNCP_T_NEIGHBOR)
-      {
-        sput_fail_unless(false, "got change when topology stable");
-      }
+  if (tlv_id(tlv) == DNCP_T_NEIGHBOR)
+    {
+      sput_fail_unless(!add || !s->add_neighbor_is_error, "undesired add");
+      sput_fail_unless(add || !s->del_neighbor_is_error, "undesired del");
+    }
 }
 
 dncp net_sim_find_hncp(net_sim s, const char *name)
