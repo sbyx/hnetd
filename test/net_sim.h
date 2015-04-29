@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Wed Apr 29 15:25:25 2015 mstenber
- * Edit time:     268 min
+ * Last modified: Wed Apr 29 15:46:28 2015 mstenber
+ * Edit time:     271 min
  *
  */
 
@@ -511,6 +511,7 @@ void net_sim_uninit(net_sim s)
   struct list_head *p, *pn;
   int c = 0;
 
+  s->del_neighbor_is_error = false;
   list_for_each_safe(p, pn, &s->nodes)
     {
       net_node node = container_of(p, net_node_s, h);
