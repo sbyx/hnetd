@@ -585,11 +585,11 @@ _set_router_name(hncp_sd sd)
 
   dncp_remove_tlvs_by_type(sd->dncp, HNCP_T_DNS_ROUTER_NAME);
 
-  if (!iface_get_preferred_address(&rname->address, false))
+  if (!iface_get_preferred_address(&rname->address, false, NULL))
     dncp_add_tlv(sd->dncp, HNCP_T_DNS_ROUTER_NAME,
       rname, sizeof(*rname) + namelen, 0);
 
-  if (!iface_get_preferred_address(&rname->address, true))
+  if (!iface_get_preferred_address(&rname->address, true, NULL))
     dncp_add_tlv(sd->dncp, HNCP_T_DNS_ROUTER_NAME,
       rname, sizeof(*rname) + namelen, 0);
 }
