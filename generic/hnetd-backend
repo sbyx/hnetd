@@ -51,7 +51,7 @@ newaddr|deladdr)
 
 newprefixroute|delprefixroute)
 	[ "$1" = "newprefixroute" ] && act="replace" || act="del"
-	ip -6 route "$act" unreachable "$3" metric 2147483646
+	ip -6 route "$act" unreachable "$2" metric 2147483646
 	;;
 
 newroute|delroute)
