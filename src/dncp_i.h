@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Apr 28 14:28:39 2015 mstenber
+ * Last modified: Wed Apr 29 15:12:04 2015 mstenber
  * Edit time:     325 min
  *
  */
@@ -183,8 +183,9 @@ struct dncp_neighbor_struct {
   /* Link-level address */
   struct sockaddr_in6 last_sa6;
 
-  /* When did we last time receive _consistent_ state from the peer. */
-  hnetd_time_t last_sync;
+  /* When did we last time receive _consistent_ state from the peer
+   * (multicast) or any contact (unicast). */
+  hnetd_time_t last_contact;
 };
 
 

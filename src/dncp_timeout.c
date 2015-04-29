@@ -339,7 +339,7 @@ void dncp_run(dncp o)
         dncp_neighbor n = dncp_tlv_get_extra(t);
 
         hnetd_time_t next_time =
-          n->last_sync +
+          n->last_contact +
           dncp_neighbor_interval(o, &t->tlv) * DNCP_KEEPALIVE_MULTIPLIER;
 
         /* TBD: How to treat party that has keepalive_interval 0? */
@@ -361,7 +361,7 @@ void dncp_run(dncp o)
         l = dncp_find_link_by_id(o, ne->link_id);
         L_DEBUG("Neighbor %s gone on " DNCP_LINK_F " - nothing in %d ms",
                 DNCP_STRUCT_REPR(ne->neighbor_node_identifier),
-                DNCP_LINK_D(l), (int) (now - n->last_sync));
+                DNCP_LINK_D(l), (int) (now - n->last_contact));
 #endif /* L_LEVEL >= 7 */
         dncp_remove_tlv(o, t);
         o->num_neighbor_dropped++;

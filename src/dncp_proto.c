@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue Apr 28 14:53:33 2015 mstenber
- * Edit time:     837 min
+ * Last modified: Wed Apr 29 15:11:00 2015 mstenber
+ * Edit time:     845 min
  *
  */
 
@@ -215,7 +215,7 @@ _heard(dncp_link l, dncp_t_link_id lid, struct sockaddr_in6 *src,
       if (!t)
         return NULL;
       n = dncp_tlv_get_extra(t);
-      n->last_sync = dncp_time(l->dncp);
+      n->last_contact = dncp_time(l->dncp);
       L_DEBUG("Neighbor %s added on " DNCP_LINK_F,
               DNCP_STRUCT_REPR(lid->node_identifier), DNCP_LINK_D(l));
     }
@@ -246,7 +246,7 @@ handle_message(dncp_link l,
   uint32_t new_update_number;
   bool should_request_network_state = false;
   bool updated_or_requested_state = false;
-  bool got_response = false;
+  bool got_tlv = false;
   bool multicast = IN6_IS_ADDR_MULTICAST(dst);
 
   /* Make sure source is IPv6 link-local (for now..) */
@@ -284,7 +284,7 @@ handle_message(dncp_link l,
       if (!tne)
         {
           if (!multicast)
-            return;
+            return; /* OOM */
           should_request_network_state = true;
         }
       ne = tne ? dncp_tlv_get_extra(tne) : NULL;
@@ -292,6 +292,7 @@ handle_message(dncp_link l,
 
   tlv_for_each_attr(a, msg)
     {
+      got_tlv = true;
       switch (tlv_id(a))
         {
         case DNCP_T_REQ_NET_STATE:
@@ -348,7 +349,7 @@ handle_message(dncp_link l,
               if (ne)
                 {
                   l->trickle_c++;
-                  ne->last_sync = dncp_time(l->dncp);
+                  ne->last_contact = dncp_time(l->dncp);
                 }
               else if (!is_local)
                 {
@@ -367,7 +368,6 @@ handle_message(dncp_link l,
               L_INFO("invalid length node state TLV received - ignoring");
               break;
             }
-          got_response = true;
           dncp_t_node_state ns = tlv_data(a);
           n = dncp_find_node_by_node_identifier(o, &ns->node_identifier,
                                                 false);
@@ -439,6 +439,7 @@ handle_message(dncp_link l,
             }
           updated_or_requested_state = true;
           break;
+
         default:
           /* Unknown TLV - MUST ignore. */
           continue;
@@ -446,9 +447,9 @@ handle_message(dncp_link l,
 
     }
 
-  /* Shared 'got _response_ from the other party' handling. */
-  if (!multicast && got_response && ne)
-    ne->last_sync = dncp_time(l->dncp);
+  /* Shared got unicast from the other party handling. */
+  if (!multicast && got_tlv && ne)
+    ne->last_contact = dncp_time(l->dncp);
 
   if (should_request_network_state && !updated_or_requested_state)
     dncp_link_send_req_network_state(l, src);
