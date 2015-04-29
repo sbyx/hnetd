@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Apr 29 15:11:00 2015 mstenber
- * Edit time:     845 min
+ * Last modified: Wed Apr 29 15:34:23 2015 mstenber
+ * Edit time:     853 min
  *
  */
 
@@ -351,7 +351,7 @@ handle_message(dncp_link l,
                   l->trickle_c++;
                   ne->last_contact = dncp_time(l->dncp);
                 }
-              else if (!is_local)
+              else
                 {
                   /* Send an unicast request, to potentially set up the
                    * peer structure. */
@@ -385,50 +385,51 @@ handle_message(dncp_link l,
           if (!interesting)
             break;
           bool found_data = false;
-          if (!multicast)
+          int nd_len = tlv_len(a) - sizeof(*ns);
+#ifdef DTLS
+          /* We don't accept node data via multicast in secure mode. */
+          if (multicast && o->profile_data.d)
+            nd_len = 0;
+#endif /* DTLS */
+          if (nd_len > 0)
             {
-              /* We don't accept node data via multicast. */
-              int nd_len = tlv_len(a) - sizeof(*ns);
-              if (nd_len > 0)
-                {
-                  unsigned char *nd_data = (unsigned char *)ns + sizeof(*ns);
+              unsigned char *nd_data = (unsigned char *)ns + sizeof(*ns);
 
-                  n = n ? n: dncp_find_node_by_node_identifier(o, &ns->node_identifier, true);
-                  if (!n)
-                    return; /* OOM */
-                  if (dncp_node_is_self(n))
+              n = n ? n: dncp_find_node_by_node_identifier(o, &ns->node_identifier, true);
+              if (!n)
+                return; /* OOM */
+              if (dncp_node_is_self(n))
+                {
+                  L_DEBUG("received %d update number from network, own %d",
+                          new_update_number, n->update_number);
+                  if (o->collided)
                     {
-                      L_DEBUG("received %d update number from network, own %d",
-                              new_update_number, n->update_number);
-                      if (o->collided)
-                        {
-                          if (dncp_profile_handle_collision(o))
-                            return;
-                        }
-                      else
-                        o->collided = true;
-                      n->update_number = new_update_number;
-                      o->republish_tlvs = true;
-                      dncp_schedule(o);
-                      return;
-                    }
-                  /* Ok. nd contains more recent TLV data than what we have
-                   * already. Woot. */
-                  memset(&tb, 0, sizeof(tb));
-                  tlv_buf_init(&tb, 0); /* not passed anywhere */
-                  if (tlv_put_raw(&tb, nd_data, nd_len))
-                    {
-                      dncp_node_set(n, new_update_number,
-                                    dncp_time(o) - be32_to_cpu(ns->ms_since_origination),
-                                    tb.head);
+                      if (dncp_profile_handle_collision(o))
+                        return;
                     }
                   else
-                    {
-                      L_DEBUG("tlv_put_raw failed");
-                      tlv_buf_free(&tb);
-                    }
-                  found_data = true;
+                    o->collided = true;
+                  n->update_number = new_update_number;
+                  o->republish_tlvs = true;
+                  dncp_schedule(o);
+                  return;
                 }
+              /* Ok. nd contains more recent TLV data than what we have
+               * already. Woot. */
+              memset(&tb, 0, sizeof(tb));
+              tlv_buf_init(&tb, 0); /* not passed anywhere */
+              if (tlv_put_raw(&tb, nd_data, nd_len))
+                {
+                  dncp_node_set(n, new_update_number,
+                                dncp_time(o) - be32_to_cpu(ns->ms_since_origination),
+                                tb.head);
+                }
+              else
+                {
+                  L_DEBUG("tlv_put_raw failed");
+                  tlv_buf_free(&tb);
+                }
+              found_data = true;
             }
           if (!found_data)
             {
@@ -451,7 +452,7 @@ handle_message(dncp_link l,
   if (!multicast && got_tlv && ne)
     ne->last_contact = dncp_time(l->dncp);
 
-  if (should_request_network_state && !updated_or_requested_state)
+  if (should_request_network_state && !updated_or_requested_state && !is_local)
     dncp_link_send_req_network_state(l, src);
 }
 
