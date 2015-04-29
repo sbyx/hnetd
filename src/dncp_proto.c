@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Apr 29 15:34:23 2015 mstenber
- * Edit time:     853 min
+ * Last modified: Wed Apr 29 17:37:34 2015 mstenber
+ * Edit time:     859 min
  *
  */
 
@@ -340,11 +340,14 @@ handle_message(dncp_link l,
               break;
             }
           unsigned char *nethash = tlv_data(a);
-          if (memcmp(nethash, &o->network_hash, DNCP_HASH_LEN) == 0)
-            {
-              L_DEBUG("received network state which is consistent (%s)",
-                      is_local ? "local" : ne ? "remote" : "unknown remote");
+          bool consistent = memcmp(nethash, &o->network_hash,
+                                   DNCP_HASH_LEN) == 0;
+          L_DEBUG("received network state which is %sconsistent (%s)",
+                  consistent ? "" : "in",
+                  is_local ? "local" : ne ? "remote" : "unknown remote");
 
+          if (consistent)
+            {
               /* Increment Trickle count + last in sync time.*/
               if (ne)
                 {
@@ -408,8 +411,11 @@ handle_message(dncp_link l,
                         return;
                     }
                   else
-                    o->collided = true;
-                  n->update_number = new_update_number;
+                    {
+                      o->collided = true;
+                      n->update_number = new_update_number + 1000 - 1;
+                      /* republish increments the count too */
+                    }
                   o->republish_tlvs = true;
                   dncp_schedule(o);
                   return;
