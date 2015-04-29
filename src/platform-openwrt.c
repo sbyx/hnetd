@@ -1164,6 +1164,29 @@ void platform_restart_dhcpv4(struct iface *c)
 }
 
 
+void platform_set_iface(const char *name, bool enable)
+{
+	struct blob_buf b = {NULL, NULL, 0, NULL};
+
+	blob_buf_init(&b, 0);
+	if (enable) {
+		blobmsg_add_string(&b, "name", name);
+		blobmsg_add_string(&b, "ifname", name);
+		blobmsg_add_string(&b, "proto", "hnet");
+		blobmsg_add_string(&b, "mode", "internal");
+
+		uint32_t ubus_network = 0;
+		ubus_lookup_id(ubus, "network", &ubus_network);
+		ubus_invoke(ubus, ubus_network, "add_dynamic", b.head, NULL, NULL, 1000);
+	} else {
+		blobmsg_add_string(&b, "interface", name);
+		ubus_invoke(ubus, ubus_network_interface, "down", b.head, NULL, NULL, 1000);
+	}
+
+	blob_buf_free(&b);
+}
+
+
 enum {
 	DUMP_ATTR_INTERFACE,
 	DUMP_ATTR_MAX
