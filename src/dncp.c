@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Apr 28 14:29:12 2015 mstenber
- * Edit time:     846 min
+ * Last modified: Wed Apr 29 18:02:33 2015 mstenber
+ * Edit time:     860 min
  *
  */
 
@@ -46,12 +46,18 @@ void dncp_node_set(dncp_node n, uint32_t update_number,
                    hnetd_time_t t, struct tlv_attr *a)
 {
   struct tlv_attr *a_valid = a;
-  bool node_hash_changed = true;
-  bool should_schedule = false;
 
   L_DEBUG("dncp_node_set %s update #%d %p (@%lld (-%lld))",
           DNCP_NODE_REPR(n), (int) update_number, a,
           (long long)t, (long long)(hnetd_time()-t));
+
+  /* If the data is same, and update number is same, skip. */
+  if (update_number == n->update_number
+      && (!a || tlv_attr_equal(a, n->tlv_container)))
+    {
+      L_DEBUG(" .. spurious (no change, we ignore time delta)");
+      return;
+    }
 
   /* If new data is set, consider if similar, and if not,
    * handle version check  */
@@ -65,29 +71,22 @@ void dncp_node_set(dncp_node n, uint32_t update_number,
               a = n->tlv_container;
             }
           a_valid = n->tlv_container_valid;
-          node_hash_changed = false; /* provisionally, depend on update#  */
         }
       else
         {
           a_valid = dncp_profile_node_validate_data(n, a);
         }
-      n->dncp->graph_dirty = true;
-      should_schedule = true;
     }
 
   /* Replace update number if any */
-  if (n->update_number != update_number)
-    {
-      node_hash_changed = true;
-      n->update_number = update_number;
-    }
+  n->update_number = update_number;
 
   /* Replace origination time if any */
   if (t)
     n->origination_time = t;
 
-  /* Replace data (if it is a different pointer) */
-  if (n->tlv_container != a)
+  /* Replace data (if it is a different valid pointer) */
+  if (a && n->tlv_container != a)
     {
       if (n->last_reachable_prune == n->dncp->last_prune)
         dncp_notify_subscribers_tlvs_changed(n, n->tlv_container_valid,
@@ -97,19 +96,14 @@ void dncp_node_set(dncp_node n, uint32_t update_number,
       n->tlv_container = a;
       n->tlv_container_valid = a_valid;
       n->tlv_index_dirty = true;
-    }
-
-  /* If something that affects network hash has changed,
-   * set various flags + schedule dncp_run. */
-  if (node_hash_changed)
-    {
       n->node_data_hash_dirty = true;
-      n->dncp->network_hash_dirty = true;
-      should_schedule = true;
+      n->dncp->graph_dirty = true;
     }
 
-  if (should_schedule)
-    dncp_schedule(n->dncp);
+  /* _anything_ we do here dirties network hash. */
+  n->dncp->network_hash_dirty = true;
+
+  dncp_schedule(n->dncp);
 }
 
 
@@ -587,7 +581,7 @@ void dncp_self_flush(dncp_node n)
         free(a);
       a = a2;
     }
-  dncp_node_set(n, ++n->update_number, dncp_time(o),
+  dncp_node_set(n, n->update_number + 1, dncp_time(o),
                 a ? a : n->tlv_container);
 }
 
@@ -604,13 +598,14 @@ void dncp_calculate_node_data_hash(dncp_node n)
 
   if (!n->node_data_hash_dirty)
     return;
+  n->node_data_hash_dirty = false;
   l = n->tlv_container ? tlv_len(n->tlv_container) : 0;
   md5_begin(&ctx);
   if (l)
     md5_hash(tlv_data(n->tlv_container), l, &ctx);
   dncp_md5_end(&n->node_data_hash, &ctx);
-  L_DEBUG("dncp_calculate_node_data_hash @%p %s=%llx%s",
-          n->dncp, DNCP_NODE_REPR(n),
+  L_DEBUG("dncp_calculate_node_data_hash %s=%llx%s",
+          DNCP_NODE_REPR(n),
           dncp_hash64(&n->node_data_hash),
           n == n->dncp->own_node ? " [self]" : "");
 }
@@ -633,10 +628,13 @@ void dncp_calculate_network_hash(dncp o)
       dncp_calculate_node_data_hash(n);
       md5_hash(&update_number, sizeof(update_number), &ctx);
       md5_hash(&n->node_data_hash, DNCP_HASH_LEN, &ctx);
+      L_DEBUG(".. %s/%d=%llx",
+              DNCP_NODE_REPR(n), n->update_number,
+              dncp_hash64(&n->node_data_hash));
     }
   dncp_md5_end(&o->network_hash, &ctx);
-  L_DEBUG("dncp_calculate_network_hash @%p =%llx",
-          o, dncp_hash64(&o->network_hash));
+  L_DEBUG("dncp_calculate_network_hash =%llx",
+          dncp_hash64(&o->network_hash));
 
   if (memcmp(&old_hash, &o->network_hash, DNCP_HASH_LEN))
     dncp_trickle_reset(o);
