@@ -182,18 +182,38 @@ static pa_plen hpa_desired_plen_override_cb(
 	}
 }
 
-static int hpa_accept_proposed_addr(__unused struct pa_rule_random *r, struct pa_ldp *ldp,
-			pa_prefix *prefix, pa_plen plen)
+static struct in6_addr addr_allones = { .s6_addr =
+	{0xff,0xff, 0xff,0xff, 0xff,0xff, 0xff,0xff,
+		0xff,0xff, 0xff,0xff, 0xff,0xff, 0xff,0xff}};
+static struct in6_addr addr_allzeroes = { .s6_addr = {}};
+
+static int hpa_accept_proposed_addr(__unused struct pa_rule_random *r,
+		struct pa_ldp *ldp,
+		pa_prefix *prefix, pa_plen plen)
 {
-	//The purpose of this function is to reject IPv4 Network Addresses
-	struct prefix p = {.plen = plen};
-	bmemcpy(&p.prefix, prefix, 0, plen);
-	if(prefix_is_ipv4(&p)) {
-		struct prefix dp = {.plen = ldp->dp->plen };
-		bmemcpy(&dp.prefix, &ldp->dp->prefix, 0, ldp->dp->plen);
-		if(!memcmp(&p.prefix, &dp.prefix, sizeof(struct in6_addr)))
-			return 0;
-	}
+	/* In IPv4, neither the network addresses (first) nor the broadcast address (last)
+	 * can be used. Linux also does not like IPv6 network address.
+	 * So let's just not accept neither of them.
+	 */
+
+	struct in6_addr a;
+
+	/* Point to point or something.
+	 * Let's assume someone knows what he is doing here. */
+	if(ldp->dp->plen >= 127)
+		return 1;
+
+	/* Forbid broadcast address */
+	memcpy(&a, &ldp->dp->prefix, sizeof(struct in6_addr));
+	bmemcpy(&a, &addr_allones, plen, 128 - plen);
+	if(!memcmp(&a, prefix, sizeof(struct in6_addr)))
+		return 0;
+
+	/* Forbid network address */
+	bmemcpy(&a, &addr_allzeroes, plen, 128 - plen);
+	if(!memcmp(&a, prefix, sizeof(struct in6_addr)))
+		return 0;
+
 	return 1;
 }
 
