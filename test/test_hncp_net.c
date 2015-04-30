@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Apr 29 18:05:25 2015 mstenber
- * Edit time:     614 min
+ * Last modified: Thu Apr 30 11:39:38 2015 mstenber
+ * Edit time:     617 min
  *
  */
 
@@ -343,7 +343,7 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes, bool no_conflicts)
       dncp n = net_sim_find_hncp(s, buf);
       /* <= 5 may have up to 2 drops; >5 0. */
       if (i <= 5)
-        sput_fail_unless(n->num_neighbor_dropped <= 2, "few many drops (start)");
+        sput_fail_unless(n->num_neighbor_dropped <= 2, "few drops (start)");
       else
         sput_fail_unless(!n->num_neighbor_dropped, "no drops (end)");
 

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Apr 29 15:12:04 2015 mstenber
- * Edit time:     325 min
+ * Last modified: Thu Apr 30 11:49:25 2015 mstenber
+ * Edit time:     329 min
  *
  */
 
@@ -166,6 +166,10 @@ struct dncp_link_struct {
 
   /* What value we have TLV for, if any */
   uint32_t published_keepalive_interval;
+
+  /* Most recent request for network state. (This could be global too,
+   * but one outgoing request per link sounds fine too). */
+  hnetd_time_t last_req_network_state;
 
   /* Statistics about Trickle (mostly for debugging) */
   int num_trickle_sent;

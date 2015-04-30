@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Apr 29 17:37:34 2015 mstenber
- * Edit time:     859 min
+ * Last modified: Thu Apr 30 11:49:55 2015 mstenber
+ * Edit time:     877 min
  *
  */
 
@@ -161,6 +161,7 @@ void dncp_link_send_req_network_state(dncp_link l,
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
   if (_push_link_id_tlv(&tb, l)
+      && _push_network_state_tlv(&tb, l->dncp) /* SHOULD include local */
       && tlv_new(&tb, DNCP_T_REQ_NET_STATE, 0))
     {
       L_DEBUG("dncp_link_send_req_network_state -> " SA6_F "%%" DNCP_LINK_F,
@@ -362,7 +363,14 @@ handle_message(dncp_link l,
                 }
             }
           else
-            should_request_network_state = true;
+            {
+              /* MUST: rate limit check */
+              if ((dncp_time(o) - l->last_req_network_state) < l->conf->trickle_imin)
+                break;
+              l->last_req_network_state = dncp_time(o);
+
+              should_request_network_state = true;
+            }
           break;
 
         case DNCP_T_NODE_STATE:
