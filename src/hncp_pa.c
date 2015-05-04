@@ -169,6 +169,22 @@ static pa_plen hpa_desired_plen_cb(struct pa_rule_random *rule_r,
 	return hpa_desired_plen(iface, ldp, biggest);
 }
 
+/* In IPv4
+ */
+static int hpa_aa_subprefix_cb(__unused struct pa_rule_random *rule_r,
+		struct pa_ldp *ldp, pa_prefix *prefix, pa_plen *plen)
+{
+	memset(prefix, 0, sizeof(*prefix));
+	bmemcpy(prefix, &ldp->dp->prefix, 0, ldp->dp->plen);
+	if(ldp->dp->plen >= 126) {
+		//Things will probably break anyway at that point.
+		*plen = ldp->dp->plen;
+	} else {
+		*plen = ldp->dp->plen + 2;
+	}
+	return 0;
+}
+
 static pa_plen hpa_desired_plen_override_cb(
 		__unused struct pa_rule_random *rule_r,
 		struct pa_ldp *ldp,
@@ -279,6 +295,7 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 			(uint8_t *)i->aa_name, strlen(i->aa_name));
 	//todo use EUI64
 	i->aa_rand.accept_proposed_cb = hpa_accept_proposed_addr;
+	i->aa_rand.subprefix_cb = hpa_aa_subprefix_cb;
 
 	//Init stable storage
 	pa_store_link_init(&i->pasl, &i->pal, i->pal.name, 20);

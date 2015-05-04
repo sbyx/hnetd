@@ -58,6 +58,12 @@ struct pa_rule_random {
 	/* The Advertised Prefix Priority used when publishing the new prefix. */
 	pa_priority priority;
 
+	/* Optional sub-prefix callback.
+	 * If set, it is called first in order to override the delegated prefix value.
+	 * Should return 0 if the prefix value is set, a different value otherwise.
+	 */
+	int (*subprefix_cb)(struct pa_rule_random *, struct pa_ldp *, pa_prefix *prefix, pa_plen *plen);
+
 	/* The desired prefix length callback.
 	 * It is called with the available prefix count for each prefix length. */
 	pa_rule_desired_plen_cb desired_plen_cb;
