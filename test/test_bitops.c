@@ -20,23 +20,15 @@ void hamming(void)
 	for(i=0; i<=64; i++)
 		sput_fail_unless(hamming_distance_64(a + 2, a + 4, i) == i, "");
 
-	for(i=0; i<48; i++) {
+	for(i=0; i<48; i++)
 		sput_fail_unless(hamming_distance_64(a + 3, a + 4, i) == 0, "");
-		printf("%d\n", hamming_distance_64(a + 3, a + 4, i));
-	}
-	for(i=48; i<=64; i++) {
+	for(i=48; i<=64; i++)
 		sput_fail_unless(hamming_distance_64(a + 3, a + 4, i) == i - 48, "");
-		printf("%d\n", hamming_distance_64(a + 3, a + 4, i));
-	}
 
-	for(i=0; i<48; i++) {
+	for(i=0; i<48; i++)
 		sput_fail_unless(hamming_distance_64(a + 2, a + 3, 64+i) == 48, "");
-		printf("%d\n", hamming_distance_64(a + 2, a + 3, 64+i));
-	}
-	for(i=48; i<=64; i++) {
+	for(i=48; i<=64; i++)
 		sput_fail_unless(hamming_distance_64(a + 2, a + 3, 64+i) == i - 48 + 48, "");
-		printf("%d\n", hamming_distance_64(a + 2, a + 3, 64+i));
-	}
 }
 
 int main(__unused int argc, __unused char **argv)
