@@ -193,6 +193,11 @@ target_link_libraries(test_btrie ubox)
 add_test(btrie test_btrie)
 add_dependencies(check test_btrie)
 
+add_executable(test_bitops test/test_bitops.c src/bitops.c)
+target_link_libraries(test_bitops)
+add_test(bitops test_bitops)
+add_dependencies(check test_bitops)
+
 # Packaging rules
 set(CPACK_PACKAGE_VERSION "1")
 set(CPACK_PACKAGE_CONTACT "Steven Barth <steven@midlink.org>")

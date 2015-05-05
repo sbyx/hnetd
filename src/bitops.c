@@ -7,6 +7,7 @@
 #include "bitops.h"
 
 #include <string.h>
+#include <libubox/utils.h> //cpu_to_xx
 
 static uint8_t bbytecpy_masks[9] =
 	{0x00, 0x80, 0xc0, 0xe0, 0xf0, 0xf8, 0xfc, 0xfe, 0xff};
@@ -111,6 +112,35 @@ int bmemcmp(const void *m1, const void *m2, size_t bitlen)
 	return ((int) (*p1 & mask)) - ((int) (*p2 & mask));
 }
 
+static const uint64_t m1  = 0x5555555555555555; //binary: 0101...
+static const uint64_t m2  = 0x3333333333333333; //binary: 00110011..
+static const uint64_t m4  = 0x0f0f0f0f0f0f0f0f; //binary:  4 zeros,  4 ones ...
+static const uint64_t m8  = 0x00ff00ff00ff00ff; //binary:  8 zeros,  8 ones ...
+static const uint64_t m16 = 0x0000ffff0000ffff; //binary: 16 zeros, 16 ones ...
+static const uint64_t m32 = 0x00000000ffffffff; //binary: 32 zeros, 32 ones
+static const uint64_t hff = 0xffffffffffffffff; //binary: all ones
+static const uint64_t h01 = 0x0101010101010101; //the sum of 256 to the power of 0,1,2,3...
+static inline int popcount_3(uint64_t x) {
+    x -= (x >> 1) & m1;             //put count of each 2 bits into those 2 bits
+    x = (x & m2) + ((x >> 2) & m2); //put count of each 4 bits into those 4 bits
+    x = (x + (x >> 4)) & m4;        //put count of each 8 bits into those 8 bits
+    return (x * h01)>>56;  //returns left 8 bits of x + (x<<8) + (x<<16) + (x<<24) + ...
+}
+
+size_t hamming_distance_64(const uint64_t *m1, const uint64_t *m2, size_t nbits)
+{
+	size_t dst = 0;
+	size_t n = nbits / 64;
+	size_t rem = nbits % 64;
+	size_t i;
+	for(i = 0; i < n; i++)
+		dst += popcount_3(m1[i] ^ m2[i]);
+
+	if(rem)
+		dst += popcount_3(be64_to_cpu(m1[n] ^ m2[n]) & (hff << (64 - rem)));
+
+	return dst;
+}
 
 static const char hexdigits[] = "0123456789abcdef";
 static const int8_t hexvals[] = {

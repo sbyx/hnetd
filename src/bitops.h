@@ -64,6 +64,15 @@ void bmemcpy_shift(void *dst, size_t dst_start,
 		const void *src, size_t src_start,
 		size_t nbits);
 
+/**
+ * Computes the Hamming distance between char arrays.
+ *
+ * @param m1 First array
+ * @param m2 Second array
+ * @param nbits Number of considered bits for the distance computation.
+ */
+size_t hamming_distance_64(const uint64_t *m1, const uint64_t *m2, size_t nbits);
+
 ssize_t unhexlify(uint8_t *dst, size_t len, const char *src);
 char *hexlify(char *dst, const uint8_t *src, size_t len);
 
