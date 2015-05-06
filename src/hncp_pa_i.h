@@ -21,6 +21,7 @@
 #include "dhcp.h"
 
 #define HNCP_PA_PD_TEMP_LEASE  60 * HNETD_TIME_PER_SECOND
+#define HNCP_PA_USE_HAMMING
 
 typedef struct hpa_iface_struct *hpa_iface, hpa_iface_s;
 
@@ -106,13 +107,21 @@ struct hpa_iface_struct {
 	char pa_name[IFNAMSIZ + HPA_LINK_NAME_LEN];
 	struct pa_link pal;
 	struct pa_rule_adopt pa_adopt;
+#ifndef HNCP_PA_USE_HAMMING
 	struct pa_rule_random pa_rand;
+#else
+	struct pa_rule_hamming pa_rand;
+#endif
 	struct pa_rule_random pa_override;
 
 	char aa_name[IFNAMSIZ + HPA_LINK_NAME_LEN];
 	struct pa_link aal;
 	//struct pa_rule_slaac aa_slaac; //todo
+#ifndef HNCP_PA_USE_HAMMING
 	struct pa_rule_random aa_rand;
+#else
+	struct pa_rule_hamming aa_rand;
+#endif
 
 	//Stable storage
 	struct pa_store_link pasl;
@@ -139,7 +148,11 @@ struct hpa_lease_struct {
 	void *priv; //For storing your own stuff
 
 	struct pa_link pal;
+#ifndef HNCP_PA_USE_HAMMING
 	struct pa_rule_random rule_rand;
+#else
+	struct pa_rule_hamming rule_rand;
+#endif
 	struct pa_store_rule rule_store;
 };
 

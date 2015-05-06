@@ -220,13 +220,19 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	i->pa_adopt.rule.filter_private = i;
 
 	//Init the assignment rule
-	pa_rule_random_init(&i->pa_rand, "Random Prefix",
+#ifndef HNCP_PA_USE_HAMMING
+	pa_rule_random_init(&i->pa_rand, "Random Prefix (Random)",
 			HPA_RULE_CREATE, HPA_PRIORITY_CREATE, hpa_desired_plen_cb,
 			HPA_RAND_SET_SIZE);
 	pa_rule_random_prandconf(&i->pa_rand, HPA_PSEUDO_RAND_TENTATIVES,
 			(uint8_t *)i->pa_name, strlen(i->pa_name));
-	//todo: use UIE64 as seed
 	i->pa_rand.accept_proposed_cb = NULL;
+#else
+	pa_rule_hamming_init(&i->pa_rand, "Random Prefix (Hamming)",
+				HPA_RULE_CREATE, HPA_PRIORITY_CREATE, hpa_desired_plen_cb,
+				HPA_RAND_SET_SIZE, (uint8_t *)i->pa_name, strlen(i->pa_name));
+#endif
+	//todo: use UIE64 as seed
 	i->pa_rand.rule.filter_accept = hpa_iface_filter_accept;
 	i->pa_rand.rule.filter_private = i;
 
@@ -250,11 +256,18 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	i->aal.type = HPA_LINK_T_IFACE;
 
 	//Use first quarter of available addresses
+#ifndef HNCP_PA_USE_HAMMING
 	pa_rule_random_init(&i->aa_rand, "Random Address",
 			HPA_RULE_CREATE, HPA_PRIORITY_CREATE,
 			hpa_return_128, HPA_RAND_SET_SIZE);
 	pa_rule_random_prandconf(&i->aa_rand, HPA_PSEUDO_RAND_TENTATIVES,
 			(uint8_t *)i->aa_name, strlen(i->aa_name));
+#else
+	pa_rule_hamming_init(&i->aa_rand, "Random Address (Hamming)",
+				HPA_RULE_CREATE, HPA_PRIORITY_CREATE,
+				hpa_return_128, HPA_RAND_SET_SIZE,
+				(uint8_t *)i->aa_name, strlen(i->aa_name));
+#endif
 	//todo use EUI64
 	i->aa_rand.subprefix_cb = hpa_aa_subprefix_cb;
 
@@ -1694,10 +1707,16 @@ hpa_lease hpa_pd_add_lease(hncp_pa hp, const char *duid, uint8_t hint_len,
 	l->pal.type = HPA_LINK_T_LEASE;
 
 	//Init random rule
+#ifndef HNCP_PA_USE_HAMMING
 	pa_rule_random_init(&l->rule_rand, "Downstream PD Random Prefix",
 			HPA_RULE_CREATE, HPA_PRIORITY_PD, hpa_lease_desired_plen_cb, 128);
 	pa_rule_random_prandconf(&l->rule_rand, 10,
 			(uint8_t *)l->pa_link_name, strlen(l->pa_link_name));
+#else
+	pa_rule_hamming_init(&l->rule_rand, "Downstream PD Random Prefix (Hamming)",
+			HPA_RULE_CREATE, HPA_PRIORITY_PD, hpa_lease_desired_plen_cb, 128,
+			(uint8_t *)l->pa_link_name, strlen(l->pa_link_name));
+#endif
 	l->rule_rand.rule.filter_accept = hpa_pd_filter_accept;
 	l->rule_rand.rule.filter_private = l;
 
