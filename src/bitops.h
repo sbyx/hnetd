@@ -73,6 +73,22 @@ void bmemcpy_shift(void *dst, size_t dst_start,
  */
 size_t hamming_distance_64(const uint64_t *m1, const uint64_t *m2, size_t nbits);
 
+/**
+ * Provides the value  and distance which minimizes the Hamming distance with a given
+ * target value, while remaining lower than the maximum value.
+ * Bits which index is under start_len are ignored and not modified.
+ *
+ * @param max Array representing the maximum value.
+ * @param target The array with respect to which the hamming distance is computed.
+ * @param dst Where the resulting array is written.
+ * @param start_len First considered bit.
+ *                  Previous bits from all arays are just ignored and left unmodified.
+ * @param nbits The number of considered bits.
+ * @return The Hamming distance between the returned dst and target.
+ */
+size_t hamming_minimize(const uint8_t *max, const uint8_t *target,
+		uint8_t *dst, size_t start_len, size_t nbits);
+
 ssize_t unhexlify(uint8_t *dst, size_t len, const char *src);
 char *hexlify(char *dst, const uint8_t *src, size_t len);
 
