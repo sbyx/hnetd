@@ -73,9 +73,10 @@ uint32_t pa_rule_candidate_subset( //Returns the number of found prefixes
 				return desired_set_size;
 			}
 			c += count[plen] * ((uint64_t)(1 << (desired_plen - plen)));
+			if(c == desired_set_size)
+				break;
 		}
 	} while(plen--); //plen-- returns plen value before decrement
-
 	return (uint32_t)c;
 }
 
@@ -237,7 +238,7 @@ enum pa_rule_target pa_rule_random_override_match(struct pa_rule *rule,
 		bmemcpy_shift(&tentative, best_plen, &id, 32 - (desired_plen - best_plen),
 				desired_plen - best_plen);
 
-		if(!rule_r->accept_proposed_cb || rule_r->accept_proposed_cb(rule_r, ldp, &tentative, desired_plen)) {
+		if(!rule_r->accept_proposed_cb || rule_r->accept_proposed_cb(&rule_r->rule, ldp, &tentative, desired_plen)) {
 			goto choose;
 		} else {
 			PA_DEBUG("Random prefix %s was rejected by user", pa_prefix_repr(&tentative, desired_plen));
@@ -270,7 +271,7 @@ enum pa_rule_target pa_rule_random_match(struct pa_rule *rule, struct pa_ldp *ld
 	if(!rule_r->subprefix_cb) { //Use the dp by default
 		subprefix = &ldp->dp->prefix;
 		subplen = ldp->dp->plen;
-	} else if (rule_r->subprefix_cb(rule_r, ldp, &sp, &subplen)) {
+	} else if (rule_r->subprefix_cb(&rule_r->rule, ldp, &sp, &subplen)) {
 		//cb returned error
 		return PA_RULE_NO_MATCH;
 	} else {
@@ -282,7 +283,7 @@ enum pa_rule_target pa_rule_random_match(struct pa_rule *rule, struct pa_ldp *ld
 	uint16_t prefix_count[PA_RAND_MAX_PLEN + 1];
 	pa_rule_prefix_count(ldp->core, subprefix, subplen, prefix_count, PA_RAND_MAX_PLEN);
 
-	pa_plen desired_plen = rule_r->desired_plen_cb(rule_r, ldp, prefix_count);
+	pa_plen desired_plen = rule_r->desired_plen_cb(&rule_r->rule, ldp, prefix_count);
 	uint32_t found;
 	pa_plen min_plen;
 	uint32_t overflow_n;
@@ -327,7 +328,7 @@ enum pa_rule_target pa_rule_random_match(struct pa_rule *rule, struct pa_ldp *ld
 					break;
 				}
 				if(!rule_r->accept_proposed_cb ||
-						rule_r->accept_proposed_cb(rule_r, ldp, &tentative, desired_plen)) {
+						rule_r->accept_proposed_cb(&rule_r->rule, ldp, &tentative, desired_plen)) {
 					goto choose;
 				} else {
 					PA_DEBUG("Prefix got rejected by user");
@@ -342,7 +343,7 @@ enum pa_rule_target pa_rule_random_match(struct pa_rule *rule, struct pa_ldp *ld
 		uint32_t id = pa_rand() % found;
 		pa_rule_candidate_pick(ldp->core, subprefix, subplen, id,
 				&tentative, desired_plen, min_plen, desired_plen);
-		if(!rule_r->accept_proposed_cb || rule_r->accept_proposed_cb(rule_r, ldp, &tentative, desired_plen)) {
+		if(!rule_r->accept_proposed_cb || rule_r->accept_proposed_cb(&rule_r->rule, ldp, &tentative, desired_plen)) {
 			goto choose;
 		} else {
 			PA_DEBUG("Random prefix %s was rejected by user", pa_prefix_repr(&tentative, desired_plen));
@@ -383,6 +384,128 @@ void pa_rule_random_prandconf(struct pa_rule_random *r,
 	r->pseudo_random_seed = seed;
 	r->pseudo_random_seedlen = seedlen;
 	r->pseudo_random_tentatives = tentatives;
+}
+
+enum pa_rule_target pa_rule_hamming_match(struct pa_rule *rule, struct pa_ldp *ldp,
+			__unused pa_rule_priority best_match_priority, struct pa_rule_arg *pa_arg)
+{
+	struct pa_rule_hamming *rule_r = container_of(rule, struct pa_rule_hamming, rule);
+	pa_prefix sp, *subprefix;
+	pa_plen subplen;
+
+	pa_arg->rule_priority = rule_r->rule_priority;
+	if(!ldp->backoff)
+		return PA_RULE_BACKOFF; //Start or continue backoff timer.
+
+	//Look at the subprefix if any
+	if(!rule_r->subprefix_cb) { //Use the dp by default
+		PA_DEBUG("Default subprefix");
+		subprefix = &ldp->dp->prefix;
+		subplen = ldp->dp->plen;
+	} else if (rule_r->subprefix_cb(&rule_r->rule, ldp, &sp, &subplen)) {
+		return PA_RULE_NO_MATCH; //cb returned error
+	} else {
+		//Use the returned subprefix
+		subprefix = &sp;
+		PA_DEBUG("Non-default assignment prefix pool will be used: %s", pa_prefix_repr(subprefix, subplen));
+	}
+
+	uint16_t prefix_count[PA_RAND_MAX_PLEN + 1];
+	pa_rule_prefix_count(ldp->core, subprefix, subplen, prefix_count, PA_RAND_MAX_PLEN);
+
+	pa_plen desired_plen = rule_r->desired_plen_cb(&rule_r->rule, ldp, prefix_count);
+	uint32_t found, overflow_n;
+	pa_plen min_plen;
+	found = pa_rule_candidate_subset(prefix_count, desired_plen, rule_r->random_set_size, &min_plen, &overflow_n);
+	PA_DEBUG("Candidate subset is: min_plen=%d overflow_n=%d", min_plen, overflow_n);
+	if(!found) { //No more available prefixes
+		PA_INFO("No prefix candidates of length %d could be found in %s",
+				(int)desired_plen, pa_prefix_repr(subprefix, subplen));
+		return pa_rule_random_override_match(rule, ldp, subprefix, subplen, best_match_priority,
+				pa_arg, desired_plen);
+	}
+
+	PA_DEBUG("Found %"PRIu32" prefix candidates of length %d in %s", found, (int)desired_plen, pa_prefix_repr(subprefix, subplen));
+	PA_DEBUG("Minimum available prefix length is %d", min_plen);
+
+	//Get a pseudo random prefix used for hamming distances
+	pa_prefix hammer;
+	pa_rule_prefix_prandom(rule_r->pseudo_random_seed, rule_r->pseudo_random_seedlen, 0, subprefix, subplen, &hammer, desired_plen);
+	PA_DEBUG("Pseudo Random Prefix is %s", pa_prefix_repr(&hammer, desired_plen));
+
+	struct btrie *n;
+	size_t best_distance = 200;
+	pa_prefix best_prefix, iter_prefix, overflow_prefix;
+	pa_plen iter_plen;
+	btrie_for_each_available(&ldp->core->prefixes, n, (btrie_key_t *)&iter_prefix, &iter_plen, (btrie_key_t *)subprefix, subplen) {
+		if(iter_plen > desired_plen || iter_plen < min_plen)
+			continue;
+
+		size_t hd;
+		if(overflow_n && iter_plen == min_plen) {
+			uint32_t count;
+			if(desired_plen - iter_plen >= 32) {
+				count = 1 << 31;
+			} else {
+				count = 1 << (desired_plen - iter_plen);
+			}
+
+			if(count >= overflow_n) {
+				//Have to use the complex min finder
+				pa_rule_prefix_nth(&overflow_prefix, &iter_prefix, iter_plen, overflow_n - 1, desired_plen);
+				hd = hamming_distance_64((uint64_t *)&iter_prefix, (uint64_t *)&hammer, iter_plen);
+				hd += hamming_minimize((uint8_t *)&overflow_prefix, (uint8_t *)&hammer, (uint8_t *)&iter_prefix, iter_plen, desired_plen - iter_plen);
+				PA_DEBUG("Distance of %d with %s (Up to %s only)",
+						(int)hd, pa_prefix_repr(&iter_prefix, iter_plen), pa_prefix_repr(&overflow_prefix, desired_plen));
+				if(hd < best_distance) {
+					best_distance = hd;
+					bmemcpy(&best_prefix, &iter_prefix, 0, desired_plen);
+				}
+				overflow_n = 0;
+				continue;
+			} else {
+				overflow_n -= count;
+			}
+		}
+		hd = hamming_distance_64((uint64_t *)&iter_prefix, (uint64_t *)&hammer, iter_plen);
+		PA_DEBUG("Distance of %d with %s", (int)hd, pa_prefix_repr(&iter_prefix, iter_plen));
+		if(hd < best_distance) {
+			best_distance = hd;
+			bmemcpy(&best_prefix, &iter_prefix, 0, iter_plen);
+			bmemcpy(&best_prefix, &hammer, iter_plen, desired_plen - iter_plen);
+		}
+		//todo: Deal with ties (Keep smaller is the easy but imperfect solution, better would be a secondary hammer).
+	}
+	PA_DEBUG("Best found with distance %d is %s", (int)best_distance, pa_prefix_repr(&best_prefix, desired_plen));
+	pa_prefix_cpy(&best_prefix, desired_plen, &pa_arg->prefix, pa_arg->plen);
+	pa_arg->priority = rule_r->priority;
+	return PA_RULE_PUBLISH;
+}
+
+pa_rule_priority pa_rule_hamming_get_max_priority(struct pa_rule *rule, struct pa_ldp *ldp)
+{
+	struct pa_rule_hamming *rule_h = container_of(rule, struct pa_rule_hamming, rule);
+	if(ldp->best_assignment || ldp->published) //No override
+			return 0;
+
+	return rule_h->rule_priority;
+}
+
+void pa_rule_hamming_init(struct pa_rule_hamming *r, const char *name,
+		pa_rule_priority rule_priority, pa_priority priority,
+		pa_rule_desired_plen_cb desired_plen_cb,
+		uint16_t random_set_size,
+		uint8_t *seed, size_t seedlen)
+{
+	pa_rule_init(&r->rule, pa_rule_hamming_get_max_priority,
+				0, pa_rule_hamming_match, name);
+		r->rule_priority = rule_priority;
+		r->priority = priority;
+		r->subprefix_cb = NULL;
+		r->desired_plen_cb = desired_plen_cb;
+		r->pseudo_random_seed = seed;
+		r->pseudo_random_seedlen = seedlen;
+		r->random_set_size = random_set_size;
 }
 
 /**** Static rule ****/

@@ -38,6 +38,13 @@ struct pa_rule_adopt {
 void pa_rule_adopt_init(struct pa_rule_adopt *r, const char *name,
 		pa_rule_priority rule_priority, pa_priority priority);
 
+struct pa_rule_random;
+typedef pa_plen (*pa_rule_desired_plen_cb)(struct pa_rule *, struct pa_ldp *,
+			uint16_t prefix_count[PA_RAND_MAX_PLEN + 1]);
+typedef int (*pa_rule_subprefix_cb)(struct pa_rule *, struct pa_ldp *, pa_prefix *prefix, pa_plen *plen);
+typedef int (*pa_rule_accept_proposed_cb)(struct pa_rule *, struct pa_ldp *,
+		pa_prefix *prefix, pa_plen plen);
+
 /**
  * Randomized prefix selection.
  *
@@ -45,9 +52,6 @@ void pa_rule_adopt_init(struct pa_rule_adopt *r, const char *name,
  * This rule implements the prefix selection algorithm detailed in the prefix
  * assignment specifications.
  */
-struct pa_rule_random;
-typedef pa_plen (*pa_rule_desired_plen_cb)(struct pa_rule_random *, struct pa_ldp *,
-			uint16_t prefix_count[PA_RAND_MAX_PLEN + 1]);
 struct pa_rule_random {
 	/* Parent rule. Initialized with pa_rule_random_init. */
 	struct pa_rule rule;
@@ -62,7 +66,7 @@ struct pa_rule_random {
 	 * If set, it is called first in order to override the delegated prefix value.
 	 * Should return 0 if the prefix value is set, a different value otherwise.
 	 */
-	int (*subprefix_cb)(struct pa_rule_random *, struct pa_ldp *, pa_prefix *prefix, pa_plen *plen);
+	pa_rule_subprefix_cb subprefix_cb;
 
 	/* The desired prefix length callback.
 	 * It is called with the available prefix count for each prefix length. */
@@ -72,8 +76,7 @@ struct pa_rule_random {
 	 * proposed by calling this function. If 0 is returned, another prefix is
 	 * tried. The prefix is used otherwise.
 	 */
-	int (*accept_proposed_cb)(struct pa_rule_random *, struct pa_ldp *,
-			pa_prefix *prefix, pa_plen plen);
+	pa_rule_accept_proposed_cb accept_proposed_cb;
 
 	/* Pseudo-random and random prefixes are picked in a given set of
 	 * candidates.
@@ -105,6 +108,42 @@ void pa_rule_random_init(struct pa_rule_random *r, const char *name,
 void pa_rule_random_prandconf(struct pa_rule_random *r,
 		uint16_t pseudo_random_tentatives,
 		uint8_t *pseudo_random_seed, uint16_t pseudo_random_seedlen);
+
+/**
+ * Pseudo-random prefix selection based on Hamming weights.
+ * This approach genuinely sorts all possible prefixes and
+ * picks the first available one. That way, preferred prefixes
+ * are preferred no matter the current state is.
+ *
+ * The algorithm is as follows:
+ * 1. Computes the amount of available prefixes.
+ * 2. Requests a desired prefix length using the callback.
+ * 3. Construct a candidate prefix set of given size and desired prefix length.
+ * 4. Generates a pseudo-random address.
+ * 5. Take the candidate prefix with smallest Hamming distance with the pseudo-random address.
+ *    with the pseudo-random prefix.
+ */
+struct pa_rule_hamming {
+	struct pa_rule rule;
+	pa_rule_subprefix_cb subprefix_cb;
+	pa_rule_desired_plen_cb desired_plen_cb;
+
+	/* Priorities used by this rule */
+	pa_rule_priority rule_priority;
+	pa_priority priority;
+
+	/* Seed used for pseudo-random address generation */
+	uint8_t *pseudo_random_seed;
+	size_t pseudo_random_seedlen;
+
+	uint16_t random_set_size;
+};
+
+void pa_rule_hamming_init(struct pa_rule_hamming *r, const char *name,
+		pa_rule_priority rule_priority, pa_priority priority,
+		pa_rule_desired_plen_cb desired_plen_cb,
+		uint16_t random_set_size,
+		uint8_t *seed, size_t seedlen);
 
 /**
  * Prefix static configuration.

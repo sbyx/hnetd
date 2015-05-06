@@ -157,7 +157,7 @@ static pa_plen hpa_desired_plen(hpa_iface iface, struct pa_ldp *ldp,
 	return ldp->dp->plen;
 }
 
-static pa_plen hpa_desired_plen_cb(struct pa_rule_random *rule_r,
+static pa_plen hpa_desired_plen_cb(struct pa_rule *rule,
 		struct pa_ldp *ldp,
 		uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
 {
@@ -165,13 +165,13 @@ static pa_plen hpa_desired_plen_cb(struct pa_rule_random *rule_r,
 	if(biggest > 128)
 		return 0;
 
-	hpa_iface iface = container_of(rule_r, hpa_iface_s, pa_rand);
+	hpa_iface iface = container_of(rule, hpa_iface_s, pa_rand.rule);
 	return hpa_desired_plen(iface, ldp, biggest);
 }
 
 /* In IPv4
  */
-static int hpa_aa_subprefix_cb(__unused struct pa_rule_random *rule_r,
+static int hpa_aa_subprefix_cb(__unused struct pa_rule *rule,
 		struct pa_ldp *ldp, pa_prefix *prefix, pa_plen *plen)
 {
 	memset(prefix, 0, sizeof(*prefix));
@@ -186,7 +186,7 @@ static int hpa_aa_subprefix_cb(__unused struct pa_rule_random *rule_r,
 }
 
 static pa_plen hpa_desired_plen_override_cb(
-		__unused struct pa_rule_random *rule_r,
+		__unused struct pa_rule *rule,
 		struct pa_ldp *ldp,
 		__unused uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
 {
@@ -203,7 +203,7 @@ static struct in6_addr addr_allones = { .s6_addr =
 		0xff,0xff, 0xff,0xff, 0xff,0xff, 0xff,0xff}};
 static struct in6_addr addr_allzeroes = { .s6_addr = {}};
 
-static int hpa_accept_proposed_addr(__unused struct pa_rule_random *r,
+static int hpa_accept_proposed_addr(__unused struct pa_rule *r,
 		struct pa_ldp *ldp,
 		pa_prefix *prefix, __unused pa_plen plen)
 {
@@ -237,7 +237,7 @@ static int hpa_accept_proposed_addr(__unused struct pa_rule_random *r,
 	return 1;
 }
 
-static pa_plen hpa_return_128(__unused struct pa_rule_random *r,
+static pa_plen hpa_return_128(__unused struct pa_rule *r,
 		__unused struct pa_ldp *ldp,
 		__unused uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
 {
@@ -1654,11 +1654,11 @@ static int hpa_pd_filter_accept(__unused struct pa_rule *rule, struct pa_ldp *ld
 	return !prefix_is_ipv4(&dp);
 }
 
-pa_plen hpa_lease_desired_plen_cb(struct pa_rule_random *r,
+pa_plen hpa_lease_desired_plen_cb(struct pa_rule *rule,
 		__unused struct pa_ldp *ldp,
 		uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
 {
-	hpa_lease l = container_of(r, hpa_lease_s, rule_rand);
+	hpa_lease l = container_of(rule, hpa_lease_s, rule_rand.rule);
 	pa_plen min_plen, des_plen;
 	if((min_plen = hpa_get_biggest(prefix_count)) > 128)
 		return 0;
