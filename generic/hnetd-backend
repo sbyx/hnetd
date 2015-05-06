@@ -54,25 +54,6 @@ newprefixroute|delprefixroute)
 	ip -6 route "$act" unreachable "$2" metric 2147483646
 	;;
 
-newroute|delroute)
-	[ "$1" = "newroute" ] && act="replace" || act="del"
-	if [ -n "$6" ]; then
-		if [ -n "$2" -a -n "$4" ]; then
-			ip -6 route "$act" "$3" from "$6" via "$4" dev "$2" metric "$5" table "$BFSRT"
-		else
-			ip -6 route "$act" unreachable "$3" table "$BFSRT"
-			ip -6 route "$act" throw "$3"
-		fi
-	else
-		if [ -n "$2" -a -n "$4" ]; then
-			ip -4 route "$act" "$3" via "$4" dev "$2" metric "$5" onlink table "$BFSRT"
-		else
-			ip -4 route "$act" unreachable "$3" table "$BFSRT"
-			ip -4 route "$act" throw "$3"
-		fi
-	fi
-	;;
-
 newblocked|delblocked)
 	[ "$1" = "newblocked" ] && act="-A" || act="-D"
 	case "$3" in
