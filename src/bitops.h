@@ -42,6 +42,21 @@ void bbytecpy (uint8_t *dst, const uint8_t *src,
 int bmemcmp(const void *m1, const void *m2, size_t bitlen);
 
 /**
+ * Compares two bit strings starting from an arbitrary position.
+ *
+ * @param m1 First compared value buffer.
+ * @param m2 Second compared value buffer.
+ * @param start Starting bit index. Previous bits are ignored.
+ * @param nbits Number of bits to be compared.
+ *
+ * @return
+ *   0 if bits from 'start' to 'start + nbits' are equal in m1 and m2.
+ *   A positive value if the first different bit is greater in m1.
+ *   A negative value if the first different bit is greater in m2.
+ */
+int bmemcmp_s(const uint8_t *m1, const uint8_t *m2, size_t start, size_t nbits);
+
+/**
  * Copy bits from one buffer to another.
  *
  * @param dst Buffer to which bits are copied.

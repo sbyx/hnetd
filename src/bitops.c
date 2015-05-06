@@ -112,7 +112,6 @@ int bmemcmp(const void *m1, const void *m2, size_t bitlen)
 	return ((int) (*p1 & mask)) - ((int) (*p2 & mask));
 }
 
-#include <stdio.h>
 int bmemcmp_s(const uint8_t *m1, const uint8_t *m2, size_t start, size_t nbits)
 {
 	if(!nbits)

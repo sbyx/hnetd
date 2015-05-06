@@ -47,18 +47,18 @@ void hamming(void)
 
 	int t;
 	for(t=1; t<32; t++) {
-		sput_fail_unless(hamming_minimize(b+1, b, &d, 0, t) == 0, "Long string");
-		sput_fail_unless(hamming_minimize(b+1, b, &d, 1, t) == 0, "Long string");
-		sput_fail_unless(hamming_minimize(b+1, b, &d, 4, t) == 0, "Long string");
+		sput_fail_unless(hamming_minimize(b+1, b, d, 0, t) == 0, "Long string");
+		sput_fail_unless(hamming_minimize(b+1, b, d, 1, t) == 0, "Long string");
+		sput_fail_unless(hamming_minimize(b+1, b, d, 4, t) == 0, "Long string");
 	}
 
 #define _(a1,a2,a3,a4) (d[0] == a1) && (d[1] == a2) && (d[2] == a3) && (d[3] == a4)
-	sput_fail_unless(hamming_minimize(b, b+1, &d, 0, 32) == 2 && _(0, 0, 3, 4), "");
-	sput_fail_unless(hamming_minimize(b, b+1, &d, 7, 32-7) == 2 && _(0, 0, 3, 4), "");
-	sput_fail_unless(hamming_minimize(b, b+1, &d, 8, 32-8) == 1 && _(0, 0, 3, 4), "");
-	sput_fail_unless(hamming_minimize(b, b+1, &d, 14, 32-14) == 1 && _(0, 0, 3, 4), "");
-	sput_fail_unless(hamming_minimize(b, b+1, &d, 15, 32-15) == 0 && _(0, 0, 3, 4), "");
-	sput_fail_unless(hamming_minimize(b, b+1, &d, 16, 32-16) == 1 && _(0, 0, 1, 4), "");
+	sput_fail_unless(hamming_minimize(b, b+1, d, 0, 32) == 2 && _(0, 0, 3, 4), "");
+	sput_fail_unless(hamming_minimize(b, b+1, d, 7, 32-7) == 2 && _(0, 0, 3, 4), "");
+	sput_fail_unless(hamming_minimize(b, b+1, d, 8, 32-8) == 1 && _(0, 0, 3, 4), "");
+	sput_fail_unless(hamming_minimize(b, b+1, d, 14, 32-14) == 1 && _(0, 0, 3, 4), "");
+	sput_fail_unless(hamming_minimize(b, b+1, d, 15, 32-15) == 0 && _(0, 0, 3, 4), "");
+	sput_fail_unless(hamming_minimize(b, b+1, d, 16, 32-16) == 1 && _(0, 0, 1, 4), "");
 #undef _
 }
 
