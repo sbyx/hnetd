@@ -36,6 +36,7 @@ typedef struct hpa_advp_struct {
 	struct list_head le; //APs are linked in main struct
 	dncp_t_link_id_s link_id;
 	uint8_t ap_flags;
+	bool fake; //This is not a real advertised prefix, but rather a trick to fool PA.
 } hpa_advp_s, *hpa_advp;
 
 #define hpa_for_each_iface(hpa, i) list_for_each_entry(i, &(hpa)->ifaces, le)
@@ -180,6 +181,11 @@ typedef struct hpa_dp_struct {
 } *hpa_dp, hpa_dp_s;
 
 #define hpa_for_each_dp(hpa, dp_p) list_for_each_entry(dp_p, &(hpa)->dps, dp.le)
+
+struct hpa_ap_ldp_struct {
+	hpa_advp_s net_addr;
+	hpa_advp_s bc_addr;
+};
 
 struct hncp_pa_struct {
 	dncp dncp;

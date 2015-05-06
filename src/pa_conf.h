@@ -179,9 +179,10 @@
  * by users for storing private data.
  *    (Optional)
  */
-#define PA_LDP_USERS 2
+#define PA_LDP_USERS 3
 #define PA_LDP_U_HNCP_TLV   0 //Contains the associated TLV
 #define PA_LDP_U_HNCP_ADDR  1 //In an AP ldp, points to the assigned Address LDP
+#define PA_LDP_U_HNCP_AP    2 //In an AP ldp, contains forbidden addresses advp structs
 
 /**
  * Link type identifier option.

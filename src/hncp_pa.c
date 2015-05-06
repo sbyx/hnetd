@@ -68,6 +68,7 @@
 #define HPA_PRIORITY_LINK_ID  3
 #define HPA_PRIORITY_PD       1
 #define HPA_PRIORITY_EXCLUDE  15
+#define HPA_PRIORITY_FAKE     2
 
 #define HPA_RULE_EXCLUDE           1000
 #define HPA_RULE_STATIC            100
@@ -198,45 +199,6 @@ static pa_plen hpa_desired_plen_override_cb(
 	}
 }
 
-static struct in6_addr addr_allones = { .s6_addr =
-	{0xff,0xff, 0xff,0xff, 0xff,0xff, 0xff,0xff,
-		0xff,0xff, 0xff,0xff, 0xff,0xff, 0xff,0xff}};
-static struct in6_addr addr_allzeroes = { .s6_addr = {}};
-
-static int hpa_accept_proposed_addr(__unused struct pa_rule *r,
-		struct pa_ldp *ldp,
-		pa_prefix *prefix, __unused pa_plen plen)
-{
-	/* In IPv4, neither the network addresses (first) nor the broadcast address (last)
-	 * can be used. Linux also does not like IPv6 network address.
-	 * So let's just not accept neither of them.
-	 */
-
-	struct in6_addr a;
-
-	/* Point to point or something.
-	 * Let's assume someone knows what he is doing here. */
-	if(ldp->dp->plen >= 127)
-		return 1;
-
-	/* Forbid broadcast address */
-	memcpy(&a, &ldp->dp->prefix, sizeof(struct in6_addr));
-	bmemcpy(&a, &addr_allones, ldp->dp->plen, 128 - ldp->dp->plen);
-	if(!memcmp(&a, prefix, sizeof(struct in6_addr))) {
-		L_DEBUG("Rejecting all-ones address %s", ADDR_REPR(&a));
-		return 0;
-	}
-
-	/* Forbid network address */
-	bmemcpy(&a, &addr_allzeroes, ldp->dp->plen, 128 - ldp->dp->plen);
-	if(!memcmp(&a, prefix, sizeof(struct in6_addr))) {
-		L_DEBUG("Rejecting all-zeroes address %s", ADDR_REPR(&a));
-		return 0;
-	}
-
-	return 1;
-}
-
 static pa_plen hpa_return_128(__unused struct pa_rule *r,
 		__unused struct pa_ldp *ldp,
 		__unused uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
@@ -294,7 +256,6 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	pa_rule_random_prandconf(&i->aa_rand, HPA_PSEUDO_RAND_TENTATIVES,
 			(uint8_t *)i->aa_name, strlen(i->aa_name));
 	//todo use EUI64
-	i->aa_rand.accept_proposed_cb = hpa_accept_proposed_addr;
 	i->aa_rand.subprefix_cb = hpa_aa_subprefix_cb;
 
 	//Init stable storage
@@ -1205,7 +1166,8 @@ static hpa_advp hpa_get_hpa_advp(struct pa_core *core, dncp_node n,
 	pa_for_each_advp(core, ap, addr, plen) {
 		hap = container_of(ap, hpa_advp_s, advp);
 		//We must compare every field of the TLV in case it was modified
-		if(!memcmp(&id, &hap->link_id, sizeof(id)) &&
+		if(!hap->fake &&
+				!memcmp(&id, &hap->link_id, sizeof(id)) &&
 				hap->ap_flags == flags) {
 			return hap;
 		}
@@ -1253,6 +1215,7 @@ static void hpa_update_ap_tlv(hncp_pa hpa, dncp_node n,
 		pa_advp_add(&hpa->pa, &hap->advp);
 
 		list_add(&hap->le, &hpa->aps);
+		hap->fake = 0;
 		hap->link_id = id;
 		hap->ap_flags = ah->flags;
 	}
@@ -1565,13 +1528,57 @@ static void hpa_dncp_link_change_cb(dncp_subscriber s,
 
 /******** PA Callbacks *******/
 
+static struct in6_addr addr_allones = { .s6_addr =
+	{0xff,0xff, 0xff,0xff, 0xff,0xff, 0xff,0xff,
+		0xff,0xff, 0xff,0xff, 0xff,0xff, 0xff,0xff}};
+static struct in6_addr addr_allzeroes = { .s6_addr = {}};
+
 static void hpa_pa_assigned_cb(struct pa_user *u, struct pa_ldp *ldp)
 {
 	//If this is a lease ldp, we want to give it to DP with a shortened lifetime
 	//If it is un-assigned, we want to remove everything
 	hncp_pa hpa = container_of(u, hncp_pa_s, pa_user);
+	struct hpa_ap_ldp_struct *ap;
 	if(ldp->link->type == HPA_LINK_T_LEASE)
 		hpa_ap_pd_notify(hpa, ldp);
+
+	if(ldp->link->type == HPA_LINK_T_IFACE) {
+
+		if(ldp->assigned) {
+			if(ldp->plen >= 127) //Do not forbid address if only 2 or 1 is available
+				return;
+
+			ldp->userdata[PA_LDP_U_HNCP_AP] = (ap = calloc(1, sizeof(*ap)));
+			if(!ap)
+				return;
+
+			/* Forbid broadcast address */
+			ap->bc_addr.fake = 1;
+			ap->bc_addr.advp.priority = HPA_PRIORITY_FAKE;
+			ap->bc_addr.advp.plen = 128;
+
+			memcpy(&ap->bc_addr.advp.prefix, &ldp->prefix, sizeof(struct in6_addr));
+			bmemcpy(&ap->bc_addr.advp.prefix, &addr_allones, ldp->plen, 128 - ldp->plen);
+
+			pa_advp_add(&hpa->aa, &ap->bc_addr.advp);
+
+			/* Forbid network address */
+			ap->net_addr.fake = 1;
+			ap->net_addr.advp.priority = HPA_PRIORITY_FAKE;
+			ap->net_addr.advp.plen = 128;
+
+			memcpy(&ap->net_addr.advp.prefix, &ldp->prefix, sizeof(struct in6_addr));
+			bmemcpy(&ap->net_addr.advp.prefix, &addr_allzeroes, ldp->plen, 128 - ldp->plen);
+
+			pa_advp_add(&hpa->aa, &ap->net_addr.advp);
+
+		} else if (ldp->userdata[PA_LDP_U_HNCP_AP]) {
+			ap = ldp->userdata[PA_LDP_U_HNCP_AP];
+			pa_advp_del(&hpa->aa, &ap->bc_addr.advp);
+			pa_advp_del(&hpa->aa, &ap->net_addr.advp);
+			free(ldp->userdata[PA_LDP_U_HNCP_AP]);
+		}
+	}
 }
 
 static void hpa_pa_published_cb(struct pa_user *u, struct pa_ldp *ldp)
