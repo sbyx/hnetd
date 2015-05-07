@@ -209,6 +209,9 @@ static pa_plen hpa_return_128(__unused struct pa_rule *r,
 /* Initializes PA, ready to be added */
 static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 {
+	uint8_t seed[IFNAMSIZ + 18];
+	size_t seedlen;
+
 	sprintf(i->pa_name, HPA_LINK_NAME_IF"%s", i->ifname);
 	pa_link_init(&i->pal, i->pa_name);
 	i->pal.type = HPA_LINK_T_IFACE;
@@ -219,20 +222,24 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	i->pa_adopt.rule.filter_accept = hpa_iface_filter_accept;
 	i->pa_adopt.rule.filter_private = i;
 
+	strcpy((char *)seed, i->ifname);
+	seedlen = strlen(i->ifname);
+	seed[seedlen++] = '-';
+	seedlen += dncp_io_get_hwaddrs(seed + seedlen, IFNAMSIZ + 18 - seedlen);
+
 	//Init the assignment rule
 #ifndef HNCP_PA_USE_HAMMING
 	pa_rule_random_init(&i->pa_rand, "Random Prefix (Random)",
 			HPA_RULE_CREATE, HPA_PRIORITY_CREATE, hpa_desired_plen_cb,
 			HPA_RAND_SET_SIZE);
 	pa_rule_random_prandconf(&i->pa_rand, HPA_PSEUDO_RAND_TENTATIVES,
-			(uint8_t *)i->pa_name, strlen(i->pa_name));
+			seed, seedlen);
 	i->pa_rand.accept_proposed_cb = NULL;
 #else
 	pa_rule_hamming_init(&i->pa_rand, "Random Prefix (Hamming)",
 				HPA_RULE_CREATE, HPA_PRIORITY_CREATE, hpa_desired_plen_cb,
-				HPA_RAND_SET_SIZE, (uint8_t *)i->pa_name, strlen(i->pa_name));
+				HPA_RAND_SET_SIZE, seed, seedlen);
 #endif
-	//todo: use UIE64 as seed
 	i->pa_rand.rule.filter_accept = hpa_iface_filter_accept;
 	i->pa_rand.rule.filter_private = i;
 
@@ -241,8 +248,8 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 			HPA_RULE_CREATE_SCARCITY, HPA_PRIORITY_SCARCITY,
 			hpa_desired_plen_override_cb, HPA_RAND_SET_SIZE);
 	pa_rule_random_prandconf(&i->pa_override, HPA_PSEUDO_RAND_TENTATIVES,
-			(uint8_t *)i->pa_name, strlen(i->pa_name));
-	//todo use EUI64
+			seed, seedlen);
+
 	i->pa_override.override_rule_priority = HPA_RULE_CREATE_SCARCITY;
 	i->pa_override.override_priority = HPA_PRIORITY_SCARCITY;
 	i->pa_override.safety = 1;
@@ -261,12 +268,12 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 			HPA_RULE_CREATE, HPA_PRIORITY_CREATE,
 			hpa_return_128, HPA_RAND_SET_SIZE);
 	pa_rule_random_prandconf(&i->aa_rand, HPA_PSEUDO_RAND_TENTATIVES,
-			(uint8_t *)i->aa_name, strlen(i->aa_name));
+			seed, seedlen);
 #else
 	pa_rule_hamming_init(&i->aa_rand, "Random Address (Hamming)",
 				HPA_RULE_CREATE, HPA_PRIORITY_CREATE,
 				hpa_return_128, HPA_RAND_SET_SIZE,
-				(uint8_t *)i->aa_name, strlen(i->aa_name));
+				seed, seedlen);
 #endif
 	//todo use EUI64
 	i->aa_rand.subprefix_cb = hpa_aa_subprefix_cb;
