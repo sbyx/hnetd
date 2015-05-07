@@ -158,6 +158,19 @@ static pa_plen hpa_desired_plen(hpa_iface iface, struct pa_ldp *ldp,
 	return ldp->dp->plen;
 }
 
+static void hpa_pa_get_plen_range(__unused struct pa_rule *rule,
+		struct pa_ldp *ldp, pa_plen *min, pa_plen *max)
+{
+	hpa_iface i = container_of(ldp->link, hpa_iface_s, pal);
+	*min = *max = hpa_desired_plen(i, ldp, 0);
+}
+
+static void hpa_aa_get_plen_range(__unused struct pa_rule *rule,
+		__unused struct pa_ldp *dlp, pa_plen *min, pa_plen *max)
+{
+	*min = *max = 128;
+}
+
 static pa_plen hpa_desired_plen_cb(struct pa_rule *rule,
 		struct pa_ldp *ldp,
 		uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
@@ -2041,12 +2054,14 @@ hncp_pa hncp_pa_create(dncp dncp, struct hncp_link *hncp_link)
 	hp->store_pa_r.rule_priority = HPA_RULE_STORE;
 	hp->store_pa_r.priority = HPA_PRIORITY_STORE;
 	hp->store_pa_r.rule.name = "Prefix Storage";
+	hp->store_pa_r.get_plen_range = hpa_pa_get_plen_range;
 	pa_rule_add(&hp->pa, &hp->store_pa_r.rule);
 
 	pa_store_rule_init(&hp->store_aa_r, &hp->store);
 	hp->store_aa_r.rule_priority = HPA_RULE_STORE;
 	hp->store_aa_r.priority = HPA_PRIORITY_STORE;
 	hp->store_aa_r.rule.name = "Address Storage";
+	hp->store_aa_r.get_plen_range = hpa_aa_get_plen_range;
 	pa_rule_add(&hp->aa, &hp->store_aa_r.rule);
 
 	//Set node IDs based on dncd node ID

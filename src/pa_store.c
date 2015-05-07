@@ -447,10 +447,14 @@ enum pa_rule_target pa_store_match(struct pa_rule *rule, struct pa_ldp *ldp,
 {
 	struct pa_store_rule *rule_s = container_of(rule, struct pa_store_rule, rule);
 	struct pa_store *store = rule_s->store;
+	pa_plen min = 0, max = (pa_plen) ((uint64_t) 0xffffffffffffffff);
 
 	pa_arg->priority = rule_s->priority;
 	pa_arg->rule_priority = rule_s->rule_priority;
 	//No need to check the best_match_priority because the rule uses a unique rule priority
+
+	if(rule_s->get_plen_range)
+		rule_s->get_plen_range(rule, ldp, &min, &max);
 
 	/* We checked that there is a candidate during get_max_priority call */
 	struct pa_store_link *l;
@@ -462,7 +466,7 @@ enum pa_rule_target pa_store_match(struct pa_rule *rule, struct pa_ldp *ldp,
 	//Find a matching prefix
 	struct pa_store_prefix *prefix;
 	list_for_each_entry(prefix, &l->prefixes, in_link) {
-		if(prefix->plen >= ldp->dp->plen &&
+		if(prefix->plen >= ldp->dp->plen && prefix->plen >= min && prefix->plen <= max &&
 				pa_prefix_contains(&ldp->dp->prefix, ldp->dp->plen, &prefix->prefix) &&
 				pa_rule_valid_assignment(ldp, &prefix->prefix, prefix->plen, 0, 0, 0)) {
 			if(!ldp->backoff)
@@ -481,4 +485,5 @@ void pa_store_rule_init(struct pa_store_rule *rule, struct pa_store *store)
 	rule->rule.filter_accept = NULL;
 	rule->rule.get_max_priority = pa_store_get_max_priority;
 	rule->rule.match = pa_store_match;
+	rule->get_plen_range = NULL;
 }
