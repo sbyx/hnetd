@@ -106,6 +106,8 @@ struct hpa_iface_struct {
 	bool pa_enabled;
 	char pa_name[IFNAMSIZ + HPA_LINK_NAME_LEN];
 	struct pa_link pal;
+	uint8_t seed[IFNAMSIZ + 18];
+	size_t seedlen;
 	struct pa_rule_adopt pa_adopt;
 #ifndef HNCP_PA_USE_HAMMING
 	struct pa_rule_random pa_rand;

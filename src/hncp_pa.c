@@ -108,8 +108,7 @@ static void hpa_conf_update_cb(struct vlist_tree *tree,
 static int hpa_iface_filter_accept(__unused struct pa_rule *rule,
 		struct pa_ldp *ldp, void *p)
 {
-	hpa_iface i = p;
-	return ldp->link == &i->pal;
+	return ldp->link == (struct pa_link *)p;
 }
 
 static hpa_conf hpa_conf_get_by_type(hpa_iface i, unsigned int type)
@@ -222,9 +221,6 @@ static pa_plen hpa_return_128(__unused struct pa_rule *r,
 /* Initializes PA, ready to be added */
 static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 {
-	uint8_t seed[IFNAMSIZ + 18];
-	size_t seedlen;
-
 	sprintf(i->pa_name, HPA_LINK_NAME_IF"%s", i->ifname);
 	pa_link_init(&i->pal, i->pa_name);
 	i->pal.type = HPA_LINK_T_IFACE;
@@ -235,10 +231,11 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	i->pa_adopt.rule.filter_accept = hpa_iface_filter_accept;
 	i->pa_adopt.rule.filter_private = i;
 
-	strcpy((char *)seed, i->ifname);
-	seedlen = strlen(i->ifname);
-	seed[seedlen++] = '-';
-	seedlen += dncp_io_get_hwaddrs(seed + seedlen, IFNAMSIZ + 18 - seedlen);
+	strcpy((char *)i->seed, i->ifname);
+	i->seedlen = strlen(i->ifname);
+	i->seed[i->seedlen++] = '-';
+	i->seedlen += dncp_io_get_hwaddrs(i->seed + i->seedlen, IFNAMSIZ + 18 - i->seedlen);
+	L_DEBUG("Pseudo random seed of %s is %s", i->ifname, HEX_REPR(i->seed, i->seedlen));
 
 	//Init the assignment rule
 #ifndef HNCP_PA_USE_HAMMING
@@ -246,28 +243,28 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 			HPA_RULE_CREATE, HPA_PRIORITY_CREATE, hpa_desired_plen_cb,
 			HPA_RAND_SET_SIZE);
 	pa_rule_random_prandconf(&i->pa_rand, HPA_PSEUDO_RAND_TENTATIVES,
-			seed, seedlen);
+			i->seed, i->seedlen);
 	i->pa_rand.accept_proposed_cb = NULL;
 #else
 	pa_rule_hamming_init(&i->pa_rand, "Random Prefix (Hamming)",
 				HPA_RULE_CREATE, HPA_PRIORITY_CREATE, hpa_desired_plen_cb,
-				HPA_RAND_SET_SIZE, seed, seedlen);
+				HPA_RAND_SET_SIZE, i->seed, i->seedlen);
 #endif
 	i->pa_rand.rule.filter_accept = hpa_iface_filter_accept;
-	i->pa_rand.rule.filter_private = i;
+	i->pa_rand.rule.filter_private = &i->pal;
 
 	//Scarcity rule
 	pa_rule_random_init(&i->pa_override, "Override Existing Prefix",
 			HPA_RULE_CREATE_SCARCITY, HPA_PRIORITY_SCARCITY,
 			hpa_desired_plen_override_cb, HPA_RAND_SET_SIZE);
 	pa_rule_random_prandconf(&i->pa_override, HPA_PSEUDO_RAND_TENTATIVES,
-			seed, seedlen);
+			i->seed, i->seedlen);
 
 	i->pa_override.override_rule_priority = HPA_RULE_CREATE_SCARCITY;
 	i->pa_override.override_priority = HPA_PRIORITY_SCARCITY;
 	i->pa_override.safety = 1;
 	i->pa_override.rule.filter_accept = hpa_iface_filter_accept;
-	i->pa_override.rule.filter_private = i;
+	i->pa_override.rule.filter_private = &i->pal;
 
 	//Init AA
 	sprintf(i->aa_name, HPA_LINK_NAME_ADDR"%s", i->ifname);
@@ -286,9 +283,10 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	pa_rule_hamming_init(&i->aa_rand, "Random Address (Hamming)",
 				HPA_RULE_CREATE, HPA_PRIORITY_CREATE,
 				hpa_return_128, HPA_RAND_SET_SIZE,
-				seed, seedlen);
+				i->seed, i->seedlen);
 #endif
-	//todo use EUI64
+	i->aa_rand.rule.filter_accept = hpa_iface_filter_accept;
+	i->aa_rand.rule.filter_private = &i->aal;
 	i->aa_rand.subprefix_cb = hpa_aa_subprefix_cb;
 
 	//Init stable storage
