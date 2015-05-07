@@ -58,7 +58,8 @@ void hncp_two(void)
   dncp n2;
   dncp_link l1;
   dncp_link l2;
-  net_node node1, node2;
+  net_node node1;
+  //net_node node2;
 
   net_sim_init(&s);
   n1 = net_sim_find_hncp(&s, "n1");
@@ -82,7 +83,7 @@ void hncp_two(void)
 
   /* Play with the prefix API. Feed in stuff! */
   node1 = container_of(n1, net_node_s, n);
-  node2 = container_of(n2, net_node_s, n);
+  //node2 = container_of(n2, net_node_s, n);
 
   /* First, give delegated prefixes */
   net_sim_node_iface_callback(node1,

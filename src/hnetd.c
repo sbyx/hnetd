@@ -148,8 +148,10 @@ int main(__unused int argc, char *argv[])
 	const char *pa_ulamode = NULL;
 	const char *dtls_password = NULL;
 	const char *dtls_trust = NULL;
+#ifdef DTLS
 	const char *dtls_cert = NULL;
 	const char *dtls_key = NULL;
+#endif
 	const char *dtls_path = NULL;
 	const char *dtls_dir = NULL;
 	const char *pidfile = NULL;
@@ -247,10 +249,14 @@ int main(__unused int argc, char *argv[])
 			dtls_path = optarg;
 			break;
 		case GOL_KEY:
+#ifdef DTLS
 			dtls_key = optarg;
+#endif
 			break;
+#ifdef DTLS
 		case GOL_CERT:
 			dtls_cert = optarg;
+#endif
 			break;
 		default:
 			L_ERR("Unrecognized option");
