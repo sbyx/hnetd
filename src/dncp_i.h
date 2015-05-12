@@ -130,6 +130,9 @@ struct dncp_struct {
 
   /* Profile-specific data */
   dncp_profile_data_s profile_data;
+
+  /* Private pointer for user */
+  void *userdata;
 };
 
 struct dncp_link_struct {

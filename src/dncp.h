@@ -197,7 +197,7 @@ bool dncp_if_set_enabled(dncp o, const char *ifname, bool enabled);
  * This call will create the dncp object, and register it to uloop. In
  * case of error, NULL is returned.
  */
-dncp dncp_create(void);
+dncp dncp_create(void *userdata);
 
 /**
  * Destroy DNCP instance

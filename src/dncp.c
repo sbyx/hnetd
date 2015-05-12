@@ -296,7 +296,7 @@ bool dncp_set_own_node_identifier(dncp o, dncp_node_identifier ni)
   return true;
 }
 
-dncp dncp_create(void)
+dncp dncp_create(void *userdata)
 {
   dncp o;
   unsigned char buf[ETHER_ADDR_LEN * 2], *c = buf;
@@ -305,6 +305,7 @@ dncp dncp_create(void)
   o = malloc(sizeof(*o));
   if (!o)
     return NULL;
+  o->userdata = userdata;
   c += dncp_io_get_hwaddrs(buf, sizeof(buf));
   if (c == buf) {
     L_ERR("no hardware address available, fatal error");

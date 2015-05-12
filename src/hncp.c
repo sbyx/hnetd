@@ -161,7 +161,7 @@ void hncp_uninit(dncp o)
 
 dncp hncp_create(void)
 {
-  dncp o = dncp_create();
+  dncp o = dncp_create(NULL);
   if (!o)
     return NULL;
   if (!_hncp_init(o))
