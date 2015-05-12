@@ -11,6 +11,8 @@
 #include "iface.c"
 
 int log_level = LOG_DEBUG;
+void (*hnetd_log)(int priority, const char *format, ...) = syslog;
+
 /*
 void pa_data_subscribe(__unused struct pa_data *data, __unused struct pa_data_user *user) {}
 struct pa_iface* pa_iface_get(__unused struct pa_data *d, __unused const char *ifname, __unused bool goc){ return NULL; }

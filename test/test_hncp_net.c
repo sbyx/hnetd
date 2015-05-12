@@ -22,6 +22,7 @@
 #include "sput.h"
 
 int log_level = LOG_DEBUG;
+void (*hnetd_log)(int priority, const char *format, ...) = syslog;
 
 /**************************************************************** Test cases */
 

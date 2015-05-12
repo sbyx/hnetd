@@ -38,12 +38,12 @@
 #define FLOODING_DELAY 2 * HNETD_TIME_PER_SECOND
 
 int log_level = LOG_INFO;
+void (*hnetd_log)(int priority, const char *format, ...) = syslog;
 
 typedef struct {
 	struct iface_user iu;
 	dncp hncp;
 } hncp_iface_user_s, *hncp_iface_user;
-
 
 void hncp_iface_intaddr_callback(struct iface_user *u, const char *ifname,
 								 const struct prefix *addr6,

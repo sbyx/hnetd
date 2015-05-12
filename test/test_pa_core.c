@@ -35,6 +35,7 @@ static int f_btrie_add(struct btrie *root, struct btrie_element *new, const btri
 #define TEST_DEBUG(format, ...) printf("TEST Debug   : "format"\n", ##__VA_ARGS__)
 
 int log_level = 8;
+void (*hnetd_log)(int priority, const char *format, ...) = syslog;
 
 #include "pa_rules.h"
 #include "pa_filters.h"

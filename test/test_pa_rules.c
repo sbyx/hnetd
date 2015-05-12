@@ -9,6 +9,7 @@
 #define TEST_DEBUG(format, ...) printf("TEST Debug   : "format"\n", ##__VA_ARGS__)
 
 int log_level = 8;
+void (*hnetd_log)(int priority, const char *format, ...) = NULL;
 #include "hnetd.h"
 
 #include "pa_core.h"

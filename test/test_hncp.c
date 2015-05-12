@@ -18,6 +18,7 @@
 #include "platform.h"
 
 int log_level = LOG_DEBUG;
+void (*hnetd_log)(int priority, const char *format, ...) = syslog;
 
 /* Lots of stubs here, rather not put __unused all over the place. */
 #pragma GCC diagnostic ignored "-Wunused-parameter"
