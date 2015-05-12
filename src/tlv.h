@@ -150,7 +150,7 @@ static inline const char *hex_repr(char *buf, const void *data, int len)
     {
       sprintf(buf, "%02X", (int) *((unsigned char *)data));
       buf += 2;
-      data++;
+      data = ((char *) data) + 1;
     }
   return r;
 }
