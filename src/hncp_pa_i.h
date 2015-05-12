@@ -21,6 +21,7 @@
 #include "dhcp.h"
 
 #define HNCP_PA_PD_TEMP_LEASE  60 * HNETD_TIME_PER_SECOND
+#define HNCP_PA_USE_HAMMING
 
 typedef struct hpa_iface_struct *hpa_iface, hpa_iface_s;
 
@@ -36,6 +37,7 @@ typedef struct hpa_advp_struct {
 	struct list_head le; //APs are linked in main struct
 	dncp_t_link_id_s link_id;
 	uint8_t ap_flags;
+	bool fake; //This is not a real advertised prefix, but rather a trick to fool PA.
 } hpa_advp_s, *hpa_advp;
 
 #define hpa_for_each_iface(hpa, i) list_for_each_entry(i, &(hpa)->ifaces, le)
@@ -104,14 +106,24 @@ struct hpa_iface_struct {
 	bool pa_enabled;
 	char pa_name[IFNAMSIZ + HPA_LINK_NAME_LEN];
 	struct pa_link pal;
+	uint8_t seed[IFNAMSIZ + 18];
+	size_t seedlen;
 	struct pa_rule_adopt pa_adopt;
+#ifndef HNCP_PA_USE_HAMMING
 	struct pa_rule_random pa_rand;
+#else
+	struct pa_rule_hamming pa_rand;
+#endif
 	struct pa_rule_random pa_override;
 
 	char aa_name[IFNAMSIZ + HPA_LINK_NAME_LEN];
 	struct pa_link aal;
 	//struct pa_rule_slaac aa_slaac; //todo
+#ifndef HNCP_PA_USE_HAMMING
 	struct pa_rule_random aa_rand;
+#else
+	struct pa_rule_hamming aa_rand;
+#endif
 
 	//Stable storage
 	struct pa_store_link pasl;
@@ -138,7 +150,11 @@ struct hpa_lease_struct {
 	void *priv; //For storing your own stuff
 
 	struct pa_link pal;
+#ifndef HNCP_PA_USE_HAMMING
 	struct pa_rule_random rule_rand;
+#else
+	struct pa_rule_hamming rule_rand;
+#endif
 	struct pa_store_rule rule_store;
 };
 
@@ -180,6 +196,11 @@ typedef struct hpa_dp_struct {
 } *hpa_dp, hpa_dp_s;
 
 #define hpa_for_each_dp(hpa, dp_p) list_for_each_entry(dp_p, &(hpa)->dps, dp.le)
+
+struct hpa_ap_ldp_struct {
+	hpa_advp_s net_addr;
+	hpa_advp_s bc_addr;
+};
 
 struct hncp_pa_struct {
 	dncp dncp;

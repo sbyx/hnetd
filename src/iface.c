@@ -68,7 +68,8 @@ void iface_link_cb(struct hncp_link_user *user __unused, const char *ifname,
 	elected &= HNCP_LINK_HOSTNAMES | HNCP_LINK_LEGACY |
 			HNCP_LINK_PREFIXDEL | HNCP_LINK_STATELESS;
 
-	if (c && c->elected != elected && strcmp(c->ifname, "lo")) {
+	if (c && c->elected != elected && strcmp(c->ifname, "lo") &&
+			(c->flags & IFACE_FLAG_HYBRID) != IFACE_FLAG_HYBRID) {
 		platform_set_dhcp(c, elected);
 		c->elected = elected;
 	}
@@ -181,13 +182,20 @@ static void iface_update_address_cb(__unused struct hncp_pa_iface_user *i,
 	}
 }
 
-static void iface_notify_internal_state(struct iface *c)
+// Notify
+static void iface_notify_internal_state(struct iface *c, bool force, bool internal)
 {
 	struct iface_user *u;
-	list_for_each_entry(u, &users, head)
-		if (u->cb_intiface)
-			u->cb_intiface(u, c->ifname, c->internal);
-	platform_set_internal(c, c->internal);
+	list_for_each_entry(u, &users, head) {
+		if (u->cb_intiface && (force || internal))
+			u->cb_intiface(u, c->ifname, force && internal);
+
+		if (u->cb_extiface && (force || !internal))
+			u->cb_extiface(u, c->ifname, force && !internal);
+	}
+
+	if (force || internal)
+		platform_set_internal(c, force && internal);
 }
 
 
@@ -486,10 +494,7 @@ void iface_remove(struct iface *c)
 	iface_commit_ipv4_uplink(c);
 
 	// If interface was internal, let subscribers know of removal
-	if (c->internal) {
-		c->internal = false;
-		iface_notify_internal_state(c);
-	}
+	iface_notify_internal_state(c, false, c->internal);
 
 	list_del(&c->head);
 	vlist_flush_all(&c->assigned);
@@ -536,7 +541,7 @@ void iface_update_init(struct iface *c)
 static void iface_announce_border(struct uloop_timeout *t)
 {
 	struct iface *c = container_of(t, struct iface, transition);
-	iface_notify_internal_state(c);
+	iface_notify_internal_state(c, true, c->internal);
 
 	if (!c->internal)
 		uloop_timeout_set(&c->preferred, 100);
@@ -565,7 +570,7 @@ static void iface_announce_preferred(struct uloop_timeout *t)
 			u->cb_intaddr(u, c->ifname, pref6 ? &pref6->prefix : NULL, pref4 ? &pref4->prefix: NULL);
 }
 
-int iface_get_preferred_address(struct in6_addr *addr, bool v4)
+int iface_get_preferred_address(struct in6_addr *addr, bool v4, const char *ifname)
 {
 	hnetd_time_t now = hnetd_time();
 	struct iface_addr *pref = NULL;
@@ -573,6 +578,10 @@ int iface_get_preferred_address(struct in6_addr *addr, bool v4)
 
 	list_for_each_entry(c, &interfaces, head) {
 		struct iface_addr *a;
+
+		if (ifname && strcmp(ifname, c->ifname))
+			continue;
+
 		vlist_for_each_element(&c->assigned, a, node) {
 			if (v4 == IN6_IS_ADDR_V4MAPPED(&a->prefix.prefix) &&
 					(v4 || a->preferred_until > now) &&
@@ -679,8 +688,8 @@ struct iface* iface_create(const char *ifname, const char *handle, iface_flags f
 
 	if (!c->platform && handle) {
 		platform_iface_new(c, handle);
-		c->transition.cb(&c->transition);
-		iface_discover_border(c);
+		if (!c->platform || iface_discover_border(c))
+			iface_notify_internal_state(c, true, false);
 	}
 
 	return c;

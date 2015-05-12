@@ -73,11 +73,117 @@ struct in6_addr
 	//sput_fail_unless(prio == (arg)->priority, "Correct advertise priority");
 
 pa_plen test_desired_plen = 0;
-pa_plen test_desired_plen_cb(__unused struct pa_rule_random *r,
+pa_plen test_desired_plen_cb(__unused struct pa_rule *r,
 		__unused struct pa_ldp *ldp,
 		__unused uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
 {
 	return test_desired_plen;
+}
+
+void pa_rules_hamming()
+{
+#define _(u) x0##u = {{{0x20, 0x01, 0, 0, 0, 0, 0x00, 0x0##u}}}
+	struct in6_addr
+	_(0), _(1), _(2), _(3), _(4), _(5), _(6), _(7), _(8),
+	_(9), _(a), _(b), _(c), _(d), _(e), _(f);
+#undef _
+	struct pa_core core;
+	struct pa_dp dp = {.prefix = x00, .plen = 48};
+	struct pa_link link1 = {.name = "L1"};
+	struct pa_ldp ldp = {.core = &core, .dp = &dp, .link = &link1};
+	struct pa_advp advp1, advp2;
+	struct pa_rule_arg arg;
+
+	test_core_init(&core, 5);
+	struct pa_rule_hamming hamming;
+	pa_rule_hamming_init(&hamming, NULL, 3, 4, test_desired_plen_cb, 4, (uint8_t *)"SEED", 4);
+	test_desired_plen = 64;
+
+	ldp.backoff = 1;
+	fr_mask_md5 = true;
+
+	fr_md5_push(&x00);
+	test_rule_match(&hamming.rule, &ldp, 1, &arg, PA_RULE_PUBLISH);
+	test_rule_prio(&arg, 3);
+	test_rule_prefix(&arg, &x00, 64, 4);
+
+	advp1.link = NULL;
+	advp1.node_id[0] = 4;
+	advp1.plen = 64;
+	advp1.prefix = x00;
+	advp1.priority = 2;
+
+	test_advp_add(&core, &advp1);
+	fr_md5_push(&x00);
+	test_rule_match(&hamming.rule, &ldp, 1, &arg, PA_RULE_PUBLISH);
+	test_rule_prio(&arg, 3);
+	test_rule_prefix(&arg, &x01, 64, 4);
+
+	fr_md5_push(&x01);
+	test_rule_match(&hamming.rule, &ldp, 1, &arg, PA_RULE_PUBLISH);
+	test_rule_prefix(&arg, &x01, 64, 4);
+
+	fr_md5_push(&x04);
+	test_rule_match(&hamming.rule, &ldp, 1, &arg, PA_RULE_PUBLISH);
+	test_rule_prefix(&arg, &x04, 64, 4);
+
+	test_advp_del(&core, &advp1);
+
+	advp1.plen = 62;
+	test_advp_add(&core, &advp1);
+
+	fr_md5_push(&x00);
+	test_rule_match(&hamming.rule, &ldp, 1, &arg, PA_RULE_PUBLISH);
+	test_rule_prio(&arg, 3);
+	test_rule_prefix(&arg, &x04, 64, 4);
+
+	fr_md5_push(&x01);
+	test_rule_match(&hamming.rule, &ldp, 1, &arg, PA_RULE_PUBLISH);
+	test_rule_prefix(&arg, &x05, 64, 4);
+
+	fr_md5_push(&x0c);
+	test_rule_match(&hamming.rule, &ldp, 1, &arg, PA_RULE_PUBLISH);
+	test_rule_prefix(&arg, &x04, 64, 4);
+
+	fr_md5_push(&x0f);
+	test_rule_match(&hamming.rule, &ldp, 1, &arg, PA_RULE_PUBLISH);
+	test_rule_prefix(&arg, &x07, 64, 4);
+
+	advp2.link = NULL;
+	advp2.node_id[0] = 4;
+	advp2.plen = 63;
+	advp2.prefix = x04;
+	advp2.priority = 2;
+	test_advp_add(&core, &advp2);
+
+
+#define test(seedp, res) \
+		fr_md5_push(&seedp); \
+		test_rule_match(&hamming.rule, &ldp, 1, &arg, PA_RULE_PUBLISH); \
+		test_rule_prefix(&arg, &res, 64, 4) \
+
+	test(x00, x08);
+	test(x01, x09);
+	test(x02, x06);
+	test(x03, x07);
+	test(x04, x06);
+	test(x05, x07);
+	test(x06, x06);
+	test(x07, x07);
+	test(x08, x08);
+	test(x09, x09);
+	test(x0a, x08);
+	test(x0b, x09);
+	test(x0c, x08);
+	test(x0d, x09);
+	test(x0e, x06);
+	test(x0f, x07);
+#undef test
+
+	test_advp_del(&core, &advp2);
+	test_advp_del(&core, &advp1);
+
+	fr_mask_md5 = false;
 }
 
 void pa_rules_random_override()
@@ -320,6 +426,7 @@ int main() {
 	sput_run_test(pa_rules_adopt);
 	sput_run_test(pa_rules_random);
 	sput_run_test(pa_rules_random_override);
+	sput_run_test(pa_rules_hamming);
 	sput_leave_suite(); /* optional */
 	sput_finish_testing();
 	return sput_get_return_value();

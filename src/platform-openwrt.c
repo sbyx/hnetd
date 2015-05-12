@@ -520,7 +520,8 @@ static void platform_commit(struct uloop_timeout *t)
 	blobmsg_for_each_attr(cfgattr, iface->config.head, rem)
 		blobmsg_add_blob(&b, cfgattr);
 
-	if (c->internal && c->elected && (avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr)) {
+	if (c->internal && c->elected && (c->flags & IFACE_FLAG_HYBRID) != IFACE_FLAG_HYBRID &&
+			(avl_is_empty(&c->delegated.avl) && !c->v4_saddr.s_addr)) {
 		blobmsg_add_string(&b, "ra", "server");
 		blobmsg_add_string(&b, "dhcpv4", (c->elected & HNCP_LINK_LEGACY) ? "server" : "disabled");
 		blobmsg_add_string(&b, "dhcpv6", (c->elected & (HNCP_LINK_PREFIXDEL | HNCP_LINK_HOSTNAMES | HNCP_LINK_STATELESS)) ?
@@ -1158,6 +1159,29 @@ void platform_restart_dhcpv4(struct iface *c)
 	uint32_t ubus_network = 0;
 	ubus_lookup_id(ubus, "network", &ubus_network);
 	ubus_invoke(ubus, ubus_network, "add_dynamic", b.head, NULL, NULL, 1000);
+
+	blob_buf_free(&b);
+}
+
+
+void platform_set_iface(const char *name, bool enable)
+{
+	struct blob_buf b = {NULL, NULL, 0, NULL};
+
+	blob_buf_init(&b, 0);
+	if (enable) {
+		blobmsg_add_string(&b, "name", name);
+		blobmsg_add_string(&b, "ifname", name);
+		blobmsg_add_string(&b, "proto", "hnet");
+		blobmsg_add_string(&b, "mode", "internal");
+
+		uint32_t ubus_network = 0;
+		ubus_lookup_id(ubus, "network", &ubus_network);
+		ubus_invoke(ubus, ubus_network, "add_dynamic", b.head, NULL, NULL, 1000);
+	} else {
+		blobmsg_add_string(&b, "interface", name);
+		ubus_invoke(ubus, ubus_network_interface, "down", b.head, NULL, NULL, 1000);
+	}
 
 	blob_buf_free(&b);
 }

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Feb 12 11:49:06 2015 mstenber
- * Edit time:     325 min
+ * Last modified: Thu Apr 30 11:49:25 2015 mstenber
+ * Edit time:     329 min
  *
  */
 
@@ -109,7 +109,7 @@ struct dncp_struct {
   struct uloop_timeout timeout;
 
   /* List of subscribers to change notifications. */
-  struct list_head subscribers;
+  struct list_head subscribers[NUM_DNCP_CALLBACKS];
 
   /* search domain provided to clients. */
   char domain[DNS_MAX_ESCAPED_LEN];
@@ -167,6 +167,10 @@ struct dncp_link_struct {
   /* What value we have TLV for, if any */
   uint32_t published_keepalive_interval;
 
+  /* Most recent request for network state. (This could be global too,
+   * but one outgoing request per link sounds fine too). */
+  hnetd_time_t last_req_network_state;
+
   /* Statistics about Trickle (mostly for debugging) */
   int num_trickle_sent;
   int num_trickle_skipped;
@@ -183,8 +187,9 @@ struct dncp_neighbor_struct {
   /* Link-level address */
   struct sockaddr_in6 last_sa6;
 
-  /* When did we last time receive _consistent_ state from the peer. */
-  hnetd_time_t last_sync;
+  /* When did we last time receive _consistent_ state from the peer
+   * (multicast) or any contact (unicast). */
+  hnetd_time_t last_contact;
 };
 
 
@@ -362,11 +367,11 @@ dncp_node_get_tlv_with_type(dncp_node n, uint16_t type, bool first)
 #define ROUND_BITS_TO_BYTES(b) (((b) + 7) / 8)
 #define ROUND_BYTES_TO_4BYTES(b) ((((b) + 3) / 4) * 4)
 
-static inline dncp_t_node_data_neighbor
+static inline dncp_t_neighbor
 dncp_tlv_neighbor(const struct tlv_attr *a)
 {
-  if (tlv_id(a) != DNCP_T_NODE_DATA_NEIGHBOR
-      || tlv_len(a) != sizeof(dncp_t_node_data_neighbor_s))
+  if (tlv_id(a) != DNCP_T_NEIGHBOR
+      || tlv_len(a) != sizeof(dncp_t_neighbor_s))
     return NULL;
   return tlv_data(a);
 }
@@ -388,7 +393,7 @@ dncp_tlv_trust_verdict(const struct tlv_attr *a)
 }
 
 static inline dncp_node
-dncp_node_find_neigh_bidir(dncp_node n, dncp_t_node_data_neighbor ne)
+dncp_node_find_neigh_bidir(dncp_node n, dncp_t_neighbor ne)
 {
   if (!n)
     return NULL;
@@ -397,9 +402,9 @@ dncp_node_find_neigh_bidir(dncp_node n, dncp_t_node_data_neighbor ne)
   if (!n2)
     return NULL;
   struct tlv_attr *a;
-  dncp_t_node_data_neighbor ne2;
+  dncp_t_neighbor ne2;
 
-  dncp_node_for_each_tlv_with_type(n2, a, DNCP_T_NODE_DATA_NEIGHBOR)
+  dncp_node_for_each_tlv_with_type(n2, a, DNCP_T_NEIGHBOR)
     if ((ne2 = dncp_tlv_neighbor(a)))
       {
         if (ne->link_id == ne2->neighbor_link_id

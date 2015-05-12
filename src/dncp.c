@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu Feb 12 11:49:00 2015 mstenber
- * Edit time:     842 min
+ * Last modified: Wed Apr 29 18:02:33 2015 mstenber
+ * Edit time:     860 min
  *
  */
 
@@ -46,12 +46,18 @@ void dncp_node_set(dncp_node n, uint32_t update_number,
                    hnetd_time_t t, struct tlv_attr *a)
 {
   struct tlv_attr *a_valid = a;
-  bool node_hash_changed = true;
-  bool should_schedule = false;
 
   L_DEBUG("dncp_node_set %s update #%d %p (@%lld (-%lld))",
           DNCP_NODE_REPR(n), (int) update_number, a,
           (long long)t, (long long)(hnetd_time()-t));
+
+  /* If the data is same, and update number is same, skip. */
+  if (update_number == n->update_number
+      && (!a || tlv_attr_equal(a, n->tlv_container)))
+    {
+      L_DEBUG(" .. spurious (no change, we ignore time delta)");
+      return;
+    }
 
   /* If new data is set, consider if similar, and if not,
    * handle version check  */
@@ -65,29 +71,22 @@ void dncp_node_set(dncp_node n, uint32_t update_number,
               a = n->tlv_container;
             }
           a_valid = n->tlv_container_valid;
-          node_hash_changed = false; /* provisionally, depend on update#  */
         }
       else
         {
           a_valid = dncp_profile_node_validate_data(n, a);
         }
-      n->dncp->graph_dirty = true;
-      should_schedule = true;
     }
 
   /* Replace update number if any */
-  if (n->update_number != update_number)
-    {
-      node_hash_changed = true;
-      n->update_number = update_number;
-    }
+  n->update_number = update_number;
 
   /* Replace origination time if any */
   if (t)
     n->origination_time = t;
 
-  /* Replace data (if it is a different pointer) */
-  if (n->tlv_container != a)
+  /* Replace data (if it is a different valid pointer) */
+  if (a && n->tlv_container != a)
     {
       if (n->last_reachable_prune == n->dncp->last_prune)
         dncp_notify_subscribers_tlvs_changed(n, n->tlv_container_valid,
@@ -97,19 +96,14 @@ void dncp_node_set(dncp_node n, uint32_t update_number,
       n->tlv_container = a;
       n->tlv_container_valid = a_valid;
       n->tlv_index_dirty = true;
-    }
-
-  /* If something that affects network hash has changed,
-   * set various flags + schedule dncp_run. */
-  if (node_hash_changed)
-    {
       n->node_data_hash_dirty = true;
-      n->dncp->network_hash_dirty = true;
-      should_schedule = true;
+      n->dncp->graph_dirty = true;
     }
 
-  if (should_schedule)
-    dncp_schedule(n->dncp);
+  /* _anything_ we do here dirties network hash. */
+  n->dncp->network_hash_dirty = true;
+
+  dncp_schedule(n->dncp);
 }
 
 
@@ -214,9 +208,9 @@ static void update_link(struct vlist_tree *t,
         dncp_io_set_ifname_enabled(o, t_old->ifname, false);
       dncp_tlv t, t2;
       dncp_for_each_local_tlv_safe(o, t, t2)
-        if (tlv_id(&t->tlv) == DNCP_T_NODE_DATA_NEIGHBOR)
+        if (tlv_id(&t->tlv) == DNCP_T_NEIGHBOR)
           {
-            dncp_t_node_data_neighbor ne = tlv_data(&t->tlv);
+            dncp_t_neighbor ne = tlv_data(&t->tlv);
             if (ne->link_id == t_old->iid)
               dncp_remove_tlv(o, t);
           }
@@ -265,9 +259,11 @@ dncp_find_node_by_node_identifier(dncp o, dncp_node_identifier ni, bool create)
 bool dncp_init(dncp o, const void *node_identifier, int len)
 {
   dncp_hash_s h;
+  int i;
 
   memset(o, 0, sizeof(*o));
-  INIT_LIST_HEAD(&o->subscribers);
+  for (i = 0 ; i < NUM_DNCP_CALLBACKS; i++)
+    INIT_LIST_HEAD(&o->subscribers[i]);
   vlist_init(&o->nodes, compare_nodes, update_node);
   o->nodes.keep_old = true;
   vlist_init(&o->tlvs, compare_tlvs, update_tlv);
@@ -585,7 +581,7 @@ void dncp_self_flush(dncp_node n)
         free(a);
       a = a2;
     }
-  dncp_node_set(n, ++n->update_number, dncp_time(o),
+  dncp_node_set(n, n->update_number + 1, dncp_time(o),
                 a ? a : n->tlv_container);
 }
 
@@ -599,25 +595,17 @@ void dncp_calculate_node_data_hash(dncp_node n)
 {
   md5_ctx_t ctx;
   int l;
-  unsigned char buf[TLV_SIZE + sizeof(dncp_t_node_data_header_s)];
-  struct tlv_attr *h = (struct tlv_attr *)buf;
-  dncp_t_node_data_header ndh = tlv_data(h);
 
   if (!n->node_data_hash_dirty)
     return;
-
+  n->node_data_hash_dirty = false;
   l = n->tlv_container ? tlv_len(n->tlv_container) : 0;
-  tlv_init(h, DNCP_T_NODE_DATA, sizeof(buf) + l);
-  ndh->node_identifier = n->node_identifier;
-  ndh->update_number = cpu_to_be32(n->update_number);
   md5_begin(&ctx);
-  md5_hash(buf, sizeof(buf), &ctx);
   if (l)
     md5_hash(tlv_data(n->tlv_container), l, &ctx);
   dncp_md5_end(&n->node_data_hash, &ctx);
-  n->node_data_hash_dirty = false;
-  L_DEBUG("dncp_calculate_node_data_hash @%p %s=%llx%s",
-          n->dncp, DNCP_NODE_REPR(n),
+  L_DEBUG("dncp_calculate_node_data_hash %s=%llx%s",
+          DNCP_NODE_REPR(n),
           dncp_hash64(&n->node_data_hash),
           n == n->dncp->own_node ? " [self]" : "");
 }
@@ -636,12 +624,17 @@ void dncp_calculate_network_hash(dncp o)
   md5_begin(&ctx);
   dncp_for_each_node(o, n)
     {
+      uint32_t update_number = cpu_to_be32(n->update_number);
       dncp_calculate_node_data_hash(n);
+      md5_hash(&update_number, sizeof(update_number), &ctx);
       md5_hash(&n->node_data_hash, DNCP_HASH_LEN, &ctx);
+      L_DEBUG(".. %s/%d=%llx",
+              DNCP_NODE_REPR(n), n->update_number,
+              dncp_hash64(&n->node_data_hash));
     }
   dncp_md5_end(&o->network_hash, &ctx);
-  L_DEBUG("dncp_calculate_network_hash @%p =%llx",
-          o, dncp_hash64(&o->network_hash));
+  L_DEBUG("dncp_calculate_network_hash =%llx",
+          dncp_hash64(&o->network_hash));
 
   if (memcmp(&old_hash, &o->network_hash, DNCP_HASH_LEN))
     dncp_trickle_reset(o);
@@ -752,9 +745,9 @@ bool dncp_if_has_highest_id(dncp o, const char *ifname)
 
   uint32_t iid = l->iid;
   struct tlv_attr *a;
-  dncp_t_node_data_neighbor nh;
+  dncp_t_neighbor nh;
 
-  dncp_node_for_each_tlv_with_type(o->own_node, a, DNCP_T_NODE_DATA_NEIGHBOR)
+  dncp_node_for_each_tlv_with_type(o->own_node, a, DNCP_T_NEIGHBOR)
     if ((nh = dncp_tlv_neighbor(a)))
       {
         if (nh->link_id != iid)

@@ -170,7 +170,7 @@ err:
 
 static int hd_node_neighbor(struct tlv_attr *tlv, struct blob_buf *b)
 {
-	dncp_t_node_data_neighbor nh;
+	dncp_t_neighbor nh;
 
 	if (!(nh = dncp_tlv_neighbor(tlv)))
 		return -1;
@@ -229,7 +229,7 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 			case HNCP_T_ASSIGNED_PREFIX:
 				hd_do_in_table(&prefixes, NULL, hd_node_prefix(tlv, &prefixes), goto err);
 				break;
-			case DNCP_T_NODE_DATA_NEIGHBOR:
+			case DNCP_T_NEIGHBOR:
 				hd_do_in_table(&neighbors, NULL, hd_node_neighbor(tlv, &neighbors), goto err);
 				break;
 			case HNCP_T_EXTERNAL_CONNECTION:

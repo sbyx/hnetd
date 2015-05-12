@@ -33,12 +33,7 @@ struct hncp_routing_struct {
 
 static void hncp_routing_spawn(char **argv)
 {
-	pid_t pid = fork();
-	if (pid == 0) {
-		execv(argv[0], argv);
-		_exit(128);
-	}
-
+	pid_t pid = hncp_run(argv);
 	waitpid(pid, NULL, 0);
 }
 
@@ -53,11 +48,7 @@ static void hncp_configure_exec(struct uloop_process *p, __unused int ret)
 		argv[2 + bfs->ifaces_cnt] = NULL;
 
 		bfs->configure_proc.cb = hncp_configure_exec;
-		bfs->configure_proc.pid = fork();
-		if (!bfs->configure_proc.pid) {
-			execv(argv[0], argv);
-			_exit(128);
-		}
+		bfs->configure_proc.pid = hncp_run(argv);
 		uloop_process_add(&bfs->configure_proc);
 		bfs->configure_pending = false;
 	}
@@ -102,7 +93,7 @@ static void hncp_routing_callback(dncp_subscriber s, __unused dncp_node n,
 {
 	hncp_bfs bfs = container_of(s, hncp_bfs_s, subscr);
 	if (tlv_id(tlv) == HNCP_T_ASSIGNED_PREFIX || tlv_id(tlv) == HNCP_T_DELEGATED_PREFIX ||
-			tlv_id(tlv) == DNCP_T_NODE_DATA_NEIGHBOR || tlv_id(tlv) == HNCP_T_EXTERNAL_CONNECTION ||
+			tlv_id(tlv) == DNCP_T_NEIGHBOR || tlv_id(tlv) == HNCP_T_EXTERNAL_CONNECTION ||
 			tlv_id(tlv) == HNCP_T_ROUTER_ADDRESS)
 		uloop_timeout_set(&bfs->t, 0);
 }
@@ -140,7 +131,7 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 				struct tlv_attr *a, *a2;
 				dncp_node_for_each_tlv(c, a) {
 					hncp_t_assigned_prefix_header ap;
-					dncp_t_node_data_neighbor ne;
+					dncp_t_neighbor ne;
 					if ((ne = dncp_tlv_neighbor(a))) {
 						if (!(n = dncp_node_find_neigh_bidir(c, ne)))
 							continue; // Connection not mutual
@@ -153,7 +144,7 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 							dncp_link link = dncp_find_link_by_id(hncp, ne->link_id);
 							if (!link)
 								continue;
-							dncp_tlv tlv = dncp_find_tlv(hncp, DNCP_T_NODE_DATA_NEIGHBOR, ne, sizeof(*ne));
+							dncp_tlv tlv = dncp_find_tlv(hncp, DNCP_T_NEIGHBOR, ne, sizeof(*ne));
 							dncp_neighbor neigh = tlv ? dncp_tlv_get_extra(tlv) : NULL;
 							if (neigh) {
 								n->profile_data.bfs.next_hop = &neigh->last_sa6.sin6_addr;
@@ -258,12 +249,12 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 						struct iface *ifo = link ? iface_get(c->profile_data.bfs.ifname) : NULL;
 						// Skip routes for prefixes on connected links
 						if (link && ifo && (ifo->flags & IFACE_FLAG_ADHOC) != IFACE_FLAG_ADHOC && c->profile_data.bfs.hopcount == 1) {
-							dncp_t_node_data_neighbor_s np = {
+							dncp_t_neighbor_s np = {
 								.neighbor_node_identifier = c->node_identifier,
 								.neighbor_link_id = ap->link_id,
 								.link_id = link->iid
 							};
-							if (dncp_find_tlv(hncp, DNCP_T_NODE_DATA_NEIGHBOR, &np, sizeof(np)))
+							if (dncp_find_tlv(hncp, DNCP_T_NEIGHBOR, &np, sizeof(np)))
 								continue;
 						}
 

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Thu Feb 26 12:39:42 2015 mstenber
- * Edit time:     296 min
+ * Last modified: Wed Apr 29 16:38:31 2015 mstenber
+ * Edit time:     297 min
  *
  */
 
@@ -326,3 +326,18 @@ void hncp_set_dtls(dncp o, dtls d)
 }
 
 #endif /* DTLS */
+
+pid_t hncp_run(char *argv[])
+{
+  pid_t pid = fork();
+
+  if (pid == 0)
+    {
+      execv(argv[0], argv);
+      _exit(128);
+    }
+  L_DEBUG("hncp_run %s", argv[0]);
+  for (int i = 1 ; argv[i] ; i++)
+    L_DEBUG(" %s", argv[i]);
+  return pid;
+}

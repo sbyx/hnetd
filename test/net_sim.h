@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu Feb 26 14:46:39 2015 mstenber
- * Edit time:     262 min
+ * Last modified: Wed Apr 29 16:45:54 2015 mstenber
+ * Edit time:     276 min
  *
  */
 
@@ -32,6 +32,9 @@
 
 /* iface_* functions from smock queue */
 #include "smock.h"
+
+/* hncp_run and friends */
+#include "fake_fork_exec.h"
 
 #ifdef L_PREFIX
 #undef L_PREFIX
@@ -113,7 +116,8 @@ typedef struct net_sim_t {
   bool disable_multicast;
 
   int node_count;
-  bool should_be_stable_topology;
+  bool add_neighbor_is_error;
+  bool del_neighbor_is_error;
   hnetd_time_t start;
 
   int sent_unicast;
@@ -215,8 +219,8 @@ bool net_sim_is_converged(net_sim s)
               return false;
             }
           if (!s->accept_time_errors
-              && abs(n2->n.own_node->origination_time
-                     - hn->origination_time) > acceptable_offset)
+              && llabs(n2->n.own_node->origination_time
+                       - hn->origination_time) > acceptable_offset)
             {
               L_DEBUG("origination time mismatch at "
                       "%s: %lld !=~ %lld for %s [update number %d]",
@@ -277,11 +281,11 @@ void net_sim_local_tlv_callback(dncp_subscriber sub,
   net_node n = container_of(sub, net_node_s, debug_subscriber);
   net_sim s = n->s;
 
-  if (s->should_be_stable_topology)
-    if (tlv_id(tlv) == DNCP_T_NODE_DATA_NEIGHBOR)
-      {
-        sput_fail_unless(false, "got change when topology stable");
-      }
+  if (tlv_id(tlv) == DNCP_T_NEIGHBOR)
+    {
+      sput_fail_unless(!add || !s->add_neighbor_is_error, "undesired add");
+      sput_fail_unless(add || !s->del_neighbor_is_error, "undesired del");
+    }
 }
 
 dncp net_sim_find_hncp(net_sim s, const char *name)
@@ -510,6 +514,7 @@ void net_sim_uninit(net_sim s)
   struct list_head *p, *pn;
   int c = 0;
 
+  s->del_neighbor_is_error = false;
   list_for_each_safe(p, pn, &s->nodes)
     {
       net_node node = container_of(p, net_node_s, h);
@@ -629,20 +634,21 @@ ssize_t dncp_io_recvfrom(dncp o, void *buf, size_t len,
 }
 
 void
-sanity_check_buf(void *buf, size_t len)
+sanity_check_buf(void *buf, size_t len, bool is_root)
 {
   struct tlv_attr *a, *last = NULL;
   int a_len;
   int last_len;
   bool ok = true;
-  size_t dhs = sizeof(dncp_t_node_data_header_s);
+  size_t nhs = sizeof(dncp_t_node_state_s);
 
   tlv_for_each_in_buf(a, buf, len)
     {
       a_len = tlv_pad_len(a);
       if (last)
         {
-          if (memcmp(last, a, last_len < a_len ? last_len : a_len) >= 0)
+          if (!is_root
+              && memcmp(last, a, last_len < a_len ? last_len : a_len) >= 0)
             {
               ok = false;
               L_ERR("ordering error - %s >= %s",
@@ -654,8 +660,8 @@ sanity_check_buf(void *buf, size_t len)
       /* XXX - some better way to determine recursion? */
       switch (tlv_id(a))
         {
-        case DNCP_T_NODE_DATA:
-          sanity_check_buf(tlv_data(a)+dhs, tlv_len(a)-dhs);
+        case DNCP_T_NODE_STATE:
+          sanity_check_buf(tlv_data(a)+nhs, tlv_len(a)-nhs, false);
           break;
         }
     }
@@ -722,7 +728,7 @@ ssize_t dncp_io_sendto(dncp o, void *buf, size_t len,
 
   L_DEBUG("dncp_io_sendto: %s -> " SA6_F,
           is_multicast ? "multicast" : "unicast", SA6_D(dst));
-  sanity_check_buf(buf, len);
+  sanity_check_buf(buf, len, true);
   if (is_multicast)
     {
       s->sent_multicast++;

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Tue Dec 23 18:54:18 2014 mstenber
- * Edit time:     153 min
+ * Last modified: Tue Apr 28 14:59:55 2015 mstenber
+ * Edit time:     162 min
  *
  */
 
@@ -58,6 +58,16 @@ typedef struct dncp_tlv_struct dncp_tlv_s, *dncp_tlv;
  * - tlv_change_callback is called
  */
 
+enum {
+  DNCP_CALLBACK_LOCAL_TLV,
+  DNCP_CALLBACK_REPUBLISH,
+  DNCP_CALLBACK_TLV,
+  DNCP_CALLBACK_NODE,
+  DNCP_CALLBACK_LINK,
+  DNCP_CALLBACK_SOCKET_MSG,
+  NUM_DNCP_CALLBACKS
+};
+
 typedef struct dncp_subscriber_struct dncp_subscriber_s, *dncp_subscriber;
 
 struct dncp_subscriber_struct {
@@ -66,7 +76,7 @@ struct dncp_subscriber_struct {
    * is valid). Using the same subscriber object twice will result in
    * undefined (and most likely bad) behavior.
    */
-  struct list_head lh;
+  struct list_head lhs[NUM_DNCP_CALLBACKS];
 
   /**
    * Local TLV change notification.
@@ -124,6 +134,25 @@ struct dncp_subscriber_struct {
    */
   void (*link_change_callback)(dncp_subscriber s, const char *ifname,
 		  enum dncp_subscriber_event event);
+
+  /**
+   * TLV(s) received on a socket-notification.
+   *
+   * This is called whenever a message is received, either unicast or
+   * multicast, on one of the socket(s) controlled by DNCP.
+   *
+   * NOTE: This is very low-level message handling callback; NO CHECKS
+   * HAVE BEEN PERFORMED ON THE PAYLOAD (or that src/dst are really
+   * allowed to send us something). Only in the (global) DTLS mode
+   * handling this without address checks is probably ok, as the
+   * authentication and authorization has happened before this
+   * callback is called.
+   */
+  void (*msg_received_callback)(dncp_subscriber s,
+                                const char *ifname,
+                                struct sockaddr_in6 *src,
+                                struct in6_addr *dst,
+                                struct tlv_attr *msg);
 };
 
 /********************************************* API for handling single links */

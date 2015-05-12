@@ -256,6 +256,10 @@ struct pa_store_rule {
 	struct pa_store *store;
 	pa_rule_priority rule_priority;
 	pa_priority priority;
+
+	/* When set to NULL, any prefix length can be used. When set, it is called
+	 * and only prefix which length is >= min_plen and <= max_plen will be used. */
+	void (*get_plen_range)(struct pa_rule *rule, struct pa_ldp *ldp, pa_plen *min_plen, pa_plen *max_plen);
 };
 
 /**

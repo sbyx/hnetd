@@ -6,8 +6,8 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 20:39:45 2015 mstenber
- * Last modified: Tue Mar 24 11:21:37 2015 mstenber
- * Edit time:     94 min
+ * Last modified: Wed Apr 29 16:40:56 2015 mstenber
+ * Edit time:     95 min
  *
  */
 
@@ -24,6 +24,7 @@
 #include "hncp_multicast.h"
 #include "dncp_i.h"
 #include "iface.h"
+#include "hncp.h"
 
 #include <unistd.h>
 #include <sys/wait.h>
@@ -54,27 +55,6 @@ struct hncp_multicast_struct
   dncp_subscriber_s subscriber;
 };
 
-/*
-  TBD: platform_{call,exec} should be really made publicly visible
-  utility functions. This Nth fork+exec+waitpid is .. excessive.
-*/
-/* Utility function glommed from platform-generic platform_exec/call. */
-static void _fork_execv(char *argv[])
-{
-  pid_t pid = fork();
-
-  if (pid == 0) {
-    execv(argv[0], argv);
-    _exit(128);
-  }
-  L_DEBUG("hncp_multicast calling %s", argv[0]);
-  for (int i = 1 ; argv[i] ; i++)
-    L_DEBUG(" %s", argv[i]);
-  /* waitpid(pid, NULL, 0); - we do not really want to call these
-   * synchronously, the script can do it's own locking if it wants
-   * to..*/
-}
-
 static void _tlv_cb(dncp_subscriber s,
                     dncp_node n, struct tlv_attr *tlv, bool add)
 {
@@ -98,7 +78,7 @@ static void _tlv_cb(dncp_subscriber s,
                           add ? "add" : "remove",
                           n == m->dncp->own_node ? "local" : "remote",
                           buf, NULL};
-          _fork_execv(argv);
+          hncp_run(argv);
         }
       break;
     case HNCP_T_PIM_RPA_CANDIDATE:
@@ -115,7 +95,7 @@ static void _cb_intiface(struct iface_user *u, const char *ifname, bool enabled)
                    (char *)ifname,
                    enabled ? "int" : "ext",
                    NULL };
-  _fork_execv(argv);
+  hncp_run(argv);
 }
 
 
@@ -132,7 +112,7 @@ static void _notify_rp(hncp_multicast m, struct in6_addr *a, bool local)
     return;
   char *argv[] = {(char *)m->p.multicast_script,
                   "rpa", local ? "local" : "remote", buf, buf2, NULL};
-  _fork_execv(argv);
+  hncp_run(argv);
 }
 
 static void _rp_timeout(struct uloop_timeout *t)

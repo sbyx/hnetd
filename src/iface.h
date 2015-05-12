@@ -32,6 +32,9 @@ struct iface_user {
 	void (*cb_intiface)(struct iface_user *u, const char *ifname, bool enabled);
 
 	/* Callback for external interfaces */
+	void (*cb_extiface)(struct iface_user *u, const char *ifname, bool enabled);
+
+	/* Callback for external interfaces */
 	void (*cb_extdata)(struct iface_user *u, const char *ifname,
 			const void *dhcpv6_data, size_t dhcpv6_len);
 
@@ -64,7 +67,7 @@ void iface_all_set_dhcp_send(const void *dhcpv6_data, size_t dhcpv6_len, const v
 bool iface_has_ipv4_address(const char *ifname);
 
 // Get preferred interface address
-int iface_get_preferred_address(struct in6_addr *addr, bool v4);
+int iface_get_preferred_address(struct in6_addr *addr, bool v4, const char *ifname);
 
 
 // Internal API to platform

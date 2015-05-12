@@ -106,7 +106,9 @@ int main(__unused int argc, char *argv[])
 	hncp_pa hncp_pa;
 	hncp_sd_params_s sd_params;
 	hncp_multicast_params_s multicast_params;
+#ifdef DTLS
 	dncp_trust dt = NULL;
+#endif /* DTLS */
 	struct hncp_link_config link_config = {HNCP_VERSION, 0, 0, 0, 0, ""};
 
 	memset(&sd_params, 0, sizeof(sd_params));
@@ -146,8 +148,10 @@ int main(__unused int argc, char *argv[])
 	const char *pa_ulamode = NULL;
 	const char *dtls_password = NULL;
 	const char *dtls_trust = NULL;
+#ifdef DTLS
 	const char *dtls_cert = NULL;
 	const char *dtls_key = NULL;
+#endif
 	const char *dtls_path = NULL;
 	const char *dtls_dir = NULL;
 	const char *pidfile = NULL;
@@ -245,10 +249,14 @@ int main(__unused int argc, char *argv[])
 			dtls_path = optarg;
 			break;
 		case GOL_KEY:
+#ifdef DTLS
 			dtls_key = optarg;
+#endif
 			break;
+#ifdef DTLS
 		case GOL_CERT:
 			dtls_cert = optarg;
+#endif
 			break;
 		default:
 			L_ERR("Unrecognized option");

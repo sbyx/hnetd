@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Wed Feb 11 10:25:18 2015 mstenber
- * Edit time:     112 min
+ * Last modified: Thu Apr 23 14:54:50 2015 mstenber
+ * Edit time:     116 min
  *
  */
 
@@ -21,24 +21,21 @@
 /******************************************************************* TLV T's */
 
 enum {
+  /* Request TLVs (not to be really stored anywhere) */
+  DNCP_T_REQ_NET_STATE = 1, /* empty */
+  DNCP_T_REQ_NODE_STATE = 2, /* = just normal hash */
+
   /* This should be included in every message to facilitate neighbor
    * discovery of peers. */
-  DNCP_T_LINK_ID = 1,
+  DNCP_T_ENDPOINT_ID = 3,
 
-  /* Request TLVs (not to be really stored anywhere) */
-  DNCP_T_REQ_NET_HASH = 2, /* empty */
-  DNCP_T_REQ_NODE_DATA = 3, /* = just normal hash */
-
-  /* 4-9 reserved for profile use */
-
-  DNCP_T_NETWORK_HASH = 10, /* = just normal hash, accumulated from node states so sensible to send later */
-  DNCP_T_NODE_STATE = 11,
-
-  DNCP_T_NODE_DATA = 12,
-  DNCP_T_NODE_DATA_NEIGHBOR = 13,
-  DNCP_T_KEEPALIVE_INTERVAL = 14,
-  DNCP_T_CUSTOM = 15, /* not implemented */
-  DNCP_T_TRUST_VERDICT = 16
+  DNCP_T_NET_STATE = 4, /* = just normal hash, accumulated from node states so sensible to send later */
+  DNCP_T_NODE_STATE = 5,
+  DNCP_T_CUSTOM = 6, /* not implemented */
+  DNCP_T_FRAGMENT_COUNT = 7, /* not implemented */
+  DNCP_T_NEIGHBOR = 8,
+  DNCP_T_KEEPALIVE_INTERVAL = 9,
+  DNCP_T_TRUST_VERDICT = 10
 };
 
 #define TLV_SIZE sizeof(struct tlv_attr)
@@ -55,17 +52,17 @@ typedef struct __packed {
   unsigned char buf[DNCP_NI_LEN];
 } dncp_node_identifier_s, *dncp_node_identifier;
 
-/* DNCP_T_LINK_ID */
+/* DNCP_T_REQ_NET_STATE has no content */
+
+/* DNCP_T_REQ_NODE_STATE has only (node identifier) hash */
+
+/* DNCP_T_ENDPOINT_ID */
 typedef struct __packed {
   dncp_node_identifier_s node_identifier;
   uint32_t link_id;
 } dncp_t_link_id_s, *dncp_t_link_id;
 
-/* DNCP_T_REQ_NET_HASH has no content */
-
-/* DNCP_T_REQ_NODE_DATA has only (node identifier) hash */
-
-/* DNCP_T_NETWORK_HASH has only (network state) hash */
+/* DNCP_T_NET_STATE has only (network state) hash */
 
 /* DNCP_T_NODE_STATE */
 typedef struct __packed {
@@ -73,28 +70,23 @@ typedef struct __packed {
   uint32_t update_number;
   uint32_t ms_since_origination;
   dncp_hash_s node_data_hash;
+  /* + optional node data after this */
 } dncp_t_node_state_s, *dncp_t_node_state;
 
-/* DNCP_T_NODE_DATA */
-typedef struct __packed {
-  dncp_node_identifier_s node_identifier;
-  uint32_t update_number;
-} dncp_t_node_data_header_s, *dncp_t_node_data_header;
+/* DNCP_T_CUSTOM custom data, with H-64 of URI at start to identify type TBD */
 
-/* DNCP_T_NODE_DATA_NEIGHBOR */
+/* DNCP_T_NEIGHBOR */
 typedef struct __packed {
   dncp_node_identifier_s neighbor_node_identifier;
   uint32_t neighbor_link_id;
   uint32_t link_id;
-} dncp_t_node_data_neighbor_s, *dncp_t_node_data_neighbor;
+} dncp_t_neighbor_s, *dncp_t_neighbor;
 
 /* DNCP_T_KEEPALIVE_INTERVAL */
 typedef struct __packed {
   uint32_t link_id;
   uint32_t interval_in_ms;
 } dncp_t_keepalive_interval_s, *dncp_t_keepalive_interval;
-
-/* DNCP_T_CUSTOM custom data, with H-64 of URI at start to identify type TBD */
 
 typedef enum {
   DNCP_VERDICT_NONE = -1, /* internal, should not be stored */

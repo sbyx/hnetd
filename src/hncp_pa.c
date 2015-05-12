@@ -68,6 +68,7 @@
 #define HPA_PRIORITY_LINK_ID  3
 #define HPA_PRIORITY_PD       1
 #define HPA_PRIORITY_EXCLUDE  15
+#define HPA_PRIORITY_FAKE     2
 
 #define HPA_RULE_EXCLUDE           1000
 #define HPA_RULE_STATIC            100
@@ -107,8 +108,7 @@ static void hpa_conf_update_cb(struct vlist_tree *tree,
 static int hpa_iface_filter_accept(__unused struct pa_rule *rule,
 		struct pa_ldp *ldp, void *p)
 {
-	hpa_iface i = p;
-	return ldp->link == &i->pal;
+	return ldp->link == (struct pa_link *)p;
 }
 
 static hpa_conf hpa_conf_get_by_type(hpa_iface i, unsigned int type)
@@ -157,7 +157,20 @@ static pa_plen hpa_desired_plen(hpa_iface iface, struct pa_ldp *ldp,
 	return ldp->dp->plen;
 }
 
-static pa_plen hpa_desired_plen_cb(struct pa_rule_random *rule_r,
+static void hpa_pa_get_plen_range(__unused struct pa_rule *rule,
+		struct pa_ldp *ldp, pa_plen *min, pa_plen *max)
+{
+	hpa_iface i = container_of(ldp->link, hpa_iface_s, pal);
+	*min = *max = hpa_desired_plen(i, ldp, 0);
+}
+
+static void hpa_aa_get_plen_range(__unused struct pa_rule *rule,
+		__unused struct pa_ldp *dlp, pa_plen *min, pa_plen *max)
+{
+	*min = *max = 128;
+}
+
+static pa_plen hpa_desired_plen_cb(struct pa_rule *rule,
 		struct pa_ldp *ldp,
 		uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
 {
@@ -165,12 +178,28 @@ static pa_plen hpa_desired_plen_cb(struct pa_rule_random *rule_r,
 	if(biggest > 128)
 		return 0;
 
-	hpa_iface iface = container_of(rule_r, hpa_iface_s, pa_rand);
+	hpa_iface iface = container_of(rule, hpa_iface_s, pa_rand.rule);
 	return hpa_desired_plen(iface, ldp, biggest);
 }
 
+/* In IPv4
+ */
+static int hpa_aa_subprefix_cb(__unused struct pa_rule *rule,
+		struct pa_ldp *ldp, pa_prefix *prefix, pa_plen *plen)
+{
+	memset(prefix, 0, sizeof(*prefix));
+	bmemcpy(prefix, &ldp->dp->prefix, 0, ldp->dp->plen);
+	if(ldp->dp->plen >= 126) {
+		//Things will probably break anyway at that point.
+		*plen = ldp->dp->plen;
+	} else {
+		*plen = ldp->dp->plen + 2;
+	}
+	return 0;
+}
+
 static pa_plen hpa_desired_plen_override_cb(
-		__unused struct pa_rule_random *rule_r,
+		__unused struct pa_rule *rule,
 		struct pa_ldp *ldp,
 		__unused uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
 {
@@ -182,22 +211,7 @@ static pa_plen hpa_desired_plen_override_cb(
 	}
 }
 
-static int hpa_accept_proposed_addr(__unused struct pa_rule_random *r, struct pa_ldp *ldp,
-			pa_prefix *prefix, pa_plen plen)
-{
-	//The purpose of this function is to reject IPv4 Network Addresses
-	struct prefix p = {.plen = plen};
-	bmemcpy(&p.prefix, prefix, 0, plen);
-	if(prefix_is_ipv4(&p)) {
-		struct prefix dp = {.plen = ldp->dp->plen };
-		bmemcpy(&dp.prefix, &ldp->dp->prefix, 0, ldp->dp->plen);
-		if(!memcmp(&p.prefix, &dp.prefix, sizeof(struct in6_addr)))
-			return 0;
-	}
-	return 1;
-}
-
-static pa_plen hpa_return_128(__unused struct pa_rule_random *r,
+static pa_plen hpa_return_128(__unused struct pa_rule *r,
 		__unused struct pa_ldp *ldp,
 		__unused uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
 {
@@ -217,29 +231,40 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	i->pa_adopt.rule.filter_accept = hpa_iface_filter_accept;
 	i->pa_adopt.rule.filter_private = i;
 
+	strcpy((char *)i->seed, i->ifname);
+	i->seedlen = strlen(i->ifname);
+	i->seed[i->seedlen++] = '-';
+	i->seedlen += dncp_io_get_hwaddrs(i->seed + i->seedlen, IFNAMSIZ + 18 - i->seedlen);
+	L_DEBUG("Pseudo random seed of %s is %s", i->ifname, HEX_REPR(i->seed, i->seedlen));
+
 	//Init the assignment rule
-	pa_rule_random_init(&i->pa_rand, "Random Prefix",
+#ifndef HNCP_PA_USE_HAMMING
+	pa_rule_random_init(&i->pa_rand, "Random Prefix (Random)",
 			HPA_RULE_CREATE, HPA_PRIORITY_CREATE, hpa_desired_plen_cb,
 			HPA_RAND_SET_SIZE);
 	pa_rule_random_prandconf(&i->pa_rand, HPA_PSEUDO_RAND_TENTATIVES,
-			(uint8_t *)i->pa_name, strlen(i->pa_name));
-	//todo: use UIE64 as seed
+			i->seed, i->seedlen);
 	i->pa_rand.accept_proposed_cb = NULL;
+#else
+	pa_rule_hamming_init(&i->pa_rand, "Random Prefix (Hamming)",
+				HPA_RULE_CREATE, HPA_PRIORITY_CREATE, hpa_desired_plen_cb,
+				HPA_RAND_SET_SIZE, i->seed, i->seedlen);
+#endif
 	i->pa_rand.rule.filter_accept = hpa_iface_filter_accept;
-	i->pa_rand.rule.filter_private = i;
+	i->pa_rand.rule.filter_private = &i->pal;
 
 	//Scarcity rule
 	pa_rule_random_init(&i->pa_override, "Override Existing Prefix",
 			HPA_RULE_CREATE_SCARCITY, HPA_PRIORITY_SCARCITY,
 			hpa_desired_plen_override_cb, HPA_RAND_SET_SIZE);
 	pa_rule_random_prandconf(&i->pa_override, HPA_PSEUDO_RAND_TENTATIVES,
-			(uint8_t *)i->pa_name, strlen(i->pa_name));
-	//todo use EUI64
+			i->seed, i->seedlen);
+
 	i->pa_override.override_rule_priority = HPA_RULE_CREATE_SCARCITY;
 	i->pa_override.override_priority = HPA_PRIORITY_SCARCITY;
 	i->pa_override.safety = 1;
 	i->pa_override.rule.filter_accept = hpa_iface_filter_accept;
-	i->pa_override.rule.filter_private = i;
+	i->pa_override.rule.filter_private = &i->pal;
 
 	//Init AA
 	sprintf(i->aa_name, HPA_LINK_NAME_ADDR"%s", i->ifname);
@@ -248,13 +273,21 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	i->aal.type = HPA_LINK_T_IFACE;
 
 	//Use first quarter of available addresses
+#ifndef HNCP_PA_USE_HAMMING
 	pa_rule_random_init(&i->aa_rand, "Random Address",
 			HPA_RULE_CREATE, HPA_PRIORITY_CREATE,
 			hpa_return_128, HPA_RAND_SET_SIZE);
 	pa_rule_random_prandconf(&i->aa_rand, HPA_PSEUDO_RAND_TENTATIVES,
-			(uint8_t *)i->aa_name, strlen(i->aa_name));
-	//todo use EUI64
-	i->aa_rand.accept_proposed_cb = hpa_accept_proposed_addr;
+			seed, seedlen);
+#else
+	pa_rule_hamming_init(&i->aa_rand, "Random Address (Hamming)",
+				HPA_RULE_CREATE, HPA_PRIORITY_CREATE,
+				hpa_return_128, HPA_RAND_SET_SIZE,
+				i->seed, i->seedlen);
+#endif
+	i->aa_rand.rule.filter_accept = hpa_iface_filter_accept;
+	i->aa_rand.rule.filter_private = &i->aal;
+	i->aa_rand.subprefix_cb = hpa_aa_subprefix_cb;
 
 	//Init stable storage
 	pa_store_link_init(&i->pasl, &i->pal, i->pal.name, 20);
@@ -1164,7 +1197,8 @@ static hpa_advp hpa_get_hpa_advp(struct pa_core *core, dncp_node n,
 	pa_for_each_advp(core, ap, addr, plen) {
 		hap = container_of(ap, hpa_advp_s, advp);
 		//We must compare every field of the TLV in case it was modified
-		if(!memcmp(&id, &hap->link_id, sizeof(id)) &&
+		if(!hap->fake &&
+				!memcmp(&id, &hap->link_id, sizeof(id)) &&
 				hap->ap_flags == flags) {
 			return hap;
 		}
@@ -1212,6 +1246,7 @@ static void hpa_update_ap_tlv(hncp_pa hpa, dncp_node n,
 		pa_advp_add(&hpa->pa, &hap->advp);
 
 		list_add(&hap->le, &hpa->aps);
+		hap->fake = 0;
 		hap->link_id = id;
 		hap->ap_flags = ah->flags;
 	}
@@ -1524,13 +1559,57 @@ static void hpa_dncp_link_change_cb(dncp_subscriber s,
 
 /******** PA Callbacks *******/
 
+static struct in6_addr addr_allones = { .s6_addr =
+	{0xff,0xff, 0xff,0xff, 0xff,0xff, 0xff,0xff,
+		0xff,0xff, 0xff,0xff, 0xff,0xff, 0xff,0xff}};
+static struct in6_addr addr_allzeroes = { .s6_addr = {}};
+
 static void hpa_pa_assigned_cb(struct pa_user *u, struct pa_ldp *ldp)
 {
 	//If this is a lease ldp, we want to give it to DP with a shortened lifetime
 	//If it is un-assigned, we want to remove everything
 	hncp_pa hpa = container_of(u, hncp_pa_s, pa_user);
+	struct hpa_ap_ldp_struct *ap;
 	if(ldp->link->type == HPA_LINK_T_LEASE)
 		hpa_ap_pd_notify(hpa, ldp);
+
+	if(ldp->link->type == HPA_LINK_T_IFACE) {
+
+		if(ldp->assigned) {
+			if(ldp->plen >= 127) //Do not forbid address if only 2 or 1 is available
+				return;
+
+			ldp->userdata[PA_LDP_U_HNCP_AP] = (ap = calloc(1, sizeof(*ap)));
+			if(!ap)
+				return;
+
+			/* Forbid broadcast address */
+			ap->bc_addr.fake = 1;
+			ap->bc_addr.advp.priority = HPA_PRIORITY_FAKE;
+			ap->bc_addr.advp.plen = 128;
+
+			memcpy(&ap->bc_addr.advp.prefix, &ldp->prefix, sizeof(struct in6_addr));
+			bmemcpy(&ap->bc_addr.advp.prefix, &addr_allones, ldp->plen, 128 - ldp->plen);
+
+			pa_advp_add(&hpa->aa, &ap->bc_addr.advp);
+
+			/* Forbid network address */
+			ap->net_addr.fake = 1;
+			ap->net_addr.advp.priority = HPA_PRIORITY_FAKE;
+			ap->net_addr.advp.plen = 128;
+
+			memcpy(&ap->net_addr.advp.prefix, &ldp->prefix, sizeof(struct in6_addr));
+			bmemcpy(&ap->net_addr.advp.prefix, &addr_allzeroes, ldp->plen, 128 - ldp->plen);
+
+			pa_advp_add(&hpa->aa, &ap->net_addr.advp);
+
+		} else if (ldp->userdata[PA_LDP_U_HNCP_AP]) {
+			ap = ldp->userdata[PA_LDP_U_HNCP_AP];
+			pa_advp_del(&hpa->aa, &ap->bc_addr.advp);
+			pa_advp_del(&hpa->aa, &ap->net_addr.advp);
+			free(ldp->userdata[PA_LDP_U_HNCP_AP]);
+		}
+	}
 }
 
 static void hpa_pa_published_cb(struct pa_user *u, struct pa_ldp *ldp)
@@ -1613,11 +1692,11 @@ static int hpa_pd_filter_accept(__unused struct pa_rule *rule, struct pa_ldp *ld
 	return !prefix_is_ipv4(&dp);
 }
 
-pa_plen hpa_lease_desired_plen_cb(struct pa_rule_random *r,
+pa_plen hpa_lease_desired_plen_cb(struct pa_rule *rule,
 		__unused struct pa_ldp *ldp,
 		uint16_t prefix_count[PA_RAND_MAX_PLEN + 1])
 {
-	hpa_lease l = container_of(r, hpa_lease_s, rule_rand);
+	hpa_lease l = container_of(rule, hpa_lease_s, rule_rand.rule);
 	pa_plen min_plen, des_plen;
 	if((min_plen = hpa_get_biggest(prefix_count)) > 128)
 		return 0;
@@ -1646,10 +1725,16 @@ hpa_lease hpa_pd_add_lease(hncp_pa hp, const char *duid, uint8_t hint_len,
 	l->pal.type = HPA_LINK_T_LEASE;
 
 	//Init random rule
+#ifndef HNCP_PA_USE_HAMMING
 	pa_rule_random_init(&l->rule_rand, "Downstream PD Random Prefix",
 			HPA_RULE_CREATE, HPA_PRIORITY_PD, hpa_lease_desired_plen_cb, 128);
 	pa_rule_random_prandconf(&l->rule_rand, 10,
 			(uint8_t *)l->pa_link_name, strlen(l->pa_link_name));
+#else
+	pa_rule_hamming_init(&l->rule_rand, "Downstream PD Random Prefix (Hamming)",
+			HPA_RULE_CREATE, HPA_PRIORITY_PD, hpa_lease_desired_plen_cb, 128,
+			(uint8_t *)l->pa_link_name, strlen(l->pa_link_name));
+#endif
 	l->rule_rand.rule.filter_accept = hpa_pd_filter_accept;
 	l->rule_rand.rule.filter_private = l;
 
@@ -1967,12 +2052,14 @@ hncp_pa hncp_pa_create(dncp dncp, struct hncp_link *hncp_link)
 	hp->store_pa_r.rule_priority = HPA_RULE_STORE;
 	hp->store_pa_r.priority = HPA_PRIORITY_STORE;
 	hp->store_pa_r.rule.name = "Prefix Storage";
+	hp->store_pa_r.get_plen_range = hpa_pa_get_plen_range;
 	pa_rule_add(&hp->pa, &hp->store_pa_r.rule);
 
 	pa_store_rule_init(&hp->store_aa_r, &hp->store);
 	hp->store_aa_r.rule_priority = HPA_RULE_STORE;
 	hp->store_aa_r.priority = HPA_PRIORITY_STORE;
 	hp->store_aa_r.rule.name = "Address Storage";
+	hp->store_aa_r.get_plen_range = hpa_aa_get_plen_range;
 	pa_rule_add(&hp->aa, &hp->store_aa_r.rule);
 
 	//Set node IDs based on dncd node ID

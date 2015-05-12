@@ -8,8 +8,6 @@ ISIS_INIT=`which autoisis`
 BFSTABLE=33333
 BFSPROTO=73
 
-echo $* >> /tmp/hnetd-routing.log
-
 act=$1
 shift
 
@@ -25,6 +23,7 @@ configure)
 			$BABEL_EXE -D -I $BABEL_PID \
 				-C "redistribute" \
 				-C "redistribute local deny" \
+				-C "ipv6-subtrees yes" \
 				$*
 
 			# Wait for pid file to actually show up
@@ -54,12 +53,10 @@ bfsprepare)
 	;;
 
 bfsipv6assigned)
-	if grep -q chaos /etc/openwrt_release; then
-		exec ip -6 route add "$1" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO"
-	# IPv6 throw routes are broken in current Linux kernels...
-	else
-		exec ip -6 route add "$1" via "$2" dev "$3" metric "$((2140000000+$4))" proto "$BFSPROTO"
-	fi
+	exec ip -6 route add "$1" via "$2" dev "$3" metric "$4" table "$BFSTABLE" proto "$BFSPROTO"
+	# IPv6 throw routes are broken in historic Linux kernels...
+        # (this workaround plays havoc with e.g. Babel though)
+	#exec ip -6 route add "$1" via "$2" dev "$3" metric "$((2140000000+$4))" proto "$BFSPROTO"
 	;;
 
 bfsipv4assigned)
