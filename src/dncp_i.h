@@ -376,7 +376,7 @@ dncp_tlv_neighbor(const struct tlv_attr *a)
   if (tlv_id(a) != DNCP_T_NEIGHBOR
       || tlv_len(a) != sizeof(dncp_t_neighbor_s))
     return NULL;
-  return tlv_data(a);
+  return (dncp_t_neighbor)tlv_data(a);
 }
 
 static inline dncp_t_trust_verdict
@@ -388,11 +388,11 @@ dncp_tlv_trust_verdict(const struct tlv_attr *a)
     return NULL;
   if (tlv_len(a) > sizeof(dncp_t_trust_verdict_s) + DNCP_T_TRUST_VERDICT_CNAME_LEN)
     return NULL;
-  const char *data = tlv_data(a);
+  const char *data = (char *)tlv_data(a);
   /* Make sure it is also null terminated */
   if (data[tlv_len(a)-1])
     return NULL;
-  return tlv_data(a);
+  return (dncp_t_trust_verdict)tlv_data(a);
 }
 
 static inline dncp_node

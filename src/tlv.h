@@ -155,14 +155,14 @@ static inline const char *hex_repr(char *buf, const void *data, int len)
   return r;
 }
 
-#define HEX_REPR(buf, len) hex_repr(alloca((len) * 2 + 1), buf, len)
+#define HEX_REPR(buf, len) hex_repr((char *)alloca((len) * 2 + 1), (void *)buf, len)
 
 static inline const char *
 tlv_repr(struct tlv_attr *a, char *buf, int buf_len)
 {
   snprintf(buf, buf_len, "<TLV id=%d,len=%d: %s>",
            tlv_id(a), tlv_len(a),
-           HEX_REPR(tlv_data(a), tlv_len(a)));
+           HEX_REPR((char *)tlv_data(a), tlv_len(a)));
   return buf;
 }
 
