@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 14:50:58 2014 mstenber
- * Last modified: Thu Jan  8 14:56:00 2015 mstenber
- * Edit time:     11 min
+ * Last modified: Wed May 13 09:37:58 2015 mstenber
+ * Edit time:     13 min
  *
  */
 
@@ -87,53 +87,6 @@ struct tlv_attr *dncp_profile_node_validate_data(dncp_node n,
     }
   return a_valid;
 }
-
-/* Utilities for formatting TLVs. */
-void dncp_tlv_ra_update(dncp o,
-                        uint32_t lid,
-                        const struct in6_addr *address,
-                        bool add)
-{
-  hncp_t_router_address_s ra;
-
-  ra.link_id = lid;
-  ra.address = *address;
-  dncp_update_tlv(o, HNCP_T_ROUTER_ADDRESS, &ra, sizeof(ra), 0, add);
-}
-
-/*
-void dncp_tlv_ap_update(dncp o,
-                        const struct prefix *prefix,
-                        const char *ifname,
-                        bool authoritative,
-                        unsigned int preference,
-                        bool add)
-{
-  struct prefix p;
-  int mlen = sizeof(hncp_t_assigned_prefix_header_s) + 16 + 3;
-  unsigned char buf[mlen];
-  int plen = ROUND_BITS_TO_BYTES(prefix->plen);
-  int flen = sizeof(hncp_t_delegated_prefix_header_s) + plen;
-  hncp_t_assigned_prefix_header ah;
-  dncp_link l;
-
-  memset(buf, 0, sizeof(buf));
-  p = *prefix;
-  prefix_canonical(&p, &p);
-  // XXX - what if links renumber? let's hope they don't
-  ah = (void *)buf;
-  l = dncp_find_link_by_name(o, ifname, false);
-  if (l)
-    ah->link_id = l->iid;
-  ah->flags =
-    HNCP_T_ASSIGNED_PREFIX_FLAG_PREFERENCE(preference)
-    | (authoritative ? HNCP_T_ASSIGNED_PREFIX_FLAG_AUTHORITATIVE : 0);
-  ah->prefix_length_bits = p.plen;
-  ah++;
-  memcpy(ah, &p, plen);
-  dncp_update_tlv(o, HNCP_T_ASSIGNED_PREFIX, buf, flen, 0, add);
-}
-*/
 
 static bool _hncp_init(dncp o)
 {
