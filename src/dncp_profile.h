@@ -121,16 +121,11 @@ bool dncp_profile_handle_collision(dncp o);
 /************************************************** I/O abstraction for DNCP */
 /* (c.f. hncp_io) */
 
+#include "hncp_io.h"
+
 bool dncp_io_init(dncp o);
 void dncp_io_uninit(dncp o);
 bool dncp_io_set_ifname_enabled(dncp o, const char *ifname, bool enabled);
 int dncp_io_get_hwaddrs(unsigned char *buf, int buf_left);
 void dncp_io_schedule(dncp o, int msecs);
 hnetd_time_t dncp_io_time(dncp o);
-
-ssize_t dncp_io_recvfrom(dncp o, void *buf, size_t len,
-                         char *ifname,
-                         struct sockaddr_in6 *src,
-                         struct in6_addr *dst);
-ssize_t dncp_io_sendto(dncp o, void *buf, size_t len,
-                       const struct sockaddr_in6 *dst);

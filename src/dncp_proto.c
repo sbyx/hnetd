@@ -130,7 +130,7 @@ void dncp_link_send_network_state(dncp_link l,
     }
   L_DEBUG("dncp_link_send_network_state -> " SA6_F "%%" DNCP_LINK_F,
           SA6_D(dst), DNCP_LINK_D(l));
-  dncp_io_sendto(o, tlv_data(tb.head), tlv_len(tb.head), dst);
+  dncp_io_sendto(o, tlv_data(tb.head), tlv_len(tb.head), dst, NULL);
  done:
   tlv_buf_free(&tb);
 }
@@ -148,7 +148,7 @@ void dncp_link_send_node_state(dncp_link l,
     {
       L_DEBUG("dncp_link_send_node_data %s -> " SA6_F " %%" DNCP_LINK_F,
               DNCP_NODE_REPR(n), SA6_D(dst), DNCP_LINK_D(l));
-      dncp_io_sendto(l->dncp, tlv_data(tb.head), tlv_len(tb.head), dst);
+      dncp_io_sendto(l->dncp, tlv_data(tb.head), tlv_len(tb.head), dst, NULL);
     }
   tlv_buf_free(&tb);
 }
@@ -166,7 +166,7 @@ void dncp_link_send_req_network_state(dncp_link l,
     {
       L_DEBUG("dncp_link_send_req_network_state -> " SA6_F "%%" DNCP_LINK_F,
               SA6_D(dst), DNCP_LINK_D(l));
-      dncp_io_sendto(l->dncp, tlv_data(tb.head), tlv_len(tb.head), dst);
+      dncp_io_sendto(l->dncp, tlv_data(tb.head), tlv_len(tb.head), dst, NULL);
     }
   tlv_buf_free(&tb);
 }
@@ -186,7 +186,7 @@ void dncp_link_send_req_node_data(dncp_link l,
       L_DEBUG("dncp_link_send_req_node_data -> " SA6_F "%%" DNCP_LINK_F,
               SA6_D(dst), DNCP_LINK_D(l));
       memcpy(tlv_data(a), &ns->node_identifier, DNCP_NI_LEN);
-      dncp_io_sendto(l->dncp, tlv_data(tb.head), tlv_len(tb.head), dst);
+      dncp_io_sendto(l->dncp, tlv_data(tb.head), tlv_len(tb.head), dst, NULL);
     }
   tlv_buf_free(&tb);
 }
@@ -485,14 +485,15 @@ void dncp_poll(dncp o)
   while ((read = dncp_io_recvfrom(o, msg->data, DNCP_MAXIMUM_PAYLOAD_SIZE,
                                   srcif, &src, &dst)) > 0)
     {
+      tlv_init(msg, 0, read + sizeof(struct tlv_attr));
+
       /* First off. If it's off some link we aren't supposed to use, ignore. */
       l = dncp_find_link_by_name(o, srcif, false);
-      if (!l)
-        continue;
-      tlv_init(msg, 0, read + sizeof(struct tlv_attr));
-      handle_message(l, &src, &dst, msg);
+      if (l)
+    	  handle_message(l, &src, &dst, msg);
+
       list_for_each_entry(s, &o->subscribers[DNCP_CALLBACK_SOCKET_MSG],
                           lhs[DNCP_CALLBACK_SOCKET_MSG])
-        s->msg_received_callback(s, l->ifname, &src, &dst, msg);
+        s->msg_received_callback(s, srcif, &src, &dst, msg);
     }
 }

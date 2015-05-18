@@ -50,6 +50,8 @@
 #include <fcntl.h>
 
 #include "dtls.h"
+#include "dncp_io.h"
+
 #if L_LEVEL >= LOG_DEBUG
 /* HEX_REPR */
 #include "tlv.h"
@@ -98,6 +100,7 @@ typedef struct {
   dtls d;
 
   struct sockaddr_in6 remote_addr;
+  struct in6_pktinfo source_addr;
 
   enum {
     STATE_ACCEPT,
@@ -130,11 +133,8 @@ typedef struct dtls_struct {
 
   SSL_CTX *ssl_server_ctx;
 
-  struct uloop_fd ufd_server;
-  int server_socket;
-
-  struct uloop_fd ufd_client;
-  int client_socket;
+  struct uloop_fd ufd_server[SOCKET_MAX];
+  struct uloop_fd ufd_client[SOCKET_MAX];
 
   struct list_head connections;
 
@@ -307,9 +307,8 @@ static bool _connection_poll_write(dtls_connection dc)
     {
       char buf[2048];
       int outsize = BIO_read(dc->wbio, buf, sizeof(buf));
-      int s = dc->is_client ? dc->d->client_socket : dc->d->server_socket;
-      sendto(s, buf, outsize, 0,
-             (struct sockaddr *)&dc->remote_addr, sizeof(dc->remote_addr));
+      struct uloop_fd *s = dc->is_client ? dc->d->ufd_client : dc->d->ufd_server;
+      dncp_io_sendmsg(s, buf, outsize, &dc->remote_addr, &dc->source_addr);
       L_DEBUG("sent %d bytes to peer", outsize);
     }
   /* We do not close sockets here. */
@@ -542,7 +541,8 @@ static void _dtls_update_t(dtls d)
 
 static dtls_connection
 _connection_create(dtls d, bool is_client,
-                   const struct sockaddr_in6 *remote_addr)
+                   const struct sockaddr_in6 *remote_addr,
+				   const struct in6_pktinfo *source_addr)
 {
   dtls_connection dc = calloc(1, sizeof(*dc));
 
@@ -556,6 +556,8 @@ _connection_create(dtls d, bool is_client,
   dc->last_use = d->t;
   dc->uto.cb = _connection_uto_cb;
   dc->remote_addr = *remote_addr;
+  if (source_addr)
+	  dc->source_addr = *source_addr;
   dc->is_client = is_client;
   d->num_non_data_connections++;
   if (is_client)
@@ -590,13 +592,14 @@ _connection_create(dtls d, bool is_client,
 static void _dtls_poll(dtls d, bool is_client)
 {
   struct sockaddr_in6 remote_addr;
+  struct in6_pktinfo dest_addr;
   int rv;
   char buf[2048];
-  socklen_t remote_len = sizeof(remote_addr);
-  int s = is_client ? d->client_socket : d->server_socket;
+  char ifname[IF_NAMESIZE];
+  struct uloop_fd *s = is_client ? d->ufd_client : d->ufd_server;
 
-  if ((rv = recvfrom(s, buf, sizeof(buf), 0,
-                     (struct sockaddr *)&remote_addr, &remote_len)) <= 0)
+  if ((rv = dncp_io_recvmsg(s, buf, sizeof(buf), ifname,
+                     &remote_addr, &dest_addr.ipi6_addr)) <= 0)
     {
       L_DEBUG("recvfrom did not return anything");
       return;
@@ -624,7 +627,9 @@ static void _dtls_poll(dtls d, bool is_client)
        * properties.. */
       if (rv > 0 && buf[0] == 21)
         return;
-      dc = _connection_create(d, false, &remote_addr);
+
+      dest_addr.ipi6_ifindex = remote_addr.sin6_scope_id;
+      dc = _connection_create(d, false, &remote_addr, &dest_addr);
       if (!dc)
         return;
     }
@@ -639,7 +644,16 @@ static void _dtls_poll(dtls d, bool is_client)
 static void
 _dtls_ufd_server_cb(struct uloop_fd *u, unsigned int events __unused)
 {
-  dtls d = container_of(u, dtls_s, ufd_server);
+  dtls d = container_of(u, dtls_s, ufd_server[SOCKET_IPV6]);
+
+  L_DEBUG("_dtls_ufd_server_cb");
+  _dtls_poll(d, false);
+}
+
+static void
+_dtls_ufd_server_cb4(struct uloop_fd *u, unsigned int events __unused)
+{
+  dtls d = container_of(u, dtls_s, ufd_server[SOCKET_IPV4]);
 
   L_DEBUG("_dtls_ufd_server_cb");
   _dtls_poll(d, false);
@@ -648,7 +662,16 @@ _dtls_ufd_server_cb(struct uloop_fd *u, unsigned int events __unused)
 static void
 _dtls_ufd_client_cb(struct uloop_fd *u, unsigned int events __unused)
 {
-  dtls d = container_of(u, dtls_s, ufd_client);
+  dtls d = container_of(u, dtls_s, ufd_client[SOCKET_IPV6]);
+
+  L_DEBUG("_dtls_ufd_client_cb");
+  _dtls_poll(d, true);
+}
+
+static void
+_dtls_ufd_client_cb4(struct uloop_fd *u, unsigned int events __unused)
+{
+  dtls d = container_of(u, dtls_s, ufd_client[SOCKET_IPV4]);
 
   L_DEBUG("_dtls_ufd_client_cb");
   _dtls_poll(d, true);
@@ -669,36 +692,6 @@ void dtls_set_unknown_cert_callback(dtls d,
   d->unknown_cb_context = cb_context;
 }
 
-static int _setup_listen_port(uint16_t port)
-{
-  struct sockaddr_in6 local_addr;
-
-  int s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-  if (s<0)
-    {
-      L_ERR("unable to create IPv6 UDP socket");
-      return -1;
-    }
-  fcntl(s, F_SETFL, O_NONBLOCK);
-
-  memset(&local_addr, 0, sizeof(local_addr));
-  local_addr.sin6_family = AF_INET6;
-  local_addr.sin6_port = htons(port);
-
-  int on = 1;
-#ifdef SO_REUSEPORT
-  setsockopt(s, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on));
-#endif /* SO_REUSEPORT */
-  setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-  if (bind(s, (struct sockaddr *)&local_addr, sizeof(local_addr))<0)
-    {
-      L_ERR("unable to bind to port %d", port);
-      close(s);
-      return -1;
-    }
-  return s;
-}
-
 /* Create/destroy instance. */
 dtls dtls_create(uint16_t port)
 {
@@ -712,16 +705,12 @@ dtls dtls_create(uint16_t port)
     }
   if (!d)
     goto fail;
-  if ((d->server_socket = _setup_listen_port(port)) < 0)
+  if (dncp_io_sockets(d->ufd_server, port, _dtls_ufd_server_cb, _dtls_ufd_server_cb4) < 0)
     goto fail;
   INIT_LIST_HEAD(&d->connections);
-  d->ufd_server.cb = _dtls_ufd_server_cb;
-  d->ufd_server.fd = d->server_socket;
 
-  if ((d->client_socket = _setup_listen_port(0)) < 0)
-    goto fail;
-  d->ufd_client.cb = _dtls_ufd_client_cb;
-  d->ufd_client.fd = d->client_socket;
+  if (dncp_io_sockets(d->ufd_client, 0, _dtls_ufd_client_cb, _dtls_ufd_client_cb4) < 0)
+      goto fail;
 
 #ifdef USE_ONE_CONTEXT
   SSL_CTX *ctx = SSL_CTX_new(DTLSv1_method());
@@ -775,8 +764,6 @@ void dtls_start(dtls d)
 {
   if (d->started) return;
   d->started = true;
-  uloop_fd_add(&d->ufd_server, ULOOP_READ);
-  uloop_fd_add(&d->ufd_client, ULOOP_READ);
 }
 
 void dtls_destroy(dtls d)
@@ -791,8 +778,8 @@ void dtls_destroy(dtls d)
 #endif /* USE_ONE_CONTEXT */
   list_for_each_entry_safe(dc, dc2, &d->connections, in_connections)
     _connection_free(dc);
-  uloop_fd_delete(&d->ufd_server);
-  uloop_fd_delete(&d->ufd_client);
+  dncp_io_close(d->ufd_client);
+  dncp_io_close(d->ufd_server);
   free(d);
 }
 
@@ -818,7 +805,8 @@ ssize_t dtls_recvfrom(dtls d, void *buf, size_t len,
 }
 
 ssize_t dtls_sendto(dtls d, void *buf, size_t len,
-                    const struct sockaddr_in6 *dst)
+                    const struct sockaddr_in6 *dst,
+					const struct in6_pktinfo *src)
 {
   L_DEBUG("dtls_sendto");
   _dtls_update_t(d);
@@ -846,7 +834,7 @@ ssize_t dtls_sendto(dtls d, void *buf, size_t len,
   if (!dc)
     {
       /* Create new connection object */
-      dc = _connection_create(d, true, dst);
+      dc = _connection_create(d, true, dst, src);
       if (!dc)
         return -1;
       _connection_poll(dc);

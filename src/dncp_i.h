@@ -14,6 +14,7 @@
 #pragma once
 
 #include "dncp.h"
+#include "dncp_io.h"
 #include "dncp_proto.h"
 #include "dncp_profile.h"
 
@@ -99,11 +100,8 @@ struct dncp_struct {
    * too late to change.) */
   uint16_t udp_port;
 
-  /* UDP socket. */
-  int udp_socket;
-
   /* And it's corresponding uloop_fd */
-  struct uloop_fd ufd;
+  struct uloop_fd ufd[SOCKET_MAX];
 
   /* Timeout for doing 'something' in dncp_io. */
   struct uloop_timeout timeout;

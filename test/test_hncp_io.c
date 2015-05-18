@@ -111,7 +111,7 @@ static void dncp_io_basic_2()
   smock_push_int("dncp_poll_io_recvfrom_dst", &a);
   smock_push_int("dncp_poll_io_recvfrom_buf", msg);
   smock_push_int("dncp_poll_io_recvfrom_ifname", ifname);
-  rv = dncp_io_sendto(&h1, msg, strlen(msg), &dst);
+  rv = dncp_io_sendto(&h1, msg, strlen(msg), &dst, NULL);
   L_DEBUG("got %d", rv);
   sput_fail_unless(rv == 3, "sendto failed?");
   pending_poll++;

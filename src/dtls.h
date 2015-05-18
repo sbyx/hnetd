@@ -115,7 +115,8 @@ void dtls_set_unknown_cert_callback(dtls d, dtls_unknown_callback cb, void *cb_c
 ssize_t dtls_recvfrom(dtls d, void *buf, size_t len,
                       struct sockaddr_in6 *src);
 ssize_t dtls_sendto(dtls o, void *buf, size_t len,
-                    const struct sockaddr_in6 *dst);
+                    const struct sockaddr_in6 *dst,
+					const struct in6_pktinfo *src);
 
 /* Certificate handling utilities */
 bool dtls_cert_to_pem_buf(dtls_cert cert, char *buf, int buf_len);

@@ -714,7 +714,8 @@ void _sendto(net_sim s, void *buf, size_t len, dncp_link sl, dncp_link dl,
 }
 
 ssize_t dncp_io_sendto(dncp o, void *buf, size_t len,
-                       const struct sockaddr_in6 *dst)
+                       const struct sockaddr_in6 *dst,
+					   const struct in6_pktinfo *src)
 {
   net_node node = container_of(o, net_node_s, n);
   net_sim s = node->s;

@@ -184,7 +184,7 @@ static void _test_basic_i(int i)
   smock_push_int("dtls_recvfrom", 3);
   smock_push("dtls_recvfrom_src_in6", &src.sin6_addr);
   smock_push("dtls_recvfrom_buf", msg);
-  rv = dtls_sendto(d1, msg, strlen(msg), &dst);
+  rv = dtls_sendto(d1, msg, strlen(msg), &dst, NULL);
   L_DEBUG("sendto => %d", rv);
   sput_fail_unless(rv == 3, "sendto failed?");
   pending_readable = 1;
@@ -284,7 +284,7 @@ static void _test_unknown_i(int i)
   src.sin6_port = htons(pbase);
   dst.sin6_port = htons(pbase+1);
 
-  rv = dtls_sendto(d1, msg, strlen(msg), &dst);
+  rv = dtls_sendto(d1, msg, strlen(msg), &dst, NULL);
   L_DEBUG("sendto => %d", rv);
   sput_fail_unless(rv == 3, "sendto failed?");
   pending_unknown = 1;
