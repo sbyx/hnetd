@@ -107,8 +107,8 @@ install(TARGETS hnetd DESTINATION sbin/)
 add_library(dncp STATIC src/hnetd_time.c src/prefix.c src/tlv.c src/dncp.c src/dncp_notify.c src/dncp_timeout.c src/dncp_proto.c)
 
 # libdncp example
-add_executable(libdncp_example examples/libdncp_example.c)
-target_link_libraries(libdncp_example dncp ubox)
+#add_executable(libdncp_example examples/libdncp_example.c)
+#target_link_libraries(libdncp_example dncp ubox)
 
 # Unit test stuff
 
