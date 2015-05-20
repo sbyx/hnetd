@@ -7,6 +7,7 @@
 #define __unused __attribute__((unused))
 
 #include <unistd.h>
+#include <arpa/inet.h>
 
 int dncp_io_sockets(struct uloop_fd *fd, uint16_t port,
 		uloop_fd_handler handle_v6, uloop_fd_handler handle_v4)
