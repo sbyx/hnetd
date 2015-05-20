@@ -1,11 +1,12 @@
-#include <fcntl.h>
-#include <errno.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <libubox/utils.h>
-
 #include "hncp.h"
 #include "dncp_io.h"
+
+#undef __unused
+/* In linux, fcntl.h includes something with __unused. Argh. */
+#include <fcntl.h>
+#define __unused __attribute__((unused))
+
+#include <unistd.h>
 
 int dncp_io_sockets(struct uloop_fd *fd, uint16_t port,
 		uloop_fd_handler handle_v6, uloop_fd_handler handle_v4)
@@ -57,6 +58,14 @@ void dncp_io_close(struct uloop_fd *fds)
   }
 }
 
+#define IN_ADDR_TO_MAPPED_IN6_ADDR(a, a6)       \
+do {                                            \
+  memset(a6, 0, sizeof(*(a6)));                 \
+  (a6)->s6_addr[10] = 0xff;                     \
+  (a6)->s6_addr[11] = 0xff;                     \
+  ((uint32_t *)a6)[3] = *((uint32_t *)a);       \
+ } while (0)
+
 ssize_t dncp_io_recvmsg(struct uloop_fd *fds,
 		void *buf, size_t len,
         char *ifname,
@@ -103,20 +112,15 @@ ssize_t dncp_io_recvmsg(struct uloop_fd *fds,
 			struct sockaddr_in6 src6 = {
 			  .sin6_family = AF_INET6,
 			  .sin6_port = src4->sin_port,
-			  .sin6_addr = IN6ADDR_ANY_INIT,
 			  .sin6_scope_id = ipi->ipi_ifindex,
 			};
 
-			src6.sin6_addr.s6_addr32[2] = cpu_to_be32(0xffff);
-			src6.sin6_addr.s6_addr32[3] = src4->sin_addr.s_addr;
+			IN_ADDR_TO_MAPPED_IN6_ADDR(&src4->sin_addr, &src6.sin6_addr);
 			*src = src6;
 
           ifindex = ipi->ipi_ifindex;
 
-          dst->s6_addr32[0] = 0;
-          dst->s6_addr32[1] = 0;
-          dst->s6_addr32[2] = cpu_to_be32(0xffff);
-          dst->s6_addr32[3] = ipi->ipi_spec_dst.s_addr;
+		  IN_ADDR_TO_MAPPED_IN6_ADDR(&ipi->ipi_spec_dst.s_addr, &src6.sin6_addr);
         }
     if (ifindex && !if_indextoname(ifindex, ifname))
       {
@@ -172,7 +176,7 @@ ssize_t dncp_io_sendmsg(struct uloop_fd *fds,
       sock = fds[SOCKET_IPV6].fd;
     } else {
       dst4.sin_family = AF_INET;
-      dst4.sin_addr.s_addr = dst->sin6_addr.s6_addr32[3];
+      dst4.sin_addr.s_addr = *((uint32_t *)&dst->sin6_addr.s6_addr[12]);
       dst4.sin_port = dst->sin6_port;
 
       msg.msg_name = &dst4;
@@ -189,7 +193,7 @@ ssize_t dncp_io_sendmsg(struct uloop_fd *fds,
         struct in_pktinfo *info = (struct in_pktinfo*)CMSG_DATA(chdr);
         info->ipi_addr.s_addr = 0;
         info->ipi_ifindex = src->ipi6_ifindex;
-        info->ipi_spec_dst.s_addr = src->ipi6_addr.s6_addr32[3];
+        info->ipi_spec_dst.s_addr = *(uint32_t *)(&src->ipi6_addr.s6_addr[12]);
       }
 
       sock = fds[SOCKET_IPV4].fd;
