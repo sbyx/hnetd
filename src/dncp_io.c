@@ -121,7 +121,7 @@ ssize_t dncp_io_recvmsg(struct uloop_fd *fds,
 
           ifindex = ipi->ipi_ifindex;
 
-		  IN_ADDR_TO_MAPPED_IN6_ADDR(&ipi->ipi_spec_dst.s_addr, &src6.sin6_addr);
+		  IN_ADDR_TO_MAPPED_IN6_ADDR(&ipi->ipi_spec_dst.s_addr, dst);
         }
     if (ifindex && !if_indextoname(ifindex, ifname))
       {
