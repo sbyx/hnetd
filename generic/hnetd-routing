@@ -3,6 +3,7 @@
 BABEL_EXE=`which babeld`
 BABEL_PID=/var/run/babeld-hnetd.pid
 BABEL_CONF=/var/run/babeld-hnetd.conf
+BABEL_CONF_OWRT=/tmp/babeld.d/hnetd.conf
 ISIS_INIT=`which autoisis`
 
 # Routing table for BFS (also rule priority)
@@ -13,28 +14,30 @@ act=$1
 shift
 
 create_babel_conf() {
-    echo "redistribute" > $BABEL_CONF
-    echo "redistribute local deny" >> $BABEL_CONF
-    echo "ipv6-subtrees yes" >> $BABEL_CONF
+    FILE=$1
+    shift
+    echo "redistribute" > $FILE
+    echo "redistribute local deny" >> $FILE
+    echo "ipv6-subtrees yes" >> $FILE
     for IF in $*; do
-        echo "interface $IF" >> $BABEL_CONF
+        echo "interface $IF" >> $FILE
     done
 }
 
 handle_babel_openwrt() {
-
-    if -z "$1" ; then 
+    if [ -z "$1" ]; then 
         /etc/init.d/babeld stop
         return
     fi
-    create_babel_conf $*
+    mkdir -p `dirname $BABEL_CONF_OWRT`
+    create_babel_conf $BABEL_CONF_OWRT $*
     /etc/init.d/babeld restart
 }
 
 handle_babel_generic() {
     [ -f $BABEL_PID ] && kill -9 `cat $BABEL_PID`
     if [ -z "$1" ]; then return ; fi
-    create_babel_conf $*
+    create_babel_conf $BABEL_CONF $*
     rm -f $BABEL_PID
     $BABEL_EXE -D -I $BABEL_PID -c $BABEL_CONF
     
@@ -47,9 +50,7 @@ handle_babel_generic() {
 case "$act" in
 configure)
 	if [ -x "$BABEL_EXE" ]; then
-            if [ -f /etc/openwrt_version -a -L /etc/babeld.conf ] ; then
-                # When installing the package, a symlink from
-                # /etc/babeld.conf to $BABEL_CONF has been created. 
+            if [ -f /etc/openwrt_version ] ; then
                 handle_babel_openwrt $*
             else 
                 handle_babel_generic $*
