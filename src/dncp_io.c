@@ -7,6 +7,7 @@
 #define __unused __attribute__((unused))
 
 #include <unistd.h>
+#include <arpa/inet.h>
 
 int dncp_io_sockets(struct uloop_fd *fd, uint16_t port,
 		uloop_fd_handler handle_v6, uloop_fd_handler handle_v4)
@@ -120,7 +121,7 @@ ssize_t dncp_io_recvmsg(struct uloop_fd *fds,
 
           ifindex = ipi->ipi_ifindex;
 
-		  IN_ADDR_TO_MAPPED_IN6_ADDR(&ipi->ipi_spec_dst.s_addr, &src6.sin6_addr);
+		  IN_ADDR_TO_MAPPED_IN6_ADDR(&ipi->ipi_spec_dst.s_addr, dst);
         }
     if (ifindex && !if_indextoname(ifindex, ifname))
       {
