@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Wed Apr 29 16:39:05 2015 mstenber
- * Edit time:     609 min
+ * Last modified: Mon May 25 15:38:06 2015 mstenber
+ * Edit time:     616 min
  *
  */
 
@@ -66,6 +66,7 @@
 
 struct hncp_sd_struct
 {
+  hncp hncp;
   dncp dncp;
 
   /* HNCP notification subscriber structure */
@@ -181,20 +182,21 @@ const char *_rewrite_ifname(const char *src, char *dst)
   _rewrite_ifname(ifname, alloca(strlen(ifname)+1))
 
 void hncp_sd_dump_link_fqdn(hncp_sd sd, dncp_ep_i l,
-		const char *ifname, char *buf, size_t buf_len)
+                            const char *ifname, char *buf, size_t buf_len)
 {
-  if (l && l->conf->dnsname[0])
+  if (l && l->conf.dnsname[0])
     {
-      if (strcmp(l->ifname, l->conf->dnsname) && strchr(l->conf->dnsname, '.'))
+      if (strcmp(l->conf.ifname, l->conf.dnsname)
+          && strchr(l->conf.dnsname, '.'))
         {
-          strncpy(buf, l->conf->dnsname, buf_len);
+          strncpy(buf, l->conf.dnsname, buf_len);
           return;
         }
-      ifname = l->conf->dnsname;
+      ifname = l->conf.dnsname;
     }
   ifname = REWRITE_IFNAME(ifname);
   snprintf(buf, buf_len, "%s.%s.%s",
-           ifname, sd->router_name, sd->dncp->domain);
+           ifname, sd->router_name, sd->hncp->domain);
 }
 
 static void _publish_ddz(hncp_sd sd, dncp_ep_i l,
@@ -210,10 +212,12 @@ static void _publish_ddz(hncp_sd sd, dncp_ep_i l,
   /* Forward DDZ handling (note: duplication doesn't matter) */
   dh = (void *)buf;
   memset(dh, 0, sizeof(*dh));
-  if (!dncp_get_ipv6_address(sd->dncp, l->ifname,
-                             (struct in6_addr *)&dh->address))
+  struct in6_addr *a;
+  hncp_get_ipv6_address(sd->hncp, l->conf.ifname, &a);
+  if (!a)
     return;
-  hncp_sd_dump_link_fqdn(sd, l, l->ifname, tbuf, sizeof(tbuf));
+  *((struct in6_addr *)dh->address) = *a;
+  hncp_sd_dump_link_fqdn(sd, l, l->conf.ifname, tbuf, sizeof(tbuf));
   int r = escaped2ll(tbuf, dh->ll, DNS_MAX_ESCAPED_LEN);
   if (r < 0)
     return;
@@ -329,7 +333,7 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
    * <subdomain>'s ~NS (remote, real IP)
    * <subdomain>'s ~NS (local, LOCAL_OHP_ADDRESS)
    */
-  md5_hash(sd->dncp->domain, strlen(sd->dncp->domain), &ctx);
+  md5_hash(sd->hncp->domain, strlen(sd->hncp->domain), &ctx);
   dncp_for_each_node(sd->dncp, n)
     {
       dncp_node_for_each_tlv_with_type(n, a, HNCP_T_DNS_ROUTER_NAME) {
@@ -339,7 +343,7 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
             hncp_t_dns_router_name rname = tlv_data(a);
             md5_hash(rname, tlv_len(a), &ctx);
             fprintf(f, "host-record=%.*s.%s,%s\n",
-              namelen, rname->name, sd->dncp->domain,
+              namelen, rname->name, sd->hncp->domain,
               ADDR_REPR(&rname->address));
           }
       }
@@ -365,10 +369,10 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
 
           if (dh->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE)
               fprintf(f, "ptr-record=b._dns-sd._udp.%s,%s\n",
-                      sd->dncp->domain, buf);
+                      sd->hncp->domain, buf);
           if (dh->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_LEGACY_BROWSE)
               fprintf(f, "ptr-record=lb._dns-sd._udp.%s,%s\n",
-                      sd->dncp->domain, buf);
+                      sd->hncp->domain, buf);
           if (dncp_node_is_self(n))
             {
               server = LOCAL_OHP_ADDRESS;
@@ -616,7 +620,7 @@ _tlv_ddz_matches(hncp_sd sd, struct tlv_attr *a)
   unsigned char tbuf[DNS_MAX_L_LEN];
   int len;
 
-  sprintf(buf, "%s.%s", sd->router_name, sd->dncp->domain);
+  sprintf(buf, "%s.%s", sd->router_name, sd->hncp->domain);
   if ((len = escaped2ll(buf, tbuf, sizeof(tbuf)))<0)
     return false;
   if (tlv_id(a) == HNCP_T_DNS_DELEGATED_ZONE)
@@ -719,10 +723,10 @@ static void _refresh_domain(hncp_sd sd)
   sd->should_update &= ~UPDATE_FLAG_DOMAIN;
   _get_dns_domain(sd, new_domain, sizeof(new_domain));
   L_DEBUG("_refresh_domain:%s", new_domain);
-  if (strcmp(new_domain, sd->dncp->domain))
+  if (strcmp(new_domain, sd->hncp->domain))
     {
       L_DEBUG("set sd domain to %s", new_domain);
-      strcpy(sd->dncp->domain, new_domain);
+      strcpy(sd->hncp->domain, new_domain);
       _should_update(sd, UPDATE_FLAG_ALL & ~UPDATE_FLAG_DOMAIN);
     }
 }
@@ -877,11 +881,13 @@ static void _intaddr_cb(struct iface_user *u, __unused const char *ifname,
 }
 
 
-hncp_sd hncp_sd_create(dncp h, hncp_sd_params p, struct hncp_link *l)
+hncp_sd hncp_sd_create(hncp h, hncp_sd_params p, struct hncp_link *l)
 {
   hncp_sd sd = calloc(1, sizeof(*sd));
+  dncp o = h->dncp;
 
-  sd->dncp = h;
+  sd->hncp = h;
+  sd->dncp = o;
   sd->timeout.cb = _timeout_cb;
   sd->p = *p;
   if (!sd)
@@ -892,7 +898,7 @@ hncp_sd hncp_sd_create(dncp h, hncp_sd_params p, struct hncp_link *l)
   iface_register_user(&sd->iface);
 
   if (l)
-	  hncp_link_register(l, &sd->link);
+    hncp_link_register(l, &sd->link);
 
   /* Handle domain name */
   if (p->domain_name)
@@ -905,12 +911,12 @@ hncp_sd hncp_sd_create(dncp h, hncp_sd_params p, struct hncp_link *l)
           L_ERR("invalid domain:%s", p->domain_name);
           abort();
         }
-      dncp_add_tlv(h, HNCP_T_DNS_DOMAIN_NAME, ll, len, 0);
+      dncp_add_tlv(o, HNCP_T_DNS_DOMAIN_NAME, ll, len, 0);
 
-      strncpy(sd->dncp->domain, p->domain_name, DNS_MAX_ESCAPED_LEN);
+      strncpy(sd->hncp->domain, p->domain_name, DNS_MAX_ESCAPED_LEN);
     }
   else
-    strcpy(sd->dncp->domain, HNCP_SD_DEFAULT_DOMAIN);
+    strcpy(sd->hncp->domain, HNCP_SD_DEFAULT_DOMAIN);
 
   /* Handle router name */
   if (p->router_name)
@@ -925,7 +931,7 @@ hncp_sd hncp_sd_create(dncp h, hncp_sd_params p, struct hncp_link *l)
   sd->subscriber.tlv_change_callback = _tlv_cb;
   sd->subscriber.republish_callback = _republish_cb;
   sd->subscriber.link_change_callback = _force_republish_cb;
-  dncp_subscribe(h, &sd->subscriber);
+  dncp_subscribe(o, &sd->subscriber);
 
   return sd;
 }

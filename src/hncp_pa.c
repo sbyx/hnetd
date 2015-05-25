@@ -36,10 +36,10 @@
 #include "hncp_pa.h"
 
 #include "hncp_pa_i.h"
+#include "hncp_i.h"
 
 #define DNCP_ID_CMP(id1, id2) memcmp(id1, id2, sizeof(dncp_node_identifier_s))
-#define ID_DNCP_TO_PA(dncp_id, pa_id) memcpy(pa_id, (dncp_id)->buf, DNCP_NI_LEN)
-#define ID_DNCP_PA_CMP(dncp_id, pa_id) memcmp((dncp_id)->buf, pa_id, DNCP_NI_LEN)
+#define DNCP_NODE_TO_PA(n, pa_id) memcpy(pa_id, &n->node_identifier, DNCP_NI_LEN(n->dncp))
 
 #define HNCP_ROUTER_ADDRESS_PA_PRIORITY 3
 
@@ -326,6 +326,7 @@ hpa_iface hpa_iface_goc(hncp_pa hp, const char *ifname, bool create)
 static void hpa_refresh_ec(hncp_pa hpa, bool publish)
 {
 	dncp dncp = hpa->dncp;
+	hncp hncp = hpa->hncp;
 	hnetd_time_t now = dncp_time(dncp);
 	hpa_dp dp, dp2;
 	int flen, plen;
@@ -340,13 +341,13 @@ static void hpa_refresh_ec(hncp_pa hpa, bool publish)
 		dncp_remove_tlvs_by_type(dncp, HNCP_T_EXTERNAL_CONNECTION);
 
 	/* add the SD domain always to search path (if present) */
-	if (dncp->domain[0])
+	if (hncp->domain[0])
 	{
 		/* domain is _ascii_ representation of domain (same as what
 		 * DHCPv4 expects). DHCPv6 needs ll-escaped string, though. */
 		uint8_t ll[DNS_MAX_LL_LEN];
 		int len;
-		len = escaped2ll(dncp->domain, ll, sizeof(ll));
+		len = escaped2ll(hncp->domain, ll, sizeof(ll));
 		if (len > 0)
 		{
 			uint16_t fake_header[2];
@@ -359,9 +360,9 @@ static void hpa_refresh_ec(hncp_pa hpa, bool publish)
 			APPEND_BUF(dhcpv6_options, dhcpv6_options_len, ll, len);
 
 			fake4_header[0] = DHCPV4_OPT_DOMAIN;
-			fake4_header[1] = strlen(dncp->domain);
+			fake4_header[1] = strlen(hncp->domain);
 			APPEND_BUF(dhcp_options, dhcp_options_len, fake4_header, 2);
-			APPEND_BUF(dhcp_options, dhcp_options_len, dncp->domain, fake4_header[1]);
+			APPEND_BUF(dhcp_options, dhcp_options_len, hncp->domain, fake4_header[1]);
 		}
 	}
 
@@ -867,7 +868,7 @@ found:
 /******** Link Callbacks *******/
 
 static void hpa_link_link_cb(struct hncp_link_user *u, const char *ifname,
-		dncp_t_link_id peers, size_t peercnt)
+		hncp_link_id peers, size_t peercnt)
 {
 	/* Set of neighboring dncp links changed.
 	 * - Update Advertised Prefixes adjacent link.
@@ -1193,7 +1194,7 @@ static hpa_advp hpa_get_hpa_advp(struct pa_core *core, dncp_node n,
 {
 	struct pa_advp *ap;
 	hpa_advp hap;
-	dncp_t_link_id_s id = {n->node_identifier, link_id};
+	hncp_link_id_s id = {link_id, n->node_identifier};
 	pa_for_each_advp(core, ap, addr, plen) {
 		hap = container_of(ap, hpa_advp_s, advp);
 		//We must compare every field of the TLV in case it was modified
@@ -1236,13 +1237,13 @@ static void hpa_update_ap_tlv(hncp_pa hpa, dncp_node n,
 	} else {
 		L_DEBUG("hpa_update_ap_tlv: creating new assigned prefix from %s",
 									HEX_REPR(tlv_data(tlv), tlv_len(tlv)));
-		dncp_t_link_id_s id = {n->node_identifier, ah->link_id};
+		hncp_link_id_s id = {ah->link_id, n->node_identifier};
 		hpa_iface i = hpa_get_adjacent_iface(hpa, &id);
 		hap->advp.plen = p.plen;
 		hap->advp.prefix = p.prefix;
 		hap->advp.priority = HNCP_T_ASSIGNED_PREFIX_FLAG_PRIORITY(ah->flags);
 		hap->advp.link = i?&i->pal:NULL;
-		ID_DNCP_TO_PA(&n->node_identifier, &hap->advp.node_id);
+		DNCP_NODE_TO_PA(n, &hap->advp.node_id);
 		pa_advp_add(&hpa->pa, &hap->advp);
 
 		list_add(&hap->le, &hpa->aps);
@@ -1280,7 +1281,7 @@ static void hpa_update_ra_tlv(hncp_pa hpa, dncp_node n,
 		hap->advp.prefix = ra->address;
 		hap->advp.priority = HNCP_ROUTER_ADDRESS_PA_PRIORITY;
 		hap->advp.link = NULL;
-		ID_DNCP_TO_PA(&n->node_identifier, &hap->advp.node_id);
+		DNCP_NODE_TO_PA(n, &hap->advp.node_id);
 		pa_advp_add(&hpa->aa, &hap->advp);
 
 		hap->link_id.node_identifier = n->node_identifier;
@@ -1996,7 +1997,7 @@ int hncp_pa_conf_set_ip6_plen(hncp_pa hp, const char *ifname,
 static int hpa_adj_avl_tree_comp(const void *k1, const void *k2,
 		__unused void *ptr)
 {
-	return memcmp(k1, k2, sizeof(dncp_t_link_id_s));
+	return memcmp(k1, k2, sizeof(hncp_link_id_s));
 }
 
 int hncp_pa_storage_set(hncp_pa hpa, const char *path)
@@ -2014,7 +2015,7 @@ void hncp_pa_iface_user_register(hncp_pa hp, struct hncp_pa_iface_user *user)
 	hp->if_cbs = user;
 }
 
-hncp_pa hncp_pa_create(dncp dncp, struct hncp_link *hncp_link)
+hncp_pa hncp_pa_create(hncp hncp, struct hncp_link *hncp_link)
 {
 	L_INFO("Initializing HNCP Prefix Assignment");
 	hncp_pa hp;
@@ -2064,9 +2065,9 @@ hncp_pa hncp_pa_create(dncp dncp, struct hncp_link *hncp_link)
 
 	//Set node IDs based on dncd node ID
 	pa_core_set_node_id(&hp->pa,
-			(uint32_t *)&dncp->own_node->node_identifier.buf[0]);
+			(uint32_t *)&hncp->dncp->own_node->node_identifier.buf[0]);
 	pa_core_set_node_id(&hp->aa,
-			(uint32_t *)&dncp->own_node->node_identifier.buf[0]);
+			(uint32_t *)&hncp->dncp->own_node->node_identifier.buf[0]);
 
 	pa_core_set_flooding_delay(&hp->pa, HPA_PA_FLOOD_DELAY);
 	hp->pa.adopt_delay = HPA_PA_ADOPT_DELAY;
@@ -2095,13 +2096,14 @@ hncp_pa hncp_pa_create(dncp dncp, struct hncp_link *hncp_link)
 	pa_link_add(&hp->pa, &hp->excluded_link);
 
 	//Subscribe to DNCP callbacks
-	hp->dncp = dncp;
+	hp->hncp = hncp;
+	hp->dncp = hncp->dncp;
 	hp->dncp_user.link_change_callback = hpa_dncp_ep_i_change_cb;
 	hp->dncp_user.local_tlv_change_callback = NULL; //hpa_dncp_local_tlv_change_cb;
 	hp->dncp_user.node_change_callback = hpa_dncp_node_change_cb;
 	hp->dncp_user.republish_callback = hpa_dncp_republish_cb;
 	hp->dncp_user.tlv_change_callback = hpa_dncp_tlv_change_cb;
-	dncp_subscribe(dncp, &hp->dncp_user);
+	dncp_subscribe(hp->dncp, &hp->dncp_user);
 
 	//Subscribe to HNCP Link
 	hp->hncp_link = hncp_link;

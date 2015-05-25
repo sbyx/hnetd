@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Mon May 25 14:42:27 2015 mstenber
+ * Last modified: Mon May 25 15:12:37 2015 mstenber
  * Edit time:     213 min
  *
  */
@@ -305,6 +305,15 @@ void *dncp_tlv_get_extra(dncp_tlv tlv);
 
 /**************************************************** dncp external bits API */
 
+/*
+ * Change these if you need bigger; however, by default, we wind up
+ * wasting some memory (but as dynamic allocations are not really free
+ * either, I do not care). (And we have ~2 of these per node, so
+ * memory overhead in typical small networks is not large.)
+ */
+#define DNCP_HASH_MAX_LEN 32
+#define DNCP_NI_MAX_LEN 32
+
 /* These cover i/o, profile, and system interface. Notably, we assume
  * sockaddr_in6 is sufficient encoding for addresses, and if it is
  * not, someone needs to do some refactoring. As DNCP code itself does
@@ -316,10 +325,10 @@ struct dncp_ext_configuration_struct {
   /* Per-link configuration defaults to what is provided here. */
   dncp_ep_s per_link;
 
-  /* Size of the node identifier */
+  /* Size of the node identifier; MUST be <= DNCP_NI_MAX_LEN */
   uint8_t node_identifier_length;
 
-  /* Hash length */
+  /* Hash length; MUST be <= DNCP_HASH_MAX_LEN */
   uint8_t hash_length;
 
   /* Keepalive multiplier (in percent) */
@@ -431,5 +440,3 @@ void dncp_ext_readable(dncp dncp);
  * Notification from the platform that the timeout has expired.
  */
 void dncp_ext_timeout(dncp dncp);
-
-/********************************************** Profile/system external API  */

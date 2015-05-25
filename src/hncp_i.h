@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:33:03 2014 mstenber
- * Last modified: Mon May 25 14:43:40 2015 mstenber
+ * Last modified: Mon May 25 15:27:18 2015 mstenber
  * Edit time:     16 min
  *
  */
@@ -76,6 +76,10 @@ struct hncp_struct {
   /* Multicast address */
   struct in6_addr multicast_address;
 
+  /* search domain provided to clients. */
+  /* (Shared between pa + sd, that's why it's here) */
+  char domain[DNS_MAX_ESCAPED_LEN];
+
 #ifdef DTLS
   /* DTLS 'socket' abstraction, which actually hides two UDP sockets
    * (client and server) and N OpenSSL contexts tied to each of
@@ -122,3 +126,6 @@ struct hncp_node_struct {
   /* Iterator to do bfs-traversal */
   struct hncp_bfs_head bfs;
 };
+
+
+#define dncp_get_hncp(o) container_of(o->ext, hncp_s, ext)

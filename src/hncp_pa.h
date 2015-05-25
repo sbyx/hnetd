@@ -15,13 +15,13 @@
 #ifndef HNCP_PA_H_
 #define HNCP_PA_H_
 
-#include "dncp.h"
+#include "hncp.h"
 #include "hncp_link.h"
 #include "prefix_utils.h"
 
 typedef struct hncp_pa_struct hncp_pa_s, *hncp_pa;
 
-hncp_pa hncp_pa_create(dncp hncp, struct hncp_link *hncp_link);
+hncp_pa hncp_pa_create(hncp hncp, struct hncp_link *hncp_link);
 void hncp_pa_destroy(hncp_pa hpa);
 
 /* Some way to list current available delegated prefixes. */

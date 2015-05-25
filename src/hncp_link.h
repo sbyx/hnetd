@@ -4,6 +4,7 @@
 #include "dncp.h"
 #include "dncp_proto.h"
 #include "hncp_proto.h"
+#include "dncp_i.h"
 
 struct hncp_link;
 
@@ -26,10 +27,15 @@ struct hncp_link_config {
 	char agent[32];
 };
 
+typedef struct {
+	uint32_t link_id;
+	dncp_node_identifier_s node_identifier;
+} *hncp_link_id, hncp_link_id_s;
+
 struct hncp_link_user {
 	struct list_head head;
 	void (*cb_link)(struct hncp_link_user*, const char *ifname,
-			dncp_t_link_id peers, size_t peercnt);
+			hncp_link_id peers, size_t peercnt);
 	void (*cb_elected)(struct hncp_link_user*, const char *ifname,
 			enum hncp_link_elected elected);
 };

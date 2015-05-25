@@ -6,12 +6,17 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:30:01 2014 mstenber
- * Last modified: Mon May 25 14:48:58 2015 mstenber
- * Edit time:     17 min
+ * Last modified: Mon May 25 15:31:59 2015 mstenber
+ * Edit time:     18 min
  *
  */
 
 #pragma once
+
+#include "hnetd.h"
+
+/* in6_addr */
+#include <netinet/in.h>
 
 /******************************** DNCP 'profile' values we stick in dncp_ext */
 
@@ -74,7 +79,7 @@ typedef struct hncp_struct hncp_s, *hncp;
  * Set IPv6 address for given interface.
  */
 void hncp_set_ipv6_address(hncp o, const char *ifname,
-                              const struct in6_addr *a);
+                           const struct in6_addr *a);
 
 /**
  * Get the IPv6 address for the given interface (if ep is set) or any.

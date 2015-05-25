@@ -25,14 +25,9 @@
 
 typedef struct hpa_iface_struct *hpa_iface, hpa_iface_s;
 
-typedef struct hpa_lid_struct {
-	unsigned char node_identifier[DNCP_NI_MAX_LEN];
-	uint32_t link_id;
-} *hpa_lid, hpa_lid_s;
-
 typedef struct hpa_adjacency_struct {
 	struct avl_node te;
-	hpa_lid_s id;
+	hncp_link_id_s id;
 	hpa_iface iface;
 	bool updated;
 } *hpa_adjacency, hpa_adjacency_s;
@@ -40,7 +35,7 @@ typedef struct hpa_adjacency_struct {
 typedef struct hpa_advp_struct {
 	struct pa_advp advp;
 	struct list_head le; //APs are linked in main struct
-	hpa_lid_s link_id;
+	hncp_link_id_s link_id;
 	uint8_t ap_flags;
 	bool fake; //This is not a real advertised prefix, but rather a trick to fool PA.
 } hpa_advp_s, *hpa_advp;
@@ -208,6 +203,7 @@ struct hpa_ap_ldp_struct {
 };
 
 struct hncp_pa_struct {
+	hncp hncp;
 	dncp dncp;
 	dncp_subscriber_s dncp_user;
 
@@ -385,7 +381,7 @@ static void hpa_ap_pd_notify(__unused hncp_pa hpa, struct pa_ldp *ldp)
 				valid, pref, dp->dhcp_data, dp->dhcp_len, l->priv);
 }
 
-static hpa_iface hpa_get_adjacent_iface(hncp_pa hpa, dncp_t_link_id id)
+static hpa_iface hpa_get_adjacent_iface(hncp_pa hpa, hncp_link_id id)
 {
 	hpa_adjacency adj;
 	adj = avl_find_element(&hpa->adjacencies, id, adj, te);

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon May 25 14:18:22 2015 mstenber
- * Edit time:     349 min
+ * Last modified: Mon May 25 15:25:17 2015 mstenber
+ * Edit time:     350 min
  *
  */
 
@@ -31,15 +31,6 @@
 
 #include <libubox/vlist.h>
 #include <libubox/list.h>
-
-/*
- * Change these if you need bigger; however, by default, we wind up
- * wasting some memory (but as dynamic allocations are not really free
- * either, I do not care). (And we have ~2 of these per node, so
- * memory overhead in typical small networks is not large.)
- */
-#define DNCP_HASH_MAX_LEN 32
-#define DNCP_NI_MAX_LEN 32
 
 typedef struct dncp_ep_i_struct dncp_ep_i_s, *dncp_ep_i;
 
@@ -126,9 +117,6 @@ struct dncp_struct {
 
   /* List of subscribers to change notifications. */
   struct list_head subscribers[NUM_DNCP_CALLBACKS];
-
-  /* search domain provided to clients. */
-  char domain[DNS_MAX_ESCAPED_LEN];
 
   /* An array that contains type -> index+1 (if available) or type ->
    * 0 (if no index yet allocated). */

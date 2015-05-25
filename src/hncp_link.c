@@ -24,7 +24,7 @@ struct hncp_link {
 	struct list_head users;
 };
 
-static void notify(struct hncp_link *l, const char *ifname, dncp_t_link_id ids, size_t cnt,
+static void notify(struct hncp_link *l, const char *ifname, hncp_link_id ids, size_t cnt,
 		enum hncp_link_elected elected)
 {
 	L_DEBUG("hncp_link_notify: %s neighbors: %d elected(SMPHL): %x", ifname, (int)cnt, elected);
@@ -43,7 +43,7 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 {
 	hncp_t_version ourvertlv = NULL;
 	enum hncp_link_elected elected = HNCP_LINK_NONE;
-	dncp_t_link_id peers = NULL;
+	hncp_link_id peers = NULL;
 	size_t peercnt = 0, peerpos = 0;
 	dncp_ep_i link = dncp_find_link_by_name(l->dncp, ifname, false);
 
@@ -72,7 +72,7 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 	if (link && enable) {
 		struct tlv_attr *c;
 		dncp_node_for_each_tlv(l->dncp->own_node, c) {
-			dncp_t_neighbor ne = dncp_tlv_neighbor(c);
+			dncp_t_neighbor ne = dncp_tlv_neighbor(l->dncp, c);
 			hncp_t_assigned_prefix_header ah = dncp_tlv_ap(c);
 
 			if (ne && ne->link_id == link->iid)
@@ -82,19 +82,18 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 		}
 
 		if (peercnt)
-			peers = malloc(sizeof(*peers) * peercnt);
+			peers = calloc(1, sizeof(*peers) * peercnt);
 
 		L_DEBUG("hncp_link_calculate: local node advertises %d "
 				"neighbors on iface %d", (int)peercnt, (int)link->iid);
 
 		dncp_node_for_each_tlv(l->dncp->own_node, c) {
-			dncp_t_neighbor cn = dncp_tlv_neighbor(c);
+			dncp_t_neighbor cn = dncp_tlv_neighbor(l->dncp, c);
 
 			if (!cn || cn->link_id != link->iid)
 				continue;
 
-			dncp_node peer = dncp_find_node_by_node_identifier(l->dncp,
-					&cn->neighbor_node_identifier, false);
+			dncp_node peer = dncp_find_node_by_node_identifier(l->dncp, dncp_tlv_get_node_identifier(l->dncp, cn), false);
 
 			if (!peer || !peers)
 				continue;
@@ -108,10 +107,9 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 						tlv_len(pc) > sizeof(*peervertlv))
 					peervertlv = tlv_data(pc);
 
-				dncp_t_neighbor pn = dncp_tlv_neighbor(pc);
+				dncp_t_neighbor pn = dncp_tlv_neighbor(l->dncp, pc);
 				if (!pn || pn->link_id != cn->neighbor_link_id ||
-						memcmp(&pn->neighbor_node_identifier,
-								&l->dncp->own_node->node_identifier, DNCP_NI_LEN))
+				    memcmp(dncp_tlv_get_node_identifier(l->dncp, pn), &l->dncp->own_node->node_identifier, DNCP_NI_LEN(l->dncp)))
 					continue;
 
 				if (pn->neighbor_link_id == link->iid) {
@@ -159,8 +157,7 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 					elected &= ~HNCP_LINK_LEGACY;
 
 				if (ourcaps < peercaps || (ourcaps == peercaps &&
-						memcmp(&l->dncp->own_node->node_identifier,
-								&peer->node_identifier, DNCP_NI_LEN) < 0)) {
+						memcmp(&l->dncp->own_node->node_identifier, &peer->node_identifier, DNCP_NI_LEN(l->dncp)) < 0)) {
 					if (peervertlv->cap_mdnsproxy &&
 							ourvertlv->cap_mdnsproxy == peervertlv->cap_mdnsproxy)
 						elected &= ~HNCP_LINK_MDNSPROXY;
@@ -206,24 +203,23 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 		struct tlv_attr *tlv, bool add __unused)
 {
 	struct hncp_link *l = container_of(s, struct hncp_link, subscr);
-	dncp_t_neighbor ne = dncp_tlv_neighbor(tlv);
+	dncp_t_neighbor ne = dncp_tlv_neighbor(l->dncp, tlv);
 	dncp_ep_i link = NULL;
 
 	if (ne) {
 		if (dncp_node_is_self(n)) {
 			L_DEBUG("hncp_link: local neighbor tlv changed");
 			link = dncp_find_link_by_id(l->dncp, ne->link_id);
-		} else if (!memcmp(&ne->neighbor_node_identifier,
-				&l->dncp->own_node->node_identifier, DNCP_NI_LEN)) {
+		} else if (!memcmp(dncp_tlv_get_node_identifier(l->dncp, ne),  &l->dncp->own_node->node_identifier, DNCP_NI_LEN(l->dncp))) {
 			L_DEBUG("hncp_link: other node neighbor tlv changed");
 			link = dncp_find_link_by_id(l->dncp, ne->neighbor_link_id);
 		}
 	}
 
 	if (link) {
-		struct iface *iface = iface_get(link->ifname);
+		struct iface *iface = iface_get(link->conf.ifname);
 		L_DEBUG("hncp_link: iface is %s (%d)", link->ifname, (int)link->iid);
-		calculate_link(l, link->ifname, iface && iface->internal);
+		calculate_link(l, link->conf.ifname, iface && iface->internal);
 	}
 }
 
