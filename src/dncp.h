@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Tue Apr 28 14:59:55 2015 mstenber
- * Edit time:     162 min
+ * Last modified: Mon May 25 11:19:55 2015 mstenber
+ * Edit time:     173 min
  *
  */
 
@@ -41,9 +41,9 @@ typedef struct dncp_node_struct dncp_node_s, *dncp_node;
 
 /* generic subscriber event enum */
 enum dncp_subscriber_event {
-	DNCP_EVENT_REMOVE,
-	DNCP_EVENT_ADD,
-	DNCP_EVENT_UPDATE
+  DNCP_EVENT_REMOVE,
+  DNCP_EVENT_ADD,
+  DNCP_EVENT_UPDATE
 };
 
 /* A single, local published TLV.*/
@@ -133,7 +133,7 @@ struct dncp_subscriber_struct {
    * @param event indicates whether the link was added, removed or updated.
    */
   void (*link_change_callback)(dncp_subscriber s, const char *ifname,
-		  enum dncp_subscriber_event event);
+                               enum dncp_subscriber_event event);
 
   /**
    * TLV(s) received on a socket-notification.
@@ -157,12 +157,14 @@ struct dncp_subscriber_struct {
 
 /********************************************* API for handling single links */
 
-/* (dncp_link itself is implementation detail) */
+/* (dncp_ep_i itself is implementation detail) */
 
-typedef struct dncp_link_conf_struct dncp_link_conf_s, *dncp_link_conf;
-struct dncp_link_conf_struct {
-  struct list_head in_link_confs;
-  char ifname[IFNAMSIZ]; /* Name of the link. */
+typedef struct dncp_ep_struct dncp_ep_s, *dncp_ep;
+struct dncp_ep_struct {
+  char ifname[IFNAMSIZ]; /* Name of the endpoint. */
+  /* NOTE: This MUST NOT be changed. It is kept around just for
+   * usability reasons. */
+
   char dnsname[DNS_MAX_ESCAPED_LEN]; /* DNS FQDN or label */
 
   /* Trickle conf */
@@ -175,19 +177,14 @@ struct dncp_link_conf_struct {
 };
 
 /**
- * Find or create new dncp_link_conf_s that matches the interface.
+ * Find or create a new dncp_ep_s that matches the interface.
  */
-dncp_link_conf dncp_if_find_conf_by_name(dncp o, const char *ifname);
+dncp_ep dncp_ep_find_by_name(dncp o, const char *name);
 
 /**
- * Does the current DNCP instance have highest ID on the given interface?
+ * Does the current DNCP instance have highest ID on the given endpoint?
  */
-bool dncp_if_has_highest_id(dncp o, const char *ifname);
-
-/**
- * Enable/disable DNCP protocol on an interface.
- */
-bool dncp_if_set_enabled(dncp o, const char *ifname, bool enabled);
+bool dncp_ep_has_highest_id(dncp_ep ep);
 
 /************************************************ API for whole dncp instance */
 
@@ -221,7 +218,7 @@ dncp_tlv dncp_add_tlv(dncp o,
                       uint16_t type, void *data, uint16_t len,
                       int extra_bytes);
 
-#define dncp_add_tlv_attr(o, a, bytes) \
+#define dncp_add_tlv_attr(o, a, bytes)                          \
   dncp_add_tlv(o, tlv_id(a), tlv_data(a), tlv_len(a), bytes)
 
 /**
@@ -234,7 +231,7 @@ dncp_tlv dncp_find_tlv(dncp o, uint16_t type, void *data, uint16_t len);
  */
 void dncp_remove_tlv(dncp o, dncp_tlv tlv);
 
-#define dncp_remove_tlv_matching(o, t, d, dlen) \
+#define dncp_remove_tlv_matching(o, t, d, dlen)         \
   dncp_remove_tlv(o, dncp_find_tlv(o, t, d, dlen))
 
 /**
@@ -294,7 +291,7 @@ struct tlv_attr *dncp_node_get_tlvs(dncp_node n);
 #define dncp_for_each_node(o, n)                                        \
   for (n = dncp_get_first_node(o) ; n ; n = dncp_node_get_next(n))
 
-#define dncp_node_for_each_tlv(n, a)    \
+#define dncp_node_for_each_tlv(n, a)            \
   tlv_for_each_attr(a, dncp_node_get_tlvs(n))
 
 /******************************************************* Per-(local) tlv API */

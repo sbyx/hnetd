@@ -33,7 +33,7 @@ void test_hncp_multicast_base(bool aa_enabled)
    * one with (fake) DP must publish it's address. */
   net_sim_s s;
   dncp n1, n2;
-  dncp_link l1, l2;
+  dncp_ep_i l1, l2;
 
   net_sim_init(&s);
   s.disable_link_auto_address = !aa_enabled;

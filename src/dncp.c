@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Wed Apr 29 18:02:33 2015 mstenber
- * Edit time:     860 min
+ * Last modified: Mon May 25 11:16:11 2015 mstenber
+ * Edit time:     867 min
  *
  */
 
@@ -168,12 +168,12 @@ static void update_tlv(struct vlist_tree *t,
 static int
 compare_links(const void *a, const void *b, void *ptr __unused)
 {
-  dncp_link t1 = (dncp_link) a, t2 = (dncp_link) b;
+  dncp_ep_i t1 = (dncp_ep_i) a, t2 = (dncp_ep_i) b;
 
-  return strcmp(t1->ifname, t2->ifname);
+  return strcmp(t1->conf.ifname, t2->conf.ifname);
 }
 
-void dncp_link_set_keepalive_interval(dncp_link l, uint32_t value)
+void dncp_ep_i_set_keepalive_interval(dncp_ep_i l, uint32_t value)
 {
   if (l->published_keepalive_interval == value)
     return;
@@ -199,13 +199,13 @@ static void update_link(struct vlist_tree *t,
                         struct vlist_node *node_old)
 {
   dncp o = container_of(t, dncp_s, links);
-  dncp_link t_old = container_of(node_old, dncp_link_s, in_links);
-  dncp_link t_new = container_of(node_new, dncp_link_s, in_links);
+  dncp_ep_i t_old = container_of(node_old, dncp_ep_i_s, in_links);
+  dncp_ep_i t_new = container_of(node_new, dncp_ep_i_s, in_links);
 
   if (t_old)
     {
       if (!t_new && o->io_init_done)
-        dncp_io_set_ifname_enabled(o, t_old->ifname, false);
+        dncp_io_set_ifname_enabled(o, t_old->conf.ifname, false);
       dncp_tlv t, t2;
       dncp_for_each_local_tlv_safe(o, t, t2)
         if (tlv_id(&t->tlv) == DNCP_T_NEIGHBOR)
@@ -215,7 +215,7 @@ static void update_link(struct vlist_tree *t,
               dncp_remove_tlv(o, t);
           }
       /* kill TLV, if any */
-      dncp_link_set_keepalive_interval(t_old, DNCP_KEEPALIVE_INTERVAL);
+      dncp_ep_i_set_keepalive_interval(t_old, DNCP_KEEPALIVE_INTERVAL);
       free(t_old);
     }
   else
@@ -411,7 +411,7 @@ int dncp_remove_tlvs_by_type(dncp o, int type)
   return c;
 }
 
-static void dncp_link_conf_set_default(dncp_link_conf conf, const char *ifname)
+static void dncp_ep_set_default(dncp_ep conf, const char *ifname)
 {
   conf->trickle_imin = DNCP_TRICKLE_IMIN;
   conf->trickle_imax = DNCP_TRICKLE_IMAX;
@@ -421,26 +421,17 @@ static void dncp_link_conf_set_default(dncp_link_conf conf, const char *ifname)
   strncpy(conf->ifname, ifname, sizeof(conf->ifname));
 }
 
-dncp_link_conf dncp_if_find_conf_by_name(dncp o, const char *ifname)
+dncp_ep dncp_ep_find_by_name(dncp o, const char *ifname)
 {
-  dncp_link_conf conf;
-  list_for_each_entry(conf, &o->link_confs, in_link_confs) {
-    if(!strcmp(ifname, conf->ifname))
-      return conf;
-  }
+  dncp_ep_i l = dncp_find_link_by_name(o, ifname, true);
 
-  if(!(conf = malloc(sizeof(dncp_link_conf_s))))
-    return NULL;
-
-  dncp_link_conf_set_default(conf, ifname);
-  list_add(&conf->in_link_confs, &o->link_confs);
-  return conf;
+  return l ? &l->conf : NULL;
 }
 
-dncp_link dncp_find_link_by_name(dncp o, const char *ifname, bool create)
+dncp_ep_i dncp_find_link_by_name(dncp o, const char *ifname, bool create)
 {
-  dncp_link cl = container_of(ifname, dncp_link_s, ifname[0]);
-  dncp_link l;
+  dncp_ep_i cl = container_of(ifname, dncp_ep_i_s, conf.ifname[0]);
+  dncp_ep_i l;
 
   if (!ifname || !*ifname)
     return NULL;
@@ -449,25 +440,20 @@ dncp_link dncp_find_link_by_name(dncp o, const char *ifname, bool create)
 
   if (create && !l)
     {
-      l = (dncp_link) calloc(1, sizeof(*l));
+      l = (dncp_ep_i) calloc(1, sizeof(*l));
       if (!l)
         return NULL;
-      l->conf = dncp_if_find_conf_by_name(o, ifname);
-      if(!l->conf) {
-        free(l);
-        return NULL;
-      }
       l->dncp = o;
       l->iid = o->first_free_iid++;
-      strcpy(l->ifname, ifname);
+      dncp_ep_set_default(&l->conf, ifname);
       vlist_add(&o->links, &l->in_links, l);
     }
   return l;
 }
 
-dncp_link dncp_find_link_by_id(dncp o, uint32_t link_id)
+dncp_ep_i dncp_find_link_by_id(dncp o, uint32_t link_id)
 {
-  dncp_link l;
+  dncp_ep_i l;
   /* XXX - this could be also made more efficient. Oh well. */
   vlist_for_each_element(&o->links, l, in_links)
     if (l->iid == link_id)
@@ -475,11 +461,11 @@ dncp_link dncp_find_link_by_id(dncp o, uint32_t link_id)
   return NULL;
 }
 
-bool dncp_if_set_enabled(dncp o, const char *ifname, bool enabled)
+bool dncp_ep_set_enabled(dncp_ep ep, bool enabled)
 {
-  dncp_link l = dncp_find_link_by_name(o, ifname, false);
+  dncp_ep_i l = dncp_find_link_by_name(o, ifname, false);
 
-  L_DEBUG("dncp_if_set_enabled %s %s",
+  L_DEBUG("dncp_ep_set_enabled %s %s",
           ifname, enabled ? "enabled" : "disabled");
   if (!enabled)
     {
@@ -646,7 +632,7 @@ void dncp_calculate_network_hash(dncp o)
 bool
 dncp_get_ipv6_address(dncp o, char *prefer_ifname, struct in6_addr *addr)
 {
-  dncp_link l = NULL;
+  dncp_ep_i l = NULL;
 
   if (prefer_ifname)
     l = dncp_find_link_by_name(o, prefer_ifname, false);
@@ -712,7 +698,7 @@ bool dncp_add_tlv_index(dncp o, uint16_t type)
 
 
 void
-dncp_link_set_ipv6_address(dncp_link l, const struct in6_addr *addr)
+dncp_ep_i_set_ipv6_address(dncp_ep_i l, const struct in6_addr *addr)
 {
   bool has_addr = addr != NULL;
 
@@ -725,19 +711,19 @@ dncp_link_set_ipv6_address(dncp_link l, const struct in6_addr *addr)
   if (has_addr)
     {
       l->ipv6_address = *addr;
-      L_DEBUG("dncp_link_set_ipv6_address: address on %s: %s",
+      L_DEBUG("dncp_ep_i_set_ipv6_address: address on %s: %s",
               l->ifname, ADDR_REPR(addr));
     }
   else
     {
-      L_DEBUG("dncp_link_set_ipv6_address: no %s any more", l->ifname);
+      L_DEBUG("dncp_ep_i_set_ipv6_address: no %s any more", l->ifname);
     }
   dncp_notify_subscribers_link_changed(l, DNCP_EVENT_UPDATE);
 }
 
-bool dncp_if_has_highest_id(dncp o, const char *ifname)
+bool dncp_ep_has_highest_id(dncp o, const char *ifname)
 {
-  dncp_link l = dncp_find_link_by_name(o, ifname, false);
+  dncp_ep_i l = dncp_find_link_by_name(o, ifname, false);
 
   /* Who knows if link is not enabled.. e.g. guest mode require us to
    * return true here, though. */
@@ -762,11 +748,11 @@ bool dncp_if_has_highest_id(dncp o, const char *ifname)
 
 
 void
-dncp_if_set_ipv6_address(dncp o, const char *ifname, const struct in6_addr *a)
+dncp_ep_set_ipv6_address(dncp o, const char *ifname, const struct in6_addr *a)
 {
-  dncp_link l = dncp_find_link_by_name(o, ifname, false);
+  dncp_ep_i l = dncp_find_link_by_name(o, ifname, false);
   if (l)
-    dncp_link_set_ipv6_address(l, a);
+    dncp_ep_i_set_ipv6_address(l, a);
 }
 
 void dncp_node_recalculate_index(dncp_node n)

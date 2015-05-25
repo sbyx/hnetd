@@ -45,7 +45,7 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 	enum hncp_link_elected elected = HNCP_LINK_NONE;
 	dncp_t_link_id peers = NULL;
 	size_t peercnt = 0, peerpos = 0;
-	dncp_link link = dncp_find_link_by_name(l->dncp, ifname, false);
+	dncp_ep_i link = dncp_find_link_by_name(l->dncp, ifname, false);
 
 	if (l->versiontlv) {
 		ourvertlv = tlv_data(&l->versiontlv->tlv);
@@ -207,7 +207,7 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 {
 	struct hncp_link *l = container_of(s, struct hncp_link, subscr);
 	dncp_t_neighbor ne = dncp_tlv_neighbor(tlv);
-	dncp_link link = NULL;
+	dncp_ep_i link = NULL;
 
 	if (ne) {
 		if (dncp_node_is_self(n)) {

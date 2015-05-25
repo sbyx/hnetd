@@ -59,7 +59,7 @@
 typedef struct {
   struct list_head h;
 
-  dncp_link l;
+  dncp_ep_i l;
   struct sockaddr_in6 src;
   struct in6_addr dst;
   void *buf;
@@ -72,8 +72,8 @@ typedef struct {
 typedef struct {
   struct list_head h;
 
-  dncp_link src;
-  dncp_link dst;
+  dncp_ep_i src;
+  dncp_ep_i dst;
 } net_neigh_s, *net_neigh;
 
 typedef struct {
@@ -355,17 +355,17 @@ dncp net_sim_find_hncp(net_sim s, const char *name)
   return &n->n;
 }
 
-dncp_link net_sim_dncp_find_link_by_name(dncp o, const char *name)
+dncp_ep_i net_sim_dncp_find_link_by_name(dncp o, const char *name)
 {
   net_node n = container_of(o, net_node_s, n);
-  dncp_link l;
+  dncp_ep_i l;
 
   l = dncp_find_link_by_name(o, name, false);
 
   if (l)
     return l;
 
-  dncp_if_set_enabled(o, name, true);
+  dncp_ep_set_enabled(o, name, true);
 
   l = dncp_find_link_by_name(o, name, false);
 
@@ -391,7 +391,7 @@ dncp_link net_sim_dncp_find_link_by_name(dncp o, const char *name)
       buf[0] = 0xFE;
       buf[1] = 0x80;
       /* 2 .. 7 left 0 always */
-      dncp_link_set_ipv6_address(l, (struct in6_addr *)buf);
+      dncp_ep_i_set_ipv6_address(l, (struct in6_addr *)buf);
       l->has_ipv6_address = !n->s->disable_link_auto_address;
       /* Internally we use the ipv6 address even if it is not
        * officially set(!). Beautiful.. */
@@ -407,7 +407,7 @@ dncp_link net_sim_dncp_find_link_by_name(dncp o, const char *name)
   return l;
 }
 
-void net_sim_set_connected(dncp_link l1, dncp_link l2, bool enabled)
+void net_sim_set_connected(dncp_ep_i l1, dncp_ep_i l2, bool enabled)
 {
   dncp o = l1->dncp;
   net_node node = container_of(o, net_node_s, n);
@@ -554,7 +554,7 @@ void net_sim_populate_iface_next(net_node n)
 {
   static char dummybuf[12345];
   struct iface *i = (struct iface *)dummybuf;
-  dncp_link l;
+  dncp_ep_i l;
 
   vlist_for_each_element(&n->n.links, l, in_links)
     {
@@ -681,7 +681,7 @@ void _message_deliver_cb(struct uloop_timeout *t)
   dncp_poll(&node->n);
 }
 
-void _sendto(net_sim s, void *buf, size_t len, dncp_link sl, dncp_link dl,
+void _sendto(net_sim s, void *buf, size_t len, dncp_ep_i sl, dncp_ep_i dl,
              const struct in6_addr *dst)
 {
   net_msg m = calloc(1, sizeof(*m));
@@ -720,7 +720,7 @@ ssize_t dncp_io_sendto(dncp o, void *buf, size_t len,
   net_node node = container_of(o, net_node_s, n);
   net_sim s = node->s;
   sput_fail_unless(dst->sin6_scope_id, "scope id must be set");
-  dncp_link l = dncp_find_link_by_id(o, dst->sin6_scope_id);
+  dncp_ep_i l = dncp_find_link_by_id(o, dst->sin6_scope_id);
   bool is_multicast = memcmp(&dst->sin6_addr, &o->profile_data.multicast_address, sizeof(o->profile_data.multicast_address)) == 0;
   net_neigh n;
 

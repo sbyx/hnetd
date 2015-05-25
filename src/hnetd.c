@@ -50,7 +50,7 @@ void hncp_iface_intaddr_callback(struct iface_user *u, const char *ifname,
 								 const struct prefix *addr4 __unused)
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
-	dncp_if_set_ipv6_address(hiu->hncp, ifname, addr6 ? &addr6->prefix : NULL);
+	dncp_ep_set_ipv6_address(hiu->hncp, ifname, addr6 ? &addr6->prefix : NULL);
 }
 
 
@@ -59,7 +59,7 @@ void hncp_iface_intiface_callback(struct iface_user *u,
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
 	struct iface *c = iface_get(ifname);
-	dncp_if_set_enabled(hiu->hncp, ifname, enabled &&
+	dncp_ep_set_enabled(hiu->hncp, ifname, enabled &&
 			(c->flags & IFACE_FLAG_LEAF) != IFACE_FLAG_LEAF);
 }
 

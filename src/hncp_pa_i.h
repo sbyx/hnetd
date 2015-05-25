@@ -130,7 +130,7 @@ struct hpa_iface_struct {
 	struct pa_store_link aasl;
 
 	//If the interface is dncp enabled
-	dncp_link l;
+	dncp_ep_i l;
 
 	//If iface is an external link
 	void *extdata[HNCP_PA_EXTDATA_N];

@@ -28,7 +28,7 @@ bool dncp_profile_handle_collision(dncp o)
 
 
 
-void dncp_profile_link_send_network_state(dncp_link l)
+void dncp_profile_link_send_network_state(dncp_ep_i l)
 {
   struct sockaddr_in6 dst =
     { .sin6_family = AF_INET6,
@@ -41,7 +41,7 @@ void dncp_profile_link_send_network_state(dncp_link l)
         L_ERR("Unable to find index for " DNCP_LINK_F, DNCP_LINK_D(l));
         return;
       }
-  dncp_link_send_network_state(l, &dst, HNCP_MAXIMUM_MULTICAST_SIZE);
+  dncp_ep_i_send_network_state(l, &dst, HNCP_MAXIMUM_MULTICAST_SIZE);
 }
 
 struct tlv_attr *dncp_profile_node_validate_data(dncp_node n,

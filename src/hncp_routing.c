@@ -141,7 +141,7 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 
 
 						if (c == hncp->own_node) { // We are at the start, lookup neighbor
-							dncp_link link = dncp_find_link_by_id(hncp, ne->link_id);
+							dncp_ep_i link = dncp_find_link_by_id(hncp, ne->link_id);
 							if (!link)
 								continue;
 							dncp_tlv tlv = dncp_find_tlv(hncp, DNCP_T_NEIGHBOR, ne, sizeof(*ne));
@@ -245,7 +245,7 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 								}
 							}
 					} else if ((ap = dncp_tlv_ap(a)) && c != hncp->own_node) {
-						dncp_link link = dncp_find_link_by_name(hncp, c->profile_data.bfs.ifname, false);
+						dncp_ep_i link = dncp_find_link_by_name(hncp, c->profile_data.bfs.ifname, false);
 						struct iface *ifo = link ? iface_get(c->profile_data.bfs.ifname) : NULL;
 						// Skip routes for prefixes on connected links
 						if (link && ifo && (ifo->flags & IFACE_FLAG_ADHOC) != IFACE_FLAG_ADHOC && c->profile_data.bfs.hopcount == 1) {

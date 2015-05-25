@@ -1480,7 +1480,7 @@ static void hpa_aa_publish(hncp_pa hpa, struct pa_ldp *ldp)
 	if(ldp->userdata[PA_LDP_U_HNCP_TLV])
 		return;
 
-	dncp_link l;
+	dncp_ep_i l;
 	uint32_t link_id = 0;
 	//We don't check link type because only iface have addresses
 	if((l = container_of(ldp->link, hpa_iface_s, aal)->l))
@@ -1503,7 +1503,7 @@ static void hpa_ap_publish(hncp_pa hpa, struct pa_ldp *ldp)
 	if(ldp->userdata[PA_LDP_U_HNCP_TLV]) //Already published
 		return;
 
-	dncp_link l;
+	dncp_ep_i l;
 	uint32_t link_id = 0;
 	if(ldp->link->type == HPA_LINK_T_IFACE &&
 			(l = container_of(ldp->link, hpa_iface_s, pal)->l))
@@ -1523,7 +1523,7 @@ static void hpa_ap_publish(hncp_pa hpa, struct pa_ldp *ldp)
 			sizeof(s.h) + ROUND_BITS_TO_BYTES(ldp->plen), 0);
 }
 
-static void hpa_dncp_link_change_cb(dncp_subscriber s,
+static void hpa_dncp_ep_i_change_cb(dncp_subscriber s,
 		const char *ifname, __unused enum dncp_subscriber_event event)
 {
 	/*
@@ -1532,7 +1532,7 @@ static void hpa_dncp_link_change_cb(dncp_subscriber s,
 	 * as on a DNCP link (Change link ID).
 	 */
 	hncp_pa hpa = container_of(s, hncp_pa_s, dncp_user);
-	dncp_link l = dncp_find_link_by_name(hpa->dncp, ifname, false);
+	dncp_ep_i l = dncp_find_link_by_name(hpa->dncp, ifname, false);
 	hpa_iface i = hpa_iface_goc(hpa, ifname, !!l);
 	if(!i || i->l == l) //No need for i, or link did not change
 		return;
@@ -2096,7 +2096,7 @@ hncp_pa hncp_pa_create(dncp dncp, struct hncp_link *hncp_link)
 
 	//Subscribe to DNCP callbacks
 	hp->dncp = dncp;
-	hp->dncp_user.link_change_callback = hpa_dncp_link_change_cb;
+	hp->dncp_user.link_change_callback = hpa_dncp_ep_i_change_cb;
 	hp->dncp_user.local_tlv_change_callback = NULL; //hpa_dncp_local_tlv_change_cb;
 	hp->dncp_user.node_change_callback = hpa_dncp_node_change_cb;
 	hp->dncp_user.republish_callback = hpa_dncp_republish_cb;

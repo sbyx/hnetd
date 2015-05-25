@@ -180,7 +180,7 @@ const char *_rewrite_ifname(const char *src, char *dst)
 #define REWRITE_IFNAME(ifname) \
   _rewrite_ifname(ifname, alloca(strlen(ifname)+1))
 
-void hncp_sd_dump_link_fqdn(hncp_sd sd, dncp_link l,
+void hncp_sd_dump_link_fqdn(hncp_sd sd, dncp_ep_i l,
 		const char *ifname, char *buf, size_t buf_len)
 {
   if (l && l->conf->dnsname[0])
@@ -197,7 +197,7 @@ void hncp_sd_dump_link_fqdn(hncp_sd sd, dncp_link l,
            ifname, sd->router_name, sd->dncp->domain);
 }
 
-static void _publish_ddz(hncp_sd sd, dncp_link l,
+static void _publish_ddz(hncp_sd sd, dncp_ep_i l,
                          int flags_forward,
                          struct prefix *assigned_prefix)
 {
@@ -239,7 +239,7 @@ static void _publish_ddzs(hncp_sd sd)
   struct tlv_attr *a;
   dncp_tlv t;
   hncp_t_assigned_prefix_header ah;
-  dncp_link l;
+  dncp_ep_i l;
 
   if (!(sd->should_update & UPDATE_FLAG_DDZ))
     return;
@@ -422,7 +422,7 @@ bool hncp_sd_restart_dnsmasq(hncp_sd sd)
 
 bool hncp_sd_reconfigure_ohp(hncp_sd sd)
 {
-  dncp_link l;
+  dncp_ep_i l;
   char buf[ARGS_MAX_LEN];
   char *c = buf;
   char *args[ARGS_MAX_COUNT];

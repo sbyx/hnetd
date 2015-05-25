@@ -19,7 +19,7 @@
 
 /* Profile API refers to links; however, try to avoid importing
  * definition of _i.h unless it is really needed. */
-typedef struct dncp_link_struct dncp_link_s, *dncp_link;
+typedef struct dncp_ep_i_struct dncp_ep_i_s, *dncp_ep_i;
 
 /* These are the DNCP profile specific definitions. The values used
  * here are for HNCP (and obviously if doing some other protocol, feel
@@ -113,7 +113,7 @@ struct tlv_attr *dncp_profile_node_validate_data(dncp_node n,
                                                  struct tlv_attr *a);
 
 /* Profile-specific method of sending keep-alive on a link. */
-void dncp_profile_link_send_network_state(dncp_link l);
+void dncp_profile_link_send_network_state(dncp_ep_i l);
 
 /* Profile hook to allow overriding collision handling. */
 bool dncp_profile_handle_collision(dncp o);

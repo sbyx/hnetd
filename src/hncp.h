@@ -34,7 +34,7 @@
 /**
  * Set IPv6 address for given interface.
  */
-void dncp_if_set_ipv6_address(dncp o,
+void dncp_ep_set_ipv6_address(dncp o,
                               const char *ifname, const struct in6_addr *a);
 
 #ifdef DTLS

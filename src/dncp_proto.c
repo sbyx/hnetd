@@ -54,7 +54,7 @@ static bool _push_network_state_tlv(struct tlv_buf *tb, dncp o)
   return true;
 }
 
-static bool _push_link_id_tlv(struct tlv_buf *tb, dncp_link l)
+static bool _push_link_id_tlv(struct tlv_buf *tb, dncp_ep_i l)
 {
   struct tlv_attr *a = tlv_new(tb, DNCP_T_ENDPOINT_ID, sizeof(dncp_t_link_id_s));
   dncp_t_link_id lid;
@@ -84,7 +84,7 @@ static bool _push_keepalive_interval_tlv(struct tlv_buf *tb,
 
 /****************************************** Actual payload sending utilities */
 
-void dncp_link_send_network_state(dncp_link l,
+void dncp_ep_i_send_network_state(dncp_ep_i l,
                                   struct sockaddr_in6 *dst,
                                   size_t maximum_size)
 {
@@ -124,18 +124,18 @@ void dncp_link_send_network_state(dncp_link l,
       goto done;
   if (maximum_size && tlv_len(tb.head) > maximum_size)
     {
-      L_ERR("dncp_link_send_network_state failed: %d > %d",
+      L_ERR("dncp_ep_i_send_network_state failed: %d > %d",
             (int)tlv_len(tb.head), (int)maximum_size);
       goto done;
     }
-  L_DEBUG("dncp_link_send_network_state -> " SA6_F "%%" DNCP_LINK_F,
+  L_DEBUG("dncp_ep_i_send_network_state -> " SA6_F "%%" DNCP_LINK_F,
           SA6_D(dst), DNCP_LINK_D(l));
   dncp_io_sendto(o, tlv_data(tb.head), tlv_len(tb.head), dst, NULL);
  done:
   tlv_buf_free(&tb);
 }
 
-void dncp_link_send_node_state(dncp_link l,
+void dncp_ep_i_send_node_state(dncp_ep_i l,
                                struct sockaddr_in6 *dst,
                                dncp_node n)
 {
@@ -146,14 +146,14 @@ void dncp_link_send_node_state(dncp_link l,
   if (_push_link_id_tlv(&tb, l)
       && _push_node_state_tlv(&tb, n, true))
     {
-      L_DEBUG("dncp_link_send_node_data %s -> " SA6_F " %%" DNCP_LINK_F,
+      L_DEBUG("dncp_ep_i_send_node_data %s -> " SA6_F " %%" DNCP_LINK_F,
               DNCP_NODE_REPR(n), SA6_D(dst), DNCP_LINK_D(l));
       dncp_io_sendto(l->dncp, tlv_data(tb.head), tlv_len(tb.head), dst, NULL);
     }
   tlv_buf_free(&tb);
 }
 
-void dncp_link_send_req_network_state(dncp_link l,
+void dncp_ep_i_send_req_network_state(dncp_ep_i l,
                                       struct sockaddr_in6 *dst)
 {
   struct tlv_buf tb;
@@ -164,14 +164,14 @@ void dncp_link_send_req_network_state(dncp_link l,
       && _push_network_state_tlv(&tb, l->dncp) /* SHOULD include local */
       && tlv_new(&tb, DNCP_T_REQ_NET_STATE, 0))
     {
-      L_DEBUG("dncp_link_send_req_network_state -> " SA6_F "%%" DNCP_LINK_F,
+      L_DEBUG("dncp_ep_i_send_req_network_state -> " SA6_F "%%" DNCP_LINK_F,
               SA6_D(dst), DNCP_LINK_D(l));
       dncp_io_sendto(l->dncp, tlv_data(tb.head), tlv_len(tb.head), dst, NULL);
     }
   tlv_buf_free(&tb);
 }
 
-void dncp_link_send_req_node_data(dncp_link l,
+void dncp_ep_i_send_req_node_data(dncp_ep_i l,
                                   struct sockaddr_in6 *dst,
                                   dncp_t_node_state ns)
 {
@@ -183,7 +183,7 @@ void dncp_link_send_req_node_data(dncp_link l,
   if (_push_link_id_tlv(&tb, l)
       && (a = tlv_new(&tb, DNCP_T_REQ_NODE_STATE, DNCP_HASH_LEN)))
     {
-      L_DEBUG("dncp_link_send_req_node_data -> " SA6_F "%%" DNCP_LINK_F,
+      L_DEBUG("dncp_ep_i_send_req_node_data -> " SA6_F "%%" DNCP_LINK_F,
               SA6_D(dst), DNCP_LINK_D(l));
       memcpy(tlv_data(a), &ns->node_identifier, DNCP_NI_LEN);
       dncp_io_sendto(l->dncp, tlv_data(tb.head), tlv_len(tb.head), dst, NULL);
@@ -194,7 +194,7 @@ void dncp_link_send_req_node_data(dncp_link l,
 /************************************************************ Input handling */
 
 static dncp_tlv
-_heard(dncp_link l, dncp_t_link_id lid, struct sockaddr_in6 *src,
+_heard(dncp_ep_i l, dncp_t_link_id lid, struct sockaddr_in6 *src,
        bool multicast)
 {
   dncp_t_neighbor_s np = {
@@ -232,7 +232,7 @@ _heard(dncp_link l, dncp_t_link_id lid, struct sockaddr_in6 *src,
 
 /* Handle a single received message. */
 static void
-handle_message(dncp_link l,
+handle_message(dncp_ep_i l,
                struct sockaddr_in6 *src,
                struct in6_addr *dst,
                struct tlv_attr *msg)
@@ -301,7 +301,7 @@ handle_message(dncp_link l,
           if (multicast)
             L_INFO("ignoring req-net-hash in multicast");
           else
-            dncp_link_send_network_state(l, src, 0);
+            dncp_ep_i_send_network_state(l, src, 0);
           break;
 
         case DNCP_T_REQ_NODE_STATE:
@@ -331,7 +331,7 @@ handle_message(dncp_link l,
                   break;
                 }
             }
-          dncp_link_send_node_state(l, src, n);
+          dncp_ep_i_send_node_state(l, src, n);
           break;
 
         case DNCP_T_NET_STATE:
@@ -450,7 +450,7 @@ handle_message(dncp_link l,
               L_DEBUG("node data %s for %s",
                       multicast ? "not supplied" : "missing",
                       DNCP_NODE_REPR(ns));
-              dncp_link_send_req_node_data(l, src, ns);
+              dncp_ep_i_send_req_node_data(l, src, ns);
             }
           updated_or_requested_state = true;
           break;
@@ -467,7 +467,7 @@ handle_message(dncp_link l,
     ne->last_contact = dncp_time(l->dncp);
 
   if (should_request_network_state && !updated_or_requested_state && !is_local)
-    dncp_link_send_req_network_state(l, src);
+    dncp_ep_i_send_req_network_state(l, src);
 }
 
 
@@ -479,7 +479,7 @@ void dncp_poll(dncp o)
   char srcif[IFNAMSIZ];
   struct sockaddr_in6 src;
   struct in6_addr dst;
-  dncp_link l;
+  dncp_ep_i l;
   dncp_subscriber s;
 
   while ((read = dncp_io_recvfrom(o, msg->data, DNCP_MAXIMUM_PAYLOAD_SIZE,

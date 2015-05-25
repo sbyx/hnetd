@@ -38,7 +38,7 @@ int main (int argc, char **argv)
 	argc--;
 	argv++;
 	while(argc) {
-		if(!dncp_if_set_enabled(hncp, argv[0], 1)) {
+		if(!dncp_ep_set_enabled(hncp, argv[0], 1)) {
 			L_ERR("Could not enable iface %s", argv[0]);
 			return -1;
 		}

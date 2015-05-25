@@ -93,7 +93,7 @@ void test_hncp_sd(void)
 {
   net_sim_s s;
   dncp n1, n2, n3;
-  dncp_link l1, l2, l21 __unused, l3;
+  dncp_ep_i l1, l2, l21 __unused, l3;
   net_node node1, node2, node3;
   struct prefix p;
   bool rv;

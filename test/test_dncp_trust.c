@@ -55,8 +55,8 @@ void dncp_trust_base()
   dncp_trust dt2 = dncp_trust_create(d2, NULL);
 
 
-  dncp_link l1 = net_sim_dncp_find_link_by_name(d1, "down");
-  dncp_link l2 = net_sim_dncp_find_link_by_name(d2, "up");
+  dncp_ep_i l1 = net_sim_dncp_find_link_by_name(d1, "down");
+  dncp_ep_i l2 = net_sim_dncp_find_link_by_name(d2, "up");
   net_sim_set_connected(l1, l2, true);
   net_sim_set_connected(l2, l1, true);
 

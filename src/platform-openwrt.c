@@ -1052,14 +1052,14 @@ static void platform_update(void *data, size_t len)
 
 		hncp_pa_conf_iface_flush(hncp_pa_p, c->ifname); //Stop HNCP_PA UPDATE
 
-		dncp_link_conf conf;
-		if(c && dtb[DATA_ATTR_KEEPALIVE_INTERVAL] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))
+		dncp_ep conf;
+		if(c && dtb[DATA_ATTR_KEEPALIVE_INTERVAL] && (conf = dncp_ep_find_by_name(p_dncp, c->ifname)))
 			conf->keepalive_interval = (hnetd_time_t) blobmsg_get_u32(dtb[DATA_ATTR_KEEPALIVE_INTERVAL]);
 
-		if(c && dtb[DATA_ATTR_TRICKLE_K] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))
+		if(c && dtb[DATA_ATTR_TRICKLE_K] && (conf = dncp_ep_find_by_name(p_dncp, c->ifname)))
 			conf->trickle_k = (int) blobmsg_get_u32(dtb[DATA_ATTR_TRICKLE_K]);
 
-		if(c && dtb[DATA_ATTR_DNSNAME] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))
+		if(c && dtb[DATA_ATTR_DNSNAME] && (conf = dncp_ep_find_by_name(p_dncp, c->ifname)))
 			strncpy(conf->dnsname, blobmsg_get_string(dtb[DATA_ATTR_DNSNAME]), sizeof(conf->dnsname));;
 
 		if (c) {

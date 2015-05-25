@@ -224,7 +224,7 @@ void dncp_notify_subscribers_about_to_republish_tlvs(dncp_node n)
 }
 
 
-void dncp_notify_subscribers_link_changed(dncp_link l, enum dncp_subscriber_event event)
+void dncp_notify_subscribers_link_changed(dncp_ep_i l, enum dncp_subscriber_event event)
 {
   dncp_subscriber s;
 

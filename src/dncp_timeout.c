@@ -13,7 +13,7 @@
 
 #include "dncp_i.h"
 
-static void trickle_set_i(dncp_link l, int i)
+static void trickle_set_i(dncp_ep_i l, int i)
 {
   hnetd_time_t now = dncp_time(l->dncp);
   int imin = l->conf->trickle_imin;
@@ -28,19 +28,19 @@ static void trickle_set_i(dncp_link l, int i)
   L_DEBUG(DNCP_LINK_F " trickle set to %d/%d", DNCP_LINK_D(l), t, i);
 }
 
-static void trickle_upgrade(dncp_link l)
+static void trickle_upgrade(dncp_ep_i l)
 {
   trickle_set_i(l, l->trickle_i * 2);
 }
 
-static void trickle_send_nocheck(dncp_link l)
+static void trickle_send_nocheck(dncp_ep_i l)
 {
   l->num_trickle_sent++;
   l->last_trickle_sent = dncp_time(l->dncp);
   dncp_profile_link_send_network_state(l);
 }
 
-static void trickle_send(dncp_link l)
+static void trickle_send(dncp_ep_i l)
 {
   if (l->trickle_c < l->conf->trickle_k)
     {
@@ -217,7 +217,7 @@ void dncp_run(dncp o)
 {
   hnetd_time_t next = 0;
   hnetd_time_t now = dncp_io_time(o);
-  dncp_link l;
+  dncp_ep_i l;
   dncp_tlv t, t2;
 
   /* Assumption: We're within RTC step here -> can use same timestamp
@@ -271,7 +271,7 @@ void dncp_run(dncp o)
   vlist_for_each_element(&o->links, l, in_links)
     {
       /* Update the 'active' link's published keepalive interval, if need be */
-      dncp_link_set_keepalive_interval(l, l->conf->keepalive_interval);
+      dncp_ep_i_set_keepalive_interval(l, l->conf->keepalive_interval);
 
       /* If we're in join pending state, we retry every
        * DNCP_REJOIN_INTERVAL if necessary. */
@@ -384,7 +384,7 @@ void dncp_run(dncp o)
 
 void dncp_trickle_reset(dncp o)
 {
-  dncp_link l;
+  dncp_ep_i l;
 
   vlist_for_each_element(&o->links, l, in_links)
     trickle_set_i(l, l->conf->trickle_imin);

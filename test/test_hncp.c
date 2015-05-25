@@ -100,24 +100,24 @@ void hncp_ext(void)
   sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs consistent");
 
   /* Should be able to enable it on a link. */
-  r = dncp_if_set_enabled(o, "eth0", true);
-  sput_fail_unless(r, "dncp_if_set_enabled eth0");
+  r = dncp_ep_set_enabled(o, "eth0", true);
+  sput_fail_unless(r, "dncp_ep_set_enabled eth0");
 
-  r = dncp_if_set_enabled(o, "eth1", true);
-  sput_fail_unless(r, "dncp_if_set_enabled eth1");
+  r = dncp_ep_set_enabled(o, "eth1", true);
+  sput_fail_unless(r, "dncp_ep_set_enabled eth1");
 
-  r = dncp_if_set_enabled(o, "eth1", true);
-  sput_fail_unless(!r, "dncp_if_set_enabled eth1 (2nd true)");
+  r = dncp_ep_set_enabled(o, "eth1", true);
+  sput_fail_unless(!r, "dncp_ep_set_enabled eth1 (2nd true)");
 
   dncp_self_flush(n);
   t = dncp_node_get_tlvs(n);
   sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs should be same");
 
-  r = dncp_if_set_enabled(o, "eth1", false);
-  sput_fail_unless(r, "dncp_if_set_enabled eth1 (false)");
+  r = dncp_ep_set_enabled(o, "eth1", false);
+  sput_fail_unless(r, "dncp_ep_set_enabled eth1 (false)");
 
-  r = dncp_if_set_enabled(o, "eth1", false);
-  sput_fail_unless(!r, "dncp_if_set_enabled eth1 (2nd false)");
+  r = dncp_ep_set_enabled(o, "eth1", false);
+  sput_fail_unless(!r, "dncp_ep_set_enabled eth1 (2nd false)");
 
   dncp_self_flush(n);
   t = dncp_node_get_tlvs(n);
@@ -149,7 +149,7 @@ void hncp_int(void)
   dncp o = &s;
   unsigned char hwbuf[] = "foo";
   dncp_node n;
-  dncp_link l;
+  dncp_ep_i l;
 
   hncp_init(o, hwbuf, strlen((char *)hwbuf));
 

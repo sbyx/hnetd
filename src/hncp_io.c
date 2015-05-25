@@ -126,7 +126,7 @@ bool dncp_io_set_ifname_enabled(dncp o,
   L_DEBUG("dncp_io_set_ifname_enabled %s %s",
           ifname, enabled ? "enabled" : "disabled");
   uint32_t ifindex = 0;
-  dncp_link l = dncp_find_link_by_name(o, ifname, false);
+  dncp_ep_i l = dncp_find_link_by_name(o, ifname, false);
   if (!(l && (ifindex = l->ifindex)))
     if (!(ifindex = if_nametoindex(ifname)))
       {

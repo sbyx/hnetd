@@ -871,14 +871,14 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 
 			hncp_pa_conf_iface_flush(hncp_pa_p, iface->ifname); //Stop HNCP_PA UPDATE
 
-			dncp_link_conf conf;
-			if(iface && tb[OPT_KEEPALIVE_INTERVAL] && (conf = dncp_if_find_conf_by_name(hncp, iface->ifname))) {
+			dncp_ep conf;
+			if(iface && tb[OPT_KEEPALIVE_INTERVAL] && (conf = dncp_ep_find_by_name(hncp, iface->ifname))) {
 				conf->keepalive_interval = (((hnetd_time_t) blobmsg_get_u32(tb[OPT_KEEPALIVE_INTERVAL])) * HNETD_TIME_PER_SECOND) / 1000;
 			}
 
-			if(iface && tb[OPT_TRICKLE_K] && (conf = dncp_if_find_conf_by_name(hncp, iface->ifname)))
+			if(iface && tb[OPT_TRICKLE_K] && (conf = dncp_ep_find_by_name(hncp, iface->ifname)))
 				conf->trickle_k = (int) blobmsg_get_u32(tb[OPT_TRICKLE_K]);
-			if(iface && tb[OPT_DNSNAME] && (conf = dncp_if_find_conf_by_name(hncp, iface->ifname)))
+			if(iface && tb[OPT_DNSNAME] && (conf = dncp_ep_find_by_name(hncp, iface->ifname)))
 				strncpy(conf->dnsname, blobmsg_get_string(tb[OPT_DNSNAME]), sizeof(conf->dnsname));
 
 			if (tb[OPT_IPV4SOURCE])

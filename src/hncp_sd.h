@@ -45,7 +45,7 @@ typedef struct hncp_sd_params_struct
 
 hncp_sd hncp_sd_create(dncp h, hncp_sd_params p, struct hncp_link *l);
 
-void hncp_sd_dump_link_fqdn(hncp_sd sd, dncp_link l,
+void hncp_sd_dump_link_fqdn(hncp_sd sd, dncp_ep_i l,
 		const char *ifname, char *buf, size_t buf_len);
 
 void hncp_sd_destroy(hncp_sd sd);

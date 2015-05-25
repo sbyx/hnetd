@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Apr 30 11:49:25 2015 mstenber
+ * Last modified: Mon May 25 11:08:21 2015 mstenber
  * Edit time:     329 min
  *
  */
@@ -133,17 +133,14 @@ struct dncp_struct {
   void *userdata;
 };
 
-struct dncp_link_struct {
+struct dncp_ep_i_struct {
   struct vlist_node in_links;
 
   /* Backpointer to dncp */
   dncp dncp;
 
-  /* Pointer to some dncp_link configuration structure */
-  dncp_link_conf conf;
-
-  /* Name of the (local) link. */
-  char ifname[IFNAMSIZ];
+  /* The public portion of the endpoint */
+  dncp_ep_s conf;
 
   /* In-system ifindex; if not set, determine dynamically. */
   uint32_t ifindex;
@@ -261,8 +258,8 @@ void dncp_uninit(dncp o);
 /* Utility to change local node identifier - use with care */
 bool dncp_set_own_node_identifier(dncp o, dncp_node_identifier ni);
 
-dncp_link dncp_find_link_by_name(dncp o, const char *ifname, bool create);
-dncp_link dncp_find_link_by_id(dncp o, uint32_t link_id);
+dncp_ep_i dncp_find_link_by_name(dncp o, const char *ifname, bool create);
+dncp_ep_i dncp_find_link_by_id(dncp o, uint32_t link_id);
 dncp_node
 dncp_find_node_by_node_identifier(dncp o, dncp_node_identifier ni, bool create);
 
@@ -291,12 +288,12 @@ static inline unsigned long long dncp_hash64(dncp_hash h)
 }
 
 /* Utility functions to send frames. */
-void dncp_link_send_network_state(dncp_link l,
+void dncp_ep_i_send_network_state(dncp_ep_i l,
                                   struct sockaddr_in6 *dst,
                                   size_t maximum_size);
-void dncp_link_send_req_network_state(dncp_link l, struct sockaddr_in6 *dst);
-void dncp_link_set_ipv6_address(dncp_link l, const struct in6_addr *addr);
-void dncp_link_set_keepalive_interval(dncp_link l, uint32_t value);
+void dncp_ep_i_send_req_network_state(dncp_ep_i l, struct sockaddr_in6 *dst);
+void dncp_ep_i_set_ipv6_address(dncp_ep_i l, const struct in6_addr *addr);
+void dncp_ep_i_set_keepalive_interval(dncp_ep_i l, uint32_t value);
 
 
 /* Miscellaneous utilities that live in dncp_timeout */
@@ -312,7 +309,7 @@ void dncp_notify_subscribers_about_to_republish_tlvs(dncp_node n);
 void dncp_notify_subscribers_local_tlv_changed(dncp o,
                                                struct tlv_attr *a,
                                                bool add);
-void dncp_notify_subscribers_link_changed(dncp_link l, enum dncp_subscriber_event event);
+void dncp_notify_subscribers_link_changed(dncp_ep_i l, enum dncp_subscriber_event event);
 
 /* Inlined utilities. */
 static inline hnetd_time_t dncp_time(dncp o)

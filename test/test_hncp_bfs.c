@@ -46,7 +46,7 @@ void platform_set_dhcpv6_send(__unused struct iface *c, __unused const void *dhc
 void platform_set_prefix_route(__unused const struct prefix *p, __unused bool enable) {}
 void platform_restart_dhcpv4(__unused struct iface *c) {}
 void platform_set_snat(__unused struct iface *c, __unused const struct prefix *p) {}
-void hncp_sd_dump_link_fqdn(__unused hncp_sd sd, __unused dncp_link l, __unused const char *ifname, __unused char *buf, __unused size_t buf_len) {}
+void hncp_sd_dump_link_fqdn(__unused hncp_sd sd, __unused dncp_ep_i l, __unused const char *ifname, __unused char *buf, __unused size_t buf_len) {}
 
 void hncp_bfs_one(void)
 {
@@ -75,8 +75,8 @@ void hncp_bfs_one(void)
 	//       N3
 	// with uni-directional neighbor N2 - N4 and PDs on N2 and N3
 
-	dncp_link l1 = dncp_find_link_by_name(hncp, "l1", true);
-	dncp_link l3 = dncp_find_link_by_name(hncp, "l3", true);
+	dncp_ep_i l1 = dncp_find_link_by_name(hncp, "l1", true);
+	dncp_ep_i l3 = dncp_find_link_by_name(hncp, "l3", true);
 	struct iface *i1 = iface_create("l1", "l1", 0);
 	struct iface *i3 = iface_create("l3", "l3", 0);
 

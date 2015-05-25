@@ -307,7 +307,7 @@ void iface_unregister_user(struct iface_user *user)
 
 char* iface_get_fqdn(const char *ifname, char *buf, size_t len)
 {
-	dncp_link link = dncp_find_link_by_name(hncp_p, ifname, false);
+	dncp_ep_i link = dncp_find_link_by_name(hncp_p, ifname, false);
 	hncp_sd_dump_link_fqdn(hncp_sd_p, link, ifname, buf, len);
 	return buf;
 }
