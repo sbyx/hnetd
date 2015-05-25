@@ -6,20 +6,21 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 14:50:58 2014 mstenber
- * Last modified: Wed May 13 09:37:58 2015 mstenber
- * Edit time:     13 min
+ * Last modified: Mon May 25 14:50:25 2015 mstenber
+ * Edit time:     30 min
  *
  */
 
 #include "hncp_i.h"
+#include <libubox/md5.h>
 
-bool dncp_profile_handle_collision(dncp o)
+static bool hncp_profile_handle_collision(dncp o)
 {
   dncp_node_identifier_s ni;
   int i;
 
   L_ERR("second+ collision -> changing node identifier");
-  for (i = 0; i < DNCP_NI_LEN; i++)
+  for (i = 0; i < DNCP_NI_LEN(o); i++)
     ni.buf[i] = random() % 256;
   dncp_set_own_node_identifier(o, &ni);
   return true;
@@ -27,25 +28,9 @@ bool dncp_profile_handle_collision(dncp o)
 
 
 
-
-void dncp_profile_link_send_network_state(dncp_ep_i l)
-{
-  struct sockaddr_in6 dst =
-    { .sin6_family = AF_INET6,
-      .sin6_addr = l->dncp->profile_data.multicast_address,
-      .sin6_port = htons(l->dncp->udp_port)
-    };
-  if (!(dst.sin6_scope_id = l->ifindex))
-    if (!(dst.sin6_scope_id = if_nametoindex(l->ifname)))
-      {
-        L_ERR("Unable to find index for " DNCP_LINK_F, DNCP_LINK_D(l));
-        return;
-      }
-  dncp_ep_i_send_network_state(l, &dst, HNCP_MAXIMUM_MULTICAST_SIZE);
-}
-
-struct tlv_attr *dncp_profile_node_validate_data(dncp_node n,
-                                                 struct tlv_attr *a)
+static struct tlv_attr *
+hncp_profile_node_validate_data(dncp_node n,
+                                struct tlv_attr *a)
 {
   uint8_t version = 0;
 #if L_LEVEL >= LOG_ERR
@@ -53,7 +38,10 @@ struct tlv_attr *dncp_profile_node_validate_data(dncp_node n,
   int agent_len = 0;
 #endif /* L_LEVEL >= LOG_ERR */
   struct tlv_attr *va, *a_valid = a;
-  dncp_node on = n->dncp->own_node;
+  dncp o = n->dncp;
+  dncp_node on = o->own_node;
+  hncp_node onh = dncp_node_get_ext_data(on);
+  hncp_node nh = dncp_node_get_ext_data(n);
 
   tlv_for_each_attr(va, a)
     {
@@ -71,57 +59,120 @@ struct tlv_attr *dncp_profile_node_validate_data(dncp_node n,
     }
   if (on
       && on != n
-      && on->profile_data.version
-      && version != on->profile_data.version)
+      && onh->version
+      && version != onh->version)
     a_valid = NULL;
-  if (a && n->profile_data.version != version)
+  if (a && nh->version != version)
     {
       if (!a_valid)
         L_ERR("Incompatible node: %s version %u (%.*s) != %u",
               DNCP_NODE_REPR(n), version, agent_len, agent,
-              on->profile_data.version);
-      else if (!n->profile_data.version)
+              onh->version);
+      else if (!nh->version)
         L_INFO("%s runs %.*s",
                DNCP_NODE_REPR(n), agent_len, agent);
-      n->profile_data.version = version;
+      nh->version = version;
     }
   return a_valid;
 }
 
-static bool _hncp_init(dncp o)
+bool hncp_init(hncp o)
 {
-  if (inet_pton(AF_INET6, HNCP_MCAST_GROUP,
-                &o->profile_data.multicast_address) < 1)
+  o->dncp = dncp_create(&o->ext);
+  if (!o->dncp)
+    return false;
+  if (inet_pton(AF_INET6, HNCP_MCAST_GROUP, &o->multicast_address) < 1)
     {
       L_ERR("unable to inet_pton multicast group address");
       return false;
     }
-  return true;
+return true;
 }
 
-bool hncp_init(dncp o, const void *node_identifier, int len)
+void hncp_uninit(hncp o)
 {
-  if (!dncp_init(o, node_identifier, len))
-    return false;
-  return _hncp_init(o);
+  if (o->dncp)
+    dncp_destroy(o->dncp);
 }
 
-void hncp_uninit(dncp o)
+void hncp_destroy(hncp o)
 {
-  dncp_uninit(o);
-}
-
-
-dncp hncp_create(void)
-{
-  dncp o = dncp_create(NULL);
   if (!o)
-    return NULL;
-  if (!_hncp_init(o))
+    return;
+  hncp_uninit(o);
+  free(o);
+}
+
+hncp hncp_create(void)
+{
+  hncp o = calloc(1, sizeof(*o));
+
+  if (o && !hncp_init(o))
     {
-      dncp_destroy(o);
+      hncp_destroy(o);
       return NULL;
     }
   return o;
 }
 
+void dncp_calculate_hash(const void *buf, int len, dncp_hash dest)
+{
+  md5_ctx_t ctx;
+
+  md5_begin(&ctx);
+  md5_hash(buf, len, &ctx);
+  dncp_md5_end(dest, &ctx);
+}
+
+void
+hncp_get_ipv6_address(hncp h, const char *prefer_ifname, struct in6_addr **addr)
+{
+  dncp o = h->dncp;
+  dncp_ep_i l = NULL;
+  hncp_ep hl;
+
+  if (prefer_ifname)
+    l = dncp_find_link_by_name(o, prefer_ifname, false);
+  hl = dncp_ep_get_ext_data(&l->conf);
+  if (!( l && hl && hl->has_ipv6_address))
+    {
+      /* Iterate through the links in order, stopping at one with IPv6
+       * address. */
+      vlist_for_each_element(&o->links, l, in_links)
+        {
+          hl = dncp_ep_get_ext_data(&l->conf);
+          if (hl->has_ipv6_address)
+            break;
+        }
+    }
+  if (l && hl && hl->has_ipv6_address)
+    *addr = &hl->ipv6_address;
+  else
+    *addr = NULL;
+}
+
+void
+hncp_set_ipv6_address(hncp h, const char *ifname, const struct in6_addr *addr)
+{
+  dncp o = h->dncp;
+  bool has_addr = addr != NULL;
+  dncp_ep_i l = dncp_find_link_by_name(o, ifname, false);
+  if (!l)
+    return;
+  hncp_ep hl = dncp_ep_get_ext_data(&l->conf);
+  if (hl->has_ipv6_address == has_addr &&
+      (!has_addr || memcmp(&hl->ipv6_address, addr, sizeof(*addr)) == 0))
+    return;
+  hl->has_ipv6_address = has_addr;
+  if (has_addr)
+    {
+      hl->ipv6_address = *addr;
+      L_DEBUG("hncp_set_ipv6_address: address on %s: %s",
+              l->ifname, ADDR_REPR(addr));
+    }
+  else
+    {
+      L_DEBUG("hncp_set_ipv6_address: no %s any more", l->ifname);
+    }
+  dncp_notify_subscribers_link_changed(l, DNCP_EVENT_UPDATE);
+}

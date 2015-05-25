@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Thu Apr 23 14:54:50 2015 mstenber
- * Edit time:     116 min
+ * Last modified: Mon May 25 12:41:38 2015 mstenber
+ * Edit time:     121 min
  *
  */
 
@@ -15,8 +15,6 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
-
-#include "dncp_profile.h"
 
 /******************************************************************* TLV T's */
 
@@ -40,17 +38,11 @@ enum {
 
 #define TLV_SIZE sizeof(struct tlv_attr)
 
-typedef struct __packed {
-  unsigned char buf[DNCP_HASH_LEN];
-} dncp_hash_s, *dncp_hash;
+#define DNCP_SHA256_LEN 32
 
 typedef struct __packed {
   unsigned char buf[DNCP_SHA256_LEN];
 } dncp_sha256_s, *dncp_sha256;
-
-typedef struct __packed {
-  unsigned char buf[DNCP_NI_LEN];
-} dncp_node_identifier_s, *dncp_node_identifier;
 
 /* DNCP_T_REQ_NET_STATE has no content */
 
@@ -58,7 +50,7 @@ typedef struct __packed {
 
 /* DNCP_T_ENDPOINT_ID */
 typedef struct __packed {
-  dncp_node_identifier_s node_identifier;
+  /* dncp_node_identifier_s node_identifier; variable length, encoded here */
   uint32_t link_id;
 } dncp_t_link_id_s, *dncp_t_link_id;
 
@@ -66,18 +58,17 @@ typedef struct __packed {
 
 /* DNCP_T_NODE_STATE */
 typedef struct __packed {
-  dncp_node_identifier_s node_identifier;
+  /* dncp_node_identifier_s node_identifier; variable length, encoded here */
   uint32_t update_number;
   uint32_t ms_since_origination;
-  dncp_hash_s node_data_hash;
-  /* + optional node data after this */
+  /* + hash + + optional node data after this */
 } dncp_t_node_state_s, *dncp_t_node_state;
 
 /* DNCP_T_CUSTOM custom data, with H-64 of URI at start to identify type TBD */
 
 /* DNCP_T_NEIGHBOR */
 typedef struct __packed {
-  dncp_node_identifier_s neighbor_node_identifier;
+  /* dncp_node_identifier_s node_identifier; variable length, encoded here */
   uint32_t neighbor_link_id;
   uint32_t link_id;
 } dncp_t_neighbor_s, *dncp_t_neighbor;

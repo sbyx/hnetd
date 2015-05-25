@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon May 25 11:08:21 2015 mstenber
- * Edit time:     329 min
+ * Last modified: Mon May 25 14:18:22 2015 mstenber
+ * Edit time:     349 min
  *
  */
 
@@ -16,7 +16,6 @@
 #include "dncp.h"
 #include "dncp_io.h"
 #include "dncp_proto.h"
-#include "dncp_profile.h"
 
 #include "dns_util.h"
 
@@ -30,13 +29,35 @@
 /* Rough approximation - should think of real figure. */
 #define DNCP_MAXIMUM_PAYLOAD_SIZE 65536
 
-
 #include <libubox/vlist.h>
 #include <libubox/list.h>
+
+/*
+ * Change these if you need bigger; however, by default, we wind up
+ * wasting some memory (but as dynamic allocations are not really free
+ * either, I do not care). (And we have ~2 of these per node, so
+ * memory overhead in typical small networks is not large.)
+ */
+#define DNCP_HASH_MAX_LEN 32
+#define DNCP_NI_MAX_LEN 32
+
+typedef struct dncp_ep_i_struct dncp_ep_i_s, *dncp_ep_i;
+
+
+typedef struct __packed {
+  unsigned char buf[DNCP_HASH_MAX_LEN];
+} dncp_hash_s, *dncp_hash;
+
+typedef struct __packed {
+  unsigned char buf[DNCP_NI_MAX_LEN];
+} dncp_node_identifier_s, *dncp_node_identifier;
 
 typedef uint32_t iid_t;
 
 struct dncp_struct {
+  /* 'external' handling structure */
+  dncp_ext ext;
+
   /* Disable pruning (should be used probably only in unit tests) */
   bool disable_prune;
 
@@ -79,9 +100,6 @@ struct dncp_struct {
    * based on nodes' state. */
   bool network_hash_dirty;
 
-  /* before io-init is done, we keep just prod should_schedule. */
-  bool io_init_done;
-  bool should_schedule;
   bool immediate_scheduled;
 
   /* Our own node (it should be constant, never purged) */
@@ -125,12 +143,6 @@ struct dncp_struct {
 
   /* Number of times neighbor has been dropped. */
   int num_neighbor_dropped;
-
-  /* Profile-specific data */
-  dncp_profile_data_s profile_data;
-
-  /* Private pointer for user */
-  void *userdata;
 };
 
 struct dncp_ep_i_struct {
@@ -139,21 +151,15 @@ struct dncp_ep_i_struct {
   /* Backpointer to dncp */
   dncp dncp;
 
+  /* Is the endpoint actually 'ready' according to ext? By default, not. */
+  bool enabled;
+
   /* The public portion of the endpoint */
   dncp_ep_s conf;
-
-  /* In-system ifindex; if not set, determine dynamically. */
-  uint32_t ifindex;
 
   /* Interface identifier - these should be unique over lifetime of
    * dncp process. */
   iid_t iid;
-
-  /* When did multicast join fail last time? */
-  /* -> probably tried during DAD. Should try later again. */
-  hnetd_time_t join_failed_time;
-
-  bool join_pending;
 
   /* Trickle state */
   int trickle_i; /* trickle interval size */
@@ -172,10 +178,6 @@ struct dncp_ep_i_struct {
   /* Statistics about Trickle (mostly for debugging) */
   int num_trickle_sent;
   int num_trickle_skipped;
-
-  /* 'Best' address (if any) */
-  bool has_ipv6_address;
-  struct in6_addr ipv6_address;
 };
 
 typedef struct dncp_neighbor_struct dncp_neighbor_s, *dncp_neighbor;
@@ -232,9 +234,6 @@ struct dncp_node_struct {
    * re-alloc when tlv_container changes and we don't immediately want
    * to recalculate tlv_index. */
   bool tlv_index_dirty;
-
-  /* Profile-specific data */
-  dncp_profile_node_data_s profile_data;
 };
 
 struct dncp_tlv_struct {
@@ -252,7 +251,7 @@ struct dncp_tlv_struct {
 
 /* Internal or testing-only way to initialize hp struct _without_
  * dynamic allocations (and some of the steps omitted too). */
-bool dncp_init(dncp o, const void *node_identifier, int len);
+bool dncp_init(dncp o, dncp_ext ext, const void *node_identifier, int len);
 void dncp_uninit(dncp o);
 
 /* Utility to change local node identifier - use with care */
@@ -272,8 +271,6 @@ void dncp_node_recalculate_index(dncp_node n);
 
 bool dncp_add_tlv_index(dncp o, uint16_t type);
 
-bool dncp_get_ipv6_address(dncp o, char *prefer_ifname, struct in6_addr *addr);
-
 void dncp_schedule(dncp o);
 
 /* Flush own TLV changes to own node. */
@@ -289,9 +286,12 @@ static inline unsigned long long dncp_hash64(dncp_hash h)
 
 /* Utility functions to send frames. */
 void dncp_ep_i_send_network_state(dncp_ep_i l,
+                                  struct sockaddr_in6 *src,
                                   struct sockaddr_in6 *dst,
                                   size_t maximum_size);
-void dncp_ep_i_send_req_network_state(dncp_ep_i l, struct sockaddr_in6 *dst);
+void dncp_ep_i_send_req_network_state(dncp_ep_i l,
+                                      struct sockaddr_in6 *src,
+                                      struct sockaddr_in6 *dst);
 void dncp_ep_i_set_ipv6_address(dncp_ep_i l, const struct in6_addr *addr);
 void dncp_ep_i_set_keepalive_interval(dncp_ep_i l, uint32_t value);
 
@@ -311,11 +311,16 @@ void dncp_notify_subscribers_local_tlv_changed(dncp o,
                                                bool add);
 void dncp_notify_subscribers_link_changed(dncp_ep_i l, enum dncp_subscriber_event event);
 
+/* Compatibility / convenience macros to access stuff that used to be fixed. */
+#define DNCP_NI_LEN(o) (o)->ext->conf.node_identifier_length
+#define DNCP_HASH_LEN(o) (o)->ext->conf.hash_length
+#define DNCP_KEEPALIVE_INTERVAL(o) (o)->ext->conf.per_link.keepalive_interval
+
 /* Inlined utilities. */
 static inline hnetd_time_t dncp_time(dncp o)
 {
   if (!o->now)
-    return dncp_io_time(o);
+    return o->ext->cb.get_time(o->ext);
   return o->now;
 }
 
@@ -366,13 +371,21 @@ dncp_node_get_tlv_with_type(dncp_node n, uint16_t type, bool first)
 #define ROUND_BYTES_TO_4BYTES(b) ((((b) + 3) / 4) * 4)
 
 static inline dncp_t_neighbor
-dncp_tlv_neighbor(const struct tlv_attr *a)
+dncp_tlv_neighbor(dncp o, const struct tlv_attr *a)
 {
   if (tlv_id(a) != DNCP_T_NEIGHBOR
-      || tlv_len(a) != sizeof(dncp_t_neighbor_s))
+      || tlv_len(a) != (DNCP_NI_LEN(o) + sizeof(dncp_t_neighbor_s)))
     return NULL;
-  return (dncp_t_neighbor)tlv_data(a);
+  return (dncp_t_neighbor)(tlv_data(a) + DNCP_NI_LEN(o));
 }
+
+/* Non-typesafe, better hope exterior handling has done things correctly */
+static inline dncp_node_identifier
+dncp_tlv_get_node_identifier(dncp o, void *tlv)
+{
+  return (dncp_node_identifier)(tlv - o->ext->conf.node_identifier_length);
+}
+
 
 static inline dncp_t_trust_verdict
 dncp_tlv_trust_verdict(const struct tlv_attr *a)
@@ -395,7 +408,7 @@ dncp_node_find_neigh_bidir(dncp_node n, dncp_t_neighbor ne)
 {
   if (!n)
     return NULL;
-  dncp_node_identifier ni = &ne->neighbor_node_identifier;
+  dncp_node_identifier ni = dncp_tlv_get_node_identifier(n->dncp, ne);
   dncp_node n2 = dncp_find_node_by_node_identifier(n->dncp, ni, false);
   if (!n2)
     return NULL;
@@ -403,12 +416,12 @@ dncp_node_find_neigh_bidir(dncp_node n, dncp_t_neighbor ne)
   dncp_t_neighbor ne2;
 
   dncp_node_for_each_tlv_with_type(n2, a, DNCP_T_NEIGHBOR)
-    if ((ne2 = dncp_tlv_neighbor(a)))
+    if ((ne2 = dncp_tlv_neighbor(n->dncp, a)))
       {
         if (ne->link_id == ne2->neighbor_link_id
             && ne->neighbor_link_id == ne2->link_id &&
-            !memcmp(&ne2->neighbor_node_identifier,
-                    &n->node_identifier, DNCP_NI_LEN))
+            !memcmp(dncp_tlv_get_node_identifier(n->dncp, ne2),
+                    &n->node_identifier, DNCP_NI_LEN(n->dncp)))
           return n2;
       }
 

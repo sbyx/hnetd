@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Feb 18 14:56:48 2015 mstenber
- * Edit time:     513 min
+ * Last modified: Mon May 25 13:55:04 2015 mstenber
+ * Edit time:     524 min
  *
  */
 
@@ -16,8 +16,8 @@
 static void trickle_set_i(dncp_ep_i l, int i)
 {
   hnetd_time_t now = dncp_time(l->dncp);
-  int imin = l->conf->trickle_imin;
-  int imax = l->conf->trickle_imax;
+  int imin = l->conf.trickle_imin;
+  int imax = l->conf.trickle_imax;
 
   i = i < imin ? imin : i > imax ? imax : i;
   l->trickle_i = i;
@@ -37,12 +37,13 @@ static void trickle_send_nocheck(dncp_ep_i l)
 {
   l->num_trickle_sent++;
   l->last_trickle_sent = dncp_time(l->dncp);
-  dncp_profile_link_send_network_state(l);
+  /* TBD - insert per-peer keepalive support code here at some point! */
+  dncp_ep_i_send_network_state(l, NULL, NULL, l->conf.maximum_multicast_size);
 }
 
 static void trickle_send(dncp_ep_i l)
 {
-  if (l->trickle_c < l->conf->trickle_k)
+  if (l->trickle_c < l->conf.trickle_k)
     {
       trickle_send_nocheck(l);
     }
@@ -50,7 +51,7 @@ static void trickle_send(dncp_ep_i l)
     {
       l->num_trickle_skipped++;
       L_DEBUG(DNCP_LINK_F " trickle already has c=%d >= k=%d, not sending",
-              DNCP_LINK_D(l), l->trickle_c, l->conf->trickle_k);
+              DNCP_LINK_D(l), l->trickle_c, l->conf.trickle_k);
     }
   l->trickle_send_time = 0;
 }
@@ -106,7 +107,7 @@ static void _prune_rec(dncp_node n)
 
   /* Look at it's neighbors. */
   tlv_for_each_attr(a, tlvs)
-    if ((ne = dncp_tlv_neighbor(a)))
+    if ((ne = dncp_tlv_neighbor(n->dncp, a)))
       {
         /* Ignore if it's not _bidirectional_ neighbor. Unidirectional
          * ones lead to graph not settling down. */
@@ -118,7 +119,8 @@ static void _prune_rec(dncp_node n)
 static void dncp_prune(dncp o)
 {
   hnetd_time_t now = dncp_time(o);
-  hnetd_time_t grace_after = now - DNCP_PRUNE_GRACE_PERIOD;
+  int grace_interval = o->ext->conf.grace_interval;
+  hnetd_time_t grace_after = now - grace_interval;
 
   /* Logic fails if time isn't moving forward-ish */
   assert(now != o->last_prune);
@@ -140,7 +142,7 @@ static void dncp_prune(dncp o)
       if (n->last_reachable_prune < grace_after)
         continue;
       next_time = TMIN(next_time,
-                       n->last_reachable_prune + DNCP_PRUNE_GRACE_PERIOD + 1);
+                       n->last_reachable_prune + grace_interval + 1);
       vlist_add(&o->nodes, &n->in_nodes, n);
       _node_set_reachable(n, false);
     }
@@ -179,20 +181,19 @@ do {                                                            \
 hnetd_time_t
 dncp_neighbor_interval(dncp o, struct tlv_attr *neighbor_tlv)
 {
-  dncp_t_neighbor neigh = dncp_tlv_neighbor(neighbor_tlv);
+  dncp_t_neighbor neigh = dncp_tlv_neighbor(o, neighbor_tlv);
   if (!neigh)
     {
       L_ERR("invalid (internally generated) dncp_t_neighbor");
       return 1;
     }
-  dncp_node n = dncp_find_node_by_node_identifier(o, &neigh->neighbor_node_identifier, false);
+  dncp_node_identifier ni = dncp_tlv_get_node_identifier(o, neigh);
+  dncp_node n = dncp_find_node_by_node_identifier(o, ni, false);
   if (!n)
-    {
-      return DNCP_KEEPALIVE_INTERVAL;
-    }
+    return DNCP_KEEPALIVE_INTERVAL(o);
 
   struct tlv_attr *a;
-  uint32_t value = DNCP_KEEPALIVE_INTERVAL;
+  uint32_t value = DNCP_KEEPALIVE_INTERVAL(o);
   dncp_node_for_each_tlv_with_type(n, a, DNCP_T_KEEPALIVE_INTERVAL)
     {
       dncp_t_keepalive_interval ka = tlv_data(a);
@@ -216,7 +217,7 @@ dncp_neighbor_interval(dncp o, struct tlv_attr *neighbor_tlv)
 void dncp_run(dncp o)
 {
   hnetd_time_t next = 0;
-  hnetd_time_t now = dncp_io_time(o);
+  hnetd_time_t now = o->ext->cb.get_time(o->ext);
   dncp_ep_i l;
   dncp_tlv t, t2;
 
@@ -246,7 +247,7 @@ void dncp_run(dncp o)
   if (!o->disable_prune)
     {
       if (o->graph_dirty)
-        o->next_prune = DNCP_MINIMUM_PRUNE_INTERVAL + o->last_prune;
+        o->next_prune = o->ext->conf.minimum_prune_interval + o->last_prune;
 
       if (o->next_prune && o->next_prune <= now)
         {
@@ -271,7 +272,10 @@ void dncp_run(dncp o)
   vlist_for_each_element(&o->links, l, in_links)
     {
       /* Update the 'active' link's published keepalive interval, if need be */
-      dncp_ep_i_set_keepalive_interval(l, l->conf->keepalive_interval);
+      dncp_ep_i_set_keepalive_interval(l, l->conf.keepalive_interval);
+
+#if 0
+      /* N/A - 'ext' takes care of this */
 
       /* If we're in join pending state, we retry every
        * DNCP_REJOIN_INTERVAL if necessary. */
@@ -292,7 +296,7 @@ void dncp_run(dncp o)
                   /* This is essentially second-stage init for a
                    * link. Before multicast join succeeds, it is
                    * essentially zombie. */
-                  trickle_set_i(l, l->conf->trickle_imin);
+                  trickle_set_i(l, l->conf.trickle_imin);
                   l->last_trickle_sent = dncp_time(l->dncp);
                 }
             }
@@ -306,11 +310,12 @@ void dncp_run(dncp o)
               continue;
             }
         }
+#endif /* 0 */
 
-      if (l->conf->keepalive_interval)
+      if (l->conf.keepalive_interval)
         {
           hnetd_time_t next_time =
-            l->last_trickle_sent + l->conf->keepalive_interval;
+            l->last_trickle_sent + l->conf.keepalive_interval;
           if (next_time <= now)
             {
               L_DEBUG("sending keep-alive");
@@ -318,7 +323,7 @@ void dncp_run(dncp o)
               /* Do not increment Trickle i, but set next t to i/2 .. i */
               trickle_set_i(l, l->trickle_i);
               next_time =
-                l->last_trickle_sent + l->conf->keepalive_interval;
+                l->last_trickle_sent + l->conf.keepalive_interval;
             }
           SET_NEXT(next_time, "next keep-alive");
         }
@@ -340,7 +345,7 @@ void dncp_run(dncp o)
 
         hnetd_time_t next_time =
           n->last_contact +
-          dncp_neighbor_interval(o, &t->tlv) * DNCP_KEEPALIVE_MULTIPLIER;
+          dncp_neighbor_interval(o, &t->tlv) * o->ext->conf.keepalive_multiplier / 100;
 
         /* TBD: How to treat party that has keepalive_interval 0? */
 
@@ -369,12 +374,12 @@ void dncp_run(dncp o)
 
   if (next && !o->immediate_scheduled)
     {
-      hnetd_time_t delta = next - dncp_io_time(o);
+      hnetd_time_t delta = next - o->ext->cb.get_time(o->ext);
       if (delta < 0)
         delta = 0;
       else if (delta > (1 << 16))
         delta = 1 << 16;
-      dncp_io_schedule(o, delta);
+      o->ext->cb.schedule_timeout(o->ext, delta);
       L_DEBUG("next scheduled in %d", (int)delta);
     }
 
@@ -387,5 +392,5 @@ void dncp_trickle_reset(dncp o)
   dncp_ep_i l;
 
   vlist_for_each_element(&o->links, l, in_links)
-    trickle_set_i(l, l->conf->trickle_imin);
+    trickle_set_i(l, l->conf.trickle_imin);
 }

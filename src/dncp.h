@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Mon May 25 11:19:55 2015 mstenber
- * Edit time:     173 min
+ * Last modified: Mon May 25 14:42:27 2015 mstenber
+ * Edit time:     213 min
  *
  */
 
@@ -28,6 +28,15 @@
 #include <libubox/list.h>
 
 /********************************************* Opaque object-like structures */
+
+/* Defined later; this is the 'public' part of I/O + system API, which
+ * essentially just contains a set of callbacks. */
+typedef struct dncp_ext_struct dncp_ext_s, *dncp_ext;
+
+/* (Not so opaque) per-endpoint _configuration_ blob, that is actually
+ * part of implementation-side-only dncp_ep_i. */
+typedef struct dncp_ep_struct dncp_ep_s, *dncp_ep;
+
 
 /* A single dncp instance. */
 typedef struct dncp_struct dncp_s, *dncp;
@@ -149,9 +158,9 @@ struct dncp_subscriber_struct {
    * callback is called.
    */
   void (*msg_received_callback)(dncp_subscriber s,
-                                const char *ifname,
+                                dncp_ep ep,
                                 struct sockaddr_in6 *src,
-                                struct in6_addr *dst,
+                                struct sockaddr_in6 *dst,
                                 struct tlv_attr *msg);
 };
 
@@ -159,7 +168,6 @@ struct dncp_subscriber_struct {
 
 /* (dncp_ep_i itself is implementation detail) */
 
-typedef struct dncp_ep_struct dncp_ep_s, *dncp_ep;
 struct dncp_ep_struct {
   char ifname[IFNAMSIZ]; /* Name of the endpoint. */
   /* NOTE: This MUST NOT be changed. It is kept around just for
@@ -174,6 +182,9 @@ struct dncp_ep_struct {
   /* How frequently (overriding Trickle) we MUST send something on the
    * link. */
   hnetd_time_t keepalive_interval;
+
+  /* How large can the multicasts be? */
+  ssize_t maximum_multicast_size;
 };
 
 /**
@@ -194,7 +205,7 @@ bool dncp_ep_has_highest_id(dncp_ep ep);
  * This call will create the dncp object, and register it to uloop. In
  * case of error, NULL is returned.
  */
-dncp dncp_create(void *userdata);
+dncp dncp_create(dncp_ext ext);
 
 /**
  * Destroy DNCP instance
@@ -258,19 +269,6 @@ void dncp_subscribe(dncp o, dncp_subscriber s);
  */
 void dncp_unsubscribe(dncp o, dncp_subscriber s);
 
-/**
- * Run DNCP state machine once. It should re-queue itself when needed.
- * (This should be mainly called from timeout callback, or from unit
- * tests).
- */
-void dncp_run(dncp o);
-
-/**
- * Poll the i/o system once. This should be called from event loop
- * whenever the udp socket has inputs.
- */
-void dncp_poll(dncp o);
-
 /************************************************************** Per-node API */
 
 /**
@@ -304,3 +302,134 @@ struct tlv_attr *dncp_node_get_tlvs(dncp_node n);
  * return value may already be invalid.
  */
 void *dncp_tlv_get_extra(dncp_tlv tlv);
+
+/**************************************************** dncp external bits API */
+
+/* These cover i/o, profile, and system interface. Notably, we assume
+ * sockaddr_in6 is sufficient encoding for addresses, and if it is
+ * not, someone needs to do some refactoring. As DNCP code itself does
+ * not use it for anything else than just storing it, it should be
+ * _relatively_ straightforward to abstract further if the need
+ * comes. */
+
+struct dncp_ext_configuration_struct {
+  /* Per-link configuration defaults to what is provided here. */
+  dncp_ep_s per_link;
+
+  /* Size of the node identifier */
+  uint8_t node_identifier_length;
+
+  /* Hash length */
+  uint8_t hash_length;
+
+  /* Keepalive multiplier (in percent) */
+  uint16_t keepalive_multiplier;
+
+  /* How recently node has to have been reachable before prune kills
+   * it for real. */
+  hnetd_time_t grace_interval;
+
+  /* How often frequently the pruning is done at most; it should be
+   * less than minimum Trickle interval, as non-valid state will not
+   * be used to respond to node data requests. */
+  hnetd_time_t minimum_prune_interval;
+
+  /* How much memory do we allocate for external code parts per node? */
+  size_t ext_node_data_size;
+
+  /* How much memory do we allocate for external code parts per ep? */
+  size_t ext_ep_data_size;
+};
+
+struct dncp_ext_callbacks_struct {
+  /* I/O-related callbacks */
+
+  /** Receive bytes from the network. ep, src, dst are set as appropriate. */
+  ssize_t (*recv)(dncp_ext e, dncp_ep *ep,
+                  struct sockaddr_in6 **src,
+                  struct sockaddr_in6 **dst,
+                  void *buf, ssize_t buf_len);
+
+  /** Send bytes to the network. */
+  void (*send)(dncp_ext e, dncp_ep ep,
+               struct sockaddr_in6 *src, struct sockaddr_in6 *dst,
+               void *buf, ssize_t buf_len);
+
+  /* Profile-related callbacks */
+
+  /**
+   * Callback to perform hashing.
+   *
+   * It MUST write only hash_length (see above) bytes to dst after
+   * running hash over buf[:len].
+   */
+  void (*hash)(void *buf, size_t len, void *dst);
+
+  /**
+   * Validate node data.
+   */
+  struct tlv_attr *(*validate_node_data)(dncp_node n, struct tlv_attr *a);
+
+  /**
+   * Handle node identifier collision.
+   *
+   * If it returns true, the collision should be ignored (=the code
+   * did something); if it returns false, the current node's TLV data
+   * should be republished (with higher update number - 'we are right,
+   * we are not moving').
+   */
+  bool (*handle_collision)(dncp_ext e);
+
+  /* Platform abstraction layer (facilitates unit testing etc.) */
+  int (*get_hwaddrs)(dncp_ext e, unsigned char *buf, int buf_left);
+  hnetd_time_t (*get_time)(dncp_ext e);
+  void (*schedule_timeout)(dncp_ext e, int msecs);
+};
+
+struct dncp_ext_struct {
+  struct dncp_ext_configuration_struct conf;
+  struct dncp_ext_callbacks_struct cb;
+};
+
+/**
+ * Get the external node data pointer of an endpoint. If endpoint is
+ * NULL, extdata is also NULL.
+ */
+void *dncp_ep_get_ext_data(dncp_ep n);
+
+/**
+ * Get the external node data pointer of a node. If node is NULL,
+ * extdata is also NULL.
+ */
+void *dncp_node_get_ext_data(dncp_node n);
+
+
+/**
+ * Notification from i/o that the endpoint is ready.
+ */
+void dncp_ext_ep_ready(dncp_ep ep, bool ready);
+
+/**
+ * Notification from i/o that a peer state has changed.
+ *
+ * These will occur only on connection-oriented transport. The 'local'
+ * (and possibly even remote) MAY be NULL if the transport warrants
+ * it. Any peer (defined by (local, remote) in 'connected' state) is
+ * assumed to be reachable and DNCP MAY attempt to send packets to it.
+ */
+void dncp_ext_ep_peer_state(dncp_ep ep,
+                           struct sockaddr_in6 *local,
+                           struct sockaddr_in6 *remote,
+                           bool connected);
+
+/**
+ * Notification from the i/o that there is something new available to be read.
+ */
+void dncp_ext_readable(dncp dncp);
+
+/**
+ * Notification from the platform that the timeout has expired.
+ */
+void dncp_ext_timeout(dncp dncp);
+
+/********************************************** Profile/system external API  */

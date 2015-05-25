@@ -219,7 +219,7 @@ static pa_plen hpa_return_128(__unused struct pa_rule *r,
 }
 
 /* Initializes PA, ready to be added */
-static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
+static void hpa_iface_init_pa(hncp_pa hpa, hpa_iface i)
 {
 	sprintf(i->pa_name, HPA_LINK_NAME_IF"%s", i->ifname);
 	pa_link_init(&i->pal, i->pa_name);
@@ -234,7 +234,7 @@ static void hpa_iface_init_pa(__unused hncp_pa hpa, hpa_iface i)
 	strcpy((char *)i->seed, i->ifname);
 	i->seedlen = strlen(i->ifname);
 	i->seed[i->seedlen++] = '-';
-	i->seedlen += dncp_io_get_hwaddrs(i->seed + i->seedlen, IFNAMSIZ + 18 - i->seedlen);
+	i->seedlen += hpa->dncp->ext->cb.get_hwaddrs(hpa->dncp->ext, i->seed + i->seedlen, IFNAMSIZ + 18 - i->seedlen);
 	L_DEBUG("Pseudo random seed of %s is %s", i->ifname, HEX_REPR(i->seed, i->seedlen));
 
 	//Init the assignment rule

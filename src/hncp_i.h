@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:33:03 2014 mstenber
- * Last modified: Tue Dec 23 18:47:41 2014 mstenber
- * Edit time:     8 min
+ * Last modified: Mon May 25 14:43:40 2015 mstenber
+ * Edit time:     16 min
  *
  */
 
@@ -63,16 +63,62 @@ dncp_tlv_router_address(const struct tlv_attr *a)
   return tlv_data(a);
 }
 
-/*
-void dncp_tlv_ap_update(dncp o,
-                        const struct prefix *prefix,
-                        const char *ifname,
-                        bool authoritative,
-                        unsigned int preference,
-                        bool add);
+bool hncp_init(hncp o);
+void hncp_uninit(hncp o);
 
-void dncp_tlv_ra_update(dncp o,
-                        uint32_t lid,
-                        const struct in6_addr *address,
-                        bool add);
-*/
+struct hncp_struct {
+  /* Our DNCP 'handle' */
+  dncp_ext_s ext;
+
+  /* Actual DNCP instance pointer. */
+  dncp dncp;
+
+  /* Multicast address */
+  struct in6_addr multicast_address;
+
+#ifdef DTLS
+  /* DTLS 'socket' abstraction, which actually hides two UDP sockets
+   * (client and server) and N OpenSSL contexts tied to each of
+   * them. */
+  dtls d;
+
+  /* Trust consensus model of authz for DTLS is _not_ here; see
+   * hncp_trust.[ch]. */
+#endif /* DTLS */
+};
+
+
+struct hncp_bfs_head {
+  /* List head for implementing BFS */
+  struct list_head head;
+
+  /* Next-hop in path (also used to mark visited nodes) */
+  const struct in6_addr *next_hop;
+  const struct in6_addr *next_hop4;
+  const char *ifname;
+  unsigned hopcount;
+};
+
+typedef struct hncp_ep_struct hncp_ep_s, *hncp_ep;
+
+struct hncp_ep_struct {
+  /* 'Best' address (if any) */
+  bool has_ipv6_address;
+  struct in6_addr ipv6_address;
+
+  /* When did multicast join fail last time? */
+  /* -> probably tried during DAD. Should try later again. */
+  hnetd_time_t join_failed_time;
+
+  bool join_pending;
+};
+
+typedef struct hncp_node_struct hncp_node_s, *hncp_node;
+
+struct hncp_node_struct {
+  /* Version of HNCP */
+  uint32_t version;
+
+  /* Iterator to do bfs-traversal */
+  struct hncp_bfs_head bfs;
+};

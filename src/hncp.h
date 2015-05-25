@@ -6,15 +6,52 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:30:01 2014 mstenber
- * Last modified: Wed Apr 29 16:37:31 2015 mstenber
- * Edit time:     5 min
+ * Last modified: Mon May 25 14:48:58 2015 mstenber
+ * Edit time:     17 min
  *
  */
 
 #pragma once
 
-#include "dncp.h"
-#include "dncp_profile.h"
+/******************************** DNCP 'profile' values we stick in dncp_ext */
+
+/* Intentionally renamed DNCP -> HNCP so that DNCP* ones can be used
+ * in DNCP code. */
+
+/* Minimum interval trickle starts at. The first potential time it may
+ * send something is actually this divided by two. */
+#define HNCP_TRICKLE_IMIN (HNETD_TIME_PER_SECOND / 5)
+
+/* Note: This is concrete value, NOT exponent # as noted in RFC. I
+ * don't know why RFC does that.. We don't want to ever need do
+ * exponentiation in any case in code. 64 seconds for the time being.. */
+#define HNCP_TRICKLE_IMAX (40 * HNETD_TIME_PER_SECOND)
+
+/* Redundancy constant. */
+#define HNCP_TRICKLE_K 1
+
+/* Size of the node identifier */
+#define HNCP_NI_LEN 4
+
+/* Default keep-alive interval to be used; overridable by user config */
+#define HNCP_KEEPALIVE_INTERVAL 24 * HNETD_TIME_PER_SECOND
+
+/* How many keep-alive periods can be missed until peer is declared M.I.A. */
+/* (Note: This CANNOT be configured) */
+#define HNCP_KEEPALIVE_MULTIPLIER 21/10
+
+/* Let's assume we use 64-bit version of MD5 for the time being.. */
+#define HNCP_HASH_LEN 8
+
+/* How recently the node has to be reachable before prune kills it for real. */
+#define HNCP_PRUNE_GRACE_PERIOD (60 * HNETD_TIME_PER_SECOND)
+
+/* Don't do node pruning more often than this. This should be less
+ * than minimum Trickle interval, as currently non-valid state will
+ * not be used to respond to node data requests about anyone except
+ * self. */
+#define HNCP_MINIMUM_PRUNE_INTERVAL (HNETD_TIME_PER_SECOND / 50)
+
 
 /****************************************** Other implementation definitions */
 
@@ -31,18 +68,26 @@
 
 /*********************************************************************** API */
 
+typedef struct hncp_struct hncp_s, *hncp;
+
 /**
  * Set IPv6 address for given interface.
  */
-void dncp_ep_set_ipv6_address(dncp o,
-                              const char *ifname, const struct in6_addr *a);
+void hncp_set_ipv6_address(hncp o, const char *ifname,
+                              const struct in6_addr *a);
+
+/**
+ * Get the IPv6 address for the given interface (if ep is set) or any.
+ */
+void hncp_get_ipv6_address(hncp o, const char *ifname, struct in6_addr **addr);
+
 
 #ifdef DTLS
 
 /**
  * Set the dtls instance to be used for securing HNCP traffic.
  */
-void hncp_set_dtls(dncp o, dtls d);
+void hncp_set_dtls(hncp o, dtls d);
 #endif /* DTLS */
 
 /**
@@ -53,9 +98,14 @@ pid_t hncp_run(char *argv[]);
 /**
  * Create HNCP instance
  */
-dncp hncp_create(void);
+hncp hncp_create(void);
 
 
-bool hncp_init(dncp o, const void *node_identifier, int len);
-void hncp_uninit(dncp o);
+/* Intentionally include this only here, so that there are no
+ * references to DNCP before. */
+#include "dncp.h"
 
+/**
+ * Get the DNCP instance pointer.
+ */
+dncp hncp_get_dncp(hncp o);

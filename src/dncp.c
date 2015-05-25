@@ -6,19 +6,19 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon May 25 11:16:11 2015 mstenber
- * Edit time:     867 min
+ * Last modified: Mon May 25 14:46:21 2015 mstenber
+ * Edit time:     897 min
  *
  */
 
 #include "dncp_i.h"
-#include <libubox/md5.h>
 #include <net/ethernet.h>
 #include <arpa/inet.h>
 
 int dncp_node_cmp(dncp_node n1, dncp_node n2)
 {
-  return memcmp(&n1->node_identifier, &n2->node_identifier, DNCP_NI_LEN);
+  return memcmp(&n1->node_identifier, &n2->node_identifier,
+                DNCP_NI_LEN(n1->dncp));
 }
 
 static int
@@ -31,15 +31,10 @@ compare_nodes(const void *a, const void *b, void *ptr __unused)
 
 void dncp_schedule(dncp o)
 {
-  if (o->io_init_done)
-    {
-      if (o->immediate_scheduled)
-        return;
-      dncp_io_schedule(o, 0);
-      o->immediate_scheduled = true;
-    }
-  else
-    o->should_schedule = true;
+  if (o->immediate_scheduled)
+    return;
+  o->ext->cb.schedule_timeout(o->ext, 0);
+  o->immediate_scheduled = true;
 }
 
 void dncp_node_set(dncp_node n, uint32_t update_number,
@@ -74,7 +69,7 @@ void dncp_node_set(dncp_node n, uint32_t update_number,
         }
       else
         {
-          a_valid = dncp_profile_node_validate_data(n, a);
+          a_valid = n->dncp->ext->cb.validate_node_data(n, a);
         }
     }
 
@@ -178,13 +173,13 @@ void dncp_ep_i_set_keepalive_interval(dncp_ep_i l, uint32_t value)
   if (l->published_keepalive_interval == value)
     return;
   dncp o = l->dncp;
-  if (l->published_keepalive_interval != DNCP_KEEPALIVE_INTERVAL)
+  if (l->published_keepalive_interval != DNCP_KEEPALIVE_INTERVAL(o))
     {
       dncp_t_keepalive_interval_s ka = { .link_id = l->iid,
                                          .interval_in_ms = cpu_to_be32(l->published_keepalive_interval) };
       dncp_remove_tlv_matching(o, DNCP_T_KEEPALIVE_INTERVAL, &ka, sizeof(ka));
     }
-  if (value != DNCP_KEEPALIVE_INTERVAL)
+  if (value != DNCP_KEEPALIVE_INTERVAL(o))
     {
       dncp_t_keepalive_interval_s ka = { .link_id = l->iid,
                                          .interval_in_ms = cpu_to_be32(value) };
@@ -204,8 +199,6 @@ static void update_link(struct vlist_tree *t,
 
   if (t_old)
     {
-      if (!t_new && o->io_init_done)
-        dncp_io_set_ifname_enabled(o, t_old->conf.ifname, false);
       dncp_tlv t, t2;
       dncp_for_each_local_tlv_safe(o, t, t2)
         if (tlv_id(&t->tlv) == DNCP_T_NEIGHBOR)
@@ -215,24 +208,14 @@ static void update_link(struct vlist_tree *t,
               dncp_remove_tlv(o, t);
           }
       /* kill TLV, if any */
-      dncp_ep_i_set_keepalive_interval(t_old, DNCP_KEEPALIVE_INTERVAL);
+      dncp_ep_i_set_keepalive_interval(t_old, DNCP_KEEPALIVE_INTERVAL(o));
       free(t_old);
     }
   else
     {
-      t_new->join_failed_time = 1;
-      t_new->published_keepalive_interval = DNCP_KEEPALIVE_INTERVAL;
+      t_new->published_keepalive_interval = DNCP_KEEPALIVE_INTERVAL(o);
     }
   dncp_schedule(o);
-}
-
-void dncp_calculate_hash(const void *buf, int len, dncp_hash dest)
-{
-  md5_ctx_t ctx;
-
-  md5_begin(&ctx);
-  md5_hash(buf, len, &ctx);
-  dncp_md5_end(dest, &ctx);
 }
 
 
@@ -256,12 +239,13 @@ dncp_find_node_by_node_identifier(dncp o, dncp_node_identifier ni, bool create)
   return n;
 }
 
-bool dncp_init(dncp o, const void *node_identifier, int len)
+bool dncp_init(dncp o, dncp_ext ext, const void *node_identifier, int len)
 {
   dncp_hash_s h;
   int i;
 
   memset(o, 0, sizeof(*o));
+  o->ext = ext;
   for (i = 0 ; i < NUM_DNCP_CALLBACKS; i++)
     INIT_LIST_HEAD(&o->subscribers[i]);
   vlist_init(&o->nodes, compare_nodes, update_node);
@@ -296,7 +280,7 @@ bool dncp_set_own_node_identifier(dncp o, dncp_node_identifier ni)
   return true;
 }
 
-dncp dncp_create(void *userdata)
+dncp dncp_create(dncp_ext ext)
 {
   dncp o;
   unsigned char buf[ETHER_ADDR_LEN * 2], *c = buf;
@@ -305,23 +289,18 @@ dncp dncp_create(void *userdata)
   o = malloc(sizeof(*o));
   if (!o)
     return NULL;
-  o->userdata = userdata;
-  c += dncp_io_get_hwaddrs(buf, sizeof(buf));
-  if (c == buf) {
-    L_ERR("no hardware address available, fatal error");
-    goto err;
-  }
-  if (!dncp_init(o, buf, c-buf))
-    goto err;
-  if (!dncp_io_init(o))
-    goto err2;
-  o->io_init_done = true;
-  if (o->should_schedule)
-    dncp_schedule(o);
-
+  c += ext->cb.get_hwaddrs(ext, buf, sizeof(buf));
+  if (c == buf)
+    {
+      L_ERR("no hardware address available, fatal error");
+      goto err;
+    }
+  if (!dncp_init(o, ext, buf, c-buf))
+    {
+      /* Error produced elsewhere .. */
+      goto err;
+    }
   return o;
- err2:
-  vlist_flush_all(&o->nodes);
  err:
   free(o);
   return NULL;
@@ -329,8 +308,6 @@ dncp dncp_create(void *userdata)
 
 void dncp_uninit(dncp o)
 {
-  o->io_init_done = false; /* cannot schedule anything anymore after this. */
-
   /* TLVs should be freed first; they're local phenomenom, but may be
    * reflected on links/nodes. */
   vlist_flush_all(&o->tlvs);
@@ -355,7 +332,6 @@ void dncp_uninit(dncp o)
 void dncp_destroy(dncp o)
 {
   if (!o) return;
-  dncp_io_uninit(o);
   dncp_uninit(o);
   free(o);
 }
@@ -411,12 +387,9 @@ int dncp_remove_tlvs_by_type(dncp o, int type)
   return c;
 }
 
-static void dncp_ep_set_default(dncp_ep conf, const char *ifname)
+static void dncp_ep_set_default(dncp o, dncp_ep conf, const char *ifname)
 {
-  conf->trickle_imin = DNCP_TRICKLE_IMIN;
-  conf->trickle_imax = DNCP_TRICKLE_IMAX;
-  conf->trickle_k = DNCP_TRICKLE_K;
-  conf->keepalive_interval = DNCP_KEEPALIVE_INTERVAL;
+  *conf = o->ext->conf.per_link;
   strncpy(conf->dnsname, ifname, sizeof(conf->ifname));
   strncpy(conf->ifname, ifname, sizeof(conf->ifname));
 }
@@ -445,7 +418,7 @@ dncp_ep_i dncp_find_link_by_name(dncp o, const char *ifname, bool create)
         return NULL;
       l->dncp = o;
       l->iid = o->first_free_iid++;
-      dncp_ep_set_default(&l->conf, ifname);
+      dncp_ep_set_default(o, &l->conf, ifname);
       vlist_add(&o->links, &l->in_links, l);
     }
   return l;
@@ -461,31 +434,17 @@ dncp_ep_i dncp_find_link_by_id(dncp o, uint32_t link_id)
   return NULL;
 }
 
-bool dncp_ep_set_enabled(dncp_ep ep, bool enabled)
+void dncp_ext_ep_ready(dncp_ep ep, bool enabled)
 {
-  dncp_ep_i l = dncp_find_link_by_name(o, ifname, false);
+  dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
 
-  L_DEBUG("dncp_ep_set_enabled %s %s",
-          ifname, enabled ? "enabled" : "disabled");
-  if (!enabled)
-    {
-      if (!l)
-        return false;
-    }
-  else
-    {
-      if (l)
-        return false;
-      l = dncp_find_link_by_name(o, ifname, true);
-      if (!l)
-        return false;
-    }
+  L_DEBUG("dncp_ext_ep_ready %s %s %s", ep->ifname, enabled ? "+" : "-",
+          !l->enabled == !enabled ? "(redundant)" : "");
+  if (!l->enabled == !enabled)
+      return;
   dncp_notify_subscribers_link_changed(l, enabled ? DNCP_EVENT_ADD : DNCP_EVENT_REMOVE);
-  if (!enabled)
-    vlist_delete(&o->links, &l->in_links);
-  return true;
+  l->enabled = enabled;
 }
-
 
 bool dncp_node_is_self(dncp_node n)
 {
@@ -580,17 +539,13 @@ struct tlv_attr *dncp_node_get_tlvs(dncp_node n)
 
 void dncp_calculate_node_data_hash(dncp_node n)
 {
-  md5_ctx_t ctx;
   int l;
 
   if (!n->node_data_hash_dirty)
     return;
   n->node_data_hash_dirty = false;
   l = n->tlv_container ? tlv_len(n->tlv_container) : 0;
-  md5_begin(&ctx);
-  if (l)
-    md5_hash(tlv_data(n->tlv_container), l, &ctx);
-  dncp_md5_end(&n->node_data_hash, &ctx);
+  n->dncp->ext->cb.hash(tlv_data(n->tlv_container), l, &n->node_data_hash);
   L_DEBUG("dncp_calculate_node_data_hash %s=%llx%s",
           DNCP_NODE_REPR(n),
           dncp_hash64(&n->node_data_hash),
@@ -600,7 +555,6 @@ void dncp_calculate_node_data_hash(dncp_node n)
 void dncp_calculate_network_hash(dncp o)
 {
   dncp_node n;
-  md5_ctx_t ctx;
 
   if (!o->network_hash_dirty)
     return;
@@ -608,48 +562,33 @@ void dncp_calculate_network_hash(dncp o)
   /* Store original network hash for future study. */
   dncp_hash_s old_hash = o->network_hash;
 
-  md5_begin(&ctx);
+  int cnt = 0;
+  dncp_for_each_node(o, n)
+    cnt++;
+  int onelen = 4 + DNCP_HASH_LEN(o);
+  void *buf = malloc(cnt * onelen);
+  if (!buf)
+    return;
+  cnt = 0;
   dncp_for_each_node(o, n)
     {
+      void *dst = buf + cnt++ * onelen;
       uint32_t update_number = cpu_to_be32(n->update_number);
       dncp_calculate_node_data_hash(n);
-      md5_hash(&update_number, sizeof(update_number), &ctx);
-      md5_hash(&n->node_data_hash, DNCP_HASH_LEN, &ctx);
+      *((uint32_t *)dst) = update_number;
+      memcpy(dst + 4, &n->node_data_hash, DNCP_HASH_LEN(o));
       L_DEBUG(".. %s/%d=%llx",
               DNCP_NODE_REPR(n), n->update_number,
               dncp_hash64(&n->node_data_hash));
     }
-  dncp_md5_end(&o->network_hash, &ctx);
+  o->ext->cb.hash(buf, cnt * onelen, &o->network_hash);
   L_DEBUG("dncp_calculate_network_hash =%llx",
           dncp_hash64(&o->network_hash));
 
-  if (memcmp(&old_hash, &o->network_hash, DNCP_HASH_LEN))
+  if (memcmp(&old_hash, &o->network_hash, DNCP_HASH_LEN(o)))
     dncp_trickle_reset(o);
 
   o->network_hash_dirty = false;
-}
-
-bool
-dncp_get_ipv6_address(dncp o, char *prefer_ifname, struct in6_addr *addr)
-{
-  dncp_ep_i l = NULL;
-
-  if (prefer_ifname)
-    l = dncp_find_link_by_name(o, prefer_ifname, false);
-  if (!l || !l->has_ipv6_address)
-    {
-      /* Iterate through the links in order, stopping at one with IPv6
-       * address. */
-      vlist_for_each_element(&o->links, l, in_links)
-        if (l->has_ipv6_address)
-          break;
-    }
-  if (l && l->has_ipv6_address)
-    {
-      *addr = l->ipv6_address;
-      return true;
-    }
-  return false;
 }
 
 bool dncp_add_tlv_index(dncp o, uint16_t type)
@@ -697,63 +636,27 @@ bool dncp_add_tlv_index(dncp o, uint16_t type)
 }
 
 
-void
-dncp_ep_i_set_ipv6_address(dncp_ep_i l, const struct in6_addr *addr)
+bool dncp_ep_has_highest_id(dncp_ep ep)
 {
-  bool has_addr = addr != NULL;
-
-  if (l->has_ipv6_address == has_addr &&
-      (!has_addr || memcmp(&l->ipv6_address, addr, sizeof(*addr)) == 0))
-    {
-      return;
-    }
-  l->has_ipv6_address = has_addr;
-  if (has_addr)
-    {
-      l->ipv6_address = *addr;
-      L_DEBUG("dncp_ep_i_set_ipv6_address: address on %s: %s",
-              l->ifname, ADDR_REPR(addr));
-    }
-  else
-    {
-      L_DEBUG("dncp_ep_i_set_ipv6_address: no %s any more", l->ifname);
-    }
-  dncp_notify_subscribers_link_changed(l, DNCP_EVENT_UPDATE);
-}
-
-bool dncp_ep_has_highest_id(dncp o, const char *ifname)
-{
-  dncp_ep_i l = dncp_find_link_by_name(o, ifname, false);
-
-  /* Who knows if link is not enabled.. e.g. guest mode require us to
-   * return true here, though. */
-  if (!l)
-    return true;
-
+  dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
+  dncp o = l->dncp;
   uint32_t iid = l->iid;
   struct tlv_attr *a;
   dncp_t_neighbor nh;
 
   dncp_node_for_each_tlv_with_type(o->own_node, a, DNCP_T_NEIGHBOR)
-    if ((nh = dncp_tlv_neighbor(a)))
+    if ((nh = dncp_tlv_neighbor(o, a)))
       {
         if (nh->link_id != iid)
           continue;
-        if (memcmp(&o->own_node->node_identifier,
-                   &nh->neighbor_node_identifier, DNCP_NI_LEN) < 0)
+
+        if (memcmp(dncp_tlv_get_node_identifier(o, nh),
+                   &o->own_node->node_identifier, DNCP_NI_LEN(o)) > 0)
           return false;
       }
   return true;
 }
 
-
-void
-dncp_ep_set_ipv6_address(dncp o, const char *ifname, const struct in6_addr *a)
-{
-  dncp_ep_i l = dncp_find_link_by_name(o, ifname, false);
-  if (l)
-    dncp_ep_i_set_ipv6_address(l, a);
-}
 
 void dncp_node_recalculate_index(dncp_node n)
 {
