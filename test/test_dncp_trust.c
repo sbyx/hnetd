@@ -6,8 +6,8 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Tue Jan 13 15:03:51 2015 mstenber
- * Last modified: Thu Feb 26 13:58:48 2015 mstenber
- * Edit time:     48 min
+ * Last modified: Tue May 26 17:00:08 2015 mstenber
+ * Edit time:     49 min
  *
  */
 
@@ -48,10 +48,10 @@ void dncp_trust_base()
   - nonexistent hash (ha[0])
   - requested hash (ha[1])
   - set hash (ha[2]) */
-  dncp d1 = net_sim_find_hncp(&s, "x");
+  dncp d1 = net_sim_find_hncp(&s, "x")->dncp;
   dncp_trust dt1 = dncp_trust_create(d1, NULL);
 
-  dncp d2 = net_sim_find_hncp(&s, "y");
+  dncp d2 = net_sim_find_hncp(&s, "y")->dncp;
   dncp_trust dt2 = dncp_trust_create(d2, NULL);
 
 
@@ -113,7 +113,7 @@ void dncp_trust_io()
   uloop_init();
   /* Make sure the (implicit) load + save work as advertised */
   unlink(TESTFILENAME);
-  dncp d = net_sim_find_hncp(&s, "x");
+  dncp d = net_sim_find_hncp(&s, "x")->dncp;
   sput_fail_unless(d, "dncp_create");
   dncp_trust dt = dncp_trust_create(d, TESTFILENAME);
   sput_fail_unless(dt, "dncp_trust_create");

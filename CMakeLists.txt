@@ -24,7 +24,7 @@ else(${VERSION})
 endif(${VERSION})
 
 if(${DTLS_OPENSSL})
-  set(DTLS_SOURCE src/dtls.c)
+  set(DTLS_SOURCE src/dtls.c src/udp46.c)
   set(TRUST_SOURCE src/dncp_trust.c)
   set(DTLS_LINK crypto ssl)
   set(DTLS 1)
@@ -142,7 +142,7 @@ if(${DTLS})
   add_test(dtls test_dtls)
   add_dependencies(check test_dtls)
 
-  add_executable(test_dncp_trust test/test_dncp_trust.c ${HNCP_WITH_GLUE} ${TRUST_SOURCE} src/dtls.c)
+  add_executable(test_dncp_trust test/test_dncp_trust.c ${HNCP_WITH_GLUE} ${TRUST_SOURCE} ${DTLS_SOURCE})
   target_link_libraries(test_dncp_trust ${DTLS_LINK} ubox ${BACKEND_LINK} blobmsg_json)
 
   add_test(dncp_trust test_dncp_trust)

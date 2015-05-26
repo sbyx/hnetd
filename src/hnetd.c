@@ -401,7 +401,7 @@ int main(__unused int argc, char *argv[])
 	//End of PA conf
 
 	/* Init ipc (no RPC-registrations after this point!)*/
-	iface_init(hncp_get_dncp(h), sd, hncp_pa, link, pd_socket_path);
+	iface_init(h, sd, hncp_pa, link, pd_socket_path);
 
 	/* Glue together HNCP, PA-glue and and iface */
 	hncp_iface_glue(&hiu, h);

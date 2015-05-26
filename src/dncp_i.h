@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue May 26 09:07:28 2015 mstenber
- * Edit time:     353 min
+ * Last modified: Tue May 26 16:58:23 2015 mstenber
+ * Edit time:     354 min
  *
  */
 
@@ -252,7 +252,6 @@ void dncp_schedule(dncp o);
 void dncp_self_flush(dncp_node n);
 
 /* Various hash calculation utilities. */
-void dncp_calculate_hash(const void *buf, int len, dncp_hash dest);
 void dncp_calculate_network_hash(dncp o);
 static inline unsigned long long dncp_hash64(dncp_hash h)
 {

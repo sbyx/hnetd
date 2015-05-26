@@ -30,7 +30,7 @@ void pa_core_iface_addr_del(__unused struct pa_core *core, __unused struct pa_if
 void hncp_pa_iface_user_register(__unused hncp_pa hp, __unused struct hncp_pa_iface_user *user) {}
 struct list_head *__hpa_get_dps(__unused hncp_pa hpa) {return NULL;}
 void platform_set_dhcp(__unused struct iface *c, __unused enum hncp_link_elected elected) {}
-int platform_init(__unused dncp hncp, __unused hncp_pa pa, __unused const char *pd_socket) { return 0; }
+int platform_init(__unused hncp hncp, __unused hncp_pa pa, __unused const char *pd_socket) { return 0; }
 void platform_set_address(__unused struct iface *c, __unused struct iface_addr *addr, __unused bool enable) {}
 void platform_iface_free(__unused struct iface *c) {}
 void platform_set_internal(__unused struct iface *c, __unused bool internal) {}

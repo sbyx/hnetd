@@ -40,7 +40,6 @@
 #include "sput.h"
 
 #define set_hnetd_time fu_set_hnetd_time
-#define get_time hnetd_time
 #define set_time set_hnetd_time
 
 #define uloop_init() fu_init()

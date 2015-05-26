@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue May 26 12:21:59 2015 mstenber
- * Edit time:     375 min
+ * Last modified: Tue May 26 15:39:17 2015 mstenber
+ * Edit time:     366 min
  *
  */
 
@@ -306,8 +306,6 @@ pid_t hncp_run(char *argv[])
 
 bool hncp_io_init(hncp h)
 {
-  int port = HNCP_PORT;
-
   if (!(h->u46_server = udp46_create(HNCP_PORT)))
     return false;
   h->timeout.cb = _timeout;

@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:31 2014 mstenber
- * Last modified: Thu Feb 26 14:21:00 2015 mstenber
- * Edit time:     134 min
+ * Last modified: Tue May 26 17:08:09 2015 mstenber
+ * Edit time:     137 min
  *
  */
 
@@ -19,6 +19,7 @@
  */
 
 #include "dtls.c"
+#include "udp46.c"
 #include "sput.h"
 #include "smock.h"
 
@@ -68,9 +69,9 @@ void _readable_cb(dtls d, void *context)
   char buf[1024];
   size_t len = sizeof(buf);
   int r;
-  struct sockaddr_in6 src;
+  struct sockaddr_in6 *src, *dst;
 
-  r = dtls_recvfrom(d, buf, len, &src);
+  r = dtls_recv(d, &src, &dst, buf, len);
   L_DEBUG("_readable_cb - %d", r);
   smock_pull_int_is("dtls_recvfrom", r);
   if (r >= 0)
@@ -78,8 +79,8 @@ void _readable_cb(dtls d, void *context)
       void *b = smock_pull("dtls_recvfrom_buf");
 
       sput_fail_unless(memcmp(b, buf, r)==0, "buf mismatch");
-      struct in6_addr *a = smock_pull("dtls_recvfrom_src_in6");
-      sput_fail_unless(memcmp(a, &src.sin6_addr, sizeof(*a))==0, "src mismatch");
+      struct in6_addr *a = smock_pull("dtls_recv_src_in6");
+      sput_fail_unless(memcmp(a, &src->sin6_addr, sizeof(*a))==0, "src mismatch");
     }
   if (!--pending_readable)
     uloop_end();
@@ -184,7 +185,7 @@ static void _test_basic_i(int i)
   smock_push_int("dtls_recvfrom", 3);
   smock_push("dtls_recvfrom_src_in6", &src.sin6_addr);
   smock_push("dtls_recvfrom_buf", msg);
-  rv = dtls_sendto(d1, msg, strlen(msg), &dst, NULL);
+  rv = dtls_send(d1, NULL, &dst, msg, strlen(msg));
   L_DEBUG("sendto => %d", rv);
   sput_fail_unless(rv == 3, "sendto failed?");
   pending_readable = 1;
@@ -284,7 +285,7 @@ static void _test_unknown_i(int i)
   src.sin6_port = htons(pbase);
   dst.sin6_port = htons(pbase+1);
 
-  rv = dtls_sendto(d1, msg, strlen(msg), &dst, NULL);
+  rv = dtls_send(d1, NULL, &dst, msg, strlen(msg));
   L_DEBUG("sendto => %d", rv);
   sput_fail_unless(rv == 3, "sendto failed?");
   pending_unknown = 1;

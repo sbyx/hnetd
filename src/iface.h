@@ -155,7 +155,7 @@ struct iface {
 };
 
 // Generic initializer to be called by main()
-int iface_init(dncp hncp, hncp_sd sd, hncp_pa pa,
+int iface_init(hncp hncp, hncp_sd sd, hncp_pa pa,
 		struct hncp_link *link, const char *pd_socket);
 
 // Get an interface by name

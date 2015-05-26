@@ -502,7 +502,7 @@ void pa_core_rule() {
 	sput_fail_unless(ldp->routine_to.pending, "Routine pending");
 	sput_fail_unless(uloop_timeout_remaining(&ldp->routine_to) == PA_RUN_DELAY, "Correct delay");
 
-	set_time(get_time() + 1);
+	set_time(hnetd_time() + 1);
 	pa_rule_add(&core, &rule2.rule);
 	sput_fail_unless(ldp->routine_to.pending, "Routine pending");
 	sput_fail_unless(uloop_timeout_remaining(&ldp->routine_to) == PA_RUN_DELAY - 1, "Correct delay");
@@ -718,12 +718,12 @@ void pa_core_rule() {
 
 
 	//Now playing with flooding delays
-	set_time(get_time()+10); //Waiting 10ms
+	set_time(hnetd_time()+10); //Waiting 10ms
 	pa_core_set_flooding_delay(&core, 100);
 	sput_fail_unless(ldp->backoff_to.pending, "Apply timeout pending");
 	sput_fail_unless(uloop_timeout_remaining(&ldp->backoff_to) == (int)(2 * core.flooding_delay), "Correct apply delay");
 
-	set_time(get_time()+10); //Waiting 10 more ms
+	set_time(hnetd_time()+10); //Waiting 10 more ms
 	pa_core_set_flooding_delay(&core, PA_DEFAULT_FLOODING_DELAY);
 	sput_fail_unless(ldp->backoff_to.pending, "Apply timeout pending");
 	sput_fail_unless(uloop_timeout_remaining(&ldp->backoff_to) == (int)(2 * core.flooding_delay) - 10, "Correct apply delay");
@@ -818,7 +818,7 @@ void pa_core_norule() {
 	sput_fail_unless(uloop_timeout_remaining(&ldp->routine_to) == PA_RUN_DELAY, "Correct delay");
 	sput_fail_unless(fu_next() == &ldp->routine_to, "Correct timeout");
 
-	set_time(get_time() + 1);
+	set_time(hnetd_time() + 1);
 	pa_core_set_node_id(&core, &id1); //Reschedule
 	sput_fail_unless(ldp->routine_to.pending, "Routine pending");
 	sput_fail_unless(uloop_timeout_remaining(&ldp->routine_to) == PA_RUN_DELAY - 1, "Correct delay");
@@ -898,7 +898,7 @@ void pa_core_norule() {
 	check_user(&tuser, NULL, NULL, NULL);
 	check_ldp_flags(ldp, 1, 0, 0, 0);
 
-	set_time(get_time() + 1);
+	set_time(hnetd_time() + 1);
 	pa_advp_add(&core, &advp1_01);
 	sput_fail_unless(ldp->routine_to.pending, "Routine pending");
 	sput_fail_unless(uloop_timeout_remaining(&ldp->routine_to) == PA_RUN_DELAY - 1, "Correct delay");
