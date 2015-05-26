@@ -172,9 +172,9 @@ static int hd_node_neighbor(struct tlv_attr *tlv, struct blob_buf *b)
 {
 	dncp_t_neighbor nh;
 
-	if (!(nh = dncp_tlv_neighbor(tlv)))
+	if (!(nh = dncp_tlv_neighbor2(tlv, HNCP_NI_LEN)))
 		return -1;
-	hd_a(!blobmsg_add_string(b, "node-id", hd_ni_to_hex(&nh->neighbor_node_identifier)), return -1);
+	hd_a(!blobmsg_add_string(b, "node-id", hd_ni_to_hex(dncp_tlv_get_node_identifier2(tlv, HNCP_NI_LEN))), return -1);
 	hd_a(!blobmsg_add_u32(b, "local-link", ntohl(nh->link_id)), return -1);
 	hd_a(!blobmsg_add_u32(b, "neighbor-link", ntohl(nh->neighbor_link_id)), return -1);
 	return 0;
@@ -298,7 +298,7 @@ static int hd_links(dncp o, struct blob_buf *b)
 {
 	dncp_ep_i link;
 	vlist_for_each_element(&o->links, link, in_links)
-		hd_a(!blobmsg_add_u32(b, link->ifname, link->iid), return -1);
+		hd_a(!blobmsg_add_u32(b, link->conf.ifname, link->iid), return -1);
 	return 0;
 }
 

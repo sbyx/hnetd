@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Tue May 26 08:25:25 2015 mstenber
- * Edit time:     220 min
+ * Last modified: Tue May 26 09:46:31 2015 mstenber
+ * Edit time:     222 min
  *
  */
 
@@ -416,11 +416,21 @@ void *dncp_ep_get_ext_data(dncp_ep n);
  */
 void *dncp_node_get_ext_data(dncp_node n);
 
+/**
+ * Reverse operation - convert ext data pointer to node.
+ */
+dncp_node dncp_node_from_ext_data(void *ext_data);
+
 
 /**
  * Notification from i/o that the endpoint is ready.
  */
 void dncp_ext_ep_ready(dncp_ep ep, bool ready);
+
+/**
+ * Reverse operation - convert ext data pointer to ep.
+ */
+dncp_ep dncp_ep_from_ext_data(void *ext_data);
 
 /**
  * Notification from i/o that a peer state has changed.

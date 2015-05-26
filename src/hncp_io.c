@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue May 26 08:26:18 2015 mstenber
- * Edit time:     349 min
+ * Last modified: Tue May 26 09:57:25 2015 mstenber
+ * Edit time:     366 min
  *
  */
 
@@ -85,9 +85,8 @@ static void _timeout(struct uloop_timeout *t)
   dncp_ext_timeout(h->dncp);
 }
 
-bool hncp_io_set_ifname_enabled(hncp h,
-                                const char *ifname,
-                                bool enabled)
+static bool
+_set_ifname_enabled(hncp h, const char *ifname, bool enabled)
 {
   struct ipv6_mreq val;
 
@@ -112,8 +111,37 @@ bool hncp_io_set_ifname_enabled(hncp h,
       return false;
     }
   /* Yay. It succeeded(?). */
+  dncp_ext_ep_ready(dncp_ep_find_by_name(h->dncp, ifname), enabled);
   return true;
 }
+
+static void _join_timeout(struct uloop_timeout *t)
+{
+  hncp_ep hep = container_of(t, hncp_ep_s, join_timeout);
+  dncp_ep ep = dncp_ep_from_ext_data(hep);
+  dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
+  hncp h = container_of(l->dncp->ext, hncp_s, ext);
+
+  if (!_set_ifname_enabled(h, ep->ifname, !l->enabled))
+    {
+      /* Schedule a timeout to try it again */
+      hep->join_timeout.cb = _join_timeout;
+      uloop_timeout_set(&hep->join_timeout, HNCP_REJOIN_INTERVAL);
+    }
+}
+
+void hncp_set_enabled(hncp h, const char *ifname, bool enabled)
+{
+  dncp_ep_i l = dncp_find_link_by_name(h->dncp, ifname, enabled);
+
+  if (!l)
+    return;
+  if (!l->enabled == !enabled)
+    return;
+  hncp_ep hep = dncp_ep_get_ext_data(&l->conf);
+  _join_timeout(&hep->join_timeout);
+}
+
 
 static void hncp_io_schedule(dncp_ext ext, int msecs)
 {

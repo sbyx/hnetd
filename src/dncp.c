@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon May 25 14:46:21 2015 mstenber
- * Edit time:     897 min
+ * Last modified: Tue May 26 09:58:52 2015 mstenber
+ * Edit time:     904 min
  *
  */
 
@@ -253,7 +253,8 @@ bool dncp_init(dncp o, dncp_ext ext, const void *node_identifier, int len)
   vlist_init(&o->tlvs, compare_tlvs, update_tlv);
   vlist_init(&o->links, compare_links, update_link);
   INIT_LIST_HEAD(&o->link_confs);
-  dncp_calculate_hash(node_identifier, len, &h);
+  memset(&h, 0, sizeof(h));
+  ext->cb.hash(node_identifier, len, &h);
   o->first_free_iid = 1;
   o->last_prune = 1;
   /* this way new nodes with last_prune=0 won't be reachable */
@@ -719,4 +720,26 @@ void *dncp_tlv_get_extra(dncp_tlv t)
 {
   unsigned int ofs = tlv_pad_len(&t->tlv);
   return ((unsigned char *)t + sizeof(*t) + ofs);
+}
+
+void *dncp_ep_get_ext_data(dncp_ep n)
+{
+  dncp_ep_i l = container_of(n, dncp_ep_i_s, conf);
+  return (void*)l+sizeof(*l);
+}
+
+void *dncp_node_get_ext_data(dncp_node n)
+{
+  return (void*)n+sizeof(*n);
+}
+
+dncp_node dncp_node_from_ext_data(void *ext_data)
+{
+  return ext_data - sizeof(dncp_node_s);
+}
+
+dncp_ep dncp_ep_from_ext_data(void *ext_data)
+{
+  dncp_ep_i l = ext_data - sizeof(dncp_ep_i_s);
+  return &l->conf;
 }

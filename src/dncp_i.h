@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue May 26 07:00:59 2015 mstenber
- * Edit time:     351 min
+ * Last modified: Tue May 26 09:07:28 2015 mstenber
+ * Edit time:     353 min
  *
  */
 
@@ -346,21 +346,33 @@ dncp_node_get_tlv_with_type(dncp_node n, uint16_t type, bool first)
 #define ROUND_BYTES_TO_4BYTES(b) ((((b) + 3) / 4) * 4)
 
 static inline dncp_t_neighbor
-dncp_tlv_neighbor(dncp o, const struct tlv_attr *a)
+dncp_tlv_neighbor2(const struct tlv_attr *a, int nidlen)
 {
   if (tlv_id(a) != DNCP_T_NEIGHBOR
-      || tlv_len(a) != (DNCP_NI_LEN(o) + sizeof(dncp_t_neighbor_s)))
+      || tlv_len(a) != (nidlen + sizeof(dncp_t_neighbor_s)))
     return NULL;
-  return (dncp_t_neighbor)(tlv_data(a) + DNCP_NI_LEN(o));
+  return (dncp_t_neighbor)(tlv_data(a) + nidlen);
+}
+
+static inline dncp_t_neighbor
+dncp_tlv_neighbor(dncp o, const struct tlv_attr *a)
+{
+  return dncp_tlv_neighbor2(a, DNCP_NI_LEN(o));
 }
 
 /* Non-typesafe, better hope exterior handling has done things correctly */
 static inline dncp_node_identifier
-dncp_tlv_get_node_identifier(dncp o, void *tlv)
+dncp_tlv_get_node_identifier2(void *tlv, int nidlen)
 {
-  return (dncp_node_identifier)(tlv - o->ext->conf.node_identifier_length);
+  return (dncp_node_identifier)(tlv - nidlen);
 }
 
+static inline dncp_node_identifier
+dncp_tlv_get_node_identifier(dncp o, void *tlv)
+{
+  return dncp_tlv_get_node_identifier2(tlv,
+                                       o->ext->conf.node_identifier_length);
+}
 
 static inline dncp_t_trust_verdict
 dncp_tlv_trust_verdict(const struct tlv_attr *a)

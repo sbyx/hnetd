@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 14:50:58 2014 mstenber
- * Last modified: Tue May 26 07:10:51 2015 mstenber
- * Edit time:     40 min
+ * Last modified: Tue May 26 09:36:53 2015 mstenber
+ * Edit time:     45 min
  *
  */
 
@@ -196,3 +196,9 @@ void hncp_uninit(hncp o)
     return;
   dncp_destroy(o->dncp);
 }
+
+dncp hncp_get_dncp(hncp o)
+{
+  return o->dncp;
+}
+

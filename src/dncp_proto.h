@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Mon May 25 12:41:38 2015 mstenber
- * Edit time:     121 min
+ * Last modified: Tue May 26 09:44:06 2015 mstenber
+ * Edit time:     124 min
  *
  */
 
@@ -100,8 +100,3 @@ typedef struct __packed {
 } dncp_t_trust_verdict_s, *dncp_t_trust_verdict;
 
 
-/************** Various tunables, that we in practise hardcode (not options) */
-
-/* How often we retry multicast joins? Once per second seems sane
- * enough. */
-#define DNCP_REJOIN_INTERVAL (1 * HNETD_TIME_PER_SECOND)

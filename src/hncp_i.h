@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:33:03 2014 mstenber
- * Last modified: Tue May 26 07:36:12 2015 mstenber
- * Edit time:     18 min
+ * Last modified: Tue May 26 09:38:12 2015 mstenber
+ * Edit time:     19 min
  *
  */
 
@@ -117,11 +117,8 @@ struct hncp_ep_struct {
   bool has_ipv6_address;
   struct in6_addr ipv6_address;
 
-  /* When did multicast join fail last time? */
-  /* -> probably tried during DAD. Should try later again. */
-  hnetd_time_t join_failed_time;
-
-  bool join_pending;
+  /* Timeout used when joining.. */
+  struct uloop_timeout join_timeout;
 };
 
 typedef struct hncp_node_struct hncp_node_s, *hncp_node;

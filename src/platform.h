@@ -13,7 +13,7 @@
 
 
 // Platform specific initialization
-int platform_init(dncp hncp, hncp_pa hncp_pa, const char *pd_socket);
+int platform_init(hncp hncp, hncp_pa hncp_pa, const char *pd_socket);
 
 // Handle internal change
 void platform_set_internal(struct iface *c, bool internal);

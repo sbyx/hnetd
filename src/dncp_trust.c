@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Nov 19 17:34:25 2014 mstenber
- * Last modified: Tue May 26 08:42:41 2015 mstenber
- * Edit time:     239 min
+ * Last modified: Tue May 26 09:31:28 2015 mstenber
+ * Edit time:     240 min
  *
  */
 
@@ -538,7 +538,7 @@ void dncp_trust_request_verdict(dncp_trust t,
     }
 }
 
-bool dtls_trust_dtls_unknown_callback(dtls d __unused,
+bool dncp_trust_dtls_unknown_callback(dtls d __unused,
                                       dtls_cert cert, void *context)
 {
   dncp_trust t = context;

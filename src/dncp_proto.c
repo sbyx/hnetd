@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue May 26 06:38:23 2015 mstenber
- * Edit time:     909 min
+ * Last modified: Tue May 26 09:27:24 2015 mstenber
+ * Edit time:     910 min
  *
  */
 
@@ -496,7 +496,7 @@ handle_message(dncp_ep_i l,
 }
 
 
-void dncp_poll(dncp o)
+void dncp_ext_readable(dncp o)
 {
   unsigned char buf[DNCP_MAXIMUM_PAYLOAD_SIZE+sizeof(struct tlv_attr)];
   struct tlv_attr *msg = (struct tlv_attr *)buf;

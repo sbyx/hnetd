@@ -42,7 +42,7 @@ void (*hnetd_log)(int priority, const char *format, ...) = syslog;
 
 typedef struct {
 	struct iface_user iu;
-	dncp hncp;
+	hncp hncp;
 } hncp_iface_user_s, *hncp_iface_user;
 
 void hncp_iface_intaddr_callback(struct iface_user *u, const char *ifname,
@@ -50,7 +50,7 @@ void hncp_iface_intaddr_callback(struct iface_user *u, const char *ifname,
 								 const struct prefix *addr4 __unused)
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
-	dncp_ep_set_ipv6_address(hiu->hncp, ifname, addr6 ? &addr6->prefix : NULL);
+	hncp_set_ipv6_address(hiu->hncp, ifname, addr6 ? &addr6->prefix : NULL);
 }
 
 
@@ -59,11 +59,10 @@ void hncp_iface_intiface_callback(struct iface_user *u,
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
 	struct iface *c = iface_get(ifname);
-	dncp_ep_set_enabled(hiu->hncp, ifname, enabled &&
-			(c->flags & IFACE_FLAG_LEAF) != IFACE_FLAG_LEAF);
+	hncp_set_enabled(hiu->hncp, ifname, enabled && (c->flags & IFACE_FLAG_LEAF) != IFACE_FLAG_LEAF);
 }
 
-void hncp_iface_glue(hncp_iface_user hiu, dncp h)
+void hncp_iface_glue(hncp_iface_user hiu, hncp h)
 {
 	/* Initialize hiu appropriately */
 	memset(hiu, 0, sizeof(*hiu));
@@ -100,7 +99,7 @@ int usage() {
 
 int main(__unused int argc, char *argv[])
 {
-	dncp h;
+	hncp h;
 	int c;
 	hncp_iface_user_s hiu;
 	hncp_pa hncp_pa;
@@ -273,7 +272,7 @@ int main(__unused int argc, char *argv[])
 		return 42;
 	}
 
-	hd_init(h);
+	hd_init(hncp_get_dncp(h));
 
 	if (sd_params.dnsmasq_script && sd_params.dnsmasq_bonus_file && sd_params.ohp_script)
 		link_config.cap_mdnsproxy = 4;
@@ -308,7 +307,7 @@ int main(__unused int argc, char *argv[])
 						return 13;
 				}
 		} else if (dtls_trust) {
-				dt = dncp_trust_create(h, dtls_trust);
+				dt = dncp_trust_create(hncp_get_dncp(h), dtls_trust);
 				if (!dt) {
 						L_ERR("Unable to create dncp trust module");
 						return 13;
@@ -319,7 +318,7 @@ int main(__unused int argc, char *argv[])
 #endif /* DTLS */
 	}
 
-	struct hncp_link *link = hncp_link_create(h, &link_config);
+	struct hncp_link *link = hncp_link_create(hncp_get_dncp(h), &link_config);
 
 	hncp_sd sd = hncp_sd_create(h, &sd_params, link);
 	if (!sd) {
@@ -402,7 +401,7 @@ int main(__unused int argc, char *argv[])
 	//End of PA conf
 
 	/* Init ipc (no RPC-registrations after this point!)*/
-	iface_init(h, sd, hncp_pa, link, pd_socket_path);
+	iface_init(hncp_get_dncp(h), sd, hncp_pa, link, pd_socket_path);
 
 	/* Glue together HNCP, PA-glue and and iface */
 	hncp_iface_glue(&hiu, h);

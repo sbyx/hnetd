@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:30:01 2014 mstenber
- * Last modified: Tue May 26 06:38:58 2015 mstenber
+ * Last modified: Tue May 26 09:44:27 2015 mstenber
  * Edit time:     20 min
  *
  */
@@ -71,6 +71,10 @@
 
 #define HNCP_SD_DEFAULT_DOMAIN "home."
 
+/* How often we retry multicast joins? Once per second seems sane
+ * enough. */
+#define HNCP_REJOIN_INTERVAL (1 * HNETD_TIME_PER_SECOND)
+
 /*********************************************************************** API */
 
 typedef struct hncp_struct hncp_s, *hncp;
@@ -80,6 +84,11 @@ typedef struct hncp_struct hncp_s, *hncp;
  */
 void hncp_set_ipv6_address(hncp o, const char *ifname,
                            const struct in6_addr *a);
+
+/**
+ * Set HNCP enabled on an interface.
+ */
+void hncp_set_enabled(hncp o, const char *ifname, bool enabled);
 
 /**
  * Get the IPv6 address for the given interface (if ifname is set) or any.

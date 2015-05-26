@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Mon May 25 13:55:04 2015 mstenber
- * Edit time:     524 min
+ * Last modified: Tue May 26 09:43:03 2015 mstenber
+ * Edit time:     525 min
  *
  */
 
@@ -214,7 +214,7 @@ dncp_neighbor_interval(dncp o, struct tlv_attr *neighbor_tlv)
   return value;
 }
 
-void dncp_run(dncp o)
+void dncp_ext_timeout(dncp o)
 {
   hnetd_time_t next = 0;
   hnetd_time_t now = o->ext->cb.get_time(o->ext);
@@ -273,44 +273,6 @@ void dncp_run(dncp o)
     {
       /* Update the 'active' link's published keepalive interval, if need be */
       dncp_ep_i_set_keepalive_interval(l, l->conf.keepalive_interval);
-
-#if 0
-      /* N/A - 'ext' takes care of this */
-
-      /* If we're in join pending state, we retry every
-       * DNCP_REJOIN_INTERVAL if necessary. */
-      if (l->join_failed_time)
-        {
-          hnetd_time_t next_time =
-            l->join_failed_time + DNCP_REJOIN_INTERVAL;
-          if (next_time <= now)
-            {
-              if (!dncp_io_set_ifname_enabled(o, l->ifname, true))
-                {
-                  l->join_failed_time = now;
-                }
-              else
-                {
-                  l->join_failed_time = 0;
-
-                  /* This is essentially second-stage init for a
-                   * link. Before multicast join succeeds, it is
-                   * essentially zombie. */
-                  trickle_set_i(l, l->conf.trickle_imin);
-                  l->last_trickle_sent = dncp_time(l->dncp);
-                }
-            }
-          /* If still join pending, do not use this for anything. */
-          if (l->join_failed_time)
-            {
-              /* join_failed_time may have changed.. */
-              hnetd_time_t next_time =
-                l->join_failed_time + DNCP_REJOIN_INTERVAL;
-              SET_NEXT(next_time, "rejoin");
-              continue;
-            }
-        }
-#endif /* 0 */
 
       if (l->conf.keepalive_interval)
         {
