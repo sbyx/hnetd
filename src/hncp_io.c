@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue May 26 09:57:25 2015 mstenber
- * Edit time:     366 min
+ * Last modified: Tue May 26 12:21:59 2015 mstenber
+ * Edit time:     375 min
  *
  */
 
@@ -37,8 +37,8 @@
 #include <linux/if_packet.h>
 #endif /* __linux__ */
 
-int
-hncp_io_get_hwaddrs(dncp_ext ext __unused, unsigned char *buf, int buf_left)
+static int
+_get_hwaddrs(dncp_ext ext __unused, unsigned char *buf, int buf_left)
 {
   struct ifaddrs *ia, *p;
   int r = getifaddrs(&ia);
@@ -69,11 +69,11 @@ hncp_io_get_hwaddrs(dncp_ext ext __unused, unsigned char *buf, int buf_left)
           memcpy(a2, a, ETHER_ADDR_LEN);
         addrs++;
       }
-  L_INFO("dncp_io_get_hwaddrs => %s", HEX_REPR(buf, ETHER_ADDR_LEN * 2));
+  L_INFO("_get_hwaddrs => %s", HEX_REPR(buf, ETHER_ADDR_LEN * 2));
   freeifaddrs(ia);
   if (!addrs)
     {
-      L_ERR("dncp_io_get_hwaddrs failed - no AF_LINK addresses");
+      L_ERR("_get_hwaddrs failed - no AF_LINK addresses");
       return 0;
     }
   return ETHER_ADDR_LEN * 2;
@@ -91,7 +91,7 @@ _set_ifname_enabled(hncp h, const char *ifname, bool enabled)
   struct ipv6_mreq val;
 
   val.ipv6mr_multiaddr = h->multicast_address;
-  L_DEBUG("hncp_io_set_ifname_enabled %s %s",
+  L_DEBUG("_set_ifname_enabled %s %s",
           ifname, enabled ? "enabled" : "disabled");
   uint32_t ifindex = 0;
   if (!(ifindex = if_nametoindex(ifname)))
@@ -139,20 +139,25 @@ void hncp_set_enabled(hncp h, const char *ifname, bool enabled)
   if (!l->enabled == !enabled)
     return;
   hncp_ep hep = dncp_ep_get_ext_data(&l->conf);
+  uloop_timeout_cancel(&hep->join_timeout);
   _join_timeout(&hep->join_timeout);
 }
 
 
-static void hncp_io_schedule(dncp_ext ext, int msecs)
+static void _schedule_timeout(dncp_ext ext, int msecs)
 {
   hncp h = container_of(ext, hncp_s, ext);
 
-  //1ms timeout was weird in VirtualBox env (causing less than 1ms to).
-  uloop_timeout_set(&h->timeout, msecs?(msecs+1):0);
+  //1ms timeout was weird in VirtualBox env (causing less than 1ms
+  //to). Also we do not really want too many timeouts anyway; if it
+  //is not instant timeout, we might as well wait 10ms.
+  if (msecs && msecs < 10)
+    msecs = 10;
+  uloop_timeout_set(&h->timeout, msecs);
 }
 
 static ssize_t
-hncp_io_recv(dncp_ext ext,
+_recv(dncp_ext ext,
              dncp_ep *ep,
              struct sockaddr_in6 **src_store,
              struct sockaddr_in6 **dst_store,
@@ -214,10 +219,11 @@ hncp_io_recv(dncp_ext ext,
   return l;
 }
 
-void hncp_io_send(dncp_ext ext, dncp_ep ep,
-                  struct sockaddr_in6 *src,
-                  struct sockaddr_in6 *dst,
-                  void *buf, size_t len)
+static void
+_send(dncp_ext ext, dncp_ep ep,
+      struct sockaddr_in6 *src,
+      struct sockaddr_in6 *dst,
+      void *buf, size_t len)
 {
   hncp h = container_of(ext, hncp_s, ext);
   struct sockaddr_in6 rdst;
@@ -253,14 +259,14 @@ void hncp_io_send(dncp_ext ext, dncp_ep ep,
     }
 }
 
-static hnetd_time_t hncp_io_get_time(dncp_ext ext __unused)
+static hnetd_time_t _get_time(dncp_ext ext __unused)
 {
   return hnetd_time();
 }
 
 #ifdef DTLS
 
-void _dtls_readable_callback(dtls d __unused, void *context)
+static void _dtls_readable_callback(dtls d __unused, void *context)
 {
   hncp h = context;
 
@@ -275,6 +281,13 @@ void hncp_set_dtls(hncp h, dtls d)
 }
 
 #endif /* DTLS */
+
+void _udp46_readable_callback(udp46 s __unused, void *context)
+{
+  hncp h = context;
+
+  dncp_ext_readable(h->dncp);
+}
 
 pid_t hncp_run(char *argv[])
 {
@@ -295,18 +308,22 @@ bool hncp_io_init(hncp h)
 {
   int port = HNCP_PORT;
 
+  if (!(h->u46_server = udp46_create(HNCP_PORT)))
+    return false;
   h->timeout.cb = _timeout;
-  h->ext.cb.recv = hncp_io_recv;
-  h->ext.cb.send = hncp_io_send;
-  h->ext.cb.get_hwaddrs = hncp_io_get_hwaddrs;
-  h->ext.cb.get_time = hncp_io_get_time;
-  h->ext.cb.schedule_timeout = hncp_io_schedule;
-  /* TBD - do things about sockets etc */
-  return false;
+  h->ext.cb.recv = _recv;
+  h->ext.cb.send = _send;
+  h->ext.cb.get_hwaddrs = _get_hwaddrs;
+  h->ext.cb.get_time = _get_time;
+  h->ext.cb.schedule_timeout = _schedule_timeout;
+  udp46_set_readable_callback(h->u46_server, _udp46_readable_callback, h);
+  return true;
 }
 
 void hncp_io_uninit(hncp h)
 {
+  if (h->u46_server)
+    udp46_destroy(h->u46_server);
   /* clear the timer from uloop. */
   uloop_timeout_cancel(&h->timeout);
 }
