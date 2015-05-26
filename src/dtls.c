@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Tue May 26 08:01:20 2015 mstenber
- * Edit time:     318 min
+ * Last modified: Tue May 26 15:50:11 2015 mstenber
+ * Edit time:     329 min
  *
  */
 
@@ -129,11 +129,9 @@ typedef struct dtls_struct {
 
   SSL_CTX *ssl_server_ctx;
 
-  struct uloop_fd ufd_server;
-  int server_socket;
+  udp46 u46_server;
 
-  struct uloop_fd ufd_client;
-  int client_socket;
+  udp46 u46_client;
 
   struct list_head connections;
 
@@ -306,9 +304,8 @@ static bool _connection_poll_write(dtls_connection dc)
     {
       char buf[2048];
       int outsize = BIO_read(dc->wbio, buf, sizeof(buf));
-      int s = dc->is_client ? dc->d->client_socket : dc->d->server_socket;
-      sendto(s, buf, outsize, 0,
-             (struct sockaddr *)&dc->remote_addr, sizeof(dc->remote_addr));
+      udp46 s = dc->is_client ? dc->d->u46_client : dc->d->u46_server;
+      (void)udp46_send(s, NULL, &dc->remote_addr, buf, outsize);
       L_DEBUG("sent %d bytes to peer", outsize);
     }
   /* We do not close sockets here. */
@@ -591,11 +588,9 @@ static void _dtls_poll(dtls d, bool is_client)
   struct sockaddr_in6 remote_addr;
   int rv;
   char buf[2048];
-  socklen_t remote_len = sizeof(remote_addr);
-  int s = is_client ? d->client_socket : d->server_socket;
+  udp46 s = is_client ? d->u46_client : d->u46_server;
 
-  if ((rv = recvfrom(s, buf, sizeof(buf), 0,
-                     (struct sockaddr *)&remote_addr, &remote_len)) <= 0)
+  if ((rv = udp46_recv(s, NULL, &remote_addr, buf, sizeof(buf))) <= 0)
     {
       L_DEBUG("recvfrom did not return anything");
       return;
@@ -636,18 +631,18 @@ static void _dtls_poll(dtls d, bool is_client)
 }
 
 static void
-_dtls_ufd_server_cb(struct uloop_fd *u, unsigned int events __unused)
+_dtls_server_cb(udp46 s __unused, void *context)
 {
-  dtls d = container_of(u, dtls_s, ufd_server);
+  dtls d = context;
 
-  L_DEBUG("_dtls_ufd_server_cb");
+  L_DEBUG("_dtls_server_cb");
   _dtls_poll(d, false);
 }
 
 static void
-_dtls_ufd_client_cb(struct uloop_fd *u, unsigned int events __unused)
+_dtls_client_cb(udp46 s __unused, void *context)
 {
-  dtls d = container_of(u, dtls_s, ufd_client);
+  dtls d = context;
 
   L_DEBUG("_dtls_ufd_client_cb");
   _dtls_poll(d, true);
@@ -668,36 +663,6 @@ void dtls_set_unknown_cert_callback(dtls d,
   d->unknown_cb_context = cb_context;
 }
 
-static int _setup_listen_port(uint16_t port)
-{
-  struct sockaddr_in6 local_addr;
-
-  int s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-  if (s<0)
-    {
-      L_ERR("unable to create IPv6 UDP socket");
-      return -1;
-    }
-  fcntl(s, F_SETFL, O_NONBLOCK);
-
-  memset(&local_addr, 0, sizeof(local_addr));
-  local_addr.sin6_family = AF_INET6;
-  local_addr.sin6_port = htons(port);
-
-  int on = 1;
-#ifdef SO_REUSEPORT
-  setsockopt(s, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on));
-#endif /* SO_REUSEPORT */
-  setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-  if (bind(s, (struct sockaddr *)&local_addr, sizeof(local_addr))<0)
-    {
-      L_ERR("unable to bind to port %d", port);
-      close(s);
-      return -1;
-    }
-  return s;
-}
-
 /* Create/destroy instance. */
 dtls dtls_create(uint16_t port)
 {
@@ -711,16 +676,12 @@ dtls dtls_create(uint16_t port)
     }
   if (!d)
     goto fail;
-  if ((d->server_socket = _setup_listen_port(port)) < 0)
+  if (!(d->u46_server = udp46_create(port)))
     goto fail;
   INIT_LIST_HEAD(&d->connections);
-  d->ufd_server.cb = _dtls_ufd_server_cb;
-  d->ufd_server.fd = d->server_socket;
 
-  if ((d->client_socket = _setup_listen_port(0)) < 0)
+  if (!(d->u46_client = udp46_create(0)))
     goto fail;
-  d->ufd_client.cb = _dtls_ufd_client_cb;
-  d->ufd_client.fd = d->client_socket;
 
 #ifdef USE_ONE_CONTEXT
   SSL_CTX *ctx = SSL_CTX_new(DTLSv1_method());
@@ -774,8 +735,8 @@ void dtls_start(dtls d)
 {
   if (d->started) return;
   d->started = true;
-  uloop_fd_add(&d->ufd_server, ULOOP_READ);
-  uloop_fd_add(&d->ufd_client, ULOOP_READ);
+  udp46_set_readable_callback(d->u46_server, _dtls_server_cb, d);
+  udp46_set_readable_callback(d->u46_client, _dtls_client_cb, d);
 }
 
 void dtls_destroy(dtls d)
@@ -790,8 +751,8 @@ void dtls_destroy(dtls d)
 #endif /* USE_ONE_CONTEXT */
   list_for_each_entry_safe(dc, dc2, &d->connections, in_connections)
     _connection_free(dc);
-  uloop_fd_delete(&d->ufd_server);
-  uloop_fd_delete(&d->ufd_client);
+  udp46_destroy(d->u46_server);
+  udp46_destroy(d->u46_client);
   free(d);
 }
 
@@ -820,7 +781,7 @@ ssize_t dtls_recv(dtls d,
 }
 
 ssize_t dtls_send(dtls d,
-                  const struct sockaddr_in6 *src,
+                  const struct sockaddr_in6 *src __unused,
                   const struct sockaddr_in6 *dst,
                   void *buf, size_t len)
 {
