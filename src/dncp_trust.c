@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Nov 19 17:34:25 2014 mstenber
- * Last modified: Tue Feb  3 19:58:06 2015 mstenber
- * Edit time:     235 min
+ * Last modified: Tue May 26 08:42:41 2015 mstenber
+ * Edit time:     239 min
  *
  */
 
@@ -538,8 +538,8 @@ void dncp_trust_request_verdict(dncp_trust t,
     }
 }
 
-static bool _dtls_unknown_callback(dtls d __unused,
-                                   dtls_cert cert, void *context)
+bool dtls_trust_dtls_unknown_callback(dtls d __unused,
+                                      dtls_cert cert, void *context)
 {
   dncp_trust t = context;
   int verdict = _trust_get_cert_verdict(t, cert);
@@ -632,13 +632,6 @@ dncp_trust dncp_trust_create(dncp o, const char *filename)
   _trust_load(t);
   _trust_calculate_hash(t, &t->file_hash);
   dncp_subscribe(o, &t->subscriber);
-  /* TBD - refactor profile_data reference from common code? */
-  if (o->profile_data.d)
-    {
-      L_DEBUG("dncp_trust_create setting unknown_cert_callback");
-      dtls_set_unknown_cert_callback(o->profile_data.d,
-                                     _dtls_unknown_callback, t);
-    }
 
   t->rpc_trust_set_timer.cb = _rpc_set_timer;
   t->rpc_trust_set_timer.name = "trust-set-timer";
@@ -657,12 +650,6 @@ void dncp_trust_destroy(dncp_trust t)
 {
   dncp o = t->dncp;
 
-  /* TBD - refactor profile_data reference from common code? */
-  if (o->profile_data.d)
-    {
-      L_DEBUG("dncp_trust_destroy clearing unknown_cert_callback");
-      dtls_set_unknown_cert_callback(o->profile_data.d, NULL, NULL);
-    }
   if (t->filename)
     {
       /* Save the data if and only if it has changed (reduce writes..) */

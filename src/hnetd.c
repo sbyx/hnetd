@@ -313,6 +313,7 @@ int main(__unused int argc, char *argv[])
 						L_ERR("Unable to create dncp trust module");
 						return 13;
 				}
+				dtls_set_unknown_cert_callback(d, dncp_trust_dtls_unknown_callback, dt);
 		}
 		dtls_start(d);
 #endif /* DTLS */

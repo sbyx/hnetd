@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Nov 20 11:46:44 2014 mstenber
- * Last modified: Mon Jan 26 18:27:23 2015 mstenber
- * Edit time:     32 min
+ * Last modified: Tue May 26 08:42:01 2015 mstenber
+ * Edit time:     34 min
  *
  */
 
@@ -75,3 +75,9 @@ const char *dncp_trust_verdict_to_string(dncp_trust_verdict verdict);
  * Register trust multicall
  */
 void dncp_trust_register_multicall(void);
+
+/*
+ * Callback that can be used with dtls_set_unknown_cert_callback
+ * (context must be dncp_trust instance)
+ */
+bool dncp_trust_dtls_unknown_callback(dtls d, dtls_cert cert, void *context);
