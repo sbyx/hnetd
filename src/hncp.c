@@ -6,16 +6,22 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 14:50:58 2014 mstenber
- * Last modified: Mon May 25 14:50:25 2015 mstenber
- * Edit time:     30 min
+ * Last modified: Tue May 26 07:10:51 2015 mstenber
+ * Edit time:     40 min
  *
  */
 
 #include "hncp_i.h"
+#include "hncp_io.h"
+
 #include <libubox/md5.h>
 
-static bool hncp_profile_handle_collision(dncp o)
+/* TBD - make these separate callbacks into utility library? */
+
+static bool hncp_handle_collision_randomly(dncp_ext ext)
 {
+  hncp h = container_of(ext, hncp_s, ext);
+  dncp o = h->dncp;
   dncp_node_identifier_s ni;
   int i;
 
@@ -27,10 +33,18 @@ static bool hncp_profile_handle_collision(dncp o)
 }
 
 
+static void hncp_hash_md5(const void *buf, size_t len, void *dest)
+{
+  md5_ctx_t ctx;
+
+  md5_begin(&ctx);
+  md5_hash(buf, len, &ctx);
+  md5_end(dest, &ctx);
+}
+
 
 static struct tlv_attr *
-hncp_profile_node_validate_data(dncp_node n,
-                                struct tlv_attr *a)
+hncp_validate_node_data(dncp_node n, struct tlv_attr *a)
 {
   uint8_t version = 0;
 #if L_LEVEL >= LOG_ERR
@@ -76,25 +90,6 @@ hncp_profile_node_validate_data(dncp_node n,
   return a_valid;
 }
 
-bool hncp_init(hncp o)
-{
-  o->dncp = dncp_create(&o->ext);
-  if (!o->dncp)
-    return false;
-  if (inet_pton(AF_INET6, HNCP_MCAST_GROUP, &o->multicast_address) < 1)
-    {
-      L_ERR("unable to inet_pton multicast group address");
-      return false;
-    }
-return true;
-}
-
-void hncp_uninit(hncp o)
-{
-  if (o->dncp)
-    dncp_destroy(o->dncp);
-}
-
 void hncp_destroy(hncp o)
 {
   if (!o)
@@ -115,17 +110,7 @@ hncp hncp_create(void)
   return o;
 }
 
-void dncp_calculate_hash(const void *buf, int len, dncp_hash dest)
-{
-  md5_ctx_t ctx;
-
-  md5_begin(&ctx);
-  md5_hash(buf, len, &ctx);
-  dncp_md5_end(dest, &ctx);
-}
-
-void
-hncp_get_ipv6_address(hncp h, const char *prefer_ifname, struct in6_addr **addr)
+struct in6_addr *hncp_get_ipv6_address(hncp h, const char *prefer_ifname)
 {
   dncp o = h->dncp;
   dncp_ep_i l = NULL;
@@ -146,9 +131,8 @@ hncp_get_ipv6_address(hncp h, const char *prefer_ifname, struct in6_addr **addr)
         }
     }
   if (l && hl && hl->has_ipv6_address)
-    *addr = &hl->ipv6_address;
-  else
-    *addr = NULL;
+    return &hl->ipv6_address;
+  return NULL;
 }
 
 void
@@ -175,4 +159,40 @@ hncp_set_ipv6_address(hncp h, const char *ifname, const struct in6_addr *addr)
       L_DEBUG("hncp_set_ipv6_address: no %s any more", l->ifname);
     }
   dncp_notify_subscribers_link_changed(l, DNCP_EVENT_UPDATE);
+}
+
+bool hncp_init(hncp o)
+{
+  dncp_ext_s ext_s = {
+    .conf = {
+
+    },
+    .cb = {
+      /* Rest of callbacks are populated in the hncp_io_init */
+      .hash = hncp_hash_md5,
+      .validate_node_data = hncp_validate_node_data,
+      .handle_collision = hncp_handle_collision_randomly
+    }
+  };
+  memset(o, 0, sizeof(*o));
+  o->ext = ext_s;
+  if (!hncp_io_init(o))
+    return false;
+  o->dncp = dncp_create(&o->ext);
+  if (!o->dncp)
+    return false;
+  if (inet_pton(AF_INET6, HNCP_MCAST_GROUP, &o->multicast_address) < 1)
+    {
+      L_ERR("unable to inet_pton multicast group address");
+      return false;
+    }
+  return true;
+}
+
+void hncp_uninit(hncp o)
+{
+  hncp_io_uninit(o);
+  if (!o->dncp)
+    return;
+  dncp_destroy(o->dncp);
 }

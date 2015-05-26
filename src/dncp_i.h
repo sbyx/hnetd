@@ -6,15 +6,14 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon May 25 15:25:17 2015 mstenber
- * Edit time:     350 min
+ * Last modified: Tue May 26 07:00:59 2015 mstenber
+ * Edit time:     351 min
  *
  */
 
 #pragma once
 
 #include "dncp.h"
-#include "dncp_io.h"
 #include "dncp_proto.h"
 
 #include "dns_util.h"
@@ -52,7 +51,7 @@ struct dncp_struct {
   /* Disable pruning (should be used probably only in unit tests) */
   bool disable_prune;
 
-  /* cached current time; if zero, should ask dncp_io for it again */
+  /* cached current time; if zero, should ask dncp_ext for it again */
   hnetd_time_t now;
 
   /* nodes (as contained within the protocol, that is, raw TLV data blobs). */
@@ -102,18 +101,6 @@ struct dncp_struct {
   /* First free local interface identifier (we allocate them in
    * monotonically increasing fashion just to keep things simple). */
   int first_free_iid;
-
-  /* The UDP port number our socket is bound to. 0 = use default. */
-  /* (Currently only of internal utility as no way to provide it when
-   * initializing dncp instance, and by the time it is created, it is
-   * too late to change.) */
-  uint16_t udp_port;
-
-  /* And it's corresponding uloop_fd */
-  struct uloop_fd ufd[SOCKET_MAX];
-
-  /* Timeout for doing 'something' in dncp_io. */
-  struct uloop_timeout timeout;
 
   /* List of subscribers to change notifications. */
   struct list_head subscribers[NUM_DNCP_CALLBACKS];

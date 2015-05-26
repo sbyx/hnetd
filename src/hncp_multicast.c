@@ -6,8 +6,8 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 20:39:45 2015 mstenber
- * Last modified: Wed Apr 29 16:40:56 2015 mstenber
- * Edit time:     95 min
+ * Last modified: Tue May 26 07:30:59 2015 mstenber
+ * Edit time:     99 min
  *
  */
 
@@ -22,9 +22,8 @@
  */
 
 #include "hncp_multicast.h"
-#include "dncp_i.h"
 #include "iface.h"
-#include "hncp.h"
+#include "dncp_i.h"
 
 #include <unistd.h>
 #include <sys/wait.h>
@@ -39,6 +38,7 @@
 struct hncp_multicast_struct
 {
   /* Who are we attached to */
+  hncp hncp;
   dncp dncp;
 
   /* Creation-time parameters */
@@ -147,14 +147,14 @@ static void _rp_timeout(struct uloop_timeout *t)
   dncp_remove_tlvs_by_type(m->dncp, HNCP_T_PIM_RPA_CANDIDATE);
   /* Nothing found, have to announce it (just to remove it once all
    * but the fittest one is done. sigh.) */
-  struct in6_addr addr;
-  if (!dncp_get_ipv6_address(m->dncp, NULL, &addr))
+  struct in6_addr *addr = hncp_get_ipv6_address(m->hncp, NULL);
+  if (!addr)
     {
       L_DEBUG("_rp_timeout no IPv6 address at all");
       return;
     }
-  dncp_add_tlv(m->dncp, HNCP_T_PIM_RPA_CANDIDATE, &addr, 16, 0);
-  _notify_rp(m, &addr, true);
+  dncp_add_tlv(m->dncp, HNCP_T_PIM_RPA_CANDIDATE, addr, 16, 0);
+  _notify_rp(m, addr, true);
 }
 
 static void _bp_timeout(struct uloop_timeout *t)
@@ -166,13 +166,13 @@ static void _bp_timeout(struct uloop_timeout *t)
   dncp_node_for_each_tlv_with_type(m->dncp->own_node, a,
                                    HNCP_T_EXTERNAL_CONNECTION)
     {
-      struct in6_addr addr;
-      if (!dncp_get_ipv6_address(m->dncp, NULL, &addr))
+      struct in6_addr *addr = hncp_get_ipv6_address(m->hncp, NULL);
+      if (!addr)
         {
           L_DEBUG("_bp_timeout no IPv6 address at all");
           return;
         }
-      dncp_add_tlv(m->dncp, HNCP_T_PIM_BORDER_PROXY, &addr, 16, 0);
+      dncp_add_tlv(m->dncp, HNCP_T_PIM_BORDER_PROXY, addr, 16, 0);
       return;
     }
 }
@@ -192,14 +192,15 @@ static void _cb_intaddr(struct iface_user *u, __unused const char *ifname,
 }
 
 
-hncp_multicast hncp_multicast_create(dncp h, hncp_multicast_params p)
+hncp_multicast hncp_multicast_create(hncp h, hncp_multicast_params p)
 {
   hncp_multicast m = calloc(1, sizeof(*m));
 
   if (!m)
     return NULL;
 
-  m->dncp = h;
+  m->hncp = h;
+  m->dncp = hncp_get_dncp(h);
 
   m->p = *p;
 
@@ -207,7 +208,7 @@ hncp_multicast hncp_multicast_create(dncp h, hncp_multicast_params p)
   m->rp_timeout.cb = _rp_timeout;
 
   m->subscriber.tlv_change_callback = _tlv_cb;
-  dncp_subscribe(h, &m->subscriber);
+  dncp_subscribe(m->dncp, &m->subscriber);
 
   m->iface.cb_intiface = _cb_intiface;
   m->iface.cb_intaddr = _cb_intaddr;

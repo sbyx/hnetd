@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:33:03 2014 mstenber
- * Last modified: Mon May 25 15:27:18 2015 mstenber
- * Edit time:     16 min
+ * Last modified: Tue May 26 07:36:12 2015 mstenber
+ * Edit time:     18 min
  *
  */
 
@@ -16,6 +16,7 @@
 #include "dncp_i.h"
 #include "hncp.h"
 #include "hncp_proto.h"
+#include "udp46.h"
 
 /* Pretty arbitrary. I wonder if all links can really guarantee MTU
  * size packets going through. However, IPv6 minimum MTU - size of
@@ -79,6 +80,12 @@ struct hncp_struct {
   /* search domain provided to clients. */
   /* (Shared between pa + sd, that's why it's here) */
   char domain[DNS_MAX_ESCAPED_LEN];
+
+  /* Server's UDP46 */
+  udp46 u46_server;
+
+  /* Timeout for doing 'something' in dncp_io. */
+  struct uloop_timeout timeout;
 
 #ifdef DTLS
   /* DTLS 'socket' abstraction, which actually hides two UDP sockets

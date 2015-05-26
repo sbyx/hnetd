@@ -6,19 +6,16 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu May 15 12:33:19 2014 mstenber
- * Last modified: Mon May 19 13:15:47 2014 mstenber
- * Edit time:     108 min
+ * Last modified: Tue May 26 08:32:46 2015 mstenber
+ * Edit time:     120 min
  *
  */
 
-#include "udp46.h"
-#include "shared.h"
-
+#include "udp46_i.h"
 #include <errno.h>
 #include <unistd.h>
 #include <assert.h>
 #include <stdlib.h>
-#include <string.h>
 #include <stdio.h>
 #include <libubox/uloop.h>
 #include <libubox/usock.h>
@@ -30,10 +27,15 @@
 #include <assert.h>
 #include <fcntl.h>
 
-struct udp46_t {
+#define DEBUG(...) L_DEBUG(__VA_ARGS__)
+
+struct udp46_struct {
   int s4;
   int s6;
   uint16_t port;
+  struct uloop_fd ufds[2];
+  udp46_readable_callback cb;
+  void *cb_context;
 };
 
 static int init_listening_socket(int pf, uint16_t port, uint16_t oport)
@@ -319,7 +321,59 @@ int udp46_send_iovec(udp46 s,
 
 void udp46_destroy(udp46 s)
 {
+  udp46_set_readable_callback(s, NULL, NULL);
   close(s->s4);
   close(s->s6);
   free(s);
+}
+
+int udp46_send(udp46 s,
+               const struct sockaddr_in6 *src,
+               const struct sockaddr_in6 *dst,
+               void *buf, size_t buf_size)
+{
+  struct iovec iov = {.iov_base = buf,
+                      .iov_len = buf_size };
+  return udp46_send_iovec(s, src, dst, &iov, 1);
+}
+
+static void ufd_cb_4(struct uloop_fd *u, unsigned int events __unused)
+{
+  udp46 s = container_of(u, udp46_s, ufds[0]);
+  if (s->cb)
+    s->cb(s, s->cb_context);
+}
+
+static void ufd_cb_6(struct uloop_fd *u, unsigned int events __unused)
+{
+  udp46 s = container_of(u, udp46_s, ufds[1]);
+  if (s->cb)
+    s->cb(s, s->cb_context);
+}
+
+void udp46_set_readable_callback(udp46 s, udp46_readable_callback cb,
+                                 void *cb_context)
+{
+  if (!s->cb != !cb)
+    {
+      if (cb)
+        {
+          /* Add to uloop */
+          memset(s->ufds, 0, sizeof(*s->ufds) * 2);
+          s->ufds[0].fd = s->s4;
+          s->ufds[0].cb = ufd_cb_4;
+          s->ufds[1].fd = s->s6;
+          s->ufds[1].cb = ufd_cb_6;
+          uloop_fd_add(&s->ufds[0], ULOOP_READ);
+          uloop_fd_add(&s->ufds[1], ULOOP_READ);
+        }
+      else
+        {
+          /* Remove from uloop */
+          (void)uloop_fd_delete(&s->ufds[0]);
+          (void)uloop_fd_delete(&s->ufds[1]);
+        }
+    }
+  s->cb = cb;
+  s->cb_context = cb_context;
 }

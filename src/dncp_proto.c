@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Mon May 25 14:13:03 2015 mstenber
- * Edit time:     908 min
+ * Last modified: Tue May 26 06:38:23 2015 mstenber
+ * Edit time:     909 min
  *
  */
 
@@ -424,11 +424,9 @@ handle_message(dncp_ep_i l,
             break;
           bool found_data = false;
           int nd_len = tlv_len(a) - sizeof(*ns);
-#ifdef DTLS
           /* We don't accept node data via multicast in secure mode. */
-          if (multicast && o->profile_data.d)
+          if (multicast && !l->conf.accept_node_data_updates_via_multicast)
             nd_len = 0;
-#endif /* DTLS */
           if (nd_len > 0)
             {
               unsigned char *nd_data = (unsigned char *)ns + sizeof(*ns);

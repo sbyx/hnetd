@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu May 15 12:16:06 2014 mstenber
- * Last modified: Thu May 15 13:55:33 2014 mstenber
- * Edit time:     22 min
+ * Last modified: Tue May 26 08:28:04 2015 mstenber
+ * Edit time:     27 min
  *
  */
 
@@ -29,7 +29,7 @@
  * (and in_addr) are hidden.
  */
 
-typedef struct udp46_t *udp46;
+typedef struct udp46_struct *udp46, udp46_s;
 
 /**
  * Create/open a new socket.
@@ -45,7 +45,16 @@ udp46 udp46_create(uint16_t port);
 /**
  * Get the socket fds.
  */
-void udp46_get_fds(udp46 s, int *fd1, int *fd2);
+void udp46_get_fds(udp46 s, int *fd_v4, int *fd_v6);
+
+typedef void (*udp46_readable_callback)(udp46 s, void *context);
+
+/**
+ * Convenience method to set up callback to call when there is
+ * something available. (It leverages uloop+ufd internally)
+ */
+void udp46_set_readable_callback(udp46 s, udp46_readable_callback cb,
+                                 void *cb_context);
 
 /**
  * Receive a packet.
@@ -69,6 +78,11 @@ int udp46_send_iovec(udp46 s,
                      const struct sockaddr_in6 *src,
                      const struct sockaddr_in6 *dst,
                      struct iovec *iov, int iov_len);
+
+int udp46_send(udp46 s,
+               const struct sockaddr_in6 *src,
+               const struct sockaddr_in6 *dst,
+               void *buf, size_t buf_size);
 
 /**
  * Destroy/close a socket.

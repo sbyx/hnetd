@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:50:18 2014 mstenber
- * Last modified: Tue Dec 23 15:27:36 2014 mstenber
- * Edit time:     35 min
+ * Last modified: Tue May 26 07:59:27 2015 mstenber
+ * Edit time:     36 min
  *
  */
 
@@ -112,11 +112,15 @@ void dtls_set_unknown_cert_callback(dtls d, dtls_unknown_callback cb, void *cb_c
 
 
 /* Send/receive data. */
-ssize_t dtls_recvfrom(dtls d, void *buf, size_t len,
-                      struct sockaddr_in6 *src);
-ssize_t dtls_sendto(dtls o, void *buf, size_t len,
-                    const struct sockaddr_in6 *dst,
-					const struct in6_pktinfo *src);
+ssize_t dtls_recv(dtls d,
+                  struct sockaddr_in6 **src,
+                  struct sockaddr_in6 **dst,
+                  void *buf, size_t len);
+
+ssize_t dtls_send(dtls o,
+                  const struct sockaddr_in6 *src,
+                  const struct sockaddr_in6 *dst,
+                  void *buf, size_t len);
 
 /* Certificate handling utilities */
 bool dtls_cert_to_pem_buf(dtls_cert cert, char *buf, int buf_len);

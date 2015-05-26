@@ -1,13 +1,13 @@
 /*
- * $Id: dncp_io.c $
+ * $Id: hncp_io.c $
  *
  * Author: Markus Stenberg <mstenber@cisco.com>
  *
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Wed Apr 29 16:38:31 2015 mstenber
- * Edit time:     297 min
+ * Last modified: Tue May 26 08:26:18 2015 mstenber
+ * Edit time:     349 min
  *
  */
 
@@ -37,10 +37,8 @@
 #include <linux/if_packet.h>
 #endif /* __linux__ */
 
-#include "dncp_io.h"
-
 int
-dncp_io_get_hwaddrs(unsigned char *buf, int buf_left)
+hncp_io_get_hwaddrs(dncp_ext ext __unused, unsigned char *buf, int buf_left)
 {
   struct ifaddrs *ia, *p;
   int r = getifaddrs(&ia);
@@ -83,160 +81,151 @@ dncp_io_get_hwaddrs(unsigned char *buf, int buf_left)
 
 static void _timeout(struct uloop_timeout *t)
 {
-  dncp o = container_of(t, dncp_s, timeout);
-  dncp_run(o);
+  hncp h = container_of(t, hncp_s, timeout);
+  dncp_ext_timeout(h->dncp);
 }
 
-static void _fd_callback(struct uloop_fd *u, unsigned int events __unused)
-{
-  dncp o = container_of(u, dncp_s, ufd[SOCKET_IPV6]);
-  dncp_poll(o);
-}
-
-static void _fd4_callback(struct uloop_fd *u, unsigned int events __unused)
-{
-  dncp o = container_of(u, dncp_s, ufd[SOCKET_IPV4]);
-  dncp_poll(o);
-}
-
-bool dncp_io_init(dncp o)
-{
-  if (!o->udp_port)
-    o->udp_port = HNCP_PORT;
-
-  o->timeout.cb = _timeout;
-  return !dncp_io_sockets(o->ufd, o->udp_port, _fd_callback, _fd4_callback);
-}
-
-void dncp_io_uninit(dncp o)
-{
-  dncp_io_close(o->ufd);
-
-  /* clear the timer from uloop. */
-  uloop_timeout_cancel(&o->timeout);
-}
-
-bool dncp_io_set_ifname_enabled(dncp o,
+bool hncp_io_set_ifname_enabled(hncp h,
                                 const char *ifname,
                                 bool enabled)
 {
   struct ipv6_mreq val;
 
-  val.ipv6mr_multiaddr = o->profile_data.multicast_address;
-  L_DEBUG("dncp_io_set_ifname_enabled %s %s",
+  val.ipv6mr_multiaddr = h->multicast_address;
+  L_DEBUG("hncp_io_set_ifname_enabled %s %s",
           ifname, enabled ? "enabled" : "disabled");
   uint32_t ifindex = 0;
-  dncp_ep_i l = dncp_find_link_by_name(o, ifname, false);
-  if (!(l && (ifindex = l->ifindex)))
-    if (!(ifindex = if_nametoindex(ifname)))
-      {
-        L_DEBUG("unable to enable on %s - if_nametoindex: %s",
-                ifname, strerror(errno));
-        goto fail;
-      }
+  if (!(ifindex = if_nametoindex(ifname)))
+    {
+      L_DEBUG("unable to enable on %s - if_nametoindex: %s",
+              ifname, strerror(errno));
+      return false;
+    }
   val.ipv6mr_interface = ifindex;
-  if (setsockopt(o->ufd[SOCKET_IPV6].fd,
-                 IPPROTO_IPV6,
+  int fd6;
+  udp46_get_fds(h->u46_server, NULL, &fd6);
+  if (setsockopt(fd6, IPPROTO_IPV6,
                  enabled ? IPV6_ADD_MEMBERSHIP : IPV6_DROP_MEMBERSHIP,
                  (char *) &val, sizeof(val)) < 0)
     {
       L_ERR("unable to enable on %s - setsockopt:%s", ifname, strerror(errno));
-      goto fail;
+      return false;
     }
   /* Yay. It succeeded(?). */
   return true;
-
- fail:
-  return false;
 }
 
-void dncp_io_schedule(dncp o, int msecs)
+static void hncp_io_schedule(dncp_ext ext, int msecs)
 {
+  hncp h = container_of(ext, hncp_s, ext);
+
   //1ms timeout was weird in VirtualBox env (causing less than 1ms to).
-  uloop_timeout_set(&o->timeout, msecs?(msecs+1):0);
+  uloop_timeout_set(&h->timeout, msecs?(msecs+1):0);
 }
 
-ssize_t dncp_io_recvfrom(dncp o, void *buf, size_t len,
-                         char *ifname,
-                         struct sockaddr_in6 *src,
-                         struct in6_addr *dst)
+static ssize_t
+hncp_io_recv(dncp_ext ext,
+             dncp_ep *ep,
+             struct sockaddr_in6 **src_store,
+             struct sockaddr_in6 **dst_store,
+             void *buf, size_t len)
 {
-  ssize_t l;
+  hncp h = container_of(ext, hncp_s, ext);
+  ssize_t l = -1;
+  char ifname[IFNAMSIZ];
 
-  while (1)
+  while (l < 0)
     {
 #ifdef DTLS
-      if (o->profile_data.d)
+      if (h->d)
         {
-          l = dtls_recvfrom(o->profile_data.d, buf, len, src);
+          l = dtls_recv(h->d, src_store, dst_store, buf, len);
           if (l > 0)
             {
-              if (!IN6_IS_ADDR_LINKLOCAL(&src->sin6_addr))
+              /* Ignore non-linklocal dtls for now. */
+              if (src_store && !IN6_IS_ADDR_LINKLOCAL(&(*src_store)->sin6_addr))
                 continue;
-              /* In case of DTLS, we have just to trust that it has sane
-               * scope id as we use that for interface determination. */
-              if (!src->sin6_scope_id)
-                {
-                  L_DEBUG("linklocal w/o scope id..?");
-                  continue;
-                }
-              if (!if_indextoname(src->sin6_scope_id, ifname))
-                {
-                  L_ERR("unable to receive (dtls) - if_indextoname:%s",
-                        strerror(errno));
-                  continue;
-                }
-              /* We do not _know_ destination address. However,
-               * the code does not really care, so we fake something
-               * here that looks like unicast linklocal address. */
-              struct in6_addr dummy = { .s6_addr = { 0xfe,0x80 }};
-              *dst = dummy;
-              break;
             }
         }
 #endif /* DTLS */
-      l = dncp_io_recvmsg(o->ufd, buf, len, ifname, src, dst);
-#ifdef DTLS
-      if (o->profile_data.d && !IN6_IS_ADDR_MULTICAST(dst))
+      if (l < 0)
         {
-          L_ERR("plaintext unicast received when in dtls mode - skip");
+          static struct sockaddr_in6 src, dst;
+          l = udp46_recv(h->u46_server, &src, &dst, buf, len);
+#ifdef DTLS
+          if (h->d && !IN6_IS_ADDR_MULTICAST(&dst.sin6_addr))
+            {
+              L_ERR("plaintext unicast received when in dtls mode - skip");
+              continue;
+            }
+#endif /* DTLS */
+          *src_store = &src;
+          *dst_store = &dst;
+        }
+      if (l < 0)
+        continue;
+      if (!*src_store)
+        {
+          L_DEBUG("no source..?");
           continue;
         }
-#endif /* DTLS */
+      if (!(*src_store)->sin6_scope_id)
+        {
+          L_DEBUG("no scope id..?");
+          continue;
+        }
+      if (!if_indextoname((*src_store)->sin6_scope_id, ifname))
+        {
+          L_ERR("unable to receive - if_indextoname:%s",
+                strerror(errno));
+          continue;
+        }
+      *ep = &dncp_find_link_by_name(h->dncp, ifname, true)->conf;
       break;
     }
-
   return l;
 }
 
-ssize_t dncp_io_sendto(dncp o, void *buf, size_t len,
-                       const struct sockaddr_in6 *dst,
-					   const struct in6_pktinfo *src)
+void hncp_io_send(dncp_ext ext, dncp_ep ep,
+                  struct sockaddr_in6 *src,
+                  struct sockaddr_in6 *dst,
+                  void *buf, size_t len)
 {
+  hncp h = container_of(ext, hncp_s, ext);
+  struct sockaddr_in6 rdst;
   ssize_t r;
 
+  if (!dst)
+    {
+      rdst.sin6_port = htons(HNCP_PORT);
+      rdst.sin6_addr = h->multicast_address;
+    }
+  else
+    rdst = *dst;
+  rdst.sin6_scope_id = if_nametoindex(ep->ifname);
 #ifdef DTLS
-  if (o->profile_data.d && !IN6_IS_ADDR_MULTICAST(&dst->sin6_addr))
+  if (h->d && !IN6_IS_ADDR_MULTICAST(&dst->sin6_addr))
     {
       /* Change destination port to DTLS server port too if it is the
        * default port. Otherwise answer on the different port (which
        * is presumably already DTLS protected due to protection in
        * input path).*/
-      struct sockaddr_in6 rdst = *dst;
       if (rdst.sin6_port == htons(HNCP_PORT))
         rdst.sin6_port = htons(HNCP_DTLS_SERVER_PORT);
-      r = dtls_sendto(o->profile_data.d, buf, len, &rdst, src);
+      r = dtls_send(h->d, src, &rdst, buf, len);
+      if (r > 0 && (size_t) r != len)
+        L_ERR("short dtls send?!?");
     }
   else
 #endif /* DTLS */
-  {
-    r = dncp_io_sendmsg(o->ufd, buf, len, dst, src);
-  }
-
-  return r;
+    {
+      r = udp46_send(h->u46_server, src, &rdst, buf, len);
+      if (r > 0 && (size_t) r != len)
+        L_ERR("short udp46_send?!?");
+    }
 }
 
-hnetd_time_t dncp_io_time(dncp o __unused)
+static hnetd_time_t hncp_io_get_time(dncp_ext ext __unused)
 {
   return hnetd_time();
 }
@@ -245,16 +234,16 @@ hnetd_time_t dncp_io_time(dncp o __unused)
 
 void _dtls_readable_callback(dtls d __unused, void *context)
 {
-  dncp o = context;
+  hncp h = context;
 
-  dncp_poll(o);
+  dncp_ext_readable(h->dncp);
 }
 
 
-void hncp_set_dtls(dncp o, dtls d)
+void hncp_set_dtls(hncp h, dtls d)
 {
-  o->profile_data.d = d;
-  dtls_set_readable_callback(d, _dtls_readable_callback, o);
+  h->d = d;
+  dtls_set_readable_callback(d, _dtls_readable_callback, h);
 }
 
 #endif /* DTLS */
@@ -272,4 +261,24 @@ pid_t hncp_run(char *argv[])
   for (int i = 1 ; argv[i] ; i++)
     L_DEBUG(" %s", argv[i]);
   return pid;
+}
+
+bool hncp_io_init(hncp h)
+{
+  int port = HNCP_PORT;
+
+  h->timeout.cb = _timeout;
+  h->ext.cb.recv = hncp_io_recv;
+  h->ext.cb.send = hncp_io_send;
+  h->ext.cb.get_hwaddrs = hncp_io_get_hwaddrs;
+  h->ext.cb.get_time = hncp_io_get_time;
+  h->ext.cb.schedule_timeout = hncp_io_schedule;
+  /* TBD - do things about sockets etc */
+  return false;
+}
+
+void hncp_io_uninit(hncp h)
+{
+  /* clear the timer from uloop. */
+  uloop_timeout_cancel(&h->timeout);
 }

@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon May 25 15:38:06 2015 mstenber
+ * Last modified: Tue May 26 06:23:16 2015 mstenber
  * Edit time:     616 min
  *
  */
@@ -212,8 +212,7 @@ static void _publish_ddz(hncp_sd sd, dncp_ep_i l,
   /* Forward DDZ handling (note: duplication doesn't matter) */
   dh = (void *)buf;
   memset(dh, 0, sizeof(*dh));
-  struct in6_addr *a;
-  hncp_get_ipv6_address(sd->hncp, l->conf.ifname, &a);
+  struct in6_addr *a = hncp_get_ipv6_address(sd->hncp, l->conf.ifname);
   if (!a)
     return;
   *((struct in6_addr *)dh->address) = *a;

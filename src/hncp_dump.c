@@ -7,9 +7,9 @@
 
 #define hd_a(test, err) do{if(!(test)) {err;}}while(0)
 
-static char __hexhash[DNCP_HASH_LEN*2 + 1];
-#define hd_hash_to_hex(hash) hexlify(__hexhash, (hash)->buf, DNCP_HASH_LEN)
-#define hd_ni_to_hex(hash) hexlify(__hexhash, (hash)->buf, DNCP_NI_LEN)
+static char __hexhash[HNCP_HASH_LEN*2 + 1];
+#define hd_hash_to_hex(hash) hexlify(__hexhash, (hash)->buf, HNCP_HASH_LEN)
+#define hd_ni_to_hex(hash) hexlify(__hexhash, (hash)->buf, HNCP_NI_LEN)
 
 static hnetd_time_t hd_now; //time hncp_dump is called
 

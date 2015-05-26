@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Mon May 25 15:12:37 2015 mstenber
- * Edit time:     213 min
+ * Last modified: Tue May 26 08:25:25 2015 mstenber
+ * Edit time:     220 min
  *
  */
 
@@ -185,6 +185,9 @@ struct dncp_ep_struct {
 
   /* How large can the multicasts be? */
   ssize_t maximum_multicast_size;
+
+  /* Do we accept node data updates via multicast? */
+  bool accept_node_data_updates_via_multicast;
 };
 
 /**
@@ -357,12 +360,13 @@ struct dncp_ext_callbacks_struct {
   ssize_t (*recv)(dncp_ext e, dncp_ep *ep,
                   struct sockaddr_in6 **src,
                   struct sockaddr_in6 **dst,
-                  void *buf, ssize_t buf_len);
+                  void *buf, size_t buf_len);
 
   /** Send bytes to the network. */
   void (*send)(dncp_ext e, dncp_ep ep,
-               struct sockaddr_in6 *src, struct sockaddr_in6 *dst,
-               void *buf, ssize_t buf_len);
+               struct sockaddr_in6 *src,
+               struct sockaddr_in6 *dst,
+               void *buf, size_t buf_len);
 
   /* Profile-related callbacks */
 
@@ -372,7 +376,7 @@ struct dncp_ext_callbacks_struct {
    * It MUST write only hash_length (see above) bytes to dst after
    * running hash over buf[:len].
    */
-  void (*hash)(void *buf, size_t len, void *dst);
+  void (*hash)(const void *buf, size_t len, void *dst);
 
   /**
    * Validate node data.

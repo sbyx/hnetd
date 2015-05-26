@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:30:01 2014 mstenber
- * Last modified: Mon May 25 15:31:59 2015 mstenber
- * Edit time:     18 min
+ * Last modified: Tue May 26 06:38:58 2015 mstenber
+ * Edit time:     20 min
  *
  */
 
@@ -82,12 +82,14 @@ void hncp_set_ipv6_address(hncp o, const char *ifname,
                            const struct in6_addr *a);
 
 /**
- * Get the IPv6 address for the given interface (if ep is set) or any.
+ * Get the IPv6 address for the given interface (if ifname is set) or any.
  */
-void hncp_get_ipv6_address(hncp o, const char *ifname, struct in6_addr **addr);
+struct in6_addr *hncp_get_ipv6_address(hncp o, const char *ifname);
 
 
 #ifdef DTLS
+
+#include "dtls.h"
 
 /**
  * Set the dtls instance to be used for securing HNCP traffic.

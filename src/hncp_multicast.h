@@ -6,14 +6,14 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 20:50:57 2015 mstenber
- * Last modified: Mon Feb 23 22:11:07 2015 mstenber
+ * Last modified: Tue May 26 06:20:37 2015 mstenber
  * Edit time:     4 min
  *
  */
 
 #pragma once
 
-#include "dncp.h"
+#include "hncp.h"
 
 typedef struct hncp_multicast_struct hncp_multicast_s, *hncp_multicast;
 
@@ -25,7 +25,7 @@ typedef struct {
    * even support being border proxy, or being RP.. */
 } hncp_multicast_params_s, *hncp_multicast_params;
 
-hncp_multicast hncp_multicast_create(dncp h, hncp_multicast_params p);
+hncp_multicast hncp_multicast_create(hncp h, hncp_multicast_params p);
 
 void hncp_multicast_destroy(hncp_multicast m);
 
