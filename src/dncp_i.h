@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue May 26 16:58:23 2015 mstenber
- * Edit time:     354 min
+ * Last modified: Wed May 27 16:35:33 2015 mstenber
+ * Edit time:     356 min
  *
  */
 
@@ -302,10 +302,12 @@ static inline hnetd_time_t dncp_time(dncp o)
 
 #define DNCP_STRUCT_REPR(i) HEX_REPR(&i, sizeof(i))
 
-#define DNCP_NODE_REPR(n) DNCP_STRUCT_REPR(n->node_identifier)
+#define DNCP_NI_REPR(o, ni) HEX_REPR(ni, DNCP_NI_LEN(o))
+
+#define DNCP_NODE_REPR(n) DNCP_NI_REPR(n->dncp, &n->node_identifier)
 
 #define DNCP_LINK_F "link %s[#%d]"
-#define DNCP_LINK_D(l) l->ifname,l->iid
+#define DNCP_LINK_D(l) l->conf.ifname,l->iid
 
 #define SA6_F "%s:%d"
 #define SA6_D(sa) ADDR_REPR(&sa->sin6_addr),ntohs(sa->sin6_port)

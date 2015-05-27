@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue May 26 09:27:24 2015 mstenber
- * Edit time:     910 min
+ * Last modified: Wed May 27 16:36:09 2015 mstenber
+ * Edit time:     913 min
  *
  */
 
@@ -242,7 +242,8 @@ _heard(dncp_ep_i l, dncp_t_link_id lid, struct sockaddr_in6 *src,
       n = dncp_tlv_get_extra(t);
       n->last_contact = dncp_time(l->dncp);
       L_DEBUG("Neighbor %s added on " DNCP_LINK_F,
-              DNCP_STRUCT_REPR(lid->node_identifier), DNCP_LINK_D(l));
+              DNCP_NI_REPR(l->dncp, dncp_tlv_get_node_identifier(l->dncp, lid)),
+              DNCP_LINK_D(l));
     }
   else
     n = dncp_tlv_get_extra(t);
@@ -419,7 +420,7 @@ handle_message(dncp_ep_i l,
           L_DEBUG("saw %s %s for %s/%p (update number %d)",
                   interesting ? "new" : "old",
                   tlv_len(a) == sizeof(*ns) ? "state" : "state+data",
-                  DNCP_NODE_REPR(ns), n, new_update_number);
+                  DNCP_NI_REPR(o, ni), n, new_update_number);
           if (!interesting)
             break;
           bool found_data = false;
@@ -474,7 +475,7 @@ handle_message(dncp_ep_i l,
             {
               L_DEBUG("node data %s for %s",
                       multicast ? "not supplied" : "missing",
-                      DNCP_NODE_REPR(ns));
+                      DNCP_NI_REPR(l->dncp, ni));
               dncp_ep_i_send_req_node_data(l, dst, src, ns);
             }
           updated_or_requested_state = true;

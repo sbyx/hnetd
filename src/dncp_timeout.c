@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Tue May 26 09:43:03 2015 mstenber
- * Edit time:     525 min
+ * Last modified: Wed May 27 16:35:03 2015 mstenber
+ * Edit time:     528 min
  *
  */
 
@@ -324,10 +324,10 @@ void dncp_ext_timeout(dncp o)
 
         /* Zap the neighbor */
 #if L_LEVEL >= 7
-        dncp_t_neighbor ne = tlv_data(&t->tlv);
+        dncp_t_neighbor ne = dncp_tlv_neighbor(o, &t->tlv);
         l = dncp_find_link_by_id(o, ne->link_id);
         L_DEBUG("Neighbor %s gone on " DNCP_LINK_F " - nothing in %d ms",
-                DNCP_STRUCT_REPR(ne->neighbor_node_identifier),
+                DNCP_NI_REPR(o, dncp_tlv_get_node_identifier(o, ne)),
                 DNCP_LINK_D(l), (int) (now - n->last_contact));
 #endif /* L_LEVEL >= 7 */
         dncp_remove_tlv(o, t);

@@ -122,7 +122,7 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 					++peerpos;
 				} else if (pn->neighbor_link_id < link->iid) {
 					L_WARN("hncp_link_calculate: %s links %d and %d appear to be connected",
-							link->ifname, link->iid, pn->neighbor_link_id);
+							link->conf.ifname, link->iid, pn->neighbor_link_id);
 
 					// Two of our links seem to be connected
 					enable = false;
@@ -176,7 +176,7 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 				}
 
 				L_DEBUG("hncp_link_calculate: %s peer: %x peer-caps: %x ourcaps: %x pre-elected(SMPHL): %x",
-						link->ifname, *((uint32_t*)&peer->node_identifier), peercaps, ourcaps, elected);
+						link->conf.ifname, *((uint32_t*)&peer->node_identifier), peercaps, ourcaps, elected);
 			}
 		}
 	}
@@ -218,7 +218,7 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 
 	if (link) {
 		struct iface *iface = iface_get(link->conf.ifname);
-		L_DEBUG("hncp_link: iface is %s (%d)", link->ifname, (int)link->iid);
+		L_DEBUG("hncp_link: iface is %s (%d)", link->conf.ifname, (int)link->iid);
 		calculate_link(l, link->conf.ifname, iface && iface->internal);
 	}
 }

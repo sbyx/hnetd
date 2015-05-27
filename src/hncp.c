@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 14:50:58 2014 mstenber
- * Last modified: Wed May 27 10:39:51 2015 mstenber
- * Edit time:     53 min
+ * Last modified: Wed May 27 16:36:36 2015 mstenber
+ * Edit time:     54 min
  *
  */
 
@@ -152,11 +152,11 @@ hncp_set_ipv6_address(hncp h, const char *ifname, const struct in6_addr *addr)
     {
       hl->ipv6_address = *addr;
       L_DEBUG("hncp_set_ipv6_address: address on %s: %s",
-              l->ifname, ADDR_REPR(addr));
+              l->conf.ifname, ADDR_REPR(addr));
     }
   else
     {
-      L_DEBUG("hncp_set_ipv6_address: no %s any more", l->ifname);
+      L_DEBUG("hncp_set_ipv6_address: no %s any more", l->conf.ifname);
     }
   dncp_notify_subscribers_link_changed(l, DNCP_EVENT_UPDATE);
 }
