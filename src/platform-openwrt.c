@@ -110,21 +110,29 @@ static const char *hnetd_pd_socket = NULL;
 
 int platform_init(dncp dncp, hncp_pa hncp_pa, const char *pd_socket)
 {
+	hnet_object_type.n_methods = main_object.n_methods;
+	netifd.cb = handle_update;
 
-	if (!(ubus = ubus_connect(NULL))) {
-		L_ERR("Failed to connect to ubus: %s", strerror(errno));
-		return -1;
+	for (;;) {
+		if (ubus) {
+			ubus_free(ubus);
+			sleep(1);
+			L_ERR("Failed to connect to ubus. retrying...");
+		}
+
+
+		if (!(ubus = ubus_connect(NULL)))
+			continue;
+
+		ubus_add_uloop(ubus);
+		if (ubus_add_object(ubus, &main_object) ||
+				ubus_register_subscriber(ubus, &netifd) ||
+				ubus_register_event_handler(ubus, &event_handler, "ubus.object.add"))
+			continue;
+
+		break;
 	}
 
-	ubus_add_uloop(ubus);
-
-	hnet_object_type.n_methods = main_object.n_methods;
-	ubus_add_object(ubus, &main_object);
-
-	netifd.cb = handle_update;
-	ubus_register_subscriber(ubus, &netifd);
-
-	ubus_register_event_handler(ubus, &event_handler, "ubus.object.add");
 	if (!ubus_lookup_id(ubus, "network.interface", &ubus_network_interface))
 		sync_netifd(true);
 
