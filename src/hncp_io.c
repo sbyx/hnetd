@@ -169,7 +169,7 @@ ssize_t dncp_io_recvfrom(dncp o, void *buf, size_t len,
       if (o->profile_data.d)
         {
           l = dtls_recvfrom(o->profile_data.d, buf, len, src);
-          if (l > 0)
+          if (l >= 0)
             {
               if (!IN6_IS_ADDR_LINKLOCAL(&src->sin6_addr))
                 continue;
@@ -197,7 +197,7 @@ ssize_t dncp_io_recvfrom(dncp o, void *buf, size_t len,
 #endif /* DTLS */
       l = dncp_io_recvmsg(o->ufd, buf, len, ifname, src, dst);
 #ifdef DTLS
-      if (o->profile_data.d && !IN6_IS_ADDR_MULTICAST(dst))
+      if (l >= 0 && o->profile_data.d && !IN6_IS_ADDR_MULTICAST(dst))
         {
           L_ERR("plaintext unicast received when in dtls mode - skip");
           continue;
