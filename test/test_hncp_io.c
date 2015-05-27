@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 09:56:00 2014 mstenber
- * Last modified: Wed May 27 09:44:01 2015 mstenber
- * Edit time:     33 min
+ * Last modified: Wed May 27 10:37:40 2015 mstenber
+ * Edit time:     49 min
  *
  */
 
@@ -16,7 +16,10 @@
  * packets back and forth. */
 
 #include "dncp_i.h"
-#define dncp_find_link_by_name(o,n,c) NULL
+
+dncp_ep_s static_ep;
+
+#define dncp_ep_find_by_name(o, n) &static_ep
 #include "hncp_io.c"
 #include "sput.h"
 #include "smock.h"
@@ -34,46 +37,49 @@ void (*hnetd_log)(int priority, const char *format, ...) = syslog;
 #endif /* __APPLE__ */
 
 
+void dncp_ext_ep_ready(dncp_ep ep, bool ready)
+{
+  smock_pull_string_is("dncp_ready", ep->ifname);
+  smock_pull_bool_is("dncp_ready_value", ready);
+}
 
 void dncp_ext_timeout(dncp o)
 {
   smock_pull("dncp_run");
 }
 
-int pending_poll = 0;
+int pending_packets = 0;
 
 void dncp_ext_readable(dncp o)
 {
   char buf[1024];
   size_t len = sizeof(buf);
   int r;
-  char ifname[IFNAMSIZ];
-  struct sockaddr_in6 srcsa;
-  struct in6_addr dst;
+  struct sockaddr_in6 *src, *dst;
+  dncp_ep ep;
 
-  r = dncp_io_recvfrom(o, buf, len, ifname, &srcsa, &dst);
+  r = o->ext->cb.recv(o->ext, &ep, &src, &dst, buf, len);
   smock_pull_int_is("dncp_poll_io_recvfrom", r);
   if (r >= 0)
     {
       void *b = smock_pull("dncp_poll_io_recvfrom_buf");
       char *ifn = smock_pull("dncp_poll_io_recvfrom_ifname");
-      struct sockaddr_in6 *sa = smock_pull("dncp_poll_io_recvfrom_src");
-      struct in6_addr *d = smock_pull("dncp_poll_io_recvfrom_dst");
+      struct sockaddr_in6 *esrc = smock_pull("dncp_poll_io_recvfrom_src");
+      struct sockaddr_in6 *edst = smock_pull("dncp_poll_io_recvfrom_src");
 
       sput_fail_unless(memcmp(b, buf, r)==0, "buf mismatch");
-      sput_fail_unless(strcmp(ifn, ifname) == 0, "ifname mismatch");
-      sput_fail_unless(memcmp(sa, &srcsa, sizeof(srcsa))==0, "src mismatch");
-      sput_fail_unless(memcmp(d, &dst, sizeof(dst))==0, "dst mismatch");
+      sput_fail_unless(strcmp(ifn, ep->ifname) == 0, "ifname mismatch");
+      sput_fail_unless(memcmp(src, esrc, sizeof(*src))==0, "src mismatch");
+      sput_fail_unless(memcmp(dst, edst, sizeof(*dst))==0, "dst mismatch");
+      if (!--pending_packets)
+        uloop_end();
     }
-  if (!--pending_poll)
-    uloop_end();
 }
 
 static void dncp_io_basic_2()
 {
-  dncp_s h1, h2;
+  hncp_s h1, h2;
   bool r;
-  int rv;
   struct in6_addr a;
   char *msg = "foo";
   char *ifname = LOOPBACK_NAME;
@@ -83,43 +89,42 @@ static void dncp_io_basic_2()
   memset(&h2, 0, sizeof(h2));
   h1.udp_port = 62000;
   h2.udp_port = 62001;
-  r = dncp_io_init(&h1);
+  r = hncp_io_init(&h1);
   sput_fail_unless(r, "dncp_io_init h1");
-  r = dncp_io_init(&h2);
+  r = hncp_io_init(&h2);
   sput_fail_unless(r, "dncp_io_init h2");
 
   /* Send a packet to ourselves */
   (void)inet_pton(AF_INET6, "::1", &a);
-  struct sockaddr_in6 src;
-  memset(&src, 0, sizeof(src));
-  src.sin6_family = AF_INET6;
-  src.sin6_port = htons(h1.udp_port);
-  src.sin6_addr = a;
+  struct sockaddr_in6 src = {
+    .sin6_family = AF_INET6,
+    .sin6_port = htons(h1.udp_port),
+    .sin6_addr = a
 #ifdef __APPLE__
-  src.sin6_len = sizeof(src);
+    , src.sin6_len = sizeof(src)
 #endif /* __APPLE__ */
-  struct sockaddr_in6 dst;
-  memset(&dst, 0, sizeof(dst));
-  dst.sin6_family = AF_INET6;
-  dst.sin6_port = htons(h2.udp_port);
-  dst.sin6_addr = a;
+  };
+  struct sockaddr_in6 dst = {
+    .sin6_family = AF_INET6,
+    .sin6_port = htons(h2.udp_port),
+    .sin6_addr = a
 #ifdef __APPLE__
-  dst.sin6_len = sizeof(dst);
+    , .sin6_len = sizeof(dst)
 #endif /* __APPLE__ */
+  };
   smock_push_int("dncp_poll_io_recvfrom", 3);
   smock_push_int("dncp_poll_io_recvfrom_src", &src);
   smock_push_int("dncp_poll_io_recvfrom_dst", &a);
   smock_push_int("dncp_poll_io_recvfrom_buf", msg);
   smock_push_int("dncp_poll_io_recvfrom_ifname", ifname);
-  rv = dncp_io_sendto(&h1, msg, strlen(msg), &dst, NULL);
-  L_DEBUG("got %d", rv);
-  sput_fail_unless(rv == 3, "sendto failed?");
-  pending_poll++;
+  h1.ext.cb.send(&h1.ext, dncp_ep_find_by_name(h1.dncp, "lo"),
+                 NULL, &dst, msg, strlen(msg));
+  pending_packets++;
 
   uloop_run();
 
-  dncp_io_uninit(&h1);
-  dncp_io_uninit(&h2);
+  hncp_io_uninit(&h1);
+  hncp_io_uninit(&h2);
 }
 
 int main(int argc, char **argv)

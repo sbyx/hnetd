@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 14:50:58 2014 mstenber
- * Last modified: Wed May 27 09:44:52 2015 mstenber
- * Edit time:     46 min
+ * Last modified: Wed May 27 10:39:51 2015 mstenber
+ * Edit time:     53 min
  *
  */
 
@@ -165,7 +165,24 @@ bool hncp_init(hncp o)
 {
   dncp_ext_s ext_s = {
     .conf = {
+      .per_link = {
+        .trickle_imin = HNCP_TRICKLE_IMIN,
+        .trickle_imax = HNCP_TRICKLE_IMAX,
+        .trickle_k = HNCP_TRICKLE_K,
+        .keepalive_interval = HNCP_KEEPALIVE_INTERVAL,
+        .maximum_multicast_size = HNCP_MAXIMUM_MULTICAST_SIZE,
 
+        /* TBD - should this be true or not? hmm. if so, we would have
+         * to turn it off _for every link_ when dtls is enabled. */
+        .accept_node_data_updates_via_multicast = false
+      },
+      .node_identifier_length = HNCP_NI_LEN,
+      .hash_length = HNCP_HASH_LEN,
+      .keepalive_multiplier = HNCP_KEEPALIVE_MULTIPLIER * 100,
+      .grace_interval = HNCP_PRUNE_GRACE_PERIOD,
+      .minimum_prune_interval = HNCP_MINIMUM_PRUNE_INTERVAL,
+      .ext_node_data_size = sizeof(hncp_node_s),
+      .ext_ep_data_size = sizeof(hncp_ep_s)
     },
     .cb = {
       /* Rest of callbacks are populated in the hncp_io_init */
@@ -176,6 +193,7 @@ bool hncp_init(hncp o)
   };
   memset(o, 0, sizeof(*o));
   o->ext = ext_s;
+  o->udp_port = HNCP_PORT;
   if (!hncp_io_init(o))
     return false;
   o->dncp = dncp_create(&o->ext);
@@ -202,3 +220,29 @@ dncp hncp_get_dncp(hncp o)
   return o->dncp;
 }
 
+static void _join_timeout(struct uloop_timeout *t)
+{
+  hncp_ep hep = container_of(t, hncp_ep_s, join_timeout);
+  dncp_ep ep = dncp_ep_from_ext_data(hep);
+  dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
+  hncp h = container_of(l->dncp->ext, hncp_s, ext);
+
+  /* If it fails immediately, schedule another timeout to try it
+   * again */
+  if (!hncp_io_set_ifname_enabled(h, ep->ifname, !l->enabled))
+    uloop_timeout_set(&hep->join_timeout, HNCP_REJOIN_INTERVAL);
+}
+
+void hncp_set_enabled(hncp h, const char *ifname, bool enabled)
+{
+  dncp_ep_i l = dncp_find_link_by_name(h->dncp, ifname, enabled);
+
+  if (!l)
+    return;
+  if (!l->enabled == !enabled)
+    return;
+  hncp_ep hep = dncp_ep_get_ext_data(&l->conf);
+  uloop_timeout_cancel(&hep->join_timeout);
+  hep->join_timeout.cb = _join_timeout;
+  _join_timeout(&hep->join_timeout);
+}

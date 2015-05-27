@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Wed May 27 09:51:48 2015 mstenber
- * Edit time:     333 min
+ * Last modified: Wed May 27 10:33:56 2015 mstenber
+ * Edit time:     340 min
  *
  */
 
@@ -356,6 +356,11 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
   return &n->h;
 }
 
+dncp net_sim_find_dncp(net_sim s, const char *name)
+{
+  return hncp_get_dncp(net_sim_find_hncp(s, name));
+}
+
 dncp_ep_i net_sim_dncp_find_link_by_name(dncp o, const char *name)
 {
   hncp h = container_of(o->ext, hncp_s, ext);
@@ -568,6 +573,12 @@ void net_sim_populate_iface_next(net_node n)
   smock_push("iface_next", NULL);
 }
 
+net_node net_sim_node_from_dncp(dncp d)
+{
+  hncp h = container_of(d->ext, hncp_s, ext);
+  return container_of(h, net_node_s, h);
+}
+
 /************************************************* Mocked interface - hncp_io */
 
 static void _timeout(struct uloop_timeout *t)
@@ -690,13 +701,13 @@ _send_one(net_sim s, void *buf, size_t len, dncp_ep_i sl, dncp_ep_i dl,
   uloop_timeout_set(&m->deliver_to, MESSAGE_PROPAGATION_DELAY);
 
 #if L_LEVEL >= 7
-  dncp o = dl->dncp;
-  net_node node1 = container_of(sl->dncp, net_node_s, n);
-  net_node node2 = container_of(dl->dncp, net_node_s, n);
-  bool is_multicast = memcmp(dst, &o->profile_data.multicast_address,
-                             sizeof(*dst)) == 0;
+  hncp h1 = container_of(sl->dncp->ext, hncp_s, ext);
+  net_node node1 = container_of(h1, net_node_s, h);
+  hncp h2 = container_of(dl->dncp->ext, hncp_s, ext);
+  net_node node2 = container_of(h2, net_node_s, h);
+  bool is_multicast = memcmp(dst, &h1->multicast_address, sizeof(*dst)) == 0;
   L_DEBUG("sendto: %s/%s -> %s/%s (%d bytes %s)",
-          node1->name, sl->ifname, node2->name, dl->ifname, (int)len,
+          node1->name, sl->conf.ifname, node2->name, dl->conf.ifname, (int)len,
           is_multicast ? "multicast" : "unicast");
 #endif /* L_LEVEL >= 7 */
 }
@@ -781,5 +792,12 @@ void hncp_io_uninit(hncp o)
 {
   /* nop */
 }
+
+bool hncp_io_set_ifname_enabled(hncp h, const char *ifname, bool enabled)
+{
+  /* Yeah, sure.. */
+  return true;
+}
+
 
 #endif /* NET_SIM_H */

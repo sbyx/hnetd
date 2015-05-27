@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue May 26 15:39:17 2015 mstenber
- * Edit time:     366 min
+ * Last modified: Wed May 27 10:39:23 2015 mstenber
+ * Edit time:     371 min
  *
  */
 
@@ -85,8 +85,8 @@ static void _timeout(struct uloop_timeout *t)
   dncp_ext_timeout(h->dncp);
 }
 
-static bool
-_set_ifname_enabled(hncp h, const char *ifname, bool enabled)
+bool
+hncp_io_set_ifname_enabled(hncp h, const char *ifname, bool enabled)
 {
   struct ipv6_mreq val;
 
@@ -115,35 +115,6 @@ _set_ifname_enabled(hncp h, const char *ifname, bool enabled)
   return true;
 }
 
-static void _join_timeout(struct uloop_timeout *t)
-{
-  hncp_ep hep = container_of(t, hncp_ep_s, join_timeout);
-  dncp_ep ep = dncp_ep_from_ext_data(hep);
-  dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
-  hncp h = container_of(l->dncp->ext, hncp_s, ext);
-
-  if (!_set_ifname_enabled(h, ep->ifname, !l->enabled))
-    {
-      /* Schedule a timeout to try it again */
-      hep->join_timeout.cb = _join_timeout;
-      uloop_timeout_set(&hep->join_timeout, HNCP_REJOIN_INTERVAL);
-    }
-}
-
-void hncp_set_enabled(hncp h, const char *ifname, bool enabled)
-{
-  dncp_ep_i l = dncp_find_link_by_name(h->dncp, ifname, enabled);
-
-  if (!l)
-    return;
-  if (!l->enabled == !enabled)
-    return;
-  hncp_ep hep = dncp_ep_get_ext_data(&l->conf);
-  uloop_timeout_cancel(&hep->join_timeout);
-  _join_timeout(&hep->join_timeout);
-}
-
-
 static void _schedule_timeout(dncp_ext ext, int msecs)
 {
   hncp h = container_of(ext, hncp_s, ext);
@@ -158,10 +129,10 @@ static void _schedule_timeout(dncp_ext ext, int msecs)
 
 static ssize_t
 _recv(dncp_ext ext,
-             dncp_ep *ep,
-             struct sockaddr_in6 **src_store,
-             struct sockaddr_in6 **dst_store,
-             void *buf, size_t len)
+      dncp_ep *ep,
+      struct sockaddr_in6 **src_store,
+      struct sockaddr_in6 **dst_store,
+      void *buf, size_t len)
 {
   hncp h = container_of(ext, hncp_s, ext);
   ssize_t l = -1;
@@ -213,7 +184,7 @@ _recv(dncp_ext ext,
                 strerror(errno));
           continue;
         }
-      *ep = &dncp_find_link_by_name(h->dncp, ifname, true)->conf;
+      *ep = dncp_ep_find_by_name(h->dncp, ifname);
       break;
     }
   return l;
@@ -306,7 +277,7 @@ pid_t hncp_run(char *argv[])
 
 bool hncp_io_init(hncp h)
 {
-  if (!(h->u46_server = udp46_create(HNCP_PORT)))
+  if (!(h->u46_server = udp46_create(h->udp_port)))
     return false;
   h->timeout.cb = _timeout;
   h->ext.cb.recv = _recv;

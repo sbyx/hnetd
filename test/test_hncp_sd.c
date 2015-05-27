@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Wed Apr 29 16:46:01 2015 mstenber
- * Edit time:     155 min
+ * Last modified: Wed May 27 10:13:54 2015 mstenber
+ * Edit time:     158 min
  *
  */
 
@@ -102,10 +102,10 @@ void test_hncp_sd(void)
   debug_exec = false;
   execs = 0;
   net_sim_init(&s);
-  n1 = net_sim_find_hncp(&s, "n1");
-  node1 = container_of(n1, net_node_s, n);
+  n1 = net_sim_find_dncp(&s, "n1");
+  node1 = net_sim_node_from_dncp(n1);
   l1 = net_sim_dncp_find_link_by_name(n1, "eth0.0");
-  strcpy(l1->conf->dnsname, "label");
+  strcpy(l1->conf.dnsname, "label");
   sput_fail_unless(prefix_pton("2001:dead:beef::/64", &p.prefix, &p.plen), "prefix_pton");
 
   tlv_ap_update(n1, p, l1, false, 0, true);
@@ -119,11 +119,11 @@ void test_hncp_sd(void)
   smock_is_empty();
   file_contains("/tmp/n0.conf", "r.home");
 
-  n2 = net_sim_find_hncp(&s, "n2");
-  node2 = container_of(n2, net_node_s, n);
+  n2 = net_sim_find_dncp(&s, "n2");
+  node2 = net_sim_node_from_dncp(n2);
   l2 = net_sim_dncp_find_link_by_name(n2, "eth1");
   l21 = net_sim_dncp_find_link_by_name(n2, "eth2");
-  strcpy(l21->conf->dnsname, "fqdn.");
+  strcpy(l21->conf.dnsname, "fqdn.");
   net_sim_set_connected(l1, l2, true);
   net_sim_set_connected(l2, l1, true);
 
@@ -140,7 +140,7 @@ void test_hncp_sd(void)
   smock_is_empty();
 
   /* Play with dnsmasq utilities */
-  memset(&node1->sd->dnsmasq_state, 0, DNCP_HASH_LEN);
+  memset(&node1->sd->dnsmasq_state, 0, HNCP_HASH_LEN);
   rv = hncp_sd_write_dnsmasq_conf(node1->sd, "/tmp/n1.conf");
   sput_fail_unless(rv, "write 1 works");
   smock_is_empty();
@@ -151,7 +151,7 @@ void test_hncp_sd(void)
   sput_fail_unless(!rv, "write 1 'fails'");
   smock_is_empty();
 
-  memset(&node2->sd->dnsmasq_state, 0, DNCP_HASH_LEN);
+  memset(&node2->sd->dnsmasq_state, 0, HNCP_HASH_LEN);
   rv = hncp_sd_write_dnsmasq_conf(node2->sd, "/tmp/n2.conf");
   sput_fail_unless(rv, "write 2 works");
   smock_is_empty();
@@ -175,7 +175,7 @@ void test_hncp_sd(void)
   smock_push("execv_arg", "-p");
   smock_push("execv_arg", "54");
   smock_push("execv_arg", "eth0.0=label.r.home.");
-  memset(&node1->sd->ohp_state, 0, DNCP_HASH_LEN);
+  memset(&node1->sd->ohp_state, 0, HNCP_HASH_LEN);
   net_sim_populate_iface_next(node1);
   rv = hncp_sd_reconfigure_ohp(node1->sd);
   sput_fail_unless(rv, "reconfigure ohp works");
@@ -196,7 +196,7 @@ void test_hncp_sd(void)
   smock_push("execv_arg", "54");
   smock_push("execv_arg", "eth1=eth1.r1.home.");
   smock_push("execv_arg", "eth2=fqdn.");
-  memset(&node2->sd->ohp_state, 0, DNCP_HASH_LEN);
+  memset(&node2->sd->ohp_state, 0, HNCP_HASH_LEN);
   net_sim_populate_iface_next(node2);
   rv = hncp_sd_reconfigure_ohp(node2->sd);
   sput_fail_unless(rv, "reconfigure ohp works");
@@ -213,7 +213,7 @@ void test_hncp_sd(void)
   debug_exec = true;
   /* Play with PCP - due to dynamic addresses, unfortunately unable to
    * check arguments. */
-  memset(&node2->sd->pcp_state, 0, DNCP_HASH_LEN);
+  memset(&node2->sd->pcp_state, 0, HNCP_HASH_LEN);
   rv = hncp_sd_reconfigure_pcp(node2->sd);
   sput_fail_unless(rv, "reconfigure pcp works (1)");
 
@@ -225,8 +225,8 @@ void test_hncp_sd(void)
   /* Add third node, with hardcoded .domain (yay). It should result in
    * .home disappearing from n1 eventually. */
   s.disable_sd = true;
-  n3 = net_sim_find_hncp(&s, "n3");
-  node3 = container_of(n3, net_node_s, n);
+  n3 = net_sim_find_dncp(&s, "n3");
+  node3 = net_sim_node_from_dncp(n3);
   static hncp_sd_params_s sd_params = {
     .dnsmasq_script = "s-dnsmasq",
     .dnsmasq_bonus_file = "/tmp/n3.conf",
@@ -235,7 +235,7 @@ void test_hncp_sd(void)
     .domain_name = "domain."
   };
   current_iface_users = &node3->iface_users;
-  node3->sd = hncp_sd_create(&node3->n, &sd_params, NULL);
+  node3->sd = hncp_sd_create(&node3->h, &sd_params, NULL);
   current_iface_users = NULL;
   s.disable_sd = false;
   l3 = net_sim_dncp_find_link_by_name(n3, "eth0");
@@ -243,7 +243,7 @@ void test_hncp_sd(void)
   net_sim_set_connected(l3, l2, true);
   SIM_WHILE(&s, 1000, net_sim_is_busy(&s) || !net_sim_is_converged(&s));
 
-  memset(&node1->sd->dnsmasq_state, 0, DNCP_HASH_LEN);
+  memset(&node1->sd->dnsmasq_state, 0, HNCP_HASH_LEN);
   rv = hncp_sd_write_dnsmasq_conf(node1->sd, "/tmp/n12.conf");
   sput_fail_unless(rv, "write 12 works");
   smock_is_empty();

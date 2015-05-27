@@ -6,8 +6,8 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 21:40:08 2015 mstenber
- * Last modified: Wed Apr 29 16:43:05 2015 mstenber
- * Edit time:     20 min
+ * Last modified: Wed May 27 09:59:32 2015 mstenber
+ * Edit time:     21 min
  *
  */
 
@@ -37,12 +37,12 @@ void test_hncp_multicast_base(bool aa_enabled)
 
   net_sim_init(&s);
   s.disable_link_auto_address = !aa_enabled;
-  n1 = net_sim_find_hncp(&s, "n1");
+  n1 = net_sim_find_dncp(&s, "n1");
   l1 = net_sim_dncp_find_link_by_name(n1, "eth0");
   /* Fake external connection */
   dncp_add_tlv(n1, HNCP_T_EXTERNAL_CONNECTION, 0, 0, 0);
 
-  n2 = net_sim_find_hncp(&s, "n2");
+  n2 = net_sim_find_dncp(&s, "n2");
   l2 = net_sim_dncp_find_link_by_name(n2, "eth0");
 
   net_sim_set_connected(l1, l2, true);

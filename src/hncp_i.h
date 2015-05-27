@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:33:03 2014 mstenber
- * Last modified: Tue May 26 09:38:12 2015 mstenber
- * Edit time:     19 min
+ * Last modified: Wed May 27 10:19:44 2015 mstenber
+ * Edit time:     21 min
  *
  */
 
@@ -80,6 +80,9 @@ struct hncp_struct {
   /* search domain provided to clients. */
   /* (Shared between pa + sd, that's why it's here) */
   char domain[DNS_MAX_ESCAPED_LEN];
+
+  /* The port number server is in */
+  uint16_t udp_port;
 
   /* Server's UDP46 */
   udp46 u46_server;

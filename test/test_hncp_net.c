@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Thu Apr 30 11:39:38 2015 mstenber
- * Edit time:     617 min
+ * Last modified: Wed May 27 10:12:16 2015 mstenber
+ * Edit time:     623 min
  *
  */
 
@@ -63,11 +63,11 @@ void hncp_two(void)
   //net_node node2;
 
   net_sim_init(&s);
-  n1 = net_sim_find_hncp(&s, "n1");
+  n1 = net_sim_find_dncp(&s, "n1");
   n1->own_node->update_number = 0xFFFFFFFE;
   dncp_ep lc = dncp_ep_find_by_name(n1, "eth0");
   lc->keepalive_interval = 1000;
-  n2 = net_sim_find_hncp(&s, "n2");
+  n2 = net_sim_find_dncp(&s, "n2");
   l1 = net_sim_dncp_find_link_by_name(n1, "eth0");
   l2 = net_sim_dncp_find_link_by_name(n2, "eth1");
   sput_fail_unless(!link_has_neighbors(l1), "no l1 neighbors");
@@ -83,7 +83,7 @@ void hncp_two(void)
 
 
   /* Play with the prefix API. Feed in stuff! */
-  node1 = container_of(n1, net_node_s, n);
+  node1 = net_sim_node_from_dncp(n1);
   //node2 = container_of(n2, net_node_s, n);
 
   /* First, give delegated prefixes */
@@ -106,15 +106,18 @@ void hncp_two(void)
               !net_sim_is_converged(&s) ||
               net_sim_dncp_tlv_type_count(n2, HNCP_T_EXTERNAL_CONNECTION) != 1);
 
-  /* Prefix assignment should just happen. Magic(?). */
+#define dncp_ifname_has_highest_id(o, ifname) \
+  dncp_ep_has_highest_id(dncp_ep_find_by_name(o, ifname))
+
+    /* Prefix assignment should just happen. Magic(?). */
   /* Wait for prefixes to be assigned too */
   if (net_sim_dncp_tlv_type_count(n2, HNCP_T_ASSIGNED_PREFIX) != 2)
     SIM_WHILE(&s, 10000,
               !net_sim_is_converged(&s) ||
               net_sim_dncp_tlv_type_count(n2, HNCP_T_ASSIGNED_PREFIX) != 2);
 
-  sput_fail_unless(dncp_ep_has_highest_id(n1, "eth0") !=
-                   dncp_ep_has_highest_id(n2, "eth1"),
+  sput_fail_unless(dncp_ifname_has_highest_id(n1, "eth0") !=
+                   dncp_ifname_has_highest_id(n2, "eth1"),
                    "someone is highest");
 
   /* disconnect on one side (=> unidirectional traffic) => should at
@@ -132,7 +135,7 @@ void hncp_two(void)
   /* n1 will keep getting stuff from n2, so it's sometimes alive,
    * sometimes not.. However, network hashes should be again
    * different. */
-  sput_fail_unless(memcmp(&n1->network_hash, &n2->network_hash, DNCP_HASH_LEN),
+  sput_fail_unless(memcmp(&n1->network_hash, &n2->network_hash, HNCP_HASH_LEN),
                    "hashes different");
 
   /* Should also have done the necessary purging of nodes due to lack
@@ -140,11 +143,11 @@ void hncp_two(void)
    * grace period).. */
   SIM_WHILE(&s, 10000, n2->nodes.avl.count != 1);
 
-  sput_fail_unless(dncp_ep_has_highest_id(n1, "eth0") &&
-                   dncp_ep_has_highest_id(n2, "eth1"),
+  sput_fail_unless(dncp_ifname_has_highest_id(n1, "eth0") &&
+                   dncp_ifname_has_highest_id(n2, "eth1"),
                    "both highest");
 
-  sput_fail_unless(dncp_ep_has_highest_id(n1, "nonexistent"),
+  sput_fail_unless(dncp_ifname_has_highest_id(n1, "nonexistent"),
                    "nonexistent highest too");
 
   net_sim_uninit(&s);
@@ -188,9 +191,9 @@ static void handle_connections(net_sim s,
   L_DEBUG("handle_connections %d", n_conns);
   for (i = 0 ; i < n_conns ; i++)
     {
-      dncp n1 = net_sim_find_hncp(s, nodenames[c->src]);
+      dncp n1 = net_sim_find_dncp(s, nodenames[c->src]);
       dncp_ep_i l1 = net_sim_dncp_find_link_by_name(n1, c->srclink);
-      dncp n2 = net_sim_find_hncp(s, nodenames[c->dst]);
+      dncp n2 = net_sim_find_dncp(s, nodenames[c->dst]);
       dncp_ep_i l2 = net_sim_dncp_find_link_by_name(n2, c->dstlink);
 
       net_sim_set_connected(l1, l2, true);
@@ -212,7 +215,7 @@ static void raw_bird14(net_sim s)
 
   SIM_WHILE(s, 10000, !net_sim_is_converged(s));
 
-  sput_fail_unless(net_sim_find_hncp(s, "b10")->nodes.avl.count == 11,
+  sput_fail_unless(net_sim_find_dncp(s, "b10")->nodes.avl.count == 11,
                    "b10 enough nodes");
 
   sput_fail_unless(hnetd_time() - s->start < 10 * HNETD_TIME_PER_SECOND,
@@ -235,8 +238,8 @@ static void raw_bird14(net_sim s)
   s->del_neighbor_is_error = true;
   L_DEBUG("assume stable topology");
   SIM_WHILE(s, 100000, !net_sim_is_converged(s) ||
-            (hnetd_time() - convergence_time) < (DNCP_KEEPALIVE_INTERVAL*
-                                                 DNCP_KEEPALIVE_MULTIPLIER));
+            (hnetd_time() - convergence_time) < (HNCP_KEEPALIVE_INTERVAL*
+                                                 HNCP_KEEPALIVE_MULTIPLIER));
   L_NOTICE("unicasts sent:%d after convergence, last %lld ms after convergence",
            s->sent_unicast - sent_unicast, (long long)(s->last_unicast_sent - convergence_time));
 #if 0
@@ -258,7 +261,7 @@ static void raw_bird14(net_sim s)
   net_sim_remove_node_by_name(s, nodenames[0]);
 
   /* Re-add the node */
-  (void)net_sim_find_hncp(s, nodenames[0]);
+  (void)net_sim_find_dncp(s, nodenames[0]);
 
   handle_connections(s, &nodeconnections[0], 2); /* Two first ones are needed */
 
@@ -312,7 +315,7 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes, bool no_conflicts)
       char buf[128];
 
       sprintf(buf, "node%d", i);
-      dncp n1 = net_sim_find_hncp(s, buf);
+      dncp n1 = net_sim_find_dncp(s, buf);
       /* Add intentional router ID collisions at nodes 0, 1,3 and 2 and 4 */
       if (!no_conflicts)
         {
@@ -323,26 +326,26 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes, bool no_conflicts)
         }
 
       sprintf(buf, "node%d", i+1);
-      dncp n2 = net_sim_find_hncp(s, buf);
+      dncp n2 = net_sim_find_dncp(s, buf);
 
       dncp_ep_i l1 = net_sim_dncp_find_link_by_name(n1, "down");
       dncp_ep_i l2 = net_sim_dncp_find_link_by_name(n2, "up");
       /* Asymmetric keepalive setup; l2 sends them 'normally', and l1
        * very aggressively. */
-      l1->conf->keepalive_interval = DNCP_KEEPALIVE_INTERVAL / 20;
+      l1->conf.keepalive_interval = HNCP_KEEPALIVE_INTERVAL / 20;
       net_sim_set_connected(l1, l2, true);
       net_sim_set_connected(l2, l1, true);
     }
   SIM_WHILE(s, 100000, !net_sim_is_converged(s));
 
-  sput_fail_unless(net_sim_find_hncp(s, "node0")->nodes.avl.count >= num_nodes,
+  sput_fail_unless(net_sim_find_dncp(s, "node0")->nodes.avl.count >= num_nodes,
                    "enough nodes");
   for (i = 0 ; i < num_nodes ; i++)
     {
       char buf[128];
 
       sprintf(buf, "node%d", i);
-      dncp n = net_sim_find_hncp(s, buf);
+      dncp n = net_sim_find_dncp(s, buf);
       /* <= 5 may have up to 2 drops; >5 0. */
       if (i <= 5)
         sput_fail_unless(n->num_neighbor_dropped <= 2, "few drops (start)");
@@ -413,11 +416,11 @@ void hncp_tube_beyond_multicast_unique(void)
 #define NUM_MONKEY_PORTS 2
 #define NUM_MONKEY_ITERATIONS 1000
 
-dncp net_sim_find_hncp_n(net_sim s, int i)
+dncp net_sim_find_dncp_n(net_sim s, int i)
 {
   char n[3];
   sprintf(n, "n%d", i);
-  return net_sim_find_hncp(s, n);
+  return net_sim_find_dncp(s, n);
 }
 
 dncp_ep_i net_sim_dncp_find_link_n(dncp o, int i)
@@ -448,15 +451,15 @@ dncp_t_neighbor monkey_neighbor(dncp n1, dncp_ep_i l1,
 
   dncp_node_for_each_tlv_with_type(n1->own_node, a,
                                    DNCP_T_NEIGHBOR)
-    if ((nh = dncp_tlv_neighbor(a)))
+    if ((nh = dncp_tlv_neighbor(n1, a)))
       {
         if (nh->link_id != l1->iid)
           continue;
         if (nh->neighbor_link_id != l2->iid)
           continue;
-        if (memcmp(&nh->neighbor_node_identifier,
+        if (memcmp(dncp_tlv_get_node_identifier(n1, nh),
                    &n2->own_node->node_identifier,
-                   DNCP_NI_LEN))
+                   HNCP_NI_LEN))
           continue;
         return nh;
       }
@@ -503,9 +506,9 @@ bool monkey_converged(net_sim s, int *ma, int *broken)
   net_node n;
 
   /* First off, cheap checks. */
-  list_for_each_entry(n, &s->nodes, h)
+  list_for_each_entry(n, &s->nodes, lh)
     {
-      if (n->n.network_hash_dirty)
+      if (n->d->network_hash_dirty)
         return false;
     }
 
@@ -515,8 +518,8 @@ bool monkey_converged(net_sim s, int *ma, int *broken)
       p1 = broken[1];
       j = broken[2];
       p2 = broken[3];
-      dncp n1 = net_sim_find_hncp_n(s, i);
-      dncp n2 = net_sim_find_hncp_n(s, j);
+      dncp n1 = net_sim_find_dncp_n(s, i);
+      dncp n2 = net_sim_find_dncp_n(s, j);
       dncp_ep_i l1 = net_sim_dncp_find_link_n(n1, p1);
       dncp_ep_i l2 = net_sim_dncp_find_link_n(n2, p2);
       if (!monkey_ok(ma, n1, l1, n2, l2, i, p1, j, p2))
@@ -524,10 +527,10 @@ bool monkey_converged(net_sim s, int *ma, int *broken)
     }
   for (i = 0 ; i < NUM_MONKEY_ROUTERS ; i++)
     {
-      dncp n1 = net_sim_find_hncp_n(s, i);
+      dncp n1 = net_sim_find_dncp_n(s, i);
       for (j = 0 ; j < NUM_MONKEY_ROUTERS ; j++)
         {
-          dncp n2 = net_sim_find_hncp_n(s, j);
+          dncp n2 = net_sim_find_dncp_n(s, j);
 
           for (p1 = 0 ; p1 < NUM_MONKEY_PORTS ; p1++)
             {
@@ -558,7 +561,7 @@ void monkey_debug_print(net_sim s, int *ma)
   int r1, r2, p1, p2;
   for (r1 = 0 ; r1 < NUM_MONKEY_ROUTERS ; r1++)
     {
-      dncp n1 = net_sim_find_hncp_n(s, r1);
+      dncp n1 = net_sim_find_dncp_n(s, r1);
       for (p1 = 0 ; p1 < NUM_MONKEY_PORTS ; p1++)
         {
           dncp_ep_i l1 = net_sim_dncp_find_link_n(n1, p1);
@@ -572,13 +575,13 @@ void monkey_debug_print(net_sim s, int *ma)
     }
   for (r1 = 0 ; r1 < NUM_MONKEY_ROUTERS ; r1++)
     {
-      dncp n1 = net_sim_find_hncp_n(s, r1);
+      dncp n1 = net_sim_find_dncp_n(s, r1);
       for (p1 = 0 ; p1 < NUM_MONKEY_PORTS ; p1++)
         {
           dncp_ep_i l1 = net_sim_dncp_find_link_n(n1, p1);
           for (r2 = r1+1 ; r2 < NUM_MONKEY_ROUTERS ; r2++)
             {
-              dncp n2 = net_sim_find_hncp_n(s, r2);
+              dncp n2 = net_sim_find_dncp_n(s, r2);
               for (p2 = 0 ; p2 < NUM_MONKEY_PORTS ; p2++)
                 {
                   dncp_ep_i l2 = net_sim_dncp_find_link_n(n2, p2);
@@ -620,7 +623,7 @@ void hncp_random_monkey(void)
   int r1, p1;
   for (r1 = 0 ; r1 < NUM_MONKEY_ROUTERS ; r1++)
     {
-      dncp n1 = net_sim_find_hncp_n(&s, r1);
+      dncp n1 = net_sim_find_dncp_n(&s, r1);
       for (p1 = 0 ; p1 < NUM_MONKEY_PORTS ; p1++)
         net_sim_dncp_find_link_n(n1, p1);
     }
@@ -630,12 +633,12 @@ void hncp_random_monkey(void)
     {
       /* Do random connect/disconnect */
       int r1 = random() % NUM_MONKEY_ROUTERS;
-      dncp n1 = net_sim_find_hncp_n(&s, r1);
+      dncp n1 = net_sim_find_dncp_n(&s, r1);
       int p1 = random() % NUM_MONKEY_PORTS;
       dncp_ep_i l1 = net_sim_dncp_find_link_n(n1, p1);
 
       int r2 = random() % NUM_MONKEY_ROUTERS;
-      dncp n2 = net_sim_find_hncp_n(&s, r2);
+      dncp n2 = net_sim_find_dncp_n(&s, r2);
       int p2 = random() % NUM_MONKEY_PORTS;
       dncp_ep_i l2 = net_sim_dncp_find_link_n(n2, p2);
       bool is_connect = random() % 2;

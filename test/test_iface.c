@@ -8,6 +8,10 @@
 
 #include "fake_uloop.h"
 #include "prefix_utils.h"
+
+#include "hncp_sd.h"
+#define hncp_get_dncp(o) NULL
+
 #include "iface.c"
 
 int log_level = LOG_DEBUG;

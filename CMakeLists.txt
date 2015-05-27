@@ -131,11 +131,6 @@ target_link_libraries(test_hncp ubox ${BACKEND_LINK} blobmsg_json ${DTLS_LINK})
 add_test(hncp test_hncp)
 add_dependencies(check test_hncp)
 
-add_executable(test_hncp_io test/test_hncp_io.c ${DTLS_SOURCE} ${HT})
-target_link_libraries(test_hncp_io ubox ${BACKEND_LINK} blobmsg_json ${DTLS_LINK})
-add_test(hncp_io test_hncp_io)
-add_dependencies(check test_hncp_io)
-
 if(${DTLS})
   add_executable(test_dtls test/test_dtls.c ${HT})
   target_link_libraries(test_dtls ${DTLS_LINK} ubox ${BACKEND_LINK} blobmsg_json)
@@ -149,7 +144,11 @@ if(${DTLS})
   add_dependencies(check test_dncp_trust)
 endif(${DTLS})
 
-# Broken since new PA
+add_executable(test_hncp_io test/test_hncp_io.c ${DTLS_SOURCE} ${HT})
+target_link_libraries(test_hncp_io ubox ${BACKEND_LINK} blobmsg_json ${DTLS_LINK})
+add_test(hncp_io test_hncp_io)
+add_dependencies(check test_hncp_io)
+
 add_executable(test_hncp_net test/test_hncp_net.c ${HNCP_WITH_GLUE})
 target_link_libraries(test_hncp_net ubox ${BACKEND_LINK} blobmsg_json)
 add_test(hncp_net test_hncp_net)
@@ -164,11 +163,6 @@ add_executable(test_hncp_multicast test/test_hncp_multicast.c ${HNCP_WITH_GLUE})
 target_link_libraries(test_hncp_multicast ubox ${BACKEND_LINK} blobmsg_json)
 add_test(hncp_multicast test_hncp_multicast)
 add_dependencies(check test_hncp_multicast)
-
-#add_executable(test_hncp_bfs test/test_hncp_bfs.c src/hncp.c ${DNCP_BASE} ${HNCP_IO} ${BT} ${HT})
-#target_link_libraries(test_hncp_bfs ubox ${BACKEND_LINK} blobmsg_json ${DTLS_LINK})
-#add_test(hncp_bfs test_hncp_bfs)
-#add_dependencies(check test_hncp_bfs)
 
 add_executable(test_pa_core test/test_pa_core.c src/pa_rules.c src/pa_filters.c ${BO} ${PX} ${BT})
 target_link_libraries(test_pa_core ubox)
@@ -204,6 +198,13 @@ add_executable(test_bitops test/test_bitops.c src/bitops.c)
 target_link_libraries(test_bitops)
 add_test(bitops test_bitops)
 add_dependencies(check test_bitops)
+
+# Historic/non-maintained unit tests
+
+#add_executable(test_hncp_bfs test/test_hncp_bfs.c src/hncp.c ${DNCP_BASE} ${HNCP_IO} ${BT} ${HT})
+#target_link_libraries(test_hncp_bfs ubox ${BACKEND_LINK} blobmsg_json ${DTLS_LINK})
+#add_test(hncp_bfs test_hncp_bfs)
+#add_dependencies(check test_hncp_bfs)
 
 # Packaging rules
 set(CPACK_PACKAGE_VERSION "1")
