@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 09:56:00 2014 mstenber
- * Last modified: Tue Dec 23 18:42:32 2014 mstenber
- * Edit time:     32 min
+ * Last modified: Wed May 27 09:44:01 2015 mstenber
+ * Edit time:     33 min
  *
  */
 
@@ -35,14 +35,14 @@ void (*hnetd_log)(int priority, const char *format, ...) = syslog;
 
 
 
-void dncp_run(dncp o)
+void dncp_ext_timeout(dncp o)
 {
   smock_pull("dncp_run");
 }
 
 int pending_poll = 0;
 
-void dncp_poll(dncp o)
+void dncp_ext_readable(dncp o)
 {
   char buf[1024];
   size_t len = sizeof(buf);

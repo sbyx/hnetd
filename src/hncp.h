@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:30:01 2014 mstenber
- * Last modified: Tue May 26 09:44:27 2015 mstenber
+ * Last modified: Wed May 27 09:45:15 2015 mstenber
  * Edit time:     20 min
  *
  */
@@ -115,6 +115,12 @@ pid_t hncp_run(char *argv[]);
  * Create HNCP instance
  */
 hncp hncp_create(void);
+
+
+/**
+ * Destroy HNCP instances
+ */
+void hncp_destroy(hncp o);
 
 
 /* Intentionally include this only here, so that there are no

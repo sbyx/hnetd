@@ -6,12 +6,12 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Tue Feb 10 19:28:55 2015 mstenber
- * Edit time:     94 min
+ * Last modified: Wed May 27 09:46:39 2015 mstenber
+ * Edit time:     99 min
  *
  */
 
-#include "hncp.h"
+#include "hncp_i.h"
 #include "hncp_proto.h"
 #include "sput.h"
 #include "smock.h"
@@ -71,7 +71,8 @@ int platform_rpc_cli(const char *method, struct blob_attr *in)
 
 void hncp_ext(void)
 {
-  dncp o = hncp_create();
+  hncp h = hncp_create();
+  dncp o = hncp_get_dncp(h);
   dncp_node n;
   bool r;
   struct tlv_buf tb;
@@ -100,41 +101,33 @@ void hncp_ext(void)
   sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs consistent");
 
   /* Should be able to enable it on a link. */
-  r = dncp_ep_set_enabled(o, "eth0", true);
-  sput_fail_unless(r, "dncp_ep_set_enabled eth0");
-
-  r = dncp_ep_set_enabled(o, "eth1", true);
-  sput_fail_unless(r, "dncp_ep_set_enabled eth1");
-
-  r = dncp_ep_set_enabled(o, "eth1", true);
-  sput_fail_unless(!r, "dncp_ep_set_enabled eth1 (2nd true)");
+  hncp_set_enabled(h, "eth0", true);
+  hncp_set_enabled(h, "eth1", true);
+  hncp_set_enabled(h, "eth1", true);
 
   dncp_self_flush(n);
   t = dncp_node_get_tlvs(n);
   sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs should be same");
 
-  r = dncp_ep_set_enabled(o, "eth1", false);
-  sput_fail_unless(r, "dncp_ep_set_enabled eth1 (false)");
-
-  r = dncp_ep_set_enabled(o, "eth1", false);
-  sput_fail_unless(!r, "dncp_ep_set_enabled eth1 (2nd false)");
+  hncp_set_enabled(h, "eth1", false);
+  hncp_set_enabled(h, "eth1", false);
 
   dncp_self_flush(n);
   t = dncp_node_get_tlvs(n);
   sput_fail_unless(tlv_attr_equal(t, tb.head), "tlvs should be same");
 
   /* Make sure run doesn't blow things up */
-  dncp_run(o);
+  dncp_ext_timeout(o);
 
   /* Similarly, poll should also be nop (socket should be non-blocking). */
-  dncp_poll(o);
+  dncp_ext_readable(o);
 
   dncp_remove_tlv_matching(o, 123, NULL, 0);
 
   n = dncp_node_get_next(n);
   sput_fail_unless(!n, "second node should not exist");
 
-  dncp_destroy(o);
+  hncp_destroy(h);
 
   tlv_buf_free(&tb);
 }
@@ -145,28 +138,26 @@ void hncp_int(void)
 {
   /* If we want to do bit more whitebox unit testing of the whole hncp,
    * do it here. */
-  dncp_s s;
-  dncp o = &s;
-  unsigned char hwbuf[] = "foo";
+  hncp_s s;
+  dncp o;
   dncp_node n;
   dncp_ep_i l;
 
-  hncp_init(o, hwbuf, strlen((char *)hwbuf));
+  hncp_init(&s);
+  o = hncp_get_dncp(&s);
 
   /* Make sure network hash is dirty. */
   sput_fail_unless(o->network_hash_dirty, "network hash should be dirty");
 
   /* Make sure we can add nodes if we feel like it. */
-  dncp_hash_s h;
-  dncp_calculate_hash("bar", 3, &h);
-  dncp_node_identifier ni = (dncp_node_identifier)&h;
+  dncp_node_identifier_s ni = {};
 
-  n = dncp_find_node_by_node_identifier(o, ni, false);
+  n = dncp_find_node_by_node_identifier(o, &ni, false);
   sput_fail_unless(!n, "dncp_find_node_by_hash w/ create=false => none");
-  n = dncp_find_node_by_node_identifier(o, ni, true);
+  n = dncp_find_node_by_node_identifier(o, &ni, true);
   sput_fail_unless(n, "dncp_find_node_by_hash w/ create=false => !none");
-  sput_fail_unless(dncp_find_node_by_node_identifier(o, ni, false), "should exist");
-  sput_fail_unless(dncp_find_node_by_node_identifier(o, ni, false) == n, "still same");
+  sput_fail_unless(dncp_find_node_by_node_identifier(o, &ni, false), "should exist");
+  sput_fail_unless(dncp_find_node_by_node_identifier(o, &ni, false) == n, "still same");
 
   n = dncp_get_first_node(o);
   sput_fail_unless(n, "dncp_get_first_node");
@@ -175,7 +166,7 @@ void hncp_int(void)
 
   /* Play with run; initially should increment update number */
   sput_fail_unless(o->own_node->update_number == 0, "update number ok");
-  dncp_run(o);
+  dncp_ext_timeout(o);
   sput_fail_unless(o->own_node->update_number == 1, "update number ok");
 
   n = dncp_get_first_node(o);
@@ -192,13 +183,13 @@ void hncp_int(void)
   sput_fail_unless(dncp_find_link_by_name(o, ifn, false) == l, "still same");
 
   /* but on second run, no */
-  dncp_run(o);
+  dncp_ext_timeout(o);
   sput_fail_unless(o->own_node->update_number == 1, "update number ok");
 
   dncp_add_tlv(o, 123, NULL, 0, 0);
 
   /* Added TLV should trigger new update */
-  dncp_run(o);
+  dncp_ext_timeout(o);
   sput_fail_unless(o->own_node->update_number == 2, "update number ok");
 
   /* Adding/removing TLV should NOT trigger new update. */
@@ -206,10 +197,10 @@ void hncp_int(void)
   sput_fail_unless(t2, "dncp_add_tlv failed");
 
   dncp_remove_tlv(o, t2);
-  dncp_run(o);
+  dncp_ext_timeout(o);
   sput_fail_unless(o->own_node->update_number == 2, "update number ok");
 
-  hncp_uninit(o);
+  hncp_uninit(&s);
 }
 
 int main(int argc, char **argv)

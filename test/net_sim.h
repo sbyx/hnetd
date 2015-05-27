@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Tue May 26 16:57:54 2015 mstenber
+ * Last modified: Wed May 27 09:51:48 2015 mstenber
  * Edit time:     333 min
  *
  */
@@ -612,7 +612,7 @@ _recv(dncp_ext ext,
       list_del(&m->lh);
       free(m->buf);
       free(m);
-      L_DEBUG("%s/%s: dncp_io_recvfrom %d bytes", node->name, ifname, s);
+      L_DEBUG("%s/%s: dncp_io_recvfrom %d bytes", node->name, m->l->conf.ifname, s);
       return s;
     }
   return - 1;
