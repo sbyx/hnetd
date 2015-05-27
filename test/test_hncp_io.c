@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 09:56:00 2014 mstenber
- * Last modified: Wed May 27 10:37:40 2015 mstenber
- * Edit time:     49 min
+ * Last modified: Wed May 27 17:44:31 2015 mstenber
+ * Edit time:     60 min
  *
  */
 
@@ -17,7 +17,14 @@
 
 #include "dncp_i.h"
 
-dncp_ep_s static_ep;
+#ifdef __APPLE__
+#define LOOPBACK_NAME "lo0"
+#else
+#define LOOPBACK_NAME "lo"
+#endif /* __APPLE__ */
+
+
+dncp_ep_s static_ep = { .ifname = LOOPBACK_NAME };
 
 #define dncp_ep_find_by_name(o, n) &static_ep
 #include "hncp_io.c"
@@ -29,13 +36,6 @@ void (*hnetd_log)(int priority, const char *format, ...) = syslog;
 
 /* Lots of stubs here, rather not put __unused all over the place. */
 #pragma GCC diagnostic ignored "-Wunused-parameter"
-
-#ifdef __APPLE__
-#define LOOPBACK_NAME "lo0"
-#else
-#define LOOPBACK_NAME "lo"
-#endif /* __APPLE__ */
-
 
 void dncp_ext_ep_ready(dncp_ep ep, bool ready)
 {
@@ -65,12 +65,14 @@ void dncp_ext_readable(dncp o)
       void *b = smock_pull("dncp_poll_io_recvfrom_buf");
       char *ifn = smock_pull("dncp_poll_io_recvfrom_ifname");
       struct sockaddr_in6 *esrc = smock_pull("dncp_poll_io_recvfrom_src");
-      struct sockaddr_in6 *edst = smock_pull("dncp_poll_io_recvfrom_src");
+      struct sockaddr_in6 *edst = smock_pull("dncp_poll_io_recvfrom_dst");
 
       sput_fail_unless(memcmp(b, buf, r)==0, "buf mismatch");
       sput_fail_unless(strcmp(ifn, ep->ifname) == 0, "ifname mismatch");
       sput_fail_unless(memcmp(src, esrc, sizeof(*src))==0, "src mismatch");
-      sput_fail_unless(memcmp(dst, edst, sizeof(*dst))==0, "dst mismatch");
+      sput_fail_unless(memcmp(&dst->sin6_addr,
+                              &edst->sin6_addr, sizeof(dst->sin6_addr))==0,
+                       "dst mismatch");
       if (!--pending_packets)
         uloop_end();
     }
@@ -79,6 +81,7 @@ void dncp_ext_readable(dncp o)
 static void dncp_io_basic_2()
 {
   hncp_s h1, h2;
+  dncp_s d1, d2;
   bool r;
   struct in6_addr a;
   char *msg = "foo";
@@ -87,8 +90,15 @@ static void dncp_io_basic_2()
   (void)uloop_init();
   memset(&h1, 0, sizeof(h1));
   memset(&h2, 0, sizeof(h2));
+  memset(&d1, 0, sizeof(d1));
+  memset(&d2, 0, sizeof(d2));
   h1.udp_port = 62000;
   h2.udp_port = 62001;
+  h1.dncp = &d1;
+  h2.dncp = &d2;
+  d1.ext = &h1.ext;
+  d2.ext = &h2.ext;
+
   r = hncp_io_init(&h1);
   sput_fail_unless(r, "dncp_io_init h1");
   r = hncp_io_init(&h2);
@@ -114,7 +124,7 @@ static void dncp_io_basic_2()
   };
   smock_push_int("dncp_poll_io_recvfrom", 3);
   smock_push_int("dncp_poll_io_recvfrom_src", &src);
-  smock_push_int("dncp_poll_io_recvfrom_dst", &a);
+  smock_push_int("dncp_poll_io_recvfrom_dst", &dst);
   smock_push_int("dncp_poll_io_recvfrom_buf", msg);
   smock_push_int("dncp_poll_io_recvfrom_ifname", ifname);
   h1.ext.cb.send(&h1.ext, dncp_ep_find_by_name(h1.dncp, "lo"),
@@ -130,9 +140,9 @@ static void dncp_io_basic_2()
 int main(int argc, char **argv)
 {
   setbuf(stdout, NULL); /* so that it's in sync with stderr when redirected */
-  openlog("test_dncp_io", LOG_CONS | LOG_PERROR, LOG_DAEMON);
+  openlog("test_hncp_io", LOG_CONS | LOG_PERROR, LOG_DAEMON);
   sput_start_testing();
-  sput_enter_suite("dncp_io"); /* optional */
+  sput_enter_suite("hncp_io"); /* optional */
   argc -= 1;
   argv += 1;
 

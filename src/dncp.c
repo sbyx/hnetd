@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue May 26 09:58:52 2015 mstenber
- * Edit time:     904 min
+ * Last modified: Wed May 27 16:55:45 2015 mstenber
+ * Edit time:     905 min
  *
  */
 
@@ -229,7 +229,7 @@ dncp_find_node_by_node_identifier(dncp o, dncp_node_identifier ni, bool create)
     return n;
   if (!create)
     return NULL;
-  n = calloc(1, sizeof(*n));
+  n = calloc(1, sizeof(*n) + o->ext->conf.ext_node_data_size);
   if (!n)
     return false;
   n->node_identifier = *ni;
@@ -414,7 +414,7 @@ dncp_ep_i dncp_find_link_by_name(dncp o, const char *ifname, bool create)
 
   if (create && !l)
     {
-      l = (dncp_ep_i) calloc(1, sizeof(*l));
+      l = (dncp_ep_i) calloc(1, sizeof(*l) + o->ext->conf.ext_ep_data_size);
       if (!l)
         return NULL;
       l->dncp = o;

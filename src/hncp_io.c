@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Wed May 27 10:39:23 2015 mstenber
- * Edit time:     371 min
+ * Last modified: Wed May 27 18:08:51 2015 mstenber
+ * Edit time:     384 min
  *
  */
 
@@ -138,7 +138,7 @@ _recv(dncp_ext ext,
   ssize_t l = -1;
   char ifname[IFNAMSIZ];
 
-  while (l < 0)
+  while (1)
     {
 #ifdef DTLS
       if (h->d)
@@ -156,6 +156,8 @@ _recv(dncp_ext ext,
         {
           static struct sockaddr_in6 src, dst;
           l = udp46_recv(h->u46_server, &src, &dst, buf, len);
+          if (l < 0)
+            break;
 #ifdef DTLS
           if (h->d && !IN6_IS_ADDR_MULTICAST(&dst.sin6_addr))
             {
@@ -166,22 +168,22 @@ _recv(dncp_ext ext,
           *src_store = &src;
           *dst_store = &dst;
         }
-      if (l < 0)
-        continue;
-      if (!*src_store)
+      if (!*dst_store)
         {
           L_DEBUG("no source..?");
+          l = -1;
           continue;
         }
-      if (!(*src_store)->sin6_scope_id)
+      if (!(*dst_store)->sin6_scope_id)
         {
           L_DEBUG("no scope id..?");
+          l = -1;
           continue;
         }
-      if (!if_indextoname((*src_store)->sin6_scope_id, ifname))
+      if (!if_indextoname((*dst_store)->sin6_scope_id, ifname))
         {
-          L_ERR("unable to receive - if_indextoname:%s",
-                strerror(errno));
+          L_ERR("unable to receive - if_indextoname:%s", strerror(errno));
+          l = -1;
           continue;
         }
       *ep = dncp_ep_find_by_name(h->dncp, ifname);
@@ -201,10 +203,7 @@ _send(dncp_ext ext, dncp_ep ep,
   ssize_t r;
 
   if (!dst)
-    {
-      rdst.sin6_port = htons(HNCP_PORT);
-      rdst.sin6_addr = h->multicast_address;
-    }
+    sockaddr_in6_set(&rdst, &h->multicast_address, HNCP_PORT);
   else
     rdst = *dst;
   rdst.sin6_scope_id = if_nametoindex(ep->ifname);

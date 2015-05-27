@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed May 27 16:35:33 2015 mstenber
- * Edit time:     356 min
+ * Last modified: Wed May 27 18:06:53 2015 mstenber
+ * Edit time:     355 min
  *
  */
 
@@ -307,10 +307,11 @@ static inline hnetd_time_t dncp_time(dncp o)
 #define DNCP_NODE_REPR(n) DNCP_NI_REPR(n->dncp, &n->node_identifier)
 
 #define DNCP_LINK_F "link %s[#%d]"
-#define DNCP_LINK_D(l) l->conf.ifname,l->iid
+#define DNCP_LINK_D(l) l ? l->conf.ifname : "(NULL IF)", l ? l->iid : 0
 
 #define SA6_F "%s:%d"
-#define SA6_D(sa) ADDR_REPR(&sa->sin6_addr),ntohs(sa->sin6_port)
+#define SA6_D(sa) \
+  sa ? ADDR_REPR(&sa->sin6_addr) : "(NULL SA6)", sa ? ntohs(sa->sin6_port) : 0
 
 static inline struct tlv_attr *
 dncp_node_get_tlv_with_type(dncp_node n, uint16_t type, bool first)
@@ -439,3 +440,18 @@ do {                                                    \
 
 #define dncp_update_number_gt(a,b) \
   ((((uint32_t)(a) - (uint32_t)(b)) & ((uint32_t)1<<31)) != 0)
+
+
+static inline void sockaddr_in6_set(struct sockaddr_in6 *sin6,
+                                    struct in6_addr *a6,
+                                    uint16_t port)
+{
+  memset(sin6, 0, sizeof(*sin6));
+#ifdef SIN6_LEN
+  sin6->sin6_len = sizeof(*sin6);
+#endif /* SIN6_LEN */
+  sin6->sin6_family = AF_INET6;
+  if (a6)
+    sin6->sin6_addr = *a6;
+  sin6->sin6_port = htons(port);
+}

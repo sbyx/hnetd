@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Wed May 27 09:46:39 2015 mstenber
- * Edit time:     99 min
+ * Last modified: Wed May 27 17:18:57 2015 mstenber
+ * Edit time:     100 min
  *
  */
 
@@ -150,7 +150,8 @@ void hncp_int(void)
   sput_fail_unless(o->network_hash_dirty, "network hash should be dirty");
 
   /* Make sure we can add nodes if we feel like it. */
-  dncp_node_identifier_s ni = {};
+  dncp_node_identifier_s ni;
+  memset(&ni, 0, sizeof(ni));
 
   n = dncp_find_node_by_node_identifier(o, &ni, false);
   sput_fail_unless(!n, "dncp_find_node_by_hash w/ create=false => none");

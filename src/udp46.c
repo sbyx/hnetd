@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu May 15 12:33:19 2014 mstenber
- * Last modified: Tue May 26 08:32:46 2015 mstenber
- * Edit time:     120 min
+ * Last modified: Wed May 27 16:56:26 2015 mstenber
+ * Edit time:     122 min
  *
  */
 
@@ -25,7 +25,6 @@
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <assert.h>
-#include <fcntl.h>
 
 #define DEBUG(...) L_DEBUG(__VA_ARGS__)
 
@@ -143,8 +142,10 @@ udp46 udp46_create(uint16_t port)
 
 void udp46_get_fds(udp46 s, int *fd1, int *fd2)
 {
-  *fd1 = s->s4;
-  *fd2 = s->s6;
+  if (fd1)
+    *fd1 = s->s4;
+  if (fd2)
+    *fd2 = s->s6;
 }
 
 ssize_t udp46_recv(udp46 s,

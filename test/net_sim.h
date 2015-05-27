@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Wed May 27 10:33:56 2015 mstenber
- * Edit time:     340 min
+ * Last modified: Wed May 27 18:08:45 2015 mstenber
+ * Edit time:     353 min
  *
  */
 
@@ -722,13 +722,25 @@ _send(dncp_ext ext, dncp_ep ep,
   dncp o = h->dncp;
   net_node node = container_of(h, net_node_s, h);
   net_sim s = node->s;
+  struct sockaddr_in6 rdst;
+
+  if (!dst)
+    {
+      sockaddr_in6_set(&rdst, &h->multicast_address, HNCP_PORT);
+      rdst.sin6_scope_id = if_nametoindex(ep->ifname);
+      dst = &rdst;
+    }
+
   sput_fail_unless(dst->sin6_scope_id, "scope id must be set");
+
   dncp_ep_i l = dncp_find_link_by_id(o, dst->sin6_scope_id);
+  sput_fail_unless(l, "sin6_scope_id lookup ok");
+
   bool is_multicast = memcmp(&dst->sin6_addr, &h->multicast_address, sizeof(h->multicast_address)) == 0;
   net_neigh n;
 
-  L_DEBUG("dncp_io_sendto: %s -> " SA6_F,
-          is_multicast ? "multicast" : "unicast", SA6_D(dst));
+  L_DEBUG("dncp_io_sendto: %s -> " SA6_F " (" DNCP_LINK_F ")",
+          is_multicast ? "multicast" : "unicast", SA6_D(dst), DNCP_LINK_D(l));
   sanity_check_buf(buf, len, true);
   if (is_multicast)
     {
@@ -772,7 +784,7 @@ _get_hwaddrs(dncp_ext ext, unsigned char *buf, int buf_left)
   hncp h = container_of(ext, hncp_s, ext);
   net_node node = container_of(h, net_node_s, h);
   const char *name = node->name;
-  int tocopy = buf_left < (int)strlen(name) ? buf_left : strlen(name);
+  int tocopy = buf_left < (int)strlen(name) ? buf_left : (int)strlen(name);
 
   memcpy(buf, name, tocopy);
   return tocopy;

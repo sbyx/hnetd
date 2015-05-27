@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 14:50:58 2014 mstenber
- * Last modified: Wed May 27 16:36:36 2015 mstenber
- * Edit time:     54 min
+ * Last modified: Wed May 27 18:04:20 2015 mstenber
+ * Edit time:     55 min
  *
  */
 
@@ -207,12 +207,21 @@ bool hncp_init(hncp o)
   return true;
 }
 
-void hncp_uninit(hncp o)
+void hncp_uninit(hncp h)
 {
-  hncp_io_uninit(o);
-  if (!o->dncp)
+  dncp o = h->dncp;
+  hncp_ep hep;
+  dncp_ep_i l;
+
+  vlist_for_each_element(&o->links, l, in_links)
+    {
+      hep = dncp_ep_get_ext_data(&l->conf);
+      uloop_timeout_cancel(&hep->join_timeout);
+    }
+  hncp_io_uninit(h);
+  if (!h->dncp)
     return;
-  dncp_destroy(o->dncp);
+  dncp_destroy(h->dncp);
 }
 
 dncp hncp_get_dncp(hncp o)
