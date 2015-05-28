@@ -155,7 +155,7 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 					dncp_ep_i link = dncp_find_link_by_id(dncp, ne->link_id);
 					if (!link)
 						continue;
-					dncp_tlv tlv = dncp_find_tlv(dncp, DNCP_T_NEIGHBOR, ne, sizeof(*ne));
+					dncp_tlv tlv = dncp_find_tlv(dncp, DNCP_T_NEIGHBOR, tlv_data(a), tlv_len(a));
 					dncp_neighbor neigh = tlv ? dncp_tlv_get_extra(tlv) : NULL;
 					if (neigh) {
 						hn->bfs.next_hop = &neigh->last_sa6.sin6_addr;
@@ -269,7 +269,7 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 					memcpy(buf, &c->node_identifier, DNCP_NI_LEN(dncp));
 					memcpy(buf + DNCP_NI_LEN(dncp), &np, sizeof(np));
 
-							   
+
 					if (dncp_find_tlv(dncp, DNCP_T_NEIGHBOR, buf, buflen))
 						continue;
 				}
