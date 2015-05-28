@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Thu May 28 15:37:34 2015 mstenber
- * Edit time:     630 min
+ * Last modified: Thu May 28 15:39:57 2015 mstenber
+ * Edit time:     632 min
  *
  */
 
@@ -359,6 +359,8 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes, bool no_conflicts)
   L_NOTICE("finished in %lld ms", (long long)hnetd_time() - s->start);
 }
 
+#define NS_LENGTH (sizeof(dncp_t_node_state_s) + HNCP_HASH_LEN + HNCP_NI_LEN)
+
 void hncp_tube_small(void)
 {
   net_sim_s s;
@@ -375,7 +377,7 @@ void hncp_tube_small(void)
 
 /* Intentionally pick a number that is close to IPv6 MTU / node state
  * (network state hash etc left as rounding errors) */
-#define MEDIUM_TUBE_LENGTH 1000 / sizeof(dncp_t_node_state_s)
+#define MEDIUM_TUBE_LENGTH 1000 / NS_LENGTH
 
 void hncp_tube_medium(void)
 {
@@ -401,7 +403,7 @@ void hncp_tube_medium_nc(void)
 
   /* Intentionally pick a number that is >> IPv6 MTU / node state
    * (network state hash etc left as rounding errors) */
-#define BIG_TUBE_LENGTH 3000 / sizeof(dncp_t_node_state_s)
+#define BIG_TUBE_LENGTH 3000 / NS_LENGTH
 
 void hncp_tube_beyond_multicast_nc(void)
 {
