@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Tue May 26 15:50:11 2015 mstenber
- * Edit time:     329 min
+ * Last modified: Thu May 28 10:45:35 2015 mstenber
+ * Edit time:     335 min
  *
  */
 
@@ -590,7 +590,7 @@ static void _dtls_poll(dtls d, bool is_client)
   char buf[2048];
   udp46 s = is_client ? d->u46_client : d->u46_server;
 
-  if ((rv = udp46_recv(s, NULL, &remote_addr, buf, sizeof(buf))) <= 0)
+  if ((rv = udp46_recv(s, &remote_addr, NULL, buf, sizeof(buf))) <= 0)
     {
       L_DEBUG("recvfrom did not return anything");
       return;

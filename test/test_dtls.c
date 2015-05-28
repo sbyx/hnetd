@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:31 2014 mstenber
- * Last modified: Tue May 26 17:08:09 2015 mstenber
- * Edit time:     137 min
+ * Last modified: Thu May 28 10:48:16 2015 mstenber
+ * Edit time:     143 min
  *
  */
 
@@ -73,14 +73,14 @@ void _readable_cb(dtls d, void *context)
 
   r = dtls_recv(d, &src, &dst, buf, len);
   L_DEBUG("_readable_cb - %d", r);
-  smock_pull_int_is("dtls_recvfrom", r);
+  smock_pull_int_is("dtls_recv", r);
   if (r >= 0)
     {
-      void *b = smock_pull("dtls_recvfrom_buf");
+      void *b = smock_pull("dtls_recv_buf");
 
       sput_fail_unless(memcmp(b, buf, r)==0, "buf mismatch");
       struct in6_addr *a = smock_pull("dtls_recv_src_in6");
-      sput_fail_unless(memcmp(a, &src->sin6_addr, sizeof(*a))==0, "src mismatch");
+      sput_fail_unless(a && memcmp(a, &src->sin6_addr, sizeof(*a))==0, "src mismatch");
     }
   if (!--pending_readable)
     uloop_end();
@@ -182,9 +182,9 @@ static void _test_basic_i(int i)
   (void)inet_pton(AF_INET6, "::1", &dst.sin6_addr);
   src.sin6_port = htons(pbase);
   dst.sin6_port = htons(pbase+1);
-  smock_push_int("dtls_recvfrom", 3);
-  smock_push("dtls_recvfrom_src_in6", &src.sin6_addr);
-  smock_push("dtls_recvfrom_buf", msg);
+  smock_push_int("dtls_recv", 3);
+  smock_push("dtls_recv_src_in6", &src.sin6_addr);
+  smock_push("dtls_recv_buf", msg);
   rv = dtls_send(d1, NULL, &dst, msg, strlen(msg));
   L_DEBUG("sendto => %d", rv);
   sput_fail_unless(rv == 3, "sendto failed?");
