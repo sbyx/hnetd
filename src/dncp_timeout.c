@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu May 28 13:26:28 2015 mstenber
+ * Last modified: Thu May 28 14:29:01 2015 mstenber
  * Edit time:     535 min
  *
  */
@@ -310,7 +310,7 @@ void dncp_ext_timeout(dncp o)
 
         hnetd_time_t next_time =
           n->last_contact +
-          dncp_neighbor_interval(o, &t->tlv) * o->ext->conf.keepalive_multiplier / 100;
+          dncp_neighbor_interval(o, &t->tlv) * o->ext->conf.keepalive_multiplier_percent / 100;
 
         /* TBD: How to treat party that has keepalive_interval 0? */
 

@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Tue May 26 09:46:31 2015 mstenber
+ * Last modified: Thu May 28 14:28:42 2015 mstenber
  * Edit time:     222 min
  *
  */
@@ -334,8 +334,8 @@ struct dncp_ext_configuration_struct {
   /* Hash length; MUST be <= DNCP_HASH_MAX_LEN */
   uint8_t hash_length;
 
-  /* Keepalive multiplier (in percent) */
-  uint16_t keepalive_multiplier;
+  /* Keepalive multiplier (as percent of keepalive interval) */
+  uint16_t keepalive_multiplier_percent;
 
   /* How recently node has to have been reachable before prune kills
    * it for real. */

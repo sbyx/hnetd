@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 14:50:58 2014 mstenber
- * Last modified: Wed May 27 18:04:20 2015 mstenber
- * Edit time:     55 min
+ * Last modified: Thu May 28 14:29:08 2015 mstenber
+ * Edit time:     57 min
  *
  */
 
@@ -178,7 +178,7 @@ bool hncp_init(hncp o)
       },
       .node_identifier_length = HNCP_NI_LEN,
       .hash_length = HNCP_HASH_LEN,
-      .keepalive_multiplier = HNCP_KEEPALIVE_MULTIPLIER * 100,
+      .keepalive_multiplier_percent = HNCP_KEEPALIVE_MULTIPLIER * 100,
       .grace_interval = HNCP_PRUNE_GRACE_PERIOD,
       .minimum_prune_interval = HNCP_MINIMUM_PRUNE_INTERVAL,
       .ext_node_data_size = sizeof(hncp_node_s),
