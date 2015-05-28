@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu May 28 14:29:01 2015 mstenber
- * Edit time:     535 min
+ * Last modified: Thu May 28 15:24:48 2015 mstenber
+ * Edit time:     551 min
  *
  */
 
@@ -149,7 +149,7 @@ static void dncp_prune(dncp o)
   o->last_prune = now;
 }
 
-#if L_LEVEL >= 7
+#if L_LEVEL >= 8
 
 #define SET_NEXT(_v, reason)                                    \
 do {                                                            \
@@ -174,22 +174,19 @@ do {                                                            \
 
 #define SET_NEXT(v, reason) next = TMIN(next, v)
 
-#endif /* L_LEVEL >= 7 */
+#endif /* L_LEVEL >= 8 */
 
-hnetd_time_t
-dncp_neighbor_interval(dncp o, struct tlv_attr *neighbor_tlv)
+static hnetd_time_t
+_neighbor_interval(dncp o, dncp_t_neighbor neigh)
 {
-  dncp_t_neighbor neigh = dncp_tlv_neighbor(o, neighbor_tlv);
-  if (!neigh)
-    {
-      L_ERR("invalid (internally generated) dncp_t_neighbor - %d bytes",
-            tlv_len(neighbor_tlv));
-      return 1;
-    }
   dncp_node_identifier ni = dncp_tlv_get_node_identifier(o, neigh);
   dncp_node n = dncp_find_node_by_node_identifier(o, ni, false);
+
   if (!n)
-    return DNCP_KEEPALIVE_INTERVAL(o);
+    {
+      L_DEBUG("using keepalive (default) for %s", DNCP_NI_REPR(o, ni));
+      return DNCP_KEEPALIVE_INTERVAL(o);
+    }
 
   struct tlv_attr *a;
   uint32_t value = DNCP_KEEPALIVE_INTERVAL(o);
@@ -202,14 +199,14 @@ dncp_neighbor_interval(dncp o, struct tlv_attr *neighbor_tlv)
           continue;
         }
       if (ka->link_id && ka->link_id != neigh->neighbor_link_id)
-        {
-          continue;
-        }
+        continue;
       value = be32_to_cpu(ka->interval_in_ms) * HNETD_TIME_PER_SECOND / 1000;
       if (ka->link_id)
         break;
     }
-  /* L_DEBUG("using keepalive %d", value); */
+#if L_LEVEL >= 8
+  L_DEBUG("using keepalive %d for %s", value, DNCP_NI_REPR(o, ni));
+#endif /* L_LEVEL >= 8 */
   return value;
 }
 
@@ -277,10 +274,10 @@ void dncp_ext_timeout(dncp o)
       /* Update the 'active' link's published keepalive interval, if need be */
       dncp_ep_i_set_keepalive_interval(l, l->conf.keepalive_interval);
 
-      if (l->conf.keepalive_interval)
+      if (l->published_keepalive_interval)
         {
           hnetd_time_t next_time =
-            l->last_trickle_sent + l->conf.keepalive_interval;
+            l->last_trickle_sent + l->published_keepalive_interval;
           if (next_time <= now)
             {
               L_DEBUG("sending keep-alive");
@@ -288,7 +285,7 @@ void dncp_ext_timeout(dncp o)
               /* Do not increment Trickle i, but set next t to i/2 .. i */
               trickle_set_i(l, l->trickle_i);
               next_time =
-                l->last_trickle_sent + l->conf.keepalive_interval;
+                l->last_trickle_sent + l->published_keepalive_interval;
             }
           SET_NEXT(next_time, "next keep-alive");
         }
@@ -303,14 +300,15 @@ void dncp_ext_timeout(dncp o)
 
   /* Look at neighbors we should be worried about.. */
   /* vlist_for_each_element(&l->neighbors, n, in_neighbors) */
+  dncp_t_neighbor ne;
   dncp_for_each_local_tlv_safe(o, t, t2)
-    if (tlv_id(&t->tlv) == DNCP_T_NEIGHBOR)
+    if ((ne = dncp_tlv_neighbor(o, &t->tlv)))
       {
         dncp_neighbor n = dncp_tlv_get_extra(t);
 
-        hnetd_time_t next_time =
-          n->last_contact +
-          dncp_neighbor_interval(o, &t->tlv) * o->ext->conf.keepalive_multiplier_percent / 100;
+        hnetd_time_t next_time = n->last_contact
+          + _neighbor_interval(o, ne)
+          * o->ext->conf.keepalive_multiplier_percent / 100;
 
         /* TBD: How to treat party that has keepalive_interval 0? */
 
@@ -327,7 +325,6 @@ void dncp_ext_timeout(dncp o)
 
         /* Zap the neighbor */
 #if L_LEVEL >= 7
-        dncp_t_neighbor ne = dncp_tlv_neighbor(o, &t->tlv);
         l = dncp_find_link_by_id(o, ne->link_id);
         L_DEBUG("Neighbor %s gone on " DNCP_LINK_F " - nothing in %d ms",
                 DNCP_NI_REPR(o, dncp_tlv_get_node_identifier(o, ne)),

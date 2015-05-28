@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed May 27 18:06:53 2015 mstenber
- * Edit time:     355 min
+ * Last modified: Thu May 28 14:57:36 2015 mstenber
+ * Edit time:     358 min
  *
  */
 
@@ -271,7 +271,6 @@ void dncp_ep_i_set_keepalive_interval(dncp_ep_i l, uint32_t value);
 
 
 /* Miscellaneous utilities that live in dncp_timeout */
-hnetd_time_t dncp_neighbor_interval(dncp o, struct tlv_attr *neighbor_tlv);
 void dncp_trickle_reset(dncp o);
 
 /* Subscription stuff (dncp_notify.c) */
