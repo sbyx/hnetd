@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu May 28 13:15:19 2015 mstenber
- * Edit time:     935 min
+ * Last modified: Thu May 28 13:27:58 2015 mstenber
+ * Edit time:     937 min
  *
  */
 
@@ -234,7 +234,7 @@ _heard(dncp_ep_i l, dncp_t_link_id lid, struct sockaddr_in6 *src,
       /* Doing add based on multicast is relatively insecure. */
       if (multicast)
         return NULL;
-      t = dncp_add_tlv(l->dncp, DNCP_T_NEIGHBOR, &np, nplen, sizeof(*n));
+      t = dncp_add_tlv(l->dncp, DNCP_T_NEIGHBOR, np, nplen, sizeof(*n));
       if (!t)
         return NULL;
       n = dncp_tlv_get_extra(t);

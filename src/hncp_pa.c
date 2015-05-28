@@ -1194,7 +1194,7 @@ static hpa_advp hpa_get_hpa_advp(struct pa_core *core, dncp_node n,
 {
 	struct pa_advp *ap;
 	hpa_advp hap;
-	hncp_link_id_s id = {link_id, n->node_identifier};
+	hncp_link_id_s id = {n->node_identifier, link_id};
 	pa_for_each_advp(core, ap, addr, plen) {
 		hap = container_of(ap, hpa_advp_s, advp);
 		//We must compare every field of the TLV in case it was modified
@@ -1237,7 +1237,7 @@ static void hpa_update_ap_tlv(hncp_pa hpa, dncp_node n,
 	} else {
 		L_DEBUG("hpa_update_ap_tlv: creating new assigned prefix from %s",
 									HEX_REPR(tlv_data(tlv), tlv_len(tlv)));
-		hncp_link_id_s id = {ah->link_id, n->node_identifier};
+		hncp_link_id_s id = {n->node_identifier, ah->link_id};
 		hpa_iface i = hpa_get_adjacent_iface(hpa, &id);
 		hap->advp.plen = p.plen;
 		hap->advp.prefix = p.prefix;

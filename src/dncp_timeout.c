@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu May 28 12:52:50 2015 mstenber
- * Edit time:     534 min
+ * Last modified: Thu May 28 13:26:28 2015 mstenber
+ * Edit time:     535 min
  *
  */
 
@@ -106,14 +106,12 @@ static void _prune_rec(dncp_node n)
   _node_set_reachable(n, true);
 
   /* Look at it's neighbors. */
+  /* Ignore if it's not _bidirectional_ neighbor. Unidirectional
+   * ones lead to graph not settling down. */
   tlv_for_each_attr(a, tlvs)
     if ((ne = dncp_tlv_neighbor(n->dncp, a)))
-      {
-        /* Ignore if it's not _bidirectional_ neighbor. Unidirectional
-         * ones lead to graph not settling down. */
-        if ((n2 = dncp_node_find_neigh_bidir(n, ne)))
-          _prune_rec(n2);
-      }
+      if ((n2 = dncp_node_find_neigh_bidir(n, ne)))
+        _prune_rec(n2);
 }
 
 static void dncp_prune(dncp o)

@@ -28,8 +28,8 @@ struct hncp_link_config {
 };
 
 typedef struct {
-	uint32_t link_id;
 	dncp_node_identifier_s node_identifier;
+	uint32_t link_id;
 } *hncp_link_id, hncp_link_id_s;
 
 struct hncp_link_user {

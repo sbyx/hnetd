@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu May 28 11:39:55 2015 mstenber
- * Edit time:     921 min
+ * Last modified: Thu May 28 13:47:55 2015 mstenber
+ * Edit time:     926 min
  *
  */
 
@@ -245,7 +245,10 @@ dncp_find_node_by_node_identifier(dncp o, dncp_node_identifier ni, bool create)
 
 bool dncp_init(dncp o, dncp_ext ext, const void *node_identifier, int len)
 {
-  dncp_hash_s h;
+  union __packed {
+    dncp_hash_s h;
+    dncp_node_identifier_s ni;
+  } nih;
   int i;
 
   memset(o, 0, sizeof(*o));
@@ -257,12 +260,12 @@ bool dncp_init(dncp o, dncp_ext ext, const void *node_identifier, int len)
   vlist_init(&o->tlvs, compare_tlvs, update_tlv);
   vlist_init(&o->links, compare_links, update_link);
   INIT_LIST_HEAD(&o->link_confs);
-  memset(&h, 0, sizeof(h));
-  ext->cb.hash(node_identifier, len, &h);
+  memset(&nih, 0, sizeof(nih));
+  ext->cb.hash(node_identifier, len, &nih.h);
   o->first_free_iid = 1;
   o->last_prune = 1;
   /* this way new nodes with last_prune=0 won't be reachable */
-  return dncp_set_own_node_identifier(o, (dncp_node_identifier)&h);
+  return dncp_set_own_node_identifier(o, &nih.ni);
 }
 
 bool dncp_set_own_node_identifier(dncp o, dncp_node_identifier ni)
@@ -574,7 +577,6 @@ void dncp_calculate_network_hash(dncp o)
   void *buf = malloc(cnt * onelen);
   if (!buf)
     return;
-  cnt = 0;
   void *dst = buf;
   dncp_for_each_node(o, n)
     {
