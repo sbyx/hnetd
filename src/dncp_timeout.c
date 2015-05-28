@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu May 28 12:11:36 2015 mstenber
- * Edit time:     533 min
+ * Last modified: Thu May 28 12:52:50 2015 mstenber
+ * Edit time:     534 min
  *
  */
 
@@ -272,6 +272,10 @@ void dncp_ext_timeout(dncp o)
 
   vlist_for_each_element(&o->links, l, in_links)
     {
+      /* Just configured, not up yet / any more? */
+      if (!l->enabled)
+        continue;
+
       /* Update the 'active' link's published keepalive interval, if need be */
       dncp_ep_i_set_keepalive_interval(l, l->conf.keepalive_interval);
 

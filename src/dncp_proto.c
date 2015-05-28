@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu May 28 12:20:52 2015 mstenber
- * Edit time:     927 min
+ * Last modified: Thu May 28 13:15:19 2015 mstenber
+ * Edit time:     935 min
  *
  */
 
@@ -278,7 +278,10 @@ handle_message(dncp_ep_i l,
 
   /* Make sure source is IPv6 link-local (for now..) */
   if (!IN6_IS_ADDR_LINKLOCAL(&src->sin6_addr))
-    return;
+    {
+      L_DEBUG("non-linklocal source address " SA6_F " - ignoring", SA6_D(src));
+      return;
+    }
 
   /* Non-multicast destination has to be too. */
   if (!multicast && !IN6_IS_ADDR_LINKLOCAL(&dst->sin6_addr))
@@ -408,15 +411,17 @@ handle_message(dncp_ep_i l,
           break;
 
         case DNCP_T_NODE_STATE:
-          if (tlv_len(a) < sizeof(dncp_t_node_state_s) + nilen + hlen)
+          ni = tlv_data(a);
+          dncp_t_node_state ns = tlv_data(a) + nilen;
+          int ns_len = sizeof(*ns) + nilen + hlen;
+          dncp_hash h = tlv_data(a) + nilen + sizeof(*ns);
+          int nd_len = tlv_len(a) - ns_len;
+
+          if (nd_len < 0)
             {
               L_INFO("invalid length node state TLV received - ignoring");
               break;
             }
-          dncp_t_node_state ns = tlv_data(a) + nilen;
-          dncp_hash h = tlv_data(a) + nilen + sizeof(*ns);
-
-          ni = tlv_data(a);
           n = dncp_find_node_by_node_identifier(o, ni, false);
           new_update_number = be32_to_cpu(ns->update_number);
           bool interesting = !n
@@ -425,18 +430,17 @@ handle_message(dncp_ep_i l,
                     && memcmp(&n->node_data_hash, h, hlen) != 0));
           L_DEBUG("saw %s %s for %s/%p (update number %d)",
                   interesting ? "new" : "old",
-                  tlv_len(a) == sizeof(*ns) ? "state" : "state+data",
+                  nd_len ? "state" : "state+data",
                   DNCP_NI_REPR(o, ni), n, new_update_number);
           if (!interesting)
             break;
           bool found_data = false;
-          int nd_len = tlv_len(a) - sizeof(*ns);
           /* We don't accept node data via multicast in secure mode. */
           if (multicast && !l->conf.accept_node_data_updates_via_multicast)
             nd_len = 0;
           if (nd_len > 0)
             {
-              unsigned char *nd_data = (unsigned char *)ns + sizeof(*ns);
+              void *nd_data = tlv_data(a) + ns_len;
 
               n = n ? n: dncp_find_node_by_node_identifier(o, ni, true);
               if (!n)
@@ -480,7 +484,7 @@ handle_message(dncp_ep_i l,
           if (!found_data)
             {
               L_DEBUG("node data %s for %s",
-                      multicast ? "not supplied" : "missing",
+                      multicast ? "not acceptable/supplied" : "missing",
                       DNCP_NI_REPR(l->dncp, ni));
               dncp_ep_i_send_req_node_data(l, dst, src, ns);
             }

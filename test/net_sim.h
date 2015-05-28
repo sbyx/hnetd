@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu May 28 12:23:08 2015 mstenber
- * Edit time:     370 min
+ * Last modified: Thu May 28 13:12:33 2015 mstenber
+ * Edit time:     374 min
  *
  */
 
@@ -369,7 +369,7 @@ dncp_ep_i net_sim_dncp_find_link_by_name(dncp o, const char *name)
 
   l = dncp_find_link_by_name(o, name, false);
 
-  if (l)
+  if (l && l->enabled)
     return l;
 
   dncp_ext_ep_ready(dncp_ep_find_by_name(o, name), true);
@@ -622,8 +622,7 @@ _recv(dncp_ext ext,
       *src = &ret_src;
       *dst = &ret_dst;
       memcpy(buf, m->buf, s);
-      L_DEBUG("%s/%s: dncp_io_recvfrom %d bytes",
-              node->name, m->l->conf.ifname, s);
+      L_DEBUG("%s/%s: _io_recv %d bytes", node->name, m->l->conf.ifname, s);
       list_del(&m->lh);
       free(m->buf);
       free(m);
@@ -747,7 +746,7 @@ _send(dncp_ext ext, dncp_ep ep,
   bool is_multicast = memcmp(&dst->sin6_addr, &h->multicast_address, sizeof(h->multicast_address)) == 0;
   net_neigh n;
 
-  L_DEBUG("dncp_io_sendto: %s -> " SA6_F " (" DNCP_LINK_F ")",
+  L_DEBUG("_io_send: %s -> " SA6_F " (" DNCP_LINK_F ")",
           is_multicast ? "multicast" : "unicast", SA6_D(dst), DNCP_LINK_D(l));
   sanity_check_buf(o, buf, len, 0);
   if (is_multicast)
