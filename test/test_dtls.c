@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:31 2014 mstenber
- * Last modified: Thu May 28 10:48:16 2015 mstenber
- * Edit time:     143 min
+ * Last modified: Thu May 28 17:23:18 2015 mstenber
+ * Edit time:     144 min
  *
  */
 
@@ -146,12 +146,16 @@ static void _test_basic_i(int i)
   char *msg = "foo";
   struct uloop_timeout t = { .cb = _timeout };
   bool rb;
-  struct sockaddr_in6 src = {.sin6_family = AF_INET6 };
-  struct sockaddr_in6 dst = {.sin6_family = AF_INET6 };
+  struct sockaddr_in6 src = {.sin6_family = AF_INET6
 #ifdef __APPLE__
-  src.sin6_len = sizeof(src);
-  dst.sin6_len = sizeof(dst);
+                             , .sin6_len = sizeof(struct sockaddr_in6)
 #endif /* __APPLE__ */
+  };
+  struct sockaddr_in6 dst = {.sin6_family = AF_INET6
+#ifdef __APPLE__
+                             , .sin6_len = sizeof(struct sockaddr_in6)
+#endif /* __APPLE__ */
+  };
   if (i & 1)
     {
       rb = dtls_set_local_cert(d1, "test/cert1.pem", "test/key1.pem");

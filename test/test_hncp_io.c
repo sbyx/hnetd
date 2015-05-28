@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 09:56:00 2014 mstenber
- * Last modified: Thu May 28 16:17:43 2015 mstenber
- * Edit time:     63 min
+ * Last modified: Thu May 28 16:58:55 2015 mstenber
+ * Edit time:     64 min
  *
  */
 
@@ -111,7 +111,7 @@ static void dncp_io_basic_2()
     .sin6_port = htons(h1.udp_port),
     .sin6_addr = a
 #ifdef __APPLE__
-    , src.sin6_len = sizeof(src)
+    , .sin6_len = sizeof(struct sockaddr_in6)
 #endif /* __APPLE__ */
   };
   struct sockaddr_in6 dst = {
@@ -119,7 +119,7 @@ static void dncp_io_basic_2()
     .sin6_port = htons(h2.udp_port),
     .sin6_addr = a
 #ifdef __APPLE__
-    , .sin6_len = sizeof(dst)
+    , .sin6_len = sizeof(struct sockaddr_in6)
 #endif /* __APPLE__ */
   };
   smock_push_int("dncp_poll_io_recvfrom", 3);
