@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu May 28 14:16:40 2015 mstenber
- * Edit time:     380 min
+ * Last modified: Thu May 28 14:47:44 2015 mstenber
+ * Edit time:     382 min
  *
  */
 
@@ -712,8 +712,9 @@ _send_one(net_sim s, void *buf, size_t len, dncp_ep_i sl, dncp_ep_i dl,
   net_node node1 = container_of(h1, net_node_s, h);
   hncp h2 = container_of(dl->dncp->ext, hncp_s, ext);
   net_node node2 = container_of(h2, net_node_s, h);
-  bool is_multicast = memcmp(dst, &h1->multicast_address, sizeof(*dst)) == 0;
-  L_DEBUG("sendto: %s/%s -> %s/%s (%d bytes %s)",
+  bool is_multicast = memcmp(&dst->sin6_addr, &h1->multicast_address,
+                             sizeof(h1->multicast_address)) == 0;
+  L_DEBUG("_send_one: %s/%s -> %s/%s (%d bytes %s)",
           node1->name, sl->conf.ifname, node2->name, dl->conf.ifname, (int)len,
           is_multicast ? "multicast" : "unicast");
 #endif /* L_LEVEL >= 7 */
@@ -745,7 +746,8 @@ _send(dncp_ext ext, dncp_ep ep,
   dncp_ep_i l = dncp_find_link_by_id(o, dst->sin6_scope_id);
   sput_fail_unless(l, "sin6_scope_id lookup ok");
 
-  bool is_multicast = memcmp(&dst->sin6_addr, &h->multicast_address, sizeof(h->multicast_address)) == 0;
+  bool is_multicast = memcmp(&dst->sin6_addr, &h->multicast_address,
+                             sizeof(h->multicast_address)) == 0;
   net_neigh n;
 
   L_DEBUG("_io_send: %s -> " SA6_F " (" DNCP_LINK_F ")",
