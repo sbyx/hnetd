@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Wed May 27 16:55:45 2015 mstenber
- * Edit time:     905 min
+ * Last modified: Thu May 28 11:39:55 2015 mstenber
+ * Edit time:     921 min
  *
  */
 
@@ -200,10 +200,10 @@ static void update_link(struct vlist_tree *t,
   if (t_old)
     {
       dncp_tlv t, t2;
+      dncp_t_neighbor ne;
       dncp_for_each_local_tlv_safe(o, t, t2)
-        if (tlv_id(&t->tlv) == DNCP_T_NEIGHBOR)
+        if ((ne = dncp_tlv_neighbor(o, &t->tlv)))
           {
-            dncp_t_neighbor ne = tlv_data(&t->tlv);
             if (ne->link_id == t_old->iid)
               dncp_remove_tlv(o, t);
           }
@@ -222,8 +222,12 @@ static void update_link(struct vlist_tree *t,
 dncp_node
 dncp_find_node_by_node_identifier(dncp o, dncp_node_identifier ni, bool create)
 {
-  dncp_node ch = container_of(ni, dncp_node_s, node_identifier);
-  dncp_node n = vlist_find(&o->nodes, ch, ch, in_nodes);
+  /* Unfortunately as DNCP_NI_LEN refers to node -> dncp, we cannot
+   * simply use the dncp_node_identifier pointer as is anymore.. */
+  dncp_node_s fake_node = { .dncp = o };
+  memcpy(&fake_node.node_identifier, ni, DNCP_NI_LEN(o));
+
+  dncp_node n = vlist_find(&o->nodes, &fake_node, &fake_node, in_nodes);
 
   if (n)
     return n;
@@ -232,7 +236,7 @@ dncp_find_node_by_node_identifier(dncp o, dncp_node_identifier ni, bool create)
   n = calloc(1, sizeof(*n) + o->ext->conf.ext_node_data_size);
   if (!n)
     return false;
-  n->node_identifier = *ni;
+  memcpy(&n->node_identifier, ni, DNCP_NI_LEN(o));
   n->dncp = o;
   n->tlv_index_dirty = true;
   vlist_add(&o->nodes, &n->in_nodes, n);
@@ -571,9 +575,9 @@ void dncp_calculate_network_hash(dncp o)
   if (!buf)
     return;
   cnt = 0;
+  void *dst = buf;
   dncp_for_each_node(o, n)
     {
-      void *dst = buf + cnt++ * onelen;
       uint32_t update_number = cpu_to_be32(n->update_number);
       dncp_calculate_node_data_hash(n);
       *((uint32_t *)dst) = update_number;
@@ -581,8 +585,10 @@ void dncp_calculate_network_hash(dncp o)
       L_DEBUG(".. %s/%d=%llx",
               DNCP_NODE_REPR(n), n->update_number,
               dncp_hash64(&n->node_data_hash));
+      dst += onelen;
     }
   o->ext->cb.hash(buf, cnt * onelen, &o->network_hash);
+  free(buf);
   L_DEBUG("dncp_calculate_network_hash =%llx",
           dncp_hash64(&o->network_hash));
 

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed May 27 16:36:09 2015 mstenber
- * Edit time:     913 min
+ * Last modified: Thu May 28 12:20:52 2015 mstenber
+ * Edit time:     927 min
  *
  */
 
@@ -25,10 +25,10 @@ static bool _push_node_state_tlv(struct tlv_buf *tb, dncp_node n,
                                  bool incl_data)
 {
   hnetd_time_t now = dncp_time(n->dncp);
-  dncp_t_node_state s;
   int l = incl_data && n->tlv_container ? tlv_len(n->tlv_container) : 0;
   int nilen = DNCP_NI_LEN(n->dncp);
   int hlen = DNCP_HASH_LEN(n->dncp);
+  dncp_t_node_state s;
   int tlen = nilen + sizeof(*s) + hlen + l;
   struct tlv_attr *a = tlv_new(tb, DNCP_T_NODE_STATE, tlen);
 
@@ -234,9 +234,7 @@ _heard(dncp_ep_i l, dncp_t_link_id lid, struct sockaddr_in6 *src,
       /* Doing add based on multicast is relatively insecure. */
       if (multicast)
         return NULL;
-      t =
-        dncp_add_tlv(l->dncp, DNCP_T_NEIGHBOR, &np, sizeof(np),
-                     sizeof(*n));
+      t = dncp_add_tlv(l->dncp, DNCP_T_NEIGHBOR, &np, nplen, sizeof(*n));
       if (!t)
         return NULL;
       n = dncp_tlv_get_extra(t);
@@ -276,6 +274,7 @@ handle_message(dncp_ep_i l,
   bool multicast = IN6_IS_ADDR_MULTICAST(&dst->sin6_addr);
   int nilen = DNCP_NI_LEN(l->dncp);
   int hlen = DNCP_HASH_LEN(l->dncp);
+  dncp_node_identifier ni;
 
   /* Make sure source is IPv6 link-local (for now..) */
   if (!IN6_IS_ADDR_LINKLOCAL(&src->sin6_addr))
@@ -339,12 +338,19 @@ handle_message(dncp_ep_i l,
               L_INFO("ignoring req-node-data in multicast");
               break;
             }
-          void *p = tlv_data(a);
-          if (tlv_len(a) != DNCP_HASH_LEN(o))
-            break;
-          n = dncp_find_node_by_node_identifier(o, p, false);
+          if (tlv_len(a) != DNCP_NI_LEN(o))
+            {
+              L_DEBUG("got invalid node identifier length in req-node-state:%d",
+                      tlv_len(a));
+              break;
+            }
+          ni = tlv_data(a);
+          n = dncp_find_node_by_node_identifier(o, ni, false);
           if (!n)
-            break;
+            {
+              L_DEBUG("got request for node for which we have no data");
+              break;
+            }
           if (n != o->own_node)
             {
               if (o->graph_dirty)
@@ -408,9 +414,9 @@ handle_message(dncp_ep_i l,
               break;
             }
           dncp_t_node_state ns = tlv_data(a) + nilen;
-          dncp_node_identifier ni = tlv_data(a);
           dncp_hash h = tlv_data(a) + nilen + sizeof(*ns);
 
+          ni = tlv_data(a);
           n = dncp_find_node_by_node_identifier(o, ni, false);
           new_update_number = be32_to_cpu(ns->update_number);
           bool interesting = !n
@@ -483,7 +489,7 @@ handle_message(dncp_ep_i l,
 
         default:
           /* Unknown TLV - MUST ignore. */
-          continue;
+          break;
         }
 
     }

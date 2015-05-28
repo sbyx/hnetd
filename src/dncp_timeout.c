@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed May 27 16:35:03 2015 mstenber
- * Edit time:     528 min
+ * Last modified: Thu May 28 12:11:36 2015 mstenber
+ * Edit time:     533 min
  *
  */
 
@@ -160,13 +160,13 @@ do {                                                            \
     {                                                           \
       if (v < now)                                              \
         {                                                       \
-          /*L_DEBUG("invalid value due to %s: %d in past",        \
-                  reason, (int)(now-v));*/                        \
+          L_DEBUG("invalid value due to %s: %d in past",        \
+                  reason, (int)(now-v));                        \
         }                                                       \
       else if (!next || next > v)                               \
         {                                                       \
-          /*L_DEBUG("setting next to %ld due to %s",               \
-                  (long int)(v-now), reason);*/                   \
+          L_DEBUG("setting next to %ld due to %s",              \
+                  (long int)(v-now), reason);                   \
           next = v;                                             \
         }                                                       \
     }                                                           \
@@ -184,7 +184,8 @@ dncp_neighbor_interval(dncp o, struct tlv_attr *neighbor_tlv)
   dncp_t_neighbor neigh = dncp_tlv_neighbor(o, neighbor_tlv);
   if (!neigh)
     {
-      L_ERR("invalid (internally generated) dncp_t_neighbor");
+      L_ERR("invalid (internally generated) dncp_t_neighbor - %d bytes",
+            tlv_len(neighbor_tlv));
       return 1;
     }
   dncp_node_identifier ni = dncp_tlv_get_node_identifier(o, neigh);

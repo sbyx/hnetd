@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Wed May 27 10:13:54 2015 mstenber
- * Edit time:     158 min
+ * Last modified: Thu May 28 11:47:02 2015 mstenber
+ * Edit time:     160 min
  *
  */
 
@@ -25,7 +25,7 @@
 #include "hncp_sd.c"
 
 int log_level = LOG_DEBUG;
-void (*hnetd_log)(int priority, const char *format, ...) = NULL;
+void (*hnetd_log)(int priority, const char *format, ...) = syslog;
 
 /*
  * This is minimalist piece of test code that just exercises the

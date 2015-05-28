@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Wed May 27 18:08:45 2015 mstenber
- * Edit time:     353 min
+ * Last modified: Thu May 28 12:23:08 2015 mstenber
+ * Edit time:     370 min
  *
  */
 
@@ -377,39 +377,39 @@ dncp_ep_i net_sim_dncp_find_link_by_name(dncp o, const char *name)
   l = dncp_find_link_by_name(o, name, false);
 
   sput_fail_unless(l, "dncp_find_link_by_name");
-  if (l)
-    {
-      /* Initialize the address - in rather ugly way. We just hash
-       * ifname + xor that with our own hash. The result should be
-       * highly unique still. */
-      dncp_hash_s h1, h2;
-      unsigned char buf[16];
-      int i;
-      hncp_ep hep = dncp_ep_get_ext_data(&l->conf);
+  if (!l)
+    return NULL;
 
-      o->ext->cb.hash(name, strlen(name), &h1);
-      o->ext->cb.hash(n->name, strlen(n->name), &h2);
+  /* Initialize the address - in rather ugly way. We just hash
+   * ifname + xor that with our own hash. The result should be
+   * highly unique still. */
+  dncp_hash_s h1, h2;
+  unsigned char buf[16];
+  int i;
+  hncp_ep hep = dncp_ep_get_ext_data(&l->conf);
 
-      int bytes = HNCP_HASH_LEN;
-      if (bytes > 8)
-        bytes = 8;
-      memset(buf, 0, sizeof(buf));
-      for (i = 0; i < bytes; i++)
-        buf[i+8] = h1.buf[i] ^ h2.buf[i];
-      buf[0] = 0xFE;
-      buf[1] = 0x80;
-      /* 2 .. 7 left 0 always */
-      hncp_set_ipv6_address(h, name, (struct in6_addr *)buf);
-      hep->has_ipv6_address = !n->s->disable_link_auto_address;
-      /* Internally we use the ipv6 address even if it is not
-       * officially set(!). Beautiful.. */
-      /* Override the iid to be unique. */
-      if (n->s->use_global_iids)
-        l->iid = n->s->next_free_iid++;
+  o->ext->cb.hash(name, strlen(name), &h1);
+  o->ext->cb.hash(n->name, strlen(n->name), &h2);
 
-      /* Give callback about it to iface users. */
-      net_sim_node_iface_callback(n, cb_intiface, name, true);
-    }
+  int bytes = HNCP_HASH_LEN;
+  if (bytes > 8)
+    bytes = 8;
+  memset(buf, 0, sizeof(buf));
+  for (i = 0; i < bytes; i++)
+    buf[i+8] = h1.buf[i] ^ h2.buf[i];
+  buf[0] = 0xFE;
+  buf[1] = 0x80;
+  /* 2 .. 7 left 0 always */
+  hncp_set_ipv6_address(h, name, (struct in6_addr *)buf);
+  hep->has_ipv6_address = !n->s->disable_link_auto_address;
+  /* Internally we use the ipv6 address even if it is not
+   * officially set(!). Beautiful.. */
+  /* Override the iid to be unique. */
+  if (n->s->use_global_iids)
+    l->iid = n->s->next_free_iid++;
+
+  /* Give callback about it to iface users. */
+  net_sim_node_iface_callback(n, cb_intiface, name, true);
   return l;
 }
 
@@ -485,11 +485,6 @@ void net_sim_remove_node(net_sim s, net_node node)
 
   uloop_timeout_cancel(&node->run_to);
 
-  /* Remove from list of nodes */
-  list_del(&node->lh);
-  free(node->name);
-  hncp_uninit(&node->h);
-
 #ifndef DISABLE_HNCP_SD
   /* Get rid of sd data structure */
   if (!s->disable_sd)
@@ -505,6 +500,13 @@ void net_sim_remove_node(net_sim s, net_node node)
   if (!s->disable_multicast)
     hncp_multicast_destroy(node->multicast);
 #endif /* !DISABLE_HNCP_MULTICAST */
+
+  /* Remove from list of nodes */
+  list_del(&node->lh);
+  free(node->name);
+
+  hncp_uninit(&node->h);
+
   free(node);
 }
 
@@ -620,35 +622,36 @@ _recv(dncp_ext ext,
       *src = &ret_src;
       *dst = &ret_dst;
       memcpy(buf, m->buf, s);
+      L_DEBUG("%s/%s: dncp_io_recvfrom %d bytes",
+              node->name, m->l->conf.ifname, s);
       list_del(&m->lh);
       free(m->buf);
       free(m);
-      L_DEBUG("%s/%s: dncp_io_recvfrom %d bytes", node->name, m->l->conf.ifname, s);
       return s;
     }
   return - 1;
 }
 
 static void
-sanity_check_buf(void *buf, size_t len, bool is_root)
+sanity_check_buf(dncp o, void *buf, size_t len, int depth)
 {
   struct tlv_attr *a, *last = NULL;
   int a_len;
   int last_len;
   bool ok = true;
-  size_t nhs = sizeof(dncp_t_node_state_s);
+  size_t nhs = sizeof(dncp_t_node_state_s) + DNCP_NI_LEN(o) + DNCP_HASH_LEN(o);
 
   tlv_for_each_in_buf(a, buf, len)
     {
       a_len = tlv_pad_len(a);
       if (last)
         {
-          if (!is_root
+          if (depth
               && memcmp(last, a, last_len < a_len ? last_len : a_len) >= 0)
             {
               ok = false;
-              L_ERR("ordering error - %s >= %s",
-                    TLV_REPR(last), TLV_REPR(a));
+              L_ERR("ordering error @depth %d - %s >= %s",
+                    depth, TLV_REPR(last), TLV_REPR(a));
             }
         }
       last = a;
@@ -657,7 +660,10 @@ sanity_check_buf(void *buf, size_t len, bool is_root)
       switch (tlv_id(a))
         {
         case DNCP_T_NODE_STATE:
-          sanity_check_buf(tlv_data(a)+nhs, tlv_len(a)-nhs, false);
+          sanity_check_buf(o, tlv_data(a)+nhs, tlv_len(a)-nhs, depth + 1);
+          break;
+        case HNCP_T_EXTERNAL_CONNECTION:
+          sanity_check_buf(o, tlv_data(a), tlv_len(a), depth + 1);
           break;
         }
     }
@@ -725,13 +731,15 @@ _send(dncp_ext ext, dncp_ep ep,
   struct sockaddr_in6 rdst;
 
   if (!dst)
-    {
-      sockaddr_in6_set(&rdst, &h->multicast_address, HNCP_PORT);
-      rdst.sin6_scope_id = if_nametoindex(ep->ifname);
-      dst = &rdst;
-    }
+    sockaddr_in6_set(&rdst, &h->multicast_address, HNCP_PORT);
+  else
+    rdst = *dst;
+  dst = &rdst;
 
-  sput_fail_unless(dst->sin6_scope_id, "scope id must be set");
+  /* Cheat and just get iid from the struct; we are unlikely to have
+   * real matching system interfaces after all. */
+  dncp_ep_i lo = container_of(ep, dncp_ep_i_s, conf);
+  dst->sin6_scope_id = lo->iid;
 
   dncp_ep_i l = dncp_find_link_by_id(o, dst->sin6_scope_id);
   sput_fail_unless(l, "sin6_scope_id lookup ok");
@@ -741,7 +749,7 @@ _send(dncp_ext ext, dncp_ep ep,
 
   L_DEBUG("dncp_io_sendto: %s -> " SA6_F " (" DNCP_LINK_F ")",
           is_multicast ? "multicast" : "unicast", SA6_D(dst), DNCP_LINK_D(l));
-  sanity_check_buf(buf, len, true);
+  sanity_check_buf(o, buf, len, 0);
   if (is_multicast)
     {
       s->sent_multicast++;
