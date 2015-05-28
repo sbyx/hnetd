@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu May 28 13:27:58 2015 mstenber
- * Edit time:     937 min
+ * Last modified: Thu May 28 15:21:00 2015 mstenber
+ * Edit time:     945 min
  *
  */
 
@@ -78,21 +78,6 @@ static bool _push_link_id_tlv(struct tlv_buf *tb, dncp_ep_i l)
   return true;
 }
 
-static bool _push_keepalive_interval_tlv(struct tlv_buf *tb,
-                                         uint32_t link_id,
-                                         uint32_t value)
-{
-  dncp_t_keepalive_interval ki;
-  struct tlv_attr *a = tlv_new(tb, DNCP_T_KEEPALIVE_INTERVAL, sizeof(*ki));
-
-  if (!a)
-    return false;
-  ki = tlv_data(a);
-  ki->link_id = link_id;
-  ki->interval_in_ms = cpu_to_be32(value);
-  return true;
-}
-
 /****************************************** Actual payload sending utilities */
 
 void dncp_ep_i_send_network_state(dncp_ep_i l,
@@ -115,14 +100,16 @@ void dncp_ep_i_send_network_state(dncp_ep_i l,
   if (!o->graph_dirty || !maximum_size)
     {
       int nn = 0;
+      int nilen = DNCP_NI_LEN(o);
+      int hlen = DNCP_HASH_LEN(o);
+      int ns_len = sizeof(dncp_t_node_state_s) + nilen + hlen;
 
       if (maximum_size)
         dncp_for_each_node(o, n)
           nn++;
       if (!maximum_size
           || maximum_size >= (tlv_len(tb.head)
-                              + (4 + sizeof(dncp_t_keepalive_interval_s))
-                              + nn * (4 + sizeof(dncp_t_node_state_s))))
+                              + nn * (4 + ns_len)))
         {
           dncp_for_each_node(o, n)
             {
@@ -131,9 +118,6 @@ void dncp_ep_i_send_network_state(dncp_ep_i l,
             }
         }
     }
-  if (l->conf.keepalive_interval != DNCP_KEEPALIVE_INTERVAL(l->dncp))
-    if (!_push_keepalive_interval_tlv(&tb, l->iid, l->conf.keepalive_interval))
-      goto done;
   if (maximum_size && tlv_len(tb.head) > maximum_size)
     {
       L_ERR("dncp_ep_i_send_network_state failed: %d > %d",
