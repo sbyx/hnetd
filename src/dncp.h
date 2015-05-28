@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Thu May 28 14:28:42 2015 mstenber
- * Edit time:     222 min
+ * Last modified: Thu May 28 16:07:00 2015 mstenber
+ * Edit time:     223 min
  *
  */
 
@@ -188,6 +188,9 @@ struct dncp_ep_struct {
 
   /* Do we accept node data updates via multicast? */
   bool accept_node_data_updates_via_multicast;
+
+  /* Accept non-linklocal traffic. */
+  bool accept_nonlocal_traffic;
 };
 
 /**

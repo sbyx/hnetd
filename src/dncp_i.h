@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu May 28 14:57:36 2015 mstenber
- * Edit time:     358 min
+ * Last modified: Thu May 28 15:55:11 2015 mstenber
+ * Edit time:     359 min
  *
  */
 
@@ -308,9 +308,12 @@ static inline hnetd_time_t dncp_time(dncp o)
 #define DNCP_LINK_F "link %s[#%d]"
 #define DNCP_LINK_D(l) l ? l->conf.ifname : "(NULL IF)", l ? l->iid : 0
 
-#define SA6_F "%s:%d"
+#define SA6_F "[%s]:%d%%%d"
 #define SA6_D(sa) \
-  sa ? ADDR_REPR(&sa->sin6_addr) : "(NULL SA6)", sa ? ntohs(sa->sin6_port) : 0
+  sa ? ADDR_REPR(&sa->sin6_addr) : "(NULL SA6)",        \
+  sa ? ntohs(sa->sin6_port) : 0,                        \
+  sa ? sa->sin6_scope_id : 0
+
 
 static inline struct tlv_attr *
 dncp_node_get_tlv_with_type(dncp_node n, uint16_t type, bool first)

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu May 28 14:47:44 2015 mstenber
- * Edit time:     382 min
+ * Last modified: Thu May 28 15:58:08 2015 mstenber
+ * Edit time:     383 min
  *
  */
 
@@ -622,7 +622,10 @@ _recv(dncp_ext ext,
       ret_src = m->src;
       ret_dst = m->dst;
       *src = &ret_src;
-      *dst = &ret_dst;
+      if (IN6_IS_ADDR_MULTICAST(&ret_dst))
+        *dst = NULL;
+      else
+        *dst = &ret_dst;
       memcpy(buf, m->buf, s);
       L_DEBUG("%s/%s: _io_recv %d bytes", node->name, m->l->conf.ifname, s);
       list_del(&m->lh);

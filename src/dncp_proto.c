@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu May 28 15:21:00 2015 mstenber
- * Edit time:     945 min
+ * Last modified: Thu May 28 16:17:20 2015 mstenber
+ * Edit time:     949 min
  *
  */
 
@@ -255,21 +255,10 @@ handle_message(dncp_ep_i l,
   bool should_request_network_state = false;
   bool updated_or_requested_state = false;
   bool got_tlv = false;
-  bool multicast = IN6_IS_ADDR_MULTICAST(&dst->sin6_addr);
+  bool multicast = dst == NULL;
   int nilen = DNCP_NI_LEN(l->dncp);
   int hlen = DNCP_HASH_LEN(l->dncp);
   dncp_node_identifier ni;
-
-  /* Make sure source is IPv6 link-local (for now..) */
-  if (!IN6_IS_ADDR_LINKLOCAL(&src->sin6_addr))
-    {
-      L_DEBUG("non-linklocal source address " SA6_F " - ignoring", SA6_D(src));
-      return;
-    }
-
-  /* Non-multicast destination has to be too. */
-  if (!multicast && !IN6_IS_ADDR_LINKLOCAL(&dst->sin6_addr))
-    return;
 
   /* Validate that link id exists (if this were TCP, we would keep
    * track of the remote link id on per-stream basis). */
@@ -509,11 +498,14 @@ void dncp_ext_readable(dncp o)
 
       l = container_of(ep, dncp_ep_i_s, conf);
 
-      /* If the link is enabled, pass it along to the DNCP protocol core. */
-      if (l->enabled)
-        handle_message(l, src, dst, msg);
+      if (!l->enabled)
+        {
+          L_DEBUG("ignoring packet on non-enabled interface %s",
+                  l->conf.ifname);
+          continue;
+        }
+      handle_message(l, src, dst, msg);
 
-      /* _always_ provide it as callback to the users though. */
       list_for_each_entry(s, &o->subscribers[DNCP_CALLBACK_SOCKET_MSG],
                           lhs[DNCP_CALLBACK_SOCKET_MSG])
         s->msg_received_callback(s, ep, src, dst, msg);

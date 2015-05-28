@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 09:56:00 2014 mstenber
- * Last modified: Wed May 27 17:44:31 2015 mstenber
- * Edit time:     60 min
+ * Last modified: Thu May 28 16:17:43 2015 mstenber
+ * Edit time:     63 min
  *
  */
 
@@ -24,7 +24,8 @@
 #endif /* __APPLE__ */
 
 
-dncp_ep_s static_ep = { .ifname = LOOPBACK_NAME };
+dncp_ep_s static_ep = { .ifname = LOOPBACK_NAME,
+                        .accept_nonlocal_traffic = true };
 
 #define dncp_ep_find_by_name(o, n) &static_ep
 #include "hncp_io.c"
@@ -98,7 +99,6 @@ static void dncp_io_basic_2()
   h2.dncp = &d2;
   d1.ext = &h1.ext;
   d2.ext = &h2.ext;
-
   r = hncp_io_init(&h1);
   sput_fail_unless(r, "dncp_io_init h1");
   r = hncp_io_init(&h2);

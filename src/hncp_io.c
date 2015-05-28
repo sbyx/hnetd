@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Wed May 27 18:08:51 2015 mstenber
- * Edit time:     384 min
+ * Last modified: Thu May 28 16:21:39 2015 mstenber
+ * Edit time:     408 min
  *
  */
 
@@ -135,61 +135,84 @@ _recv(dncp_ext ext,
       void *buf, size_t len)
 {
   hncp h = container_of(ext, hncp_s, ext);
-  ssize_t l = -1;
+  ssize_t r = -1;
   char ifname[IFNAMSIZ];
+  struct sockaddr_in6 *src, *dst;
 
   while (1)
     {
 #ifdef DTLS
       if (h->d)
         {
-          l = dtls_recv(h->d, src_store, dst_store, buf, len);
-          if (l > 0)
+          r = dtls_recv(h->d, &src, &dst, buf, len);
+          if (r > 0)
             {
               /* Ignore non-linklocal dtls for now. */
-              if (src_store && !IN6_IS_ADDR_LINKLOCAL(&(*src_store)->sin6_addr))
+              if (src && !IN6_IS_ADDR_LINKLOCAL(&src->sin6_addr))
                 continue;
             }
         }
 #endif /* DTLS */
-      if (l < 0)
+      if (r < 0)
         {
-          static struct sockaddr_in6 src, dst;
-          l = udp46_recv(h->u46_server, &src, &dst, buf, len);
-          if (l < 0)
+          static struct sockaddr_in6 src_store, dst_store;
+          r = udp46_recv(h->u46_server, &src_store, &dst_store, buf, len);
+          if (r < 0)
             break;
 #ifdef DTLS
-          if (h->d && !IN6_IS_ADDR_MULTICAST(&dst.sin6_addr))
+          if (h->d && !IN6_IS_ADDR_MULTICAST(&dst_store.sin6_addr))
             {
               L_ERR("plaintext unicast received when in dtls mode - skip");
               continue;
             }
 #endif /* DTLS */
-          *src_store = &src;
-          *dst_store = &dst;
+          src = &src_store;
+          dst = &dst_store;
         }
-      if (!*dst_store)
+      if (!dst)
         {
-          L_DEBUG("no source..?");
-          l = -1;
+          L_DEBUG("no dst..?");
           continue;
         }
-      if (!(*dst_store)->sin6_scope_id)
+      if (!dst->sin6_scope_id)
         {
           L_DEBUG("no scope id..?");
-          l = -1;
           continue;
         }
-      if (!if_indextoname((*dst_store)->sin6_scope_id, ifname))
+      if (!if_indextoname(dst->sin6_scope_id, ifname))
         {
           L_ERR("unable to receive - if_indextoname:%s", strerror(errno));
-          l = -1;
           continue;
         }
+
       *ep = dncp_ep_find_by_name(h->dncp, ifname);
+
+      if (!*ep)
+        continue;
+
+      if (!(*ep)->accept_nonlocal_traffic
+          && !IN6_IS_ADDR_LINKLOCAL(&src->sin6_addr))
+        {
+          L_DEBUG("hncp_io_recv ignoring non-linklocal traffic from " SA6_F,
+                  SA6_D(src));
+          continue;
+        }
+      /* 'NULL' = multicast from dncp point of view. */
+      if (IN6_IS_ADDR_MULTICAST(&dst->sin6_addr))
+        {
+          if (memcmp(&dst->sin6_addr, &h->multicast_address,
+                     sizeof(h->multicast_address)))
+            {
+              L_DEBUG("hncp_io_recv: got wrong multicast address traffic?");
+              continue;
+            }
+          dst = NULL;
+        }
+      *src_store = src;
+      *dst_store = dst;
       break;
     }
-  return l;
+  return r;
 }
 
 static void
@@ -217,15 +240,20 @@ _send(dncp_ext ext, dncp_ep ep,
       if (rdst.sin6_port == htons(HNCP_PORT))
         rdst.sin6_port = htons(HNCP_DTLS_SERVER_PORT);
       r = dtls_send(h->d, src, &rdst, buf, len);
-      if (r > 0 && (size_t) r != len)
+      if (r >= 0 && (size_t) r != len)
         L_ERR("short dtls send?!?");
+      else if (r < 0)
+        L_DEBUG("dtls_send failed");
     }
   else
 #endif /* DTLS */
     {
       r = udp46_send(h->u46_server, src, &rdst, buf, len);
-      if (r > 0 && (size_t) r != len)
+      if (r >= 0 && (size_t) r != len)
         L_ERR("short udp46_send?!?");
+      else if (r < 0)
+        L_DEBUG("udp46_send failed: %s for %d bytes " SA6_F "->" SA6_F,
+                strerror(errno), len, SA6_D(src), SA6_D(dst));
     }
 }
 
