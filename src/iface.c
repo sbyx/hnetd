@@ -97,7 +97,7 @@ static void iface_update_dp_cb(__unused struct hncp_pa_iface_user *u,
 			if (!dp->local) {
 				struct iface *c;
 				list_for_each_entry(c, &interfaces, head) {
-					if (c->designatedv4) {
+					if (c->designatedv4 && (c->flags & IFACE_FLAG_SINGLEV4UP)) {
 						c->designatedv4 = false;
 						platform_restart_dhcpv4(c);
 					}
@@ -135,7 +135,8 @@ static void iface_update_dp_cb(__unused struct hncp_pa_iface_user *u,
 
 			struct iface *c;
 			list_for_each_entry(c, &interfaces, head) {
-				if (c->designatedv4 != !ipv4_edp) {
+				if ((c->flags & IFACE_FLAG_SINGLEV4UP) &&
+						c->designatedv4 != !ipv4_edp) {
 					c->designatedv4 = !ipv4_edp;
 					platform_restart_dhcpv4(c);
 				}
@@ -664,7 +665,7 @@ struct iface* iface_create(const char *ifname, const char *handle, iface_flags f
 		c->designatedv4 = !(flags & IFACE_FLAG_INTERNAL) ||
 				(flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID;
 		struct hncp_pa_dp *dp;
-		if(hncp_pa_p) { //This is just for test cases
+		if ((flags & IFACE_FLAG_SINGLEV4UP) && hncp_pa_p) { //This is just for test cases
 			hncp_pa_for_each_dp(dp, hncp_pa_p)
 					if (!dp->local && IN6_IS_ADDR_V4MAPPED(&dp->prefix.prefix))
 						c->designatedv4 = false;

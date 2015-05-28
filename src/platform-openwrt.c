@@ -267,7 +267,7 @@ void platform_iface_new(struct iface *c, const char *handle)
 	// reqiest
 	INIT_LIST_HEAD(&iface->req.list);
 
-	if (!c->designatedv4 && (!(c->flags & IFACE_FLAG_INTERNAL) ||
+	if ((!(c->flags & IFACE_FLAG_INTERNAL) ||
 			(c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID))
 		platform_restart_dhcpv4(c);
 }
@@ -746,6 +746,7 @@ enum {
 	DATA_ATTR_TRICKLE_K,
 	DATA_ATTR_DNSNAME,
 	DATA_ATTR_CREATED,
+	DATA_ATTR_IP4UPLINKLIMIT,
 	DATA_ATTR_MAX
 };
 
@@ -783,6 +784,7 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_TRICKLE_K] = { .name = "trickle_k", .type = BLOBMSG_TYPE_INT32 },
 	[DATA_ATTR_DNSNAME] = { .name = "dnsname", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_CREATED] = { .name = "created", .type = BLOBMSG_TYPE_INT32 },
+	[DATA_ATTR_IP4UPLINKLIMIT] = { .name = "ip4uplinklimit", .type = BLOBMSG_TYPE_BOOL },
 };
 
 
@@ -986,6 +988,9 @@ static void platform_update(void *data, size_t len)
 
 		if (dtb[DATA_ATTR_ULA_DEFAULT_ROUTER] && blobmsg_get_bool(dtb[DATA_ATTR_ULA_DEFAULT_ROUTER]))
 			flags |= IFACE_FLAG_ULA_DEFAULT;
+
+		if (dtb[DATA_ATTR_IP4UPLINKLIMIT] && blobmsg_get_bool(dtb[DATA_ATTR_IP4UPLINKLIMIT]))
+			flags |= IFACE_FLAG_SINGLEV4UP;
 	}
 
 	const char *proto = "";

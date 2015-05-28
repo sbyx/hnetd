@@ -21,14 +21,15 @@ proto_hnet_init_config() {
     proto_config_add_string 'dnsname'
     proto_config_add_int 'keepalive_interval'
     proto_config_add_int 'trickle_k'
+    proto_config_add_boolean 'ip4uplinklimit'
 }
 
 proto_hnet_setup() {
     local interface="$1"
     local device="$2"
 
-    local dhcpv4_clientid dhcpv6_clientid reqaddress reqprefix prefix link_id iface_id ip6assign ip4assign disable_pa ula_default_router keepalive_interval trickle_k dnsname mode
-    json_get_vars dhcpv4_clientid dhcpv6_clientid reqaddress reqprefix prefix link_id iface_id ip6assign ip4assign disable_pa ula_default_router keepalive_interval trickle_k dnsname mode
+    local dhcpv4_clientid dhcpv6_clientid reqaddress reqprefix prefix link_id iface_id ip6assign ip4assign disable_pa ula_default_router keepalive_interval trickle_k dnsname mode ip4uplinklimit
+    json_get_vars dhcpv4_clientid dhcpv6_clientid reqaddress reqprefix prefix link_id iface_id ip6assign ip4assign disable_pa ula_default_router keepalive_interval trickle_k dnsname mode ip4uplinklimit
 
     logger -t proto-hnet "proto_hnet_setup $device/$interface"
 
@@ -46,29 +47,6 @@ proto_hnet_setup() {
     ubus call network del_dynamic "{\"name\": \"${interface}_6\"}"
 
 	if [ "$mode" != "guest" -a "$mode" != "leaf" -a "$mode" != "adhoc" -a "$mode" != "internal" -a "$device" != "lo" -a "$device" != "lo0" ]; then
-	    # add sub-protocols for DHCPv4 + DHCPv6
-	    json_init
-	    json_add_string name "${interface}_4"
-	    json_add_string ifname "@${interface}"
-
-	    # User Class (77)
-	    # UCLEN (7)
-	    # Class ("HOMENET")
-	    json_add_string sendopts "0x4d:07484f4d454e4554"
-
-	    json_add_string proto dhcp
-	    [ -n "$dhcpv4_clientid" ] && json_add_string clientid "$dhcpv4_clientid"
-	    json_add_string iface6rd "${interface}_6rd"
-	    json_add_int metric $((1000 + $(hnet-ifresolve $device)))
-
-	    # Don't delegate 6rd
-	    json_add_boolean delegate 0
-	    json_add_boolean defaultroute 1
-	    json_add_string zone6rd wan
-
-	    json_close_object
-	    ubus call network add_dynamic "$(json_dump)"
-
 	    json_init
 	    json_add_string name "${interface}_6"
 	    json_add_string ifname "@${interface}"
@@ -110,6 +88,7 @@ proto_hnet_setup() {
     [ -n "$trickle_k" ] && json_add_int trickle_k $trickle_k
     [ -n "$ip6assign" ] && json_add_string ip6assign "$ip6assign"
     [ -n "$ip4assign" ] && json_add_string ip4assign "$ip4assign"
+    [ "$ip4uplinklimit" = 1 ] && json_add_boolean ip4uplinklimit 1
 
     json_add_string dnsname "${dnsname:-$interface}"
     json_add_array prefix
