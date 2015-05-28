@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu May 28 13:47:55 2015 mstenber
- * Edit time:     926 min
+ * Last modified: Thu May 28 14:21:55 2015 mstenber
+ * Edit time:     933 min
  *
  */
 
@@ -51,6 +51,8 @@ void dncp_node_set(dncp_node n, uint32_t update_number,
       && (!a || tlv_attr_equal(a, n->tlv_container)))
     {
       L_DEBUG(" .. spurious (no change, we ignore time delta)");
+      if (a && a != n->tlv_container)
+        free(a);
       return;
     }
 
@@ -80,14 +82,15 @@ void dncp_node_set(dncp_node n, uint32_t update_number,
   if (t)
     n->origination_time = t;
 
-  /* Replace data (if it is a different valid pointer) */
-  if (a && n->tlv_container != a)
+  /* If the pointer changed, handle it */
+  if (n->tlv_container != a)
     {
       if (n->last_reachable_prune == n->dncp->last_prune)
         dncp_notify_subscribers_tlvs_changed(n, n->tlv_container_valid,
                                              a_valid);
       if (n->tlv_container)
         free(n->tlv_container);
+
       n->tlv_container = a;
       n->tlv_container_valid = a_valid;
       n->tlv_index_dirty = true;

@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Tue May 26 06:23:16 2015 mstenber
- * Edit time:     616 min
+ * Last modified: Thu May 28 14:01:45 2015 mstenber
+ * Edit time:     620 min
  *
  */
 
@@ -938,8 +938,8 @@ hncp_sd hncp_sd_create(hncp h, hncp_sd_params p, struct hncp_link *l)
 void hncp_sd_destroy(hncp_sd sd)
 {
   iface_unregister_user(&sd->iface);
-  uloop_timeout_cancel(&sd->timeout);
   dncp_unsubscribe(sd->dncp, &sd->subscriber);
+  uloop_timeout_cancel(&sd->timeout);
   free(sd);
 }
 

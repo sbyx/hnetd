@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu May 28 13:12:33 2015 mstenber
- * Edit time:     374 min
+ * Last modified: Thu May 28 14:16:40 2015 mstenber
+ * Edit time:     380 min
  *
  */
 
@@ -483,8 +483,6 @@ void net_sim_remove_node(net_sim s, net_node node)
         }
     }
 
-  uloop_timeout_cancel(&node->run_to);
-
 #ifndef DISABLE_HNCP_SD
   /* Get rid of sd data structure */
   if (!s->disable_sd)
@@ -501,11 +499,15 @@ void net_sim_remove_node(net_sim s, net_node node)
     hncp_multicast_destroy(node->multicast);
 #endif /* !DISABLE_HNCP_MULTICAST */
 
+  hncp_link_destroy(node->link);
+
   /* Remove from list of nodes */
   list_del(&node->lh);
   free(node->name);
 
   hncp_uninit(&node->h);
+
+  uloop_timeout_cancel(&node->run_to);
 
   free(node);
 }

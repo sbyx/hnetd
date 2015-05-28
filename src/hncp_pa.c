@@ -481,6 +481,7 @@ static void hpa_refresh_ec(hncp_pa hpa, bool publish)
 
 		//todo: Add DHCP Data
 		dncp_add_tlv_attr(dncp, tb.head, 0);
+		tlv_buf_free(&tb);
 	}
 
 	dncp_node n;
