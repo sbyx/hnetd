@@ -110,21 +110,29 @@ static const char *hnetd_pd_socket = NULL;
 
 int platform_init(dncp dncp, hncp_pa hncp_pa, const char *pd_socket)
 {
+	hnet_object_type.n_methods = main_object.n_methods;
+	netifd.cb = handle_update;
 
-	if (!(ubus = ubus_connect(NULL))) {
-		L_ERR("Failed to connect to ubus: %s", strerror(errno));
-		return -1;
+	for (;;) {
+		if (ubus) {
+			ubus_free(ubus);
+			sleep(1);
+			L_ERR("Failed to connect to ubus. retrying...");
+		}
+
+
+		if (!(ubus = ubus_connect(NULL)))
+			continue;
+
+		ubus_add_uloop(ubus);
+		if (ubus_add_object(ubus, &main_object) ||
+				ubus_register_subscriber(ubus, &netifd) ||
+				ubus_register_event_handler(ubus, &event_handler, "ubus.object.add"))
+			continue;
+
+		break;
 	}
 
-	ubus_add_uloop(ubus);
-
-	hnet_object_type.n_methods = main_object.n_methods;
-	ubus_add_object(ubus, &main_object);
-
-	netifd.cb = handle_update;
-	ubus_register_subscriber(ubus, &netifd);
-
-	ubus_register_event_handler(ubus, &event_handler, "ubus.object.add");
 	if (!ubus_lookup_id(ubus, "network.interface", &ubus_network_interface))
 		sync_netifd(true);
 
@@ -259,7 +267,7 @@ void platform_iface_new(struct iface *c, const char *handle)
 	// reqiest
 	INIT_LIST_HEAD(&iface->req.list);
 
-	if (!c->designatedv4 && (!(c->flags & IFACE_FLAG_INTERNAL) ||
+	if ((!(c->flags & IFACE_FLAG_INTERNAL) ||
 			(c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID))
 		platform_restart_dhcpv4(c);
 }
@@ -738,6 +746,7 @@ enum {
 	DATA_ATTR_TRICKLE_K,
 	DATA_ATTR_DNSNAME,
 	DATA_ATTR_CREATED,
+	DATA_ATTR_IP4UPLINKLIMIT,
 	DATA_ATTR_MAX
 };
 
@@ -775,6 +784,7 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_TRICKLE_K] = { .name = "trickle_k", .type = BLOBMSG_TYPE_INT32 },
 	[DATA_ATTR_DNSNAME] = { .name = "dnsname", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_CREATED] = { .name = "created", .type = BLOBMSG_TYPE_INT32 },
+	[DATA_ATTR_IP4UPLINKLIMIT] = { .name = "ip4uplinklimit", .type = BLOBMSG_TYPE_BOOL },
 };
 
 
@@ -978,6 +988,9 @@ static void platform_update(void *data, size_t len)
 
 		if (dtb[DATA_ATTR_ULA_DEFAULT_ROUTER] && blobmsg_get_bool(dtb[DATA_ATTR_ULA_DEFAULT_ROUTER]))
 			flags |= IFACE_FLAG_ULA_DEFAULT;
+
+		if (dtb[DATA_ATTR_IP4UPLINKLIMIT] && blobmsg_get_bool(dtb[DATA_ATTR_IP4UPLINKLIMIT]))
+			flags |= IFACE_FLAG_SINGLEV4UP;
 	}
 
 	const char *proto = "";

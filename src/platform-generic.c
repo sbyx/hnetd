@@ -481,6 +481,7 @@ enum ipc_option {
 	OPT_IP6_PLEN,
 	OPT_IP4_PLEN,
 	OPT_DISABLE_PA,
+	OPT_IP4UPLINKLIMIT,
 	OPT_PASSTHRU,
 	OPT_ULA_DEFAULT_ROUTER,
 	OPT_KEEPALIVE_INTERVAL,
@@ -503,6 +504,7 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_IP6_PLEN] = {"ip6assign", BLOBMSG_TYPE_STRING},
 	[OPT_IP4_PLEN] = {"ip4assign", BLOBMSG_TYPE_STRING},
 	[OPT_DISABLE_PA] = {"disable_pa", BLOBMSG_TYPE_BOOL},
+	[OPT_IP4UPLINKLIMIT] = {"ip4uplinklimit", BLOBMSG_TYPE_BOOL},
 	[OPT_PASSTHRU] = {"passthru", BLOBMSG_TYPE_STRING},
 	[OPT_ULA_DEFAULT_ROUTER] = {"ula_default_router", BLOBMSG_TYPE_BOOL},
 	[OPT_KEEPALIVE_INTERVAL] = { .name = "keepalive_interval", .type = BLOBMSG_TYPE_INT32 },
@@ -544,7 +546,7 @@ int ipc_ifupdown(const char *method, int argc, char *const argv[])
 	char *entry;
 
 	int c, i;
-	while ((c = getopt(argc, argv, "c:dp:l:i:m:n:uk:P:4:6:D:")) > 0) {
+	while ((c = getopt(argc, argv, "c:dp:l:i:m:n:uk:P:4:6:D:L")) > 0) {
 		switch(c) {
 		case 'c':
 			blobmsg_add_string(&b, "mode", optarg);
@@ -609,6 +611,10 @@ int ipc_ifupdown(const char *method, int argc, char *const argv[])
 		case 'D':
 			blobmsg_add_string(&dns, NULL, optarg);
 			dnsnames = true;
+			break;
+
+		case 'L':
+			blobmsg_add_u8(&b, "ip4uplinklimit", 1);
 			break;
 		}
 	}
@@ -808,6 +814,9 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 
 			if (tb[OPT_ULA_DEFAULT_ROUTER] && blobmsg_get_bool(tb[OPT_ULA_DEFAULT_ROUTER]))
 				flags |= IFACE_FLAG_ULA_DEFAULT;
+
+			if (tb[OPT_IP4UPLINKLIMIT] && blobmsg_get_bool(tb[OPT_IP4UPLINKLIMIT]))
+				flags |= IFACE_FLAG_SINGLEV4UP;
 
 			struct iface *iface = iface_create(ifname, tb[OPT_HANDLE] == NULL ? NULL :
 					blobmsg_get_string(tb[OPT_HANDLE]), flags);

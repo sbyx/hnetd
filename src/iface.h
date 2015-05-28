@@ -95,6 +95,7 @@ typedef int iface_flags;
 #define IFACE_FLAG_HYBRID		 (0x40 | IFACE_FLAG_INTERNAL)
 #define IFACE_FLAG_EXTERNAL		 0x80
 #define IFACE_FLAG_NODHCP		 0x100
+#define IFACE_FLAG_SINGLEV4UP    0x200
 
 struct iface {
 	struct list_head head;
