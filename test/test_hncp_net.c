@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Thu Apr 30 11:39:38 2015 mstenber
- * Edit time:     617 min
+ * Last modified: Thu May 28 15:36:57 2015 mstenber
+ * Edit time:     629 min
  *
  */
 
@@ -362,6 +362,11 @@ void hncp_tube_small(void)
 
   net_sim_init(&s);
   raw_hncp_tube(&s, 6, false);
+
+  /* This is arbitrary result based on test runs. Raise it if you have
+   * _a good reason_ to think the value is too low. */
+  sput_fail_unless((hnetd_time() - s.start) < 10 * HNETD_TIME_PER_SECOND,
+                   "fastish convergence");
 }
 
 
@@ -375,6 +380,12 @@ void hncp_tube_medium(void)
 
   net_sim_init(&s);
   raw_hncp_tube(&s, MEDIUM_TUBE_LENGTH, false);
+
+  /* This is arbitrary result based on test runs. Raise it if you have
+   * _a good reason_ to think the value is too low. */
+  sput_fail_unless((hnetd_time() - s.start) < 30 * HNETD_TIME_PER_SECOND,
+                   "fastish convergence");
+
 }
 
 void hncp_tube_medium_nc(void)
