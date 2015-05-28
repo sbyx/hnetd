@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Thu May 28 10:45:35 2015 mstenber
- * Edit time:     335 min
+ * Last modified: Thu May 28 17:25:55 2015 mstenber
+ * Edit time:     336 min
  *
  */
 
@@ -305,8 +305,14 @@ static bool _connection_poll_write(dtls_connection dc)
       char buf[2048];
       int outsize = BIO_read(dc->wbio, buf, sizeof(buf));
       udp46 s = dc->is_client ? dc->d->u46_client : dc->d->u46_server;
-      (void)udp46_send(s, NULL, &dc->remote_addr, buf, outsize);
-      L_DEBUG("sent %d bytes to peer", outsize);
+      int r = udp46_send(s, NULL, &dc->remote_addr, buf, outsize);
+      if (r != outsize)
+        {
+          if (r < 0)
+            L_DEBUG("send error");
+          else
+            L_DEBUG("short send?!? %d != %d", r, outsize);
+        }
     }
   /* We do not close sockets here. */
   return true;
