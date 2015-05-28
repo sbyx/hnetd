@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu May 28 15:58:08 2015 mstenber
+ * Last modified: Thu May 28 16:47:24 2015 mstenber
  * Edit time:     383 min
  *
  */
@@ -622,7 +622,7 @@ _recv(dncp_ext ext,
       ret_src = m->src;
       ret_dst = m->dst;
       *src = &ret_src;
-      if (IN6_IS_ADDR_MULTICAST(&ret_dst))
+      if (IN6_IS_ADDR_MULTICAST(&ret_dst.sin6_addr))
         *dst = NULL;
       else
         *dst = &ret_dst;
