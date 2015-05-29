@@ -26,6 +26,7 @@
 #include "platform.h"
 #include "iface.h"
 #include "hncp_dump.h"
+#include "hncp.h"
 
 static struct ubus_context *ubus = NULL;
 static struct ubus_subscriber netifd;
@@ -108,7 +109,7 @@ static void handle_event(__unused struct ubus_context *ctx, __unused struct ubus
 static struct ubus_event_handler event_handler = { .cb = handle_event };
 static const char *hnetd_pd_socket = NULL;
 
-int platform_init(dncp dncp, hncp_pa hncp_pa, const char *pd_socket)
+int platform_init(hncp hncp, hncp_pa hncp_pa, const char *pd_socket)
 {
 	hnet_object_type.n_methods = main_object.n_methods;
 	netifd.cb = handle_update;
@@ -138,7 +139,7 @@ int platform_init(dncp dncp, hncp_pa hncp_pa, const char *pd_socket)
 
 	hnetd_pd_socket = pd_socket;
 	hncp_pa_p = hncp_pa;
-	p_dncp = dncp;
+	p_dncp = hncp_get_dncp(hncp);
 	timebase = hnetd_time() / HNETD_TIME_PER_SECOND;
 	return 0;
 }
