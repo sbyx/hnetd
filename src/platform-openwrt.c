@@ -30,6 +30,7 @@
 static struct ubus_context *ubus = NULL;
 static struct ubus_subscriber netifd;
 static uint32_t ubus_network_interface = 0;
+static uint32_t ubus_network = 0;
 static hncp_pa hncp_pa_p;
 static dncp p_dncp = NULL;
 static uint32_t timebase = 1;
@@ -98,6 +99,9 @@ static void handle_event(__unused struct ubus_context *ctx, __unused struct ubus
 	if (!tb[OBJ_ATTR_ID] || !tb[OBJ_ATTR_PATH])
 		return;
 
+	if (!strcmp(blobmsg_get_string(tb[OBJ_ATTR_PATH]), "network"))
+		ubus_network = blobmsg_get_u32(tb[OBJ_ATTR_ID]);
+
 	if (strcmp(blobmsg_get_string(tb[OBJ_ATTR_PATH]), "network.interface"))
 		return;
 
@@ -133,7 +137,8 @@ int platform_init(dncp dncp, hncp_pa hncp_pa, const char *pd_socket)
 		break;
 	}
 
-	if (!ubus_lookup_id(ubus, "network.interface", &ubus_network_interface))
+	if (!ubus_lookup_id(ubus, "network", &ubus_network) &&
+			!ubus_lookup_id(ubus, "network.interface", &ubus_network_interface))
 		sync_netifd(true);
 
 	hnetd_pd_socket = pd_socket;
@@ -747,6 +752,9 @@ enum {
 	DATA_ATTR_DNSNAME,
 	DATA_ATTR_CREATED,
 	DATA_ATTR_IP4UPLINKLIMIT,
+	DATA_ATTR_REQADDRESS,
+	DATA_ATTR_REQPREFIX,
+	DATA_ATTR_DHCPV6_CLIENTID,
 	DATA_ATTR_MAX
 };
 
@@ -785,6 +793,9 @@ static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_DNSNAME] = { .name = "dnsname", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_CREATED] = { .name = "created", .type = BLOBMSG_TYPE_INT32 },
 	[DATA_ATTR_IP4UPLINKLIMIT] = { .name = "ip4uplinklimit", .type = BLOBMSG_TYPE_BOOL },
+	[DATA_ATTR_REQADDRESS] = { .name = "reqaddress", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_REQPREFIX] = { .name = "reqprefix", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_DHCPV6_CLIENTID] = { .name = "dhcpv6_clientid", .type = BLOBMSG_TYPE_STRING },
 };
 
 
@@ -1005,7 +1016,8 @@ static void platform_update(void *data, size_t len)
 	bool created = dtb[DATA_ATTR_CREATED] && blobmsg_get_u32(dtb[DATA_ATTR_CREATED]) < timebase;
 
 	if ((!c || !c->platform) && up && !strcmp(proto, "hnet") && (c || created) && (a = tb[IFACE_ATTR_HANDLE])) {
-		c = iface_create(ifname, blobmsg_get_string(a), flags);
+		const char *handle = blobmsg_get_string(a);
+		c = iface_create(ifname, handle, flags);
 
 		hncp_pa_conf_iface_update(hncp_pa_p, c->ifname); //Start HNCP PA Conf Update
 		if (c && dtb[DATA_ATTR_PREFIX]) {
@@ -1079,6 +1091,35 @@ static void platform_update(void *data, size_t len)
 
 		if(c && dtb[DATA_ATTR_DNSNAME] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))
 			strncpy(conf->dnsname, blobmsg_get_string(dtb[DATA_ATTR_DNSNAME]), sizeof(conf->dnsname));;
+
+		if (c && (!(c->flags & IFACE_FLAG_INTERNAL) ||
+				((c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID))) {
+			struct blob_buf b = {NULL, NULL, 0, NULL};
+			blob_buf_init(&b, 0);
+			char *buf = blobmsg_alloc_string_buffer(&b, "name", 32);
+			snprintf(buf, 32, "%s_6", handle);
+			blobmsg_add_string_buffer(&b);
+			buf = blobmsg_alloc_string_buffer(&b, "ifname", 32);
+			snprintf(buf, 32, "@%s", handle);
+			blobmsg_add_string_buffer(&b);
+			blobmsg_add_string(&b, "proto", "dhcpv6");
+
+			if (dtb[DATA_ATTR_REQADDRESS])
+				blobmsg_add_blob(&b, dtb[DATA_ATTR_REQADDRESS]);
+
+			if (dtb[DATA_ATTR_REQPREFIX])
+				blobmsg_add_blob(&b, dtb[DATA_ATTR_REQPREFIX]);
+
+			if (dtb[DATA_ATTR_DHCPV6_CLIENTID])
+				blobmsg_add_blob(&b, dtb[DATA_ATTR_DHCPV6_CLIENTID]);
+
+			blobmsg_add_string(&b, "forceprefix", "1");
+			blobmsg_add_string(&b, "userclass", "HOMENET");
+			blobmsg_add_u8(&b, "delegate", 0);
+
+			ubus_invoke(ubus, ubus_network, "add_dynamic", b.head, NULL, NULL, 1000);
+			blob_buf_free(&b);
+		}
 
 		if (c) {
 			struct platform_iface *iface = c->platform;
@@ -1165,17 +1206,10 @@ void platform_restart_dhcpv4(struct iface *c)
 	blobmsg_add_string_buffer(&b);
 	blobmsg_add_string(&b, "proto", "dhcp");
 	blobmsg_add_string(&b, "sendopts", "0x4d:07484f4d454e4554");
-	buf = blobmsg_alloc_string_buffer(&b, "iface6rd", 32);
-	snprintf(buf, 32, "%s_6rd", iface->handle);
-	blobmsg_add_string_buffer(&b);
 	blobmsg_add_u8(&b, "delegate", 0);
-	blobmsg_add_string(&b, "zone6rd", "wan");
-
 	blobmsg_add_u8(&b, "defaultroute", c->designatedv4);
 	blobmsg_add_u32(&b, "metric", 1000 + if_nametoindex(c->ifname));
 
-	uint32_t ubus_network = 0;
-	ubus_lookup_id(ubus, "network", &ubus_network);
 	ubus_invoke(ubus, ubus_network, "add_dynamic", b.head, NULL, NULL, 1000);
 
 	blob_buf_free(&b);
