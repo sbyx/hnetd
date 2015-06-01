@@ -819,7 +819,7 @@ static void hpa_ula_to(struct uloop_timeout *to)
 		L_DEBUG("ULA Spontaneous Generation: Backoff %d ms", delay);
 	} else if(hpa->ula_backoff <= now) { //Time to create
 		//create ula
-		struct prefix ula;
+		struct prefix ula = { .plen = 0 };
 		if(hpa->ula_conf.use_random_ula) {
 			//first see if there is a cached ULA
 			struct pa_store_prefix *store_p;
@@ -1215,7 +1215,7 @@ static void hpa_update_ap_tlv(hncp_pa hpa, dncp_node n,
 	if (!(ah = dncp_tlv_ap(tlv)))
 		return;
 
-	struct prefix p;
+	struct prefix p = { .plen = 0 };
 	pa_prefix_cpy(ah->prefix_data, ah->prefix_length_bits, &p.prefix, p.plen);
 
 	//Get adjacent link
@@ -1361,7 +1361,7 @@ static void hpa_update_dp_tlv(hncp_pa hpa, dncp_node n,
 	}
 
 	//Fetch existing dp
-	struct prefix p;
+	struct prefix p = { .plen = 0 };
 	pa_prefix_cpy(dh->prefix_data, dh->prefix_length_bits, &p.prefix, p.plen);
 	hpa_dp dp = hpa_dp_get_hncp(hpa, &p, &n->node_identifier);
 
