@@ -57,9 +57,11 @@ static struct ubus_object main_object = {
 };
 
 static void platform_commit(struct uloop_timeout *t);
+static void platform_dhcp(struct uloop_timeout *t);
 struct platform_iface {
 	struct iface *iface;
 	struct uloop_timeout update;
+	struct uloop_timeout dhcp;
 	struct ubus_request req;
 	struct blob_buf config;
 	char handle[];
@@ -263,6 +265,7 @@ void platform_iface_new(struct iface *c, const char *handle)
 	memcpy(iface->handle, handle, handlenamelen);
 	iface->iface = c;
 	iface->update.cb = platform_commit;
+	iface->dhcp.cb = platform_dhcp;
 
 	c->platform = iface;
 
@@ -271,10 +274,7 @@ void platform_iface_new(struct iface *c, const char *handle)
 
 	// reqiest
 	INIT_LIST_HEAD(&iface->req.list);
-
-	if ((!(c->flags & IFACE_FLAG_INTERNAL) ||
-			(c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID))
-		platform_restart_dhcpv4(c);
+	platform_restart_dhcpv4(c);
 }
 
 // Destructor for openwrt-specific interface part
@@ -282,6 +282,7 @@ void platform_iface_free(struct iface *c)
 {
 	struct platform_iface *iface = c->platform;
 	if (iface) {
+		uloop_timeout_cancel(&iface->dhcp);
 		uloop_timeout_cancel(&iface->update);
 		ubus_abort_request(ubus, &iface->req);
 		blob_buf_free(&iface->config);
@@ -750,11 +751,11 @@ enum {
 	DATA_ATTR_KEEPALIVE_INTERVAL,
 	DATA_ATTR_TRICKLE_K,
 	DATA_ATTR_DNSNAME,
-	DATA_ATTR_CREATED,
 	DATA_ATTR_IP4UPLINKLIMIT,
 	DATA_ATTR_REQADDRESS,
 	DATA_ATTR_REQPREFIX,
 	DATA_ATTR_DHCPV6_CLIENTID,
+	DATA_ATTR_CREATED,
 	DATA_ATTR_MAX
 };
 
@@ -1090,36 +1091,7 @@ static void platform_update(void *data, size_t len)
 			conf->trickle_k = (int) blobmsg_get_u32(dtb[DATA_ATTR_TRICKLE_K]);
 
 		if(c && dtb[DATA_ATTR_DNSNAME] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))
-			strncpy(conf->dnsname, blobmsg_get_string(dtb[DATA_ATTR_DNSNAME]), sizeof(conf->dnsname));;
-
-		if (c && (!(c->flags & IFACE_FLAG_INTERNAL) ||
-				((c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID))) {
-			struct blob_buf b = {NULL, NULL, 0, NULL};
-			blob_buf_init(&b, 0);
-			char *buf = blobmsg_alloc_string_buffer(&b, "name", 32);
-			snprintf(buf, 32, "%s_6", handle);
-			blobmsg_add_string_buffer(&b);
-			buf = blobmsg_alloc_string_buffer(&b, "ifname", 32);
-			snprintf(buf, 32, "@%s", handle);
-			blobmsg_add_string_buffer(&b);
-			blobmsg_add_string(&b, "proto", "dhcpv6");
-
-			if (dtb[DATA_ATTR_REQADDRESS])
-				blobmsg_add_blob(&b, dtb[DATA_ATTR_REQADDRESS]);
-
-			if (dtb[DATA_ATTR_REQPREFIX])
-				blobmsg_add_blob(&b, dtb[DATA_ATTR_REQPREFIX]);
-
-			if (dtb[DATA_ATTR_DHCPV6_CLIENTID])
-				blobmsg_add_blob(&b, dtb[DATA_ATTR_DHCPV6_CLIENTID]);
-
-			blobmsg_add_string(&b, "forceprefix", "1");
-			blobmsg_add_string(&b, "userclass", "HOMENET");
-			blobmsg_add_u8(&b, "delegate", 0);
-
-			ubus_invoke(ubus, ubus_network, "add_dynamic", b.head, NULL, NULL, 1000);
-			blob_buf_free(&b);
-		}
+			strncpy(conf->dnsname, blobmsg_get_string(dtb[DATA_ATTR_DNSNAME]), sizeof(conf->dnsname));
 
 		if (c) {
 			struct platform_iface *iface = c->platform;
@@ -1189,16 +1161,16 @@ static int handle_update(__unused struct ubus_context *ctx, __unused struct ubus
 }
 
 
-void platform_restart_dhcpv4(struct iface *c)
+static void platform_dhcp(struct uloop_timeout *t)
 {
-	struct platform_iface *iface = c->platform;
-	if (!iface)
-		return;
-
+	struct platform_iface *iface = container_of(t, struct platform_iface, dhcp);
+	struct iface *c = iface->iface;
 	struct blob_buf b = {NULL, NULL, 0, NULL};
+	struct blob_attr *dtb[DATA_ATTR_MAX];
+	char *buf;
 
 	blob_buf_init(&b, 0);
-	char *buf = blobmsg_alloc_string_buffer(&b, "name", 32);
+	buf = blobmsg_alloc_string_buffer(&b, "name", 32);
 	snprintf(buf, 32, "%s_4", iface->handle);
 	blobmsg_add_string_buffer(&b);
 	buf = blobmsg_alloc_string_buffer(&b, "ifname", 32);
@@ -1212,7 +1184,43 @@ void platform_restart_dhcpv4(struct iface *c)
 
 	ubus_invoke(ubus, ubus_network, "add_dynamic", b.head, NULL, NULL, 1000);
 
+	blobmsg_parse(data_attrs, DATA_ATTR_MAX, dtb,
+				blobmsg_data(iface->config.head),
+				blobmsg_len(iface->config.head));
+
+	blob_buf_init(&b, 0);
+	buf = blobmsg_alloc_string_buffer(&b, "name", 32);
+	snprintf(buf, 32, "%s_6", iface->handle);
+	blobmsg_add_string_buffer(&b);
+	buf = blobmsg_alloc_string_buffer(&b, "ifname", 32);
+	snprintf(buf, 32, "@%s", iface->handle);
+	blobmsg_add_string_buffer(&b);
+	blobmsg_add_string(&b, "proto", "dhcpv6");
+
+	if (dtb[DATA_ATTR_REQADDRESS])
+		blobmsg_add_blob(&b, dtb[DATA_ATTR_REQADDRESS]);
+
+	if (dtb[DATA_ATTR_REQPREFIX])
+		blobmsg_add_blob(&b, dtb[DATA_ATTR_REQPREFIX]);
+
+	if (dtb[DATA_ATTR_DHCPV6_CLIENTID])
+		blobmsg_add_blob(&b, dtb[DATA_ATTR_DHCPV6_CLIENTID]);
+
+	blobmsg_add_string(&b, "forceprefix", "1");
+	blobmsg_add_string(&b, "userclass", "HOMENET");
+	blobmsg_add_u8(&b, "delegate", 0);
+
+	ubus_invoke(ubus, ubus_network, "add_dynamic", b.head, NULL, NULL, 1000);
 	blob_buf_free(&b);
+}
+
+
+void platform_restart_dhcpv4(struct iface *c)
+{
+	struct platform_iface *iface = c->platform;
+	if (iface && (!(c->flags & (IFACE_FLAG_INTERNAL | IFACE_FLAG_NODHCP)) ||
+			((c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID)))
+		uloop_timeout_set(&iface->dhcp, 1);
 }
 
 
