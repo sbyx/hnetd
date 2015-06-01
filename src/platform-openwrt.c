@@ -924,7 +924,7 @@ static void platform_update(void *data, size_t len)
 	bool v4uplink = false, v6uplink = false;
 
 	if (!ifname[0]) {
-		L_WARN("%s: got interface update for no device in particular?!");
+		L_WARN("%s: got interface update for no device in particular?!", __FUNCTION__);
 		return;
 	}
 
