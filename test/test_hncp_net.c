@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Thu May 28 15:39:57 2015 mstenber
- * Edit time:     632 min
+ * Last modified: Mon Jun  1 10:42:54 2015 mstenber
+ * Edit time:     635 min
  *
  */
 
@@ -388,7 +388,11 @@ void hncp_tube_medium(void)
 
   /* This is arbitrary result based on test runs. Raise it if you have
    * _a good reason_ to think the value is too low. */
-  sput_fail_unless((hnetd_time() - s.start) < 30 * HNETD_TIME_PER_SECOND,
+
+  /* With conflicts, it may take 48 seconds for the system to even
+   * realize something is wrong due to (potentially) long keepalive
+   * interval times multiplier. */
+  sput_fail_unless((hnetd_time() - s.start) < 70 * HNETD_TIME_PER_SECOND,
                    "fastish convergence");
 
 }
@@ -399,6 +403,14 @@ void hncp_tube_medium_nc(void)
 
   net_sim_init(&s);
   raw_hncp_tube(&s, MEDIUM_TUBE_LENGTH, true);
+
+
+  /* This is arbitrary result based on test runs. Raise it if you have
+   * _a good reason_ to think the value is too low. */
+
+  /* Without conflicts, this should finish faster. */
+  sput_fail_unless((hnetd_time() - s.start) < 30 * HNETD_TIME_PER_SECOND,
+                   "fastish convergence");
 }
 
   /* Intentionally pick a number that is >> IPv6 MTU / node state
