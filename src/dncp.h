@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Thu May 28 16:07:00 2015 mstenber
+ * Last modified: Mon Jun  1 13:27:00 2015 mstenber
  * Edit time:     223 min
  *
  */
@@ -141,7 +141,7 @@ struct dncp_subscriber_struct {
    * @param ifname The link which is being added, removed or modified.
    * @param event indicates whether the link was added, removed or updated.
    */
-  void (*link_change_callback)(dncp_subscriber s, const char *ifname,
+  void (*link_change_callback)(dncp_subscriber s, dncp_ep ep,
                                enum dncp_subscriber_event event);
 
   /**

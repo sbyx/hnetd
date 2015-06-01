@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 10:04:30 2013 mstenber
- * Last modified: Mon May 25 13:22:08 2015 mstenber
+ * Last modified: Mon Jun  1 13:27:15 2015 mstenber
  * Edit time:     61 min
  *
  */
@@ -230,5 +230,5 @@ void dncp_notify_subscribers_link_changed(dncp_ep_i l, enum dncp_subscriber_even
 
   list_for_each_entry(s, &l->dncp->subscribers[DNCP_CALLBACK_LINK],
                       lhs[DNCP_CALLBACK_LINK])
-    s->link_change_callback(s, l->conf.ifname, event);
+    s->link_change_callback(s, &l->conf, event);
 }

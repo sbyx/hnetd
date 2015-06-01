@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Thu May 28 14:01:45 2015 mstenber
- * Edit time:     620 min
+ * Last modified: Mon Jun  1 13:27:45 2015 mstenber
+ * Edit time:     621 min
  *
  */
 
@@ -862,8 +862,8 @@ static void _republish_cb(dncp_subscriber s)
   _publish_ddzs(sd);
 }
 
-static void _force_republish_cb(dncp_subscriber s,
-		const char *ifname __unused, enum dncp_subscriber_event event __unused)
+static void _force_republish_cb(dncp_subscriber s, dncp_ep ep __unused,
+                                enum dncp_subscriber_event event __unused)
 {
   hncp_sd sd = container_of(s, hncp_sd_s, subscriber);
 
