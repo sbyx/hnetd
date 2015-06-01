@@ -198,8 +198,7 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 
 								hncp_routing_spawn(argv);
 
-								if (tlv_len(a2) < flen || !metric[0] ||
-										!c->profile_data.bfs.next_hop || !c->profile_data.bfs.ifname)
+								if (tlv_len(a2) < flen || !metric[0] || !c->profile_data.bfs.ifname)
 									continue;
 
 								tlv_for_each_in_buf(b, tlv_data(a2) + flen, tlv_len(a2) - flen) {
@@ -219,18 +218,19 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 										prefix_ntop(domain, sizeof(domain), &domainaddr, d->type);
 									}
 
-									if (!IN6_IS_ADDR_V4MAPPED(&from.prefix)) {
+									if (!IN6_IS_ADDR_V4MAPPED(&from.prefix) && c->profile_data.bfs.next_hop) {
 										argv[1] = "bfsipv6uplink";
 										inet_ntop(AF_INET6, c->profile_data.bfs.next_hop, via, sizeof(via));
 										hncp_routing_spawn(argv);
-									} else if (iface_has_ipv4_address(c->profile_data.bfs.ifname)) {
+									} else if (IN6_IS_ADDR_V4MAPPED(&from.prefix) && c->profile_data.bfs.next_hop4 &&
+											iface_has_ipv4_address(c->profile_data.bfs.ifname)) {
 										argv[1] = "bfsipv4uplink";
 										inet_ntop(AF_INET, &c->profile_data.bfs.next_hop4->s6_addr[12], via, sizeof(via));
 										hncp_routing_spawn(argv);
 									}
 								}
 							}
-					} else if ((ap = dncp_tlv_ap(a)) && c != hncp->own_node && c->profile_data.bfs.next_hop && c->profile_data.bfs.ifname) {
+					} else if ((ap = dncp_tlv_ap(a)) && c != hncp->own_node && c->profile_data.bfs.ifname) {
 						dncp_link link = dncp_find_link_by_name(hncp, c->profile_data.bfs.ifname, false);
 						struct iface *ifo = link ? iface_get(c->profile_data.bfs.ifname) : NULL;
 						// Skip routes for prefixes on connected links
@@ -251,11 +251,12 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 						prefix_ntop(dst, sizeof(dst), &to.prefix, to.plen);
 						snprintf(metric, sizeof(metric), "%u", c->profile_data.bfs.hopcount << 8 | linkid);
 
-						if (!IN6_IS_ADDR_V4MAPPED(&to.prefix)) {
+						if (!IN6_IS_ADDR_V4MAPPED(&to.prefix) && c->profile_data.bfs.next_hop) {
 							argv[1] = "bfsipv6assigned";
 							inet_ntop(AF_INET6, c->profile_data.bfs.next_hop, via, sizeof(via));
 							hncp_routing_spawn(argv);
-						} else if (iface_has_ipv4_address(c->profile_data.bfs.ifname)) {
+						} else if (IN6_IS_ADDR_V4MAPPED(&to.prefix) && c->profile_data.bfs.next_hop4 &&
+								iface_has_ipv4_address(c->profile_data.bfs.ifname)) {
 							argv[1] = "bfsipv4assigned";
 							inet_ntop(AF_INET, &c->profile_data.bfs.next_hop4->s6_addr[12], via, sizeof(via));
 							hncp_routing_spawn(argv);
