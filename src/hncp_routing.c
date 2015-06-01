@@ -108,7 +108,6 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 			dncp hncp = bfs->hncp;
 			struct list_head queue = LIST_HEAD_INIT(queue);
 			dncp_node c, n;
-			bool have_v4uplink = false;
 			char dst[PREFIX_MAXBUFFLEN] = "", via[INET6_ADDRSTRLEN] = "";
 			char domain[PREFIX_MAXBUFFLEN] = "", metric[16];
 			char *argv[] = {(char*)bfs->script, "bfsprepare", dst, via, NULL, metric, domain, NULL};
@@ -231,11 +230,8 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 									} else {
 										argv[1] = "bfsipv4uplink";
 										if (c->profile_data.bfs.next_hop4 && c->profile_data.bfs.ifname &&
-												iface_has_ipv4_address(c->profile_data.bfs.ifname) &&
-												(d->type != 0 || !have_v4uplink)) {
+												iface_has_ipv4_address(c->profile_data.bfs.ifname)) {
 											inet_ntop(AF_INET, &c->profile_data.bfs.next_hop4->s6_addr[12], via, sizeof(via));
-											if (d->type == 0)
-												have_v4uplink = true;
 										} else {
 											metric[0] = 0;
 											via[0] = 0;
