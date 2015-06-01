@@ -923,8 +923,13 @@ static void platform_update(void *data, size_t len)
 	bool up = (a = tb[IFACE_ATTR_UP]) && blobmsg_get_bool(a);
 	bool v4uplink = false, v6uplink = false;
 
-	if (c)
-		c->unused = !up;
+	if (!ifname[0]) {
+		L_WARN("%s: got interface update for no device in particular?!");
+		return;
+	}
+
+	if (c && up)
+		c->unused = false;
 
 	struct blob_attr *route;
 	unsigned rem;
