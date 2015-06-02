@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Thu May 28 17:25:55 2015 mstenber
- * Edit time:     336 min
+ * Last modified: Tue Jun  2 14:02:05 2015 mstenber
+ * Edit time:     339 min
  *
  */
 
@@ -97,6 +97,9 @@ typedef struct {
   dtls d;
 
   struct sockaddr_in6 remote_addr;
+
+  bool has_local_addr;
+  struct sockaddr_in6 local_addr;
 
   enum {
     STATE_ACCEPT,
@@ -305,7 +308,8 @@ static bool _connection_poll_write(dtls_connection dc)
       char buf[2048];
       int outsize = BIO_read(dc->wbio, buf, sizeof(buf));
       udp46 s = dc->is_client ? dc->d->u46_client : dc->d->u46_server;
-      int r = udp46_send(s, NULL, &dc->remote_addr, buf, outsize);
+      int r = udp46_send(s, dc->has_local_addr ? &dc->local_addr : NULL,
+                         &dc->remote_addr, buf, outsize);
       if (r != outsize)
         {
           if (r < 0)
@@ -591,12 +595,12 @@ _connection_create(dtls d, bool is_client,
 
 static void _dtls_poll(dtls d, bool is_client)
 {
-  struct sockaddr_in6 remote_addr;
+  struct sockaddr_in6 remote_addr, local_addr;
   int rv;
   char buf[2048];
   udp46 s = is_client ? d->u46_client : d->u46_server;
 
-  if ((rv = udp46_recv(s, &remote_addr, NULL, buf, sizeof(buf))) <= 0)
+  if ((rv = udp46_recv(s, &remote_addr, &local_addr, buf, sizeof(buf))) <= 0)
     {
       L_DEBUG("recvfrom did not return anything");
       return;
@@ -628,6 +632,9 @@ static void _dtls_poll(dtls d, bool is_client)
       if (!dc)
         return;
     }
+  dc->has_local_addr = true;
+  dc->local_addr = local_addr;
+
   /* Feed in the data to the BIO */
   L_DEBUG("adding %d bytes to rbio", rv);
   BIO_write(dc->rbio, buf, rv);
@@ -779,7 +786,10 @@ ssize_t dtls_recv(dtls d,
         {
           L_DEBUG(" .. winner from s-connection %p: %d bytes", dc, (int)rv);
           *src = &dc->remote_addr;
-          *dst = NULL;
+          if (dc->has_local_addr)
+            *dst = &dc->local_addr;
+          else
+            *dst = NULL;
           return rv;
         }
     }
