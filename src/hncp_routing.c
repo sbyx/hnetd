@@ -115,7 +115,6 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 	dncp dncp = bfs->dncp;
 	struct list_head queue = LIST_HEAD_INIT(queue);
 	dncp_node c, n;
-	bool have_v4uplink = false;
 	char dst[PREFIX_MAXBUFFLEN] = "", via[INET6_ADDRSTRLEN] = "";
 	char domain[PREFIX_MAXBUFFLEN] = "", metric[16];
 	char *argv[] = {(char*)bfs->script, "bfsprepare", dst, via, NULL, metric, domain, NULL};
@@ -210,7 +209,7 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 
 						hncp_routing_spawn(argv);
 
-						if (tlv_len(a2) < flen)
+						if (tlv_len(a2) < flen || !metric[0] || !hc->bfs.ifname)
 							continue;
 
 						tlv_for_each_in_buf(b, tlv_data(a2) + flen, tlv_len(a2) - flen) {
@@ -230,32 +229,19 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 								prefix_ntop(domain, sizeof(domain), &domainaddr, d->type);
 							}
 
-							if (!IN6_IS_ADDR_V4MAPPED(&from.prefix)) {
+							if (!IN6_IS_ADDR_V4MAPPED(&from.prefix) && hc->bfs.next_hop) {
 								argv[1] = "bfsipv6uplink";
-								if (hc->bfs.next_hop && hc->bfs.ifname) {
-									inet_ntop(AF_INET6, hc->bfs.next_hop, via, sizeof(via));
-								} else {
-									metric[0] = 0;
-									via[0] = 0;
-								}
+								inet_ntop(AF_INET6, hc->bfs.next_hop, via, sizeof(via));
 								hncp_routing_spawn(argv);
-							} else {
+							} else if (IN6_IS_ADDR_V4MAPPED(&from.prefix) && hc->bfs.next_hop4 &&
+								iface_has_ipv4_address(hc->bfs.ifname)) {
 								argv[1] = "bfsipv4uplink";
-								if (hc->bfs.next_hop4 && hc->bfs.ifname &&
-								    iface_has_ipv4_address(hc->bfs.ifname) &&
-								    (d->type != 0 || !have_v4uplink)) {
-									inet_ntop(AF_INET, &hc->bfs.next_hop4->s6_addr[12], via, sizeof(via));
-									if (d->type == 0)
-										have_v4uplink = true;
-								} else {
-									metric[0] = 0;
-									via[0] = 0;
-								}
+								inet_ntop(AF_INET, &hc->bfs.next_hop4->s6_addr[12], via, sizeof(via));
 								hncp_routing_spawn(argv);
 							}
 						}
 					}
-			} else if ((ap = dncp_tlv_ap(a)) && c != dncp->own_node) {
+			} else if ((ap = dncp_tlv_ap(a)) && c != dncp->own_node && hc->bfs.ifname) {
 				dncp_ep_i link = dncp_find_link_by_name(dncp, hc->bfs.ifname, false);
 				struct iface *ifo = link ? iface_get(hc->bfs.ifname) : NULL;
 				// Skip routes for prefixes on connected links
@@ -281,18 +267,15 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 				prefix_ntop(dst, sizeof(dst), &to.prefix, to.plen);
 				snprintf(metric, sizeof(metric), "%u", hc->bfs.hopcount << 8 | linkid);
 
-				if (!IN6_IS_ADDR_V4MAPPED(&to.prefix)) {
-					if (hc->bfs.next_hop && hc->bfs.ifname) {
-						inet_ntop(AF_INET6, hc->bfs.next_hop, via, sizeof(via));
-						argv[1] = "bfsipv6assigned";
-						hncp_routing_spawn(argv);
-					}
-				} else {
-					if (hc->bfs.next_hop4 && hc->bfs.ifname && iface_has_ipv4_address(hc->bfs.ifname)) {
-						inet_ntop(AF_INET, &hc->bfs.next_hop4->s6_addr[12], via, sizeof(via));
-						argv[1] = "bfsipv4assigned";
-						hncp_routing_spawn(argv);
-					}
+				if (!IN6_IS_ADDR_V4MAPPED(&to.prefix) && hc->bfs.next_hop) {
+					inet_ntop(AF_INET6, hc->bfs.next_hop, via, sizeof(via));
+					argv[1] = "bfsipv6assigned";
+					hncp_routing_spawn(argv);
+				} else if (IN6_IS_ADDR_V4MAPPED(&to.prefix) && hc->bfs.next_hop4 &&
+					iface_has_ipv4_address(hc->bfs.ifname)) {
+					inet_ntop(AF_INET, &hc->bfs.next_hop4->s6_addr[12], via, sizeof(via));
+					argv[1] = "bfsipv4assigned";
+					hncp_routing_spawn(argv);
 				}
 			}
 		}

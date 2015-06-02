@@ -46,37 +46,6 @@ proto_hnet_setup() {
     ubus call network del_dynamic "{\"name\": \"${interface}_4\"}"
     ubus call network del_dynamic "{\"name\": \"${interface}_6\"}"
 
-	if [ "$mode" != "guest" -a "$mode" != "leaf" -a "$mode" != "adhoc" -a "$mode" != "internal" -a "$device" != "lo" -a "$device" != "lo0" ]; then
-	    json_init
-	    json_add_string name "${interface}_6"
-	    json_add_string ifname "@${interface}"
-	    json_add_string proto dhcpv6
-            [ -n "$reqaddress" ] && json_add_string reqaddress "$reqaddress"
-            [ -n "$reqprefix" ] && json_add_string reqprefix "$reqprefix"
-	    [ -n "$dhcpv6_clientid" ] && json_add_string clientid "$dhcpv6_clientid"
-	    json_add_string iface_dslite "${interface}_dslite"
-	    json_add_string zone_dslite wan
-	    json_add_string iface_map "${interface}_map"
-	    json_add_string zone_map wan
-
-	    # Require PD, not only NA/SLAAC
-	    json_add_string forceprefix 1
-
-	    # Class
-	    json_add_string userclass HOMENET
-
-	    # Disable automatic netifd-level prefix delegation for this interface
-	    json_add_boolean delegate 0
-
-	    # Use source routing and add to maintable
-	    json_add_string sourcerouting 1
-	    json_add_string ip6table main
-
-	    json_close_object
-	    ubus call network add_dynamic "$(json_dump)"
-	fi
-
-
     proto_init_update "*" 1
 
     proto_add_data
@@ -88,6 +57,9 @@ proto_hnet_setup() {
     [ -n "$trickle_k" ] && json_add_int trickle_k $trickle_k
     [ -n "$ip6assign" ] && json_add_string ip6assign "$ip6assign"
     [ -n "$ip4assign" ] && json_add_string ip4assign "$ip4assign"
+    [ -n "$reqaddress" ] && json_add_string reqaddress "$reqaddress"
+    [ -n "$reqprefix" ] && json_add_string reqprefix "$reqprefix"
+    [ -n "$dhcpv6_clientid" ] && json_add_string dhcpv6_clientid "$dhcpv6_clientid"
     [ "$ip4uplinklimit" = 1 ] && json_add_boolean ip4uplinklimit 1
 
     json_add_string dnsname "${dnsname:-$interface}"
@@ -105,8 +77,6 @@ proto_hnet_setup() {
     proto_close_data
 
     proto_send_update "$interface"
-
-
 }
 
 proto_hnet_teardown() {
