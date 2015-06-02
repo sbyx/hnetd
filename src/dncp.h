@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Tue Jun  2 12:37:50 2015 mstenber
- * Edit time:     233 min
+ * Last modified: Tue Jun  2 12:50:03 2015 mstenber
+ * Edit time:     235 min
  *
  */
 
@@ -360,9 +360,23 @@ struct dncp_ext_configuration_struct {
   size_t ext_ep_data_size;
 };
 
+/* While the code uses sockaddr_in6 for now, it intentionally does not
+ * use any of the internal semantics within dncp*. Therefore, the I/O
+ * is responsible for setting following flags:
+ *
+ * Note also that 'NULL' dst is mapped to the multicast address, but
+ * as dncp does not need to know about it, it does not.
+ */
+
+/* IN6_IS_ADDR_LINKLOCAL result on src/dst */
 #define DNCP_RECV_FLAG_SRC_LINKLOCAL 0x1
 #define DNCP_RECV_FLAG_DST_LINKLOCAL 0x2
+
+/* Whether or not the packet was actually received using secure means. */
 #define DNCP_RECV_FLAG_SECURE        0x4
+
+/* Whether or not security was available. If this is set, but
+ * FLAG_SECURE is not, packet should be probably ignored. */
 #define DNCP_RECV_FLAG_SECURE_TRIED  0x8
 
 struct dncp_ext_callbacks_struct {
