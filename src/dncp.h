@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Tue Jun  2 12:02:25 2015 mstenber
- * Edit time:     228 min
+ * Last modified: Tue Jun  2 12:37:50 2015 mstenber
+ * Edit time:     233 min
  *
  */
 
@@ -161,6 +161,7 @@ struct dncp_subscriber_struct {
                                 dncp_ep ep,
                                 struct sockaddr_in6 *src,
                                 struct sockaddr_in6 *dst,
+                                int recv_flags,
                                 struct tlv_attr *msg);
 };
 
@@ -359,6 +360,11 @@ struct dncp_ext_configuration_struct {
   size_t ext_ep_data_size;
 };
 
+#define DNCP_RECV_FLAG_SRC_LINKLOCAL 0x1
+#define DNCP_RECV_FLAG_DST_LINKLOCAL 0x2
+#define DNCP_RECV_FLAG_SECURE        0x4
+#define DNCP_RECV_FLAG_SECURE_TRIED  0x8
+
 struct dncp_ext_callbacks_struct {
   /* I/O-related callbacks */
 
@@ -366,6 +372,7 @@ struct dncp_ext_callbacks_struct {
   ssize_t (*recv)(dncp_ext e, dncp_ep *ep,
                   struct sockaddr_in6 **src,
                   struct sockaddr_in6 **dst,
+                  int *flags,
                   void *buf, size_t buf_len);
 
   /** Send bytes to the network. */

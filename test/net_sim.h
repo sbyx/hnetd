@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu May 28 16:47:24 2015 mstenber
- * Edit time:     383 min
+ * Last modified: Tue Jun  2 12:39:56 2015 mstenber
+ * Edit time:     384 min
  *
  */
 
@@ -607,6 +607,7 @@ _recv(dncp_ext ext,
       dncp_ep *ep,
       struct sockaddr_in6 **src,
       struct sockaddr_in6 **dst,
+      int *flags,
       void *buf, size_t len)
 {
   hncp h = container_of(ext, hncp_s, ext);
@@ -622,10 +623,18 @@ _recv(dncp_ext ext,
       ret_src = m->src;
       ret_dst = m->dst;
       *src = &ret_src;
+      int f = 0;
       if (IN6_IS_ADDR_MULTICAST(&ret_dst.sin6_addr))
         *dst = NULL;
       else
-        *dst = &ret_dst;
+        {
+          *dst = &ret_dst;
+          if (IN6_IS_ADDR_LINKLOCAL(&ret_dst.sin6_addr))
+            f |= DNCP_RECV_FLAG_DST_LINKLOCAL;
+        }
+      if (IN6_IS_ADDR_LINKLOCAL(&ret_src.sin6_addr))
+        f |= DNCP_RECV_FLAG_SRC_LINKLOCAL;
+      *flags = f;
       memcpy(buf, m->buf, s);
       L_DEBUG("%s/%s: _io_recv %d bytes", node->name, m->l->conf.ifname, s);
       list_del(&m->lh);

@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 09:56:00 2014 mstenber
- * Last modified: Tue Jun  2 12:03:10 2015 mstenber
+ * Last modified: Tue Jun  2 12:40:12 2015 mstenber
  * Edit time:     64 min
  *
  */
@@ -58,8 +58,9 @@ void dncp_ext_readable(dncp o)
   int r;
   struct sockaddr_in6 *src, *dst;
   dncp_ep ep;
+  int flags;
 
-  r = o->ext->cb.recv(o->ext, &ep, &src, &dst, buf, len);
+  r = o->ext->cb.recv(o->ext, &ep, &src, &dst, &flags, buf, len);
   smock_pull_int_is("dncp_poll_io_recvfrom", r);
   if (r >= 0)
     {

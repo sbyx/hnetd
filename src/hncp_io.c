@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Jun  2 12:02:45 2015 mstenber
- * Edit time:     411 min
+ * Last modified: Tue Jun  2 12:29:10 2015 mstenber
+ * Edit time:     416 min
  *
  */
 
@@ -132,25 +132,25 @@ _recv(dncp_ext ext,
       dncp_ep *ep,
       struct sockaddr_in6 **src_store,
       struct sockaddr_in6 **dst_store,
+      int *flags,
       void *buf, size_t len)
 {
   hncp h = container_of(ext, hncp_s, ext);
   ssize_t r = -1;
   char ifname[IFNAMSIZ];
   struct sockaddr_in6 *src, *dst;
+  int f;
 
   while (1)
     {
+      f = 0;
 #ifdef DTLS
       if (h->d)
         {
+          f |= DNCP_RECV_FLAG_SECURE_TRIED;
           r = dtls_recv(h->d, &src, &dst, buf, len);
           if (r > 0)
-            {
-              /* Ignore non-linklocal dtls for now. */
-              if (src && !(*ep)->accept_secure_nonlocal_traffic && !IN6_IS_ADDR_LINKLOCAL(&src->sin6_addr))
-                continue;
-            }
+            f |= DNCP_RECV_FLAG_SECURE;
         }
 #endif /* DTLS */
       if (r < 0)
@@ -159,13 +159,6 @@ _recv(dncp_ext ext,
           r = udp46_recv(h->u46_server, &src_store, &dst_store, buf, len);
           if (r < 0)
             break;
-#ifdef DTLS
-          if (h->d && !IN6_IS_ADDR_MULTICAST(&dst_store.sin6_addr))
-            {
-              L_ERR("plaintext unicast received when in dtls mode - skip");
-              continue;
-            }
-#endif /* DTLS */
           src = &src_store;
           dst = &dst_store;
         }
@@ -190,13 +183,12 @@ _recv(dncp_ext ext,
       if (!*ep)
         continue;
 
-      if (!(*ep)->accept_insecure_nonlocal_traffic
-          && !IN6_IS_ADDR_LINKLOCAL(&src->sin6_addr))
-        {
-          L_DEBUG("hncp_io_recv ignoring non-linklocal traffic from " SA6_F,
-                  SA6_D(src));
-          continue;
-        }
+      if (IN6_IS_ADDR_LINKLOCAL(&src->sin6_addr))
+        f |= DNCP_RECV_FLAG_SRC_LINKLOCAL;
+
+      if (IN6_IS_ADDR_LINKLOCAL(&dst->sin6_addr))
+        f |= DNCP_RECV_FLAG_DST_LINKLOCAL;
+
       /* 'NULL' = multicast from dncp point of view. */
       if (IN6_IS_ADDR_MULTICAST(&dst->sin6_addr))
         {
@@ -210,6 +202,7 @@ _recv(dncp_ext ext,
         }
       *src_store = src;
       *dst_store = dst;
+      *flags = f;
       break;
     }
   return r;

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu May 28 16:17:20 2015 mstenber
- * Edit time:     949 min
+ * Last modified: Tue Jun  2 12:38:23 2015 mstenber
+ * Edit time:     960 min
  *
  */
 
@@ -490,13 +490,19 @@ void dncp_ext_readable(dncp o)
   dncp_ep_i l;
   dncp_ep ep;
   dncp_subscriber s;
+  int flags;
 
-  while ((read = o->ext->cb.recv(o->ext, &ep, &src, &dst,
+  while ((read = o->ext->cb.recv(o->ext, &ep, &src, &dst, &flags,
                                  msg->data, DNCP_MAXIMUM_PAYLOAD_SIZE)) > 0)
     {
       tlv_init(msg, 0, read + sizeof(struct tlv_attr));
 
       l = container_of(ep, dncp_ep_i_s, conf);
+
+      /* This is raw */
+      list_for_each_entry(s, &o->subscribers[DNCP_CALLBACK_SOCKET_MSG],
+                          lhs[DNCP_CALLBACK_SOCKET_MSG])
+        s->msg_received_callback(s, ep, src, dst, flags, msg);
 
       if (!l->enabled)
         {
@@ -504,10 +510,45 @@ void dncp_ext_readable(dncp o)
                   l->conf.ifname);
           continue;
         }
+
+      if (dst
+          && !(flags & DNCP_RECV_FLAG_SRC_LINKLOCAL) !=
+             !(flags & DNCP_RECV_FLAG_DST_LINKLOCAL))
+        {
+          L_DEBUG("ignoring linklocal <> non-linklocal traffic");
+          continue;
+        }
+
+      if (!(flags & DNCP_RECV_FLAG_SRC_LINKLOCAL))
+        {
+          if (flags & DNCP_RECV_FLAG_SECURE)
+            {
+              if (!ep->accept_secure_nonlocal_traffic)
+                {
+                  L_DEBUG("ignoring secure non-local traffic from" SA6_F,
+                          SA6_D(src));
+                  continue;
+                }
+            }
+          else
+            {
+              if (!ep->accept_insecure_nonlocal_traffic)
+                {
+                  L_DEBUG("ignoring insecure non-local traffic from" SA6_F,
+                          SA6_D(src));
+                  continue;
+                }
+            }
+        }
+
+      if (dst
+          && (flags & (DNCP_RECV_FLAG_SECURE | DNCP_RECV_FLAG_SECURE_TRIED))
+          == DNCP_RECV_FLAG_SECURE_TRIED)
+        {
+          L_DEBUG("ignoring insecure unicast from " SA6_F, SA6_D(src));
+          continue;
+        }
       handle_message(l, src, dst, msg);
 
-      list_for_each_entry(s, &o->subscribers[DNCP_CALLBACK_SOCKET_MSG],
-                          lhs[DNCP_CALLBACK_SOCKET_MSG])
-        s->msg_received_callback(s, ep, src, dst, msg);
     }
 }
