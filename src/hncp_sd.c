@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Jun  1 13:27:45 2015 mstenber
- * Edit time:     621 min
+ * Last modified: Tue Jun  2 10:16:35 2015 mstenber
+ * Edit time:     622 min
  *
  */
 
@@ -260,13 +260,10 @@ static void _publish_ddzs(hncp_sd sd)
               return;
             }
 
-          uint32_t link_id = ah->link_id;
-
-          l = dncp_find_link_by_id(sd->dncp, link_id);
+          l = dncp_find_link_by_id(sd->dncp, ah->link_id);
           if (!l)
             {
-        	  if(ah->link_id)
-        		  L_ERR("unable to find hncp link by id #%d", link_id);
+              L_ERR("unable to find hncp link by id #%d", ah->link_id);
               continue;
             }
 
@@ -291,8 +288,7 @@ static void _publish_ddzs(hncp_sd sd)
           if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX)
             {
               ah = tlv_data(a);
-              uint32_t link_id = ah->link_id;
-              if (link_id == l->iid)
+              if (ah->link_id == l->iid)
                 {
                   found = true;
                   break;
@@ -573,7 +569,8 @@ bool hncp_sd_reconfigure_pcp(hncp_sd sd)
 
 static void
 _election_cb(struct hncp_link_user *u,
-		const char *ifname __unused, enum hncp_link_elected elected __unused)
+             const char *ifname __unused,
+             enum hncp_link_elected elected __unused)
 {
   hncp_sd sd = container_of(u, hncp_sd_s, link);
   _should_update(sd, UPDATE_FLAG_OHP | UPDATE_FLAG_DDZ);
@@ -602,8 +599,8 @@ _tlv_router_name_matches(hncp_sd sd, struct tlv_attr *a)
 {
   if (tlv_id(a) == HNCP_T_DNS_ROUTER_NAME)
     {
-	  hncp_t_dns_router_name rname = tlv_data(a);
-	  int namelen = tlv_len(a) - sizeof(*rname);
+      hncp_t_dns_router_name rname = tlv_data(a);
+      int namelen = tlv_len(a) - sizeof(*rname);
       if (namelen == (int)strlen(sd->router_name)
           && memcmp(rname->name, sd->router_name, namelen) == 0)
         return true;
