@@ -1167,6 +1167,7 @@ static void platform_dhcp(struct uloop_timeout *t)
 	struct iface *c = iface->iface;
 	struct blob_buf b = {NULL, NULL, 0, NULL};
 	struct blob_attr *dtb[DATA_ATTR_MAX];
+	bool hybrid = (c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID;
 	char *buf;
 
 	blob_buf_init(&b, 0);
@@ -1181,6 +1182,7 @@ static void platform_dhcp(struct uloop_timeout *t)
 	blobmsg_add_u8(&b, "delegate", 0);
 	blobmsg_add_u8(&b, "defaultroute", c->designatedv4);
 	blobmsg_add_u32(&b, "metric", 1000 + if_nametoindex(c->ifname));
+	blobmsg_add_string(&b, "zone", hybrid ? "lan" : "wan");
 
 	ubus_invoke(ubus, ubus_network, "add_dynamic", b.head, NULL, NULL, 1000);
 
@@ -1209,6 +1211,7 @@ static void platform_dhcp(struct uloop_timeout *t)
 	blobmsg_add_string(&b, "forceprefix", "1");
 	blobmsg_add_string(&b, "userclass", "HOMENET");
 	blobmsg_add_u8(&b, "delegate", 0);
+	blobmsg_add_string(&b, "zone", hybrid ? "lan" : "wan");
 
 	ubus_invoke(ubus, ubus_network, "add_dynamic", b.head, NULL, NULL, 1000);
 	blob_buf_free(&b);
