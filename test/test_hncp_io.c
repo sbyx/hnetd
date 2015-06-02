@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 09:56:00 2014 mstenber
- * Last modified: Thu May 28 16:58:55 2015 mstenber
+ * Last modified: Tue Jun  2 12:03:10 2015 mstenber
  * Edit time:     64 min
  *
  */
@@ -25,7 +25,7 @@
 
 
 dncp_ep_s static_ep = { .ifname = LOOPBACK_NAME,
-                        .accept_nonlocal_traffic = true };
+                        .accept_insecure_nonlocal_traffic = true };
 
 #define dncp_ep_find_by_name(o, n) &static_ep
 #include "hncp_io.c"

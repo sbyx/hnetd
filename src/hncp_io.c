@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Thu May 28 16:21:39 2015 mstenber
- * Edit time:     408 min
+ * Last modified: Tue Jun  2 12:02:45 2015 mstenber
+ * Edit time:     411 min
  *
  */
 
@@ -148,7 +148,7 @@ _recv(dncp_ext ext,
           if (r > 0)
             {
               /* Ignore non-linklocal dtls for now. */
-              if (src && !IN6_IS_ADDR_LINKLOCAL(&src->sin6_addr))
+              if (src && !(*ep)->accept_secure_nonlocal_traffic && !IN6_IS_ADDR_LINKLOCAL(&src->sin6_addr))
                 continue;
             }
         }
@@ -190,7 +190,7 @@ _recv(dncp_ext ext,
       if (!*ep)
         continue;
 
-      if (!(*ep)->accept_nonlocal_traffic
+      if (!(*ep)->accept_insecure_nonlocal_traffic
           && !IN6_IS_ADDR_LINKLOCAL(&src->sin6_addr))
         {
           L_DEBUG("hncp_io_recv ignoring non-linklocal traffic from " SA6_F,
