@@ -39,7 +39,11 @@
 #include "hncp_i.h"
 
 #define DNCP_ID_CMP(id1, id2) memcmp(id1, id2, sizeof(dncp_node_identifier_s))
-#define DNCP_NODE_TO_PA(n, pa_id) memcpy(pa_id, &n->node_identifier, DNCP_NI_LEN(n->dncp))
+#define DNCP_NODE_TO_PA(n, pa_id)                                       \
+do {                                                                    \
+        memset(pa_id, 0, sizeof(*pa_id));                               \
+        memcpy(pa_id, &n->node_identifier, DNCP_NI_LEN(n->dncp));       \
+} while(0)
 
 #define HNCP_ROUTER_ADDRESS_PA_PRIORITY 3
 
@@ -679,7 +683,7 @@ static int hpa_has_other_v4(hncp_pa hpa)
 	hpa_for_each_dp(hpa, dp)
 		if(dp->pa.type == HPA_DP_T_HNCP && prefix_is_ipv4(&dp->dp.prefix) &&
 				(memcmp(&dp->hncp.node_id, &hpa->dncp->own_node->node_identifier,
-						sizeof(dncp_node_identifier_s)) >= 0))
+						DNCP_NI_LEN(hpa->dncp)) >= 0))
 			return 1;
 	return 0;
 }
