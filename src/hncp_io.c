@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Jun  2 12:29:10 2015 mstenber
+ * Last modified: Tue Jun  2 13:55:00 2015 mstenber
  * Edit time:     416 min
  *
  */
@@ -224,7 +224,7 @@ _send(dncp_ext ext, dncp_ep ep,
     rdst = *dst;
   rdst.sin6_scope_id = if_nametoindex(ep->ifname);
 #ifdef DTLS
-  if (h->d && !IN6_IS_ADDR_MULTICAST(&dst->sin6_addr))
+  if (h->d && !IN6_IS_ADDR_MULTICAST(&rdst.sin6_addr))
     {
       /* Change destination port to DTLS server port too if it is the
        * default port. Otherwise answer on the different port (which
