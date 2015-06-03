@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu May 28 15:24:48 2015 mstenber
- * Edit time:     551 min
+ * Last modified: Wed Jun  3 14:26:14 2015 mstenber
+ * Edit time:     554 min
  *
  */
 
@@ -355,4 +355,22 @@ void dncp_trickle_reset(dncp o)
 
   vlist_for_each_element(&o->links, l, in_links)
     trickle_set_i(l, l->conf.trickle_imin);
+}
+
+void dncp_ext_ep_ready(dncp_ep ep, bool enabled)
+{
+  dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
+
+  L_DEBUG("dncp_ext_ep_ready %s %s %s", ep->ifname, enabled ? "+" : "-",
+          !l->enabled == !enabled ? "(redundant)" : "");
+  if (!l->enabled == !enabled)
+      return;
+  dncp_notify_subscribers_link_changed(l, enabled ? DNCP_EVENT_ADD : DNCP_EVENT_REMOVE);
+  l->enabled = enabled;
+  if (enabled)
+    {
+      trickle_set_i(l, l->conf.trickle_imin);
+      l->last_trickle_sent = dncp_time(l->dncp);
+      dncp_schedule(l->dncp);
+    }
 }

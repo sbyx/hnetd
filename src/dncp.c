@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Thu May 28 14:21:55 2015 mstenber
- * Edit time:     933 min
+ * Last modified: Wed Jun  3 14:25:26 2015 mstenber
+ * Edit time:     956 min
  *
  */
 
@@ -443,18 +443,6 @@ dncp_ep_i dncp_find_link_by_id(dncp o, uint32_t link_id)
     if (l->iid == link_id)
       return l;
   return NULL;
-}
-
-void dncp_ext_ep_ready(dncp_ep ep, bool enabled)
-{
-  dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
-
-  L_DEBUG("dncp_ext_ep_ready %s %s %s", ep->ifname, enabled ? "+" : "-",
-          !l->enabled == !enabled ? "(redundant)" : "");
-  if (!l->enabled == !enabled)
-      return;
-  dncp_notify_subscribers_link_changed(l, enabled ? DNCP_EVENT_ADD : DNCP_EVENT_REMOVE);
-  l->enabled = enabled;
 }
 
 bool dncp_node_is_self(dncp_node n)
