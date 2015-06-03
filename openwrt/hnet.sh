@@ -42,10 +42,6 @@ proto_hnet_setup() {
 	fi
     fi
 
-    # work around some more races
-    ubus call network del_dynamic "{\"name\": \"${interface}_4\"}"
-    ubus call network del_dynamic "{\"name\": \"${interface}_6\"}"
-
     proto_init_update "*" 1
 
     proto_add_data
