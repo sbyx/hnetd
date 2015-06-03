@@ -6,54 +6,50 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Jun  3 14:26:14 2015 mstenber
- * Edit time:     554 min
+ * Last modified: Wed Jun  3 16:51:36 2015 mstenber
+ * Edit time:     584 min
  *
  */
 
 #include "dncp_i.h"
 
-static void trickle_set_i(dncp_ep_i l, int i)
+static void trickle_set_i(dncp_trickle t, dncp_ep_i l, int i)
 {
   hnetd_time_t now = dncp_time(l->dncp);
   int imin = l->conf.trickle_imin;
   int imax = l->conf.trickle_imax;
 
   i = i < imin ? imin : i > imax ? imax : i;
-  l->trickle_i = i;
-  int t = i / 2 + random() % (i / 2);
-  l->trickle_send_time = now + t;
-  l->trickle_interval_end_time = now + i;
-  l->trickle_c = 0;
-  L_DEBUG(DNCP_LINK_F " trickle set to %d/%d", DNCP_LINK_D(l), t, i);
+  t->i = i;
+  t->send_time = now + i / 2 + random() % (i / 2);
+  t->interval_end_time = now + i;
+  t->c = 0;
 }
 
-static void trickle_upgrade(dncp_ep_i l)
+static void trickle_upgrade(dncp_trickle t, dncp_ep_i l)
 {
-  trickle_set_i(l, l->trickle_i * 2);
+  trickle_set_i(t, l, t->i * 2);
 }
 
-static void trickle_send_nocheck(dncp_ep_i l)
+static void trickle_send_nocheck(dncp_trickle t, dncp_ep_i l, dncp_neighbor ne)
 {
-  l->num_trickle_sent++;
-  l->last_trickle_sent = dncp_time(l->dncp);
-  /* TBD - insert per-peer keepalive support code here at some point! */
-  dncp_ep_i_send_network_state(l, NULL, NULL, l->conf.maximum_multicast_size);
+  t->num_sent++;
+  t->last_sent = dncp_time(l->dncp);
+  /* TBD: Is sending full network state always advisable in unicast mode?
+   * I hope so.. */
+  dncp_ep_i_send_network_state(l, NULL, ne ? &ne->last_sa6: NULL,
+                               ne ? 0 : l->conf.maximum_multicast_size, false);
 }
 
-static void trickle_send(dncp_ep_i l)
+static void trickle_send(dncp_trickle t, dncp_ep_i l, dncp_neighbor ne)
 {
-  if (l->trickle_c < l->conf.trickle_k)
-    {
-      trickle_send_nocheck(l);
-    }
+  if (t->c < l->conf.trickle_k
+      && (!l->conf.unicast_is_reliable_stream ||
+          t->i == l->conf.trickle_imin))
+    trickle_send_nocheck(t, l, ne);
   else
-    {
-      l->num_trickle_skipped++;
-      L_DEBUG(DNCP_LINK_F " trickle already has c=%d >= k=%d, not sending",
-              DNCP_LINK_D(l), l->trickle_c, l->conf.trickle_k);
-    }
-  l->trickle_send_time = 0;
+    t->num_skipped++;
+  t->send_time = 0;
 }
 
 static void _node_set_reachable(dncp_node n, bool value)
@@ -210,6 +206,38 @@ _neighbor_interval(dncp o, dncp_t_neighbor neigh)
   return value;
 }
 
+static hnetd_time_t handle_trickle_and_ka(dncp_trickle t,
+                                          dncp_ep_i l,
+                                          dncp_neighbor ne)
+{
+  hnetd_time_t next = 0;
+  hnetd_time_t now = dncp_time(l->dncp);
+
+  if (l->published_keepalive_interval)
+    {
+      hnetd_time_t next_time =
+        t->last_sent + l->published_keepalive_interval;
+      if (next_time <= now)
+        {
+          L_DEBUG("sending keep-alive");
+          trickle_send_nocheck(t, l, ne);
+          /* Do not increment Trickle i, but set next t to i/2 .. i */
+          trickle_set_i(t, l, t->i);
+          next_time =
+            t->last_sent + l->published_keepalive_interval;
+        }
+      SET_NEXT(next_time, "next keep-alive");
+    }
+  if (t->interval_end_time <= now)
+    trickle_upgrade(t, l);
+  else if (t->send_time && t->send_time <= now)
+    trickle_send(t, l, ne);
+
+  SET_NEXT(t->interval_end_time, "trickle_interval_end_time");
+  SET_NEXT(t->send_time, "trickle_send_time");
+  return next;
+}
+
 void dncp_ext_timeout(dncp o)
 {
   hnetd_time_t next = 0;
@@ -274,28 +302,11 @@ void dncp_ext_timeout(dncp o)
       /* Update the 'active' link's published keepalive interval, if need be */
       dncp_ep_i_set_keepalive_interval(l, l->conf.keepalive_interval);
 
-      if (l->published_keepalive_interval)
-        {
-          hnetd_time_t next_time =
-            l->last_trickle_sent + l->published_keepalive_interval;
-          if (next_time <= now)
-            {
-              L_DEBUG("sending keep-alive");
-              trickle_send_nocheck(l);
-              /* Do not increment Trickle i, but set next t to i/2 .. i */
-              trickle_set_i(l, l->trickle_i);
-              next_time =
-                l->last_trickle_sent + l->published_keepalive_interval;
-            }
-          SET_NEXT(next_time, "next keep-alive");
-        }
-      if (l->trickle_interval_end_time <= now)
-        trickle_upgrade(l);
-      else if (l->trickle_send_time && l->trickle_send_time <= now)
-        trickle_send(l);
+      if (l->conf.unicast_only)
+        continue;
 
-      SET_NEXT(l->trickle_interval_end_time, "trickle_interval_end_time");
-      SET_NEXT(l->trickle_send_time, "trickle_send_time");
+      hnetd_time_t next_time = handle_trickle_and_ka(&l->trickle, l, NULL);
+      SET_NEXT(next_time, "l-trickle-ka");
     }
 
   /* Look at neighbors we should be worried about.. */
@@ -304,17 +315,24 @@ void dncp_ext_timeout(dncp o)
   dncp_for_each_local_tlv_safe(o, t, t2)
     if ((ne = dncp_tlv_neighbor(o, &t->tlv)))
       {
+        l = dncp_find_link_by_id(o, ne->link_id);
         dncp_neighbor n = dncp_tlv_get_extra(t);
+        hnetd_time_t interval = _neighbor_interval(o, ne);
+
+        if (l->conf.unicast_only)
+          {
+            hnetd_time_t next_time = handle_trickle_and_ka(&n->trickle, l, n);
+            SET_NEXT(next_time, "n-trickle-ka");
+          }
+
+        /* Zero interval is valid only on unicast stream connection
+         * (=~TCP/TLS/..). In that case, we can ignore keepalive
+         * handling here. */
+        if (!interval && l->conf.unicast_is_reliable_stream)
+          continue;
 
         hnetd_time_t next_time = n->last_contact
-          + _neighbor_interval(o, ne)
-          * o->ext->conf.keepalive_multiplier_percent / 100;
-
-        /* TBD: How to treat party that has keepalive_interval 0? */
-
-        /* (For the time being, we just drop them immediately, but
-         * some sort of API might be called for it in the future.)
-         */
+          + interval * o->ext->conf.keepalive_multiplier_percent / 100;
 
         /* No cause to do anything right now. */
         if (next_time > now)
@@ -325,7 +343,6 @@ void dncp_ext_timeout(dncp o)
 
         /* Zap the neighbor */
 #if L_LEVEL >= 7
-        l = dncp_find_link_by_id(o, ne->link_id);
         L_DEBUG("Neighbor %s gone on " DNCP_LINK_F " - nothing in %d ms",
                 DNCP_NI_REPR(o, dncp_tlv_get_node_identifier(o, ne)),
                 DNCP_LINK_D(l), (int) (now - n->last_contact));
@@ -353,8 +370,24 @@ void dncp_trickle_reset(dncp o)
 {
   dncp_ep_i l;
 
+  /* This function does not care if Trickle is actually in per-peer or
+   * per-link mode here; resetting the variables does nothing harmful
+   * anyway. */
+
+  /* Per-link */
   vlist_for_each_element(&o->links, l, in_links)
-    trickle_set_i(l, l->conf.trickle_imin);
+    trickle_set_i(&l->trickle, l, l->conf.trickle_imin);
+
+  /* Per-peer */
+  dncp_t_neighbor ne;
+  dncp_tlv t;
+  dncp_for_each_local_tlv(o, t)
+    if ((ne = dncp_tlv_neighbor(o, &t->tlv)))
+      {
+        dncp_neighbor n = dncp_tlv_get_extra(t);
+        l = dncp_find_link_by_id(o, ne->link_id);
+        trickle_set_i(&n->trickle, l, l->conf.trickle_imin);
+      }
 }
 
 void dncp_ext_ep_ready(dncp_ep ep, bool enabled)
@@ -369,8 +402,8 @@ void dncp_ext_ep_ready(dncp_ep ep, bool enabled)
   l->enabled = enabled;
   if (enabled)
     {
-      trickle_set_i(l, l->conf.trickle_imin);
-      l->last_trickle_sent = dncp_time(l->dncp);
+      trickle_set_i(&l->trickle, l, l->conf.trickle_imin);
+      l->trickle.last_sent = dncp_time(l->dncp);
       dncp_schedule(l->dncp);
     }
 }

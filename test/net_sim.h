@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Tue Jun  2 12:39:56 2015 mstenber
- * Edit time:     384 min
+ * Last modified: Wed Jun  3 17:34:04 2015 mstenber
+ * Edit time:     391 min
  *
  */
 
@@ -131,6 +131,10 @@ typedef struct net_sim_t {
   int next_free_iid;
 
   bool accept_time_errors;
+
+  bool fake_unicast;
+  bool fake_unicast_is_reliable_stream;
+
 } net_sim_s, *net_sim;
 
 static struct list_head net_sim_interfaces = LIST_HEAD_INIT(net_sim_interfaces);
@@ -306,6 +310,10 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
   sput_fail_unless(n->name, "strdup name");
   n->s = s;
   r = hncp_init(&n->h);
+  if (s->fake_unicast)
+    n->h.ext.conf.per_link.unicast_only = true;
+  if (s->fake_unicast_is_reliable_stream)
+    n->h.ext.conf.per_link.unicast_is_reliable_stream = true;
   n->d = hncp_get_dncp(&n->h);
   sput_fail_unless(r, "hncp_init");
 
@@ -420,6 +428,8 @@ void net_sim_set_connected(dncp_ep_i l1, dncp_ep_i l2, bool enabled)
   net_node node = container_of(h, net_node_s, h);
   net_sim s = node->s;
   net_neigh n;
+  hncp_ep h1 = dncp_ep_get_ext_data(&l1->conf);
+  hncp_ep h2 = dncp_ep_get_ext_data(&l2->conf);
 
 
   L_DEBUG("connection %p/%d -> %p/%d %s",
@@ -448,9 +458,18 @@ void net_sim_set_connected(dncp_ep_i l1, dncp_ep_i l2, bool enabled)
             {
               list_del(&n->lh);
               free(n);
-              return;
+              break;
             }
         }
+    }
+  if (s->fake_unicast || s->fake_unicast_is_reliable_stream)
+    {
+      struct sockaddr_in6 a1, a2;
+
+      sockaddr_in6_set(&a1, &h1->ipv6_address, HNCP_PORT);
+      sockaddr_in6_set(&a2, &h2->ipv6_address, HNCP_PORT);
+      dncp_ext_ep_peer_state(&l1->conf, &a1, &a2, enabled);
+      dncp_ext_ep_peer_state(&l1->conf, &a2, &a1, enabled);
     }
 }
 
@@ -745,7 +764,11 @@ _send(dncp_ext ext, dncp_ep ep,
   struct sockaddr_in6 rdst;
 
   if (!dst)
-    sockaddr_in6_set(&rdst, &h->multicast_address, HNCP_PORT);
+    {
+      if (s->fake_unicast)
+        return;
+      sockaddr_in6_set(&rdst, &h->multicast_address, HNCP_PORT);
+    }
   else
     rdst = *dst;
   dst = &rdst;

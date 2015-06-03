@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Jun  1 10:42:54 2015 mstenber
- * Edit time:     635 min
+ * Last modified: Wed Jun  3 17:16:50 2015 mstenber
+ * Edit time:     642 min
  *
  */
 
@@ -283,6 +283,34 @@ void hncp_bird14()
   net_sim_s s;
 
   net_sim_init(&s);
+  raw_bird14(&s);
+}
+
+void hncp_bird14_u()
+{
+  net_sim_s s;
+
+  net_sim_init(&s);
+  s.fake_unicast = true;
+  raw_bird14(&s);
+}
+
+void hncp_bird14_us()
+{
+  net_sim_s s;
+
+  net_sim_init(&s);
+  s.fake_unicast_is_reliable_stream = true;
+  raw_bird14(&s);
+}
+
+void hncp_bird14_u_us()
+{
+  net_sim_s s;
+
+  net_sim_init(&s);
+  s.fake_unicast = true;
+  s.fake_unicast_is_reliable_stream = true;
   raw_bird14(&s);
 }
 
@@ -590,12 +618,12 @@ void monkey_debug_print(net_sim s, int *ma)
       for (p1 = 0 ; p1 < NUM_MONKEY_PORTS ; p1++)
         {
           dncp_ep_i l1 = net_sim_dncp_find_link_n(n1, p1);
-          int tot = l1->num_trickle_skipped + l1->num_trickle_sent;
+          int tot = l1->trickle.num_skipped + l1->trickle.num_sent;
 
           if (tot)
             L_DEBUG("%d/%d - trickle %d/%d (%.2f%%)",
-                    r1, p1, l1->num_trickle_sent, tot,
-                    100.0 * l1->num_trickle_sent / tot);
+                    r1, p1, l1->trickle.num_sent, tot,
+                    100.0 * l1->trickle.num_sent / tot);
         }
     }
   for (r1 = 0 ; r1 < NUM_MONKEY_ROUTERS ; r1++)
@@ -728,6 +756,9 @@ int main(__unused int argc, __unused char **argv)
   sput_enter_suite("hncp_net"); /* optional */
   maybe_run_test(hncp_two);
   maybe_run_test(hncp_bird14);
+  maybe_run_test(hncp_bird14_u);
+  maybe_run_test(hncp_bird14_us);
+  maybe_run_test(hncp_bird14_u_us);
   maybe_run_test(hncp_bird14_unique);
   maybe_run_test(hncp_tube_small);
   maybe_run_test(hncp_tube_medium);

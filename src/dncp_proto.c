@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue Jun  2 12:38:23 2015 mstenber
- * Edit time:     960 min
+ * Last modified: Wed Jun  3 17:40:14 2015 mstenber
+ * Edit time:     996 min
  *
  */
 
@@ -64,10 +64,15 @@ static bool _push_network_state_tlv(struct tlv_buf *tb, dncp o)
   return true;
 }
 
-static bool _push_link_id_tlv(struct tlv_buf *tb, dncp_ep_i l)
+static bool _push_link_id_tlv(struct tlv_buf *tb, dncp_ep_i l,
+                              struct sockaddr_in6 *dst, bool always_link_id)
 {
   dncp_t_link_id lid;
   int tl = DNCP_NI_LEN(l->dncp) + sizeof(*lid);
+
+  if (l->conf.unicast_is_reliable_stream && dst && !always_link_id)
+    return true;
+
   struct tlv_attr *a = tlv_new(tb, DNCP_T_ENDPOINT_ID, tl);
 
   if (!a)
@@ -83,7 +88,8 @@ static bool _push_link_id_tlv(struct tlv_buf *tb, dncp_ep_i l)
 void dncp_ep_i_send_network_state(dncp_ep_i l,
                                   struct sockaddr_in6 *src,
                                   struct sockaddr_in6 *dst,
-                                  size_t maximum_size)
+                                  size_t maximum_size,
+                                  bool always_link_id)
 {
   struct tlv_buf tb;
   dncp o = l->dncp;
@@ -91,7 +97,7 @@ void dncp_ep_i_send_network_state(dncp_ep_i l,
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
-  if (!_push_link_id_tlv(&tb, l))
+  if (!_push_link_id_tlv(&tb, l, dst, always_link_id))
     goto done;
   if (!_push_network_state_tlv(&tb, o))
     goto done;
@@ -142,7 +148,7 @@ void dncp_ep_i_send_node_state(dncp_ep_i l,
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
-  if (_push_link_id_tlv(&tb, l)
+  if (_push_link_id_tlv(&tb, l, dst, false)
       && _push_node_state_tlv(&tb, n, true))
     {
       L_DEBUG("dncp_ep_i_send_node_data %s -> " SA6_F " %%" DNCP_LINK_F,
@@ -162,7 +168,7 @@ void dncp_ep_i_send_req_network_state(dncp_ep_i l,
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
-  if (_push_link_id_tlv(&tb, l)
+  if (_push_link_id_tlv(&tb, l, dst, false)
       && _push_network_state_tlv(&tb, l->dncp) /* SHOULD include local */
       && tlv_new(&tb, DNCP_T_REQ_NET_STATE, 0))
     {
@@ -185,7 +191,7 @@ void dncp_ep_i_send_req_node_data(dncp_ep_i l,
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
-  if (_push_link_id_tlv(&tb, l)
+  if (_push_link_id_tlv(&tb, l, dst, false)
       && (a = tlv_new(&tb, DNCP_T_REQ_NODE_STATE, DNCP_NI_LEN(o))))
     {
       L_DEBUG("dncp_ep_i_send_req_node_data -> " SA6_F "%%" DNCP_LINK_F,
@@ -199,6 +205,22 @@ void dncp_ep_i_send_req_node_data(dncp_ep_i l,
 }
 
 /************************************************************ Input handling */
+
+static dncp_tlv
+_find_local_tlv_by_remote(dncp o, struct sockaddr_in6 *remote)
+{
+  dncp_tlv t;
+  dncp_t_neighbor ne;
+
+  dncp_for_each_local_tlv(o, t)
+    if ((ne = dncp_tlv_neighbor(o, &t->tlv)))
+      {
+        dncp_neighbor n = dncp_tlv_get_extra(t);
+        if (memcmp(&n->last_sa6, remote, sizeof(*remote)) == 0)
+          return t;
+      }
+  return NULL;
+}
 
 static dncp_tlv
 _heard(dncp_ep_i l, dncp_t_link_id lid, struct sockaddr_in6 *src,
@@ -259,6 +281,7 @@ handle_message(dncp_ep_i l,
   int nilen = DNCP_NI_LEN(l->dncp);
   int hlen = DNCP_HASH_LEN(l->dncp);
   dncp_node_identifier ni;
+  char fake_lid[DNCP_NI_MAX_LEN + sizeof(*lid)];
 
   /* Validate that link id exists (if this were TCP, we would keep
    * track of the remote link id on per-stream basis). */
@@ -278,20 +301,38 @@ handle_message(dncp_ep_i l,
           }
         lid = tlv_data(a) + nilen;
       }
-
-  bool is_local = memcmp(dncp_tlv_get_node_identifier(l->dncp, lid),
-                         &o->own_node->node_identifier,
-                         nilen) == 0;
-  if (!is_local && lid)
+  if (dst && !lid && l->conf.unicast_is_reliable_stream)
     {
-      tne = _heard(l, lid, src, multicast);
-      if (!tne)
+      /* If and only if this is unicast traffic, and from stream, we
+       * may reuse old info. */
+      void *buf = fake_lid;
+      dncp_tlv t = _find_local_tlv_by_remote(o, src);
+      dncp_t_neighbor ne;
+      if (t && (ne = dncp_tlv_neighbor(o, &t->tlv)))
         {
-          if (!multicast)
-            return; /* OOM */
-          should_request_network_state = true;
+          memcpy(buf, dncp_tlv_get_node_identifier(o, ne), nilen);
+          lid = buf + nilen;
+          lid->link_id = ne->neighbor_link_id;
         }
-      ne = tne ? dncp_tlv_get_extra(tne) : NULL;
+    }
+  bool is_local = false;
+
+  if (lid)
+    {
+      is_local = memcmp(dncp_tlv_get_node_identifier(l->dncp, lid),
+                        &o->own_node->node_identifier,
+                        nilen) == 0;
+      if (!is_local)
+        {
+          tne = _heard(l, lid, src, multicast);
+          if (!tne)
+            {
+              if (!multicast)
+                return; /* OOM */
+              should_request_network_state = true;
+            }
+          ne = tne ? dncp_tlv_get_extra(tne) : NULL;
+        }
     }
 
   tlv_for_each_attr(a, msg)
@@ -304,7 +345,7 @@ handle_message(dncp_ep_i l,
           if (multicast)
             L_INFO("ignoring req-net-hash in multicast");
           else
-            dncp_ep_i_send_network_state(l, dst, src, 0);
+            dncp_ep_i_send_network_state(l, dst, src, 0, false);
           break;
 
         case DNCP_T_REQ_NODE_STATE:
@@ -362,7 +403,8 @@ handle_message(dncp_ep_i l,
               /* Increment Trickle count + last in sync time.*/
               if (ne)
                 {
-                  l->trickle_c++;
+                  l->trickle.c++;
+                  ne->trickle.c++;
                   ne->last_contact = dncp_time(l->dncp);
                 }
               else
@@ -551,4 +593,27 @@ void dncp_ext_readable(dncp o)
       handle_message(l, src, dst, msg);
 
     }
+}
+
+void dncp_ext_ep_peer_state(dncp_ep ep,
+                            struct sockaddr_in6 *local,
+                            struct sockaddr_in6 *remote,
+                            bool connected)
+{
+  dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
+  dncp o = l->dncp;
+
+  if (connected)
+    {
+      dncp_ep_i_send_network_state(l, local, remote, 0, true);
+      return;
+    }
+  dncp_tlv t = _find_local_tlv_by_remote(o, remote);
+  dncp_t_neighbor ne;
+  if (t && (ne = dncp_tlv_neighbor(o, &t->tlv)))
+    {
+      dncp_neighbor n = dncp_tlv_get_extra(t);
+      n->last_contact = 0;
+    }
+  dncp_schedule(o);
 }

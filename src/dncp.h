@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Tue Jun  2 12:50:03 2015 mstenber
- * Edit time:     235 min
+ * Last modified: Wed Jun  3 16:45:59 2015 mstenber
+ * Edit time:     244 min
  *
  */
 
@@ -195,6 +195,16 @@ struct dncp_ep_struct {
 
   /* Accept non-linklocal traffic (secure). */
   bool accept_secure_nonlocal_traffic;
+
+  /* Indicate that the interface is in unicast mode.
+   *
+   * In unicast mode, the keep-alives are handled per-peer, and so is
+   * sending of Trickle state.
+   */
+  bool unicast_only;
+
+  /* Is unicast stream + reliable? */
+  bool unicast_is_reliable_stream;
 };
 
 /**
@@ -468,9 +478,9 @@ dncp_ep dncp_ep_from_ext_data(void *ext_data);
  * assumed to be reachable and DNCP MAY attempt to send packets to it.
  */
 void dncp_ext_ep_peer_state(dncp_ep ep,
-                           struct sockaddr_in6 *local,
-                           struct sockaddr_in6 *remote,
-                           bool connected);
+                            struct sockaddr_in6 *local,
+                            struct sockaddr_in6 *remote,
+                            bool connected);
 
 /**
  * Notification from the i/o that there is something new available to be read.

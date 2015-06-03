@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu May 28 16:55:02 2015 mstenber
- * Edit time:     357 min
+ * Last modified: Wed Jun  3 16:51:25 2015 mstenber
+ * Edit time:     365 min
  *
  */
 
@@ -120,6 +120,20 @@ struct dncp_struct {
   int num_neighbor_dropped;
 };
 
+typedef struct dncp_trickle_struct dncp_trickle_s, *dncp_trickle;
+
+struct dncp_trickle_struct {
+  /* Trickle state */
+  int i; /* trickle interval size */
+  hnetd_time_t send_time; /* when do we send if c < k*/
+  hnetd_time_t interval_end_time; /* when does current interval end */
+  int c; /* counter */
+  hnetd_time_t last_sent;
+  int num_sent;
+  int num_skipped;
+};
+
+
 struct dncp_ep_i_struct {
   struct vlist_node in_links;
 
@@ -136,13 +150,6 @@ struct dncp_ep_i_struct {
    * dncp process. */
   iid_t iid;
 
-  /* Trickle state */
-  int trickle_i; /* trickle interval size */
-  hnetd_time_t trickle_send_time; /* when do we send if c < k*/
-  hnetd_time_t trickle_interval_end_time; /* when does current interval end */
-  int trickle_c; /* counter */
-  hnetd_time_t last_trickle_sent;
-
   /* What value we have TLV for, if any */
   uint32_t published_keepalive_interval;
 
@@ -150,13 +157,11 @@ struct dncp_ep_i_struct {
    * but one outgoing request per link sounds fine too). */
   hnetd_time_t last_req_network_state;
 
-  /* Statistics about Trickle (mostly for debugging) */
-  int num_trickle_sent;
-  int num_trickle_skipped;
+  /* The per-link Trickle state. */
+  dncp_trickle_s trickle;
 };
 
 typedef struct dncp_neighbor_struct dncp_neighbor_s, *dncp_neighbor;
-
 
 struct dncp_neighbor_struct {
   /* Link-level address */
@@ -165,6 +170,9 @@ struct dncp_neighbor_struct {
   /* When did we last time receive _consistent_ state from the peer
    * (multicast) or any contact (unicast). */
   hnetd_time_t last_contact;
+
+  /* The per-(local)peer Trickle state. */
+  dncp_trickle_s trickle;
 };
 
 
@@ -262,7 +270,8 @@ static inline unsigned long long dncp_hash64(dncp_hash h)
 void dncp_ep_i_send_network_state(dncp_ep_i l,
                                   struct sockaddr_in6 *src,
                                   struct sockaddr_in6 *dst,
-                                  size_t maximum_size);
+                                  size_t maximum_size,
+                                  bool always_link_id);
 void dncp_ep_i_send_req_network_state(dncp_ep_i l,
                                       struct sockaddr_in6 *src,
                                       struct sockaddr_in6 *dst);
