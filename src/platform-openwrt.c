@@ -452,6 +452,26 @@ static void handle_complete(struct ubus_request *req, int ret)
 	L_INFO("platform: async notify_proto for %s: %s", iface->handle, ubus_strerror(ret));
 }
 
+static void handle_data_dhcp(struct ubus_request *req,
+		__unused int type, struct blob_attr *msg)
+{
+	struct platform_iface *iface = container_of(req, struct platform_iface, dhcp);
+	bool available = false;
+	struct blob_attr *b;
+	unsigned rem;
+
+	blob_for_each_attr(b, msg, rem)
+		if (blobmsg_type(b) == BLOBMSG_TYPE_BOOL &&
+				!strcmp(blobmsg_name(b), "available"))
+			available = blobmsg_get_u8(b);
+
+	if (available)
+		iface->dhcp_is_v4 = !iface->dhcp_is_v4;
+
+	if (!available || iface->dhcp_is_v4)
+		platform_restart_dhcpv4(iface->iface);
+}
+
 // Handle netifd ubus event for subinterface status
 static void handle_status_dhcp(struct ubus_request *req, int ret)
 {
@@ -459,10 +479,7 @@ static void handle_status_dhcp(struct ubus_request *req, int ret)
 	L_INFO("platform: async status %s_%d: %s", iface->handle,
 			iface->dhcp_is_v4 ? 4 : 6, ubus_strerror(ret));
 
-	if (!ret)
-		iface->dhcp_is_v4 = !iface->dhcp_is_v4;
-
-	if (ret || iface->dhcp_is_v4)
+	if (ret)
 		platform_restart_dhcpv4(iface->iface);
 }
 
@@ -481,6 +498,7 @@ static void handle_start_dhcp(struct ubus_request *req, int ret)
 	ubus_abort_request(ubus, &iface->dhcp);
 	if (!ubus_invoke_async(ubus, ubus_network_interface, "status", b.head, &iface->dhcp)) {
 		iface->dhcp.complete_cb = handle_status_dhcp;
+		iface->dhcp.data_cb = handle_data_dhcp;
 		ubus_complete_request_async(ubus, &iface->dhcp);
 	}
 }
@@ -533,6 +551,7 @@ static void handle_restart_dhcp(struct ubus_request *req, int ret __unused)
 	ubus_abort_request(ubus, &iface->dhcp);
 	if (!ubus_invoke_async(ubus, ubus_network, "add_dynamic", b.head, &iface->dhcp)) {
 		iface->dhcp.complete_cb = handle_start_dhcp;
+		iface->dhcp.data_cb = NULL;
 		ubus_complete_request_async(ubus, &iface->dhcp);
 	}
 }
@@ -1261,6 +1280,7 @@ void platform_restart_dhcpv4(struct iface *c)
 	ubus_abort_request(ubus, &iface->dhcp);
 	if (!ubus_invoke_async(ubus, ubus_network, "del_dynamic", b.head, &iface->dhcp)) {
 		iface->dhcp.complete_cb = handle_restart_dhcp;
+		iface->dhcp.data_cb = NULL;
 		ubus_complete_request_async(ubus, &iface->dhcp);
 	}
 }
