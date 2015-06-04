@@ -339,6 +339,112 @@ void platform_set_prefix_route(const struct prefix *p, bool enable)
 }
 
 
+enum {
+	PREFIX_ATTR_ADDRESS,
+	PREFIX_ATTR_MASK,
+	PREFIX_ATTR_VALID,
+	PREFIX_ATTR_PREFERRED,
+	PREFIX_ATTR_EXCLUDED,
+	PREFIX_ATTR_CLASS,
+	PREFIX_ATTR_MAX,
+};
+
+
+static const struct blobmsg_policy prefix_attrs[PREFIX_ATTR_MAX] = {
+	[PREFIX_ATTR_ADDRESS] = { .name = "address", .type = BLOBMSG_TYPE_STRING },
+	[PREFIX_ATTR_MASK] = { .name = "mask", .type = BLOBMSG_TYPE_INT32 },
+	[PREFIX_ATTR_PREFERRED] = { .name = "preferred", .type = BLOBMSG_TYPE_INT32 },
+	[PREFIX_ATTR_EXCLUDED] = { .name = "excluded", .type = BLOBMSG_TYPE_STRING },
+	[PREFIX_ATTR_VALID] = { .name = "valid", .type = BLOBMSG_TYPE_INT32 },
+	[PREFIX_ATTR_CLASS] = { .name = "class", .type = BLOBMSG_TYPE_STRING },
+};
+
+
+
+enum {
+	IFACE_ATTR_HANDLE,
+	IFACE_ATTR_IFNAME,
+	IFACE_ATTR_PROTO,
+	IFACE_ATTR_PREFIX,
+	IFACE_ATTR_ROUTE,
+	IFACE_ATTR_DELEGATION,
+	IFACE_ATTR_DNS,
+	IFACE_ATTR_UP,
+	IFACE_ATTR_DATA,
+	IFACE_ATTR_IPV4,
+	IFACE_ATTR_INACTIVE,
+	IFACE_ATTR_DEVICE,
+	IFACE_ATTR_MAX,
+};
+
+enum {
+	ROUTE_ATTR_TARGET,
+	ROUTE_ATTR_MASK,
+	ROUTE_ATTR_MAX
+};
+
+enum {
+	DATA_ATTR_MODE,
+	DATA_ATTR_PREFIX,
+	DATA_ATTR_LINK_ID,
+	DATA_ATTR_IFACE_ID,
+	DATA_ATTR_IP6_PLEN,
+	DATA_ATTR_IP4_PLEN,
+	DATA_ATTR_DISABLE_PA,
+	DATA_ATTR_PASSTHRU,
+	DATA_ATTR_ULA_DEFAULT_ROUTER,
+	DATA_ATTR_KEEPALIVE_INTERVAL,
+	DATA_ATTR_TRICKLE_K,
+	DATA_ATTR_DNSNAME,
+	DATA_ATTR_IP4UPLINKLIMIT,
+	DATA_ATTR_REQADDRESS,
+	DATA_ATTR_REQPREFIX,
+	DATA_ATTR_DHCPV6_CLIENTID,
+	DATA_ATTR_CREATED,
+	DATA_ATTR_MAX
+};
+
+static const struct blobmsg_policy iface_attrs[IFACE_ATTR_MAX] = {
+	[IFACE_ATTR_HANDLE] = { .name = "interface", .type = BLOBMSG_TYPE_STRING },
+	[IFACE_ATTR_IFNAME] = { .name = "l3_device", .type = BLOBMSG_TYPE_STRING },
+	[IFACE_ATTR_PROTO] = { .name = "proto", .type = BLOBMSG_TYPE_STRING },
+	[IFACE_ATTR_PREFIX] = { .name = "ipv6-prefix", .type = BLOBMSG_TYPE_ARRAY },
+	[IFACE_ATTR_ROUTE] = { .name = "route", .type = BLOBMSG_TYPE_ARRAY },
+	[IFACE_ATTR_DELEGATION] = { .name = "delegation", .type = BLOBMSG_TYPE_BOOL },
+	[IFACE_ATTR_DNS] = { .name = "dns-server", .type = BLOBMSG_TYPE_ARRAY },
+	[IFACE_ATTR_UP] = { .name = "up", .type = BLOBMSG_TYPE_BOOL },
+	[IFACE_ATTR_DATA] = { .name = "data", .type = BLOBMSG_TYPE_TABLE },
+	[IFACE_ATTR_IPV4] = { .name = "ipv4-address", .type = BLOBMSG_TYPE_ARRAY },
+	[IFACE_ATTR_INACTIVE] = { .name = "inactive", .type = BLOBMSG_TYPE_TABLE },
+	[IFACE_ATTR_DEVICE] = { .name = "device", .type = BLOBMSG_TYPE_STRING },
+};
+
+static const struct blobmsg_policy route_attrs[ROUTE_ATTR_MAX] = {
+	[ROUTE_ATTR_TARGET] = { .name = "target", .type = BLOBMSG_TYPE_STRING },
+	[ROUTE_ATTR_MASK] = { .name = "mask", .type = BLOBMSG_TYPE_INT32 },
+};
+
+static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
+	[DATA_ATTR_PREFIX] = { .name = "prefix", .type = BLOBMSG_TYPE_ARRAY },
+	[DATA_ATTR_LINK_ID] = { .name = "link_id", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_IFACE_ID] = { .name = "iface_id", .type = BLOBMSG_TYPE_ARRAY },
+	[DATA_ATTR_IP6_PLEN] = { .name = "ip6assign", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_IP4_PLEN] = { .name = "ip4assign", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_MODE] = { .name = "mode", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_DISABLE_PA] = { .name = "disable_pa", .type = BLOBMSG_TYPE_BOOL },
+	[DATA_ATTR_PASSTHRU] = { .name = "passthru", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_ULA_DEFAULT_ROUTER] = { .name = "ula_default_router", .type = BLOBMSG_TYPE_BOOL },
+	[DATA_ATTR_KEEPALIVE_INTERVAL] = { .name = "keepalive_interval", .type = BLOBMSG_TYPE_INT32 },
+	[DATA_ATTR_TRICKLE_K] = { .name = "trickle_k", .type = BLOBMSG_TYPE_INT32 },
+	[DATA_ATTR_DNSNAME] = { .name = "dnsname", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_CREATED] = { .name = "created", .type = BLOBMSG_TYPE_INT32 },
+	[DATA_ATTR_IP4UPLINKLIMIT] = { .name = "ip4uplinklimit", .type = BLOBMSG_TYPE_BOOL },
+	[DATA_ATTR_REQADDRESS] = { .name = "reqaddress", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_REQPREFIX] = { .name = "reqprefix", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_DHCPV6_CLIENTID] = { .name = "dhcpv6_clientid", .type = BLOBMSG_TYPE_STRING },
+};
+
+
 // Handle netifd ubus event for interfaces updates
 static void handle_complete(struct ubus_request *req, int ret)
 {
@@ -347,7 +453,7 @@ static void handle_complete(struct ubus_request *req, int ret)
 }
 
 // Handle netifd ubus event for subinterface status
-static void handle_status(struct ubus_request *req, int ret)
+static void handle_status_dhcp(struct ubus_request *req, int ret)
 {
 	struct platform_iface *iface = container_of(req, struct platform_iface, dhcp);
 	L_INFO("platform: async status %s_%d: %s", iface->handle,
@@ -361,23 +467,76 @@ static void handle_status(struct ubus_request *req, int ret)
 }
 
 // Handle netifd ubus event for subinterface addition
-static void handle_dhcp(struct ubus_request *req, int ret)
+static void handle_start_dhcp(struct ubus_request *req, int ret)
 {
 	struct platform_iface *iface = container_of(req, struct platform_iface, dhcp);
-	char *c;
+	char *buf;
 
 	blob_buf_init(&b, 0);
-	c = blobmsg_alloc_string_buffer(&b, "interface", 32);
-	snprintf(c, 32, "%s_%d", iface->handle, iface->dhcp_is_v4 ? 4 : 6);
+	buf = blobmsg_alloc_string_buffer(&b, "interface", 32);
+	snprintf(buf, 32, "%s_%d", iface->handle, iface->dhcp_is_v4 ? 4 : 6);
 	blobmsg_add_string_buffer(&b);
 
-	L_INFO("platform: async add_dynamic %s: %s", c, ubus_strerror(ret));
+	L_INFO("platform: async add_dynamic %s: %s", buf, ubus_strerror(ret));
 	ubus_abort_request(ubus, &iface->dhcp);
 	if (!ubus_invoke_async(ubus, ubus_network_interface, "status", b.head, &iface->dhcp)) {
-		iface->dhcp.complete_cb = handle_status;
+		iface->dhcp.complete_cb = handle_status_dhcp;
 		ubus_complete_request_async(ubus, &iface->dhcp);
 	}
 }
+
+// Handle netifd ubus event for interfaces updates
+static void handle_restart_dhcp(struct ubus_request *req, int ret __unused)
+{
+	struct platform_iface *iface = container_of(req, struct platform_iface, req);
+	struct iface *c = iface->iface;
+	struct blob_attr *dtb[DATA_ATTR_MAX];
+	bool hybrid = (c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID;
+	char *buf;
+
+	blob_buf_init(&b, 0);
+	buf = blobmsg_alloc_string_buffer(&b, "name", 32);
+	snprintf(buf, 32, "%s_%d", iface->handle, iface->dhcp_is_v4 ? 4 : 6);
+	blobmsg_add_string_buffer(&b);
+	buf = blobmsg_alloc_string_buffer(&b, "ifname", 32);
+	snprintf(buf, 32, "@%s", iface->handle);
+	blobmsg_add_string_buffer(&b);
+	blobmsg_add_string(&b, "proto", iface->dhcp_is_v4 ? "dhcp" : "dhcpv6");
+
+	if (iface->dhcp_is_v4) {
+		blobmsg_add_string(&b, "sendopts", "0x4d:07484f4d454e4554");
+		blobmsg_add_u8(&b, "defaultroute", c->designatedv4);
+		blobmsg_add_u32(&b, "metric", 1000 + if_nametoindex(c->ifname));
+	} else {
+		memset(dtb, 0, sizeof(dtb));
+		if (iface->config.head)
+			blobmsg_parse(data_attrs, DATA_ATTR_MAX, dtb,
+					blobmsg_data(iface->config.head),
+					blobmsg_len(iface->config.head));
+
+		if (dtb[DATA_ATTR_REQADDRESS])
+				blobmsg_add_blob(&b, dtb[DATA_ATTR_REQADDRESS]);
+
+		if (dtb[DATA_ATTR_REQPREFIX])
+			blobmsg_add_blob(&b, dtb[DATA_ATTR_REQPREFIX]);
+
+		if (dtb[DATA_ATTR_DHCPV6_CLIENTID])
+			blobmsg_add_blob(&b, dtb[DATA_ATTR_DHCPV6_CLIENTID]);
+
+		blobmsg_add_string(&b, "forceprefix", "1");
+		blobmsg_add_string(&b, "userclass", "HOMENET");
+	}
+
+	blobmsg_add_u8(&b, "delegate", 0);
+	blobmsg_add_string(&b, "zone", hybrid ? "lan" : "wan");
+
+	ubus_abort_request(ubus, &iface->dhcp);
+	if (!ubus_invoke_async(ubus, ubus_network, "add_dynamic", b.head, &iface->dhcp)) {
+		iface->dhcp.complete_cb = handle_start_dhcp;
+		ubus_complete_request_async(ubus, &iface->dhcp);
+	}
+}
+
 
 
 // Commit platform changes to netifd
@@ -722,112 +881,6 @@ static void platform_commit(struct uloop_timeout *t)
 		platform_set_internal(c, false);
 	}
 }
-
-
-enum {
-	PREFIX_ATTR_ADDRESS,
-	PREFIX_ATTR_MASK,
-	PREFIX_ATTR_VALID,
-	PREFIX_ATTR_PREFERRED,
-	PREFIX_ATTR_EXCLUDED,
-	PREFIX_ATTR_CLASS,
-	PREFIX_ATTR_MAX,
-};
-
-
-static const struct blobmsg_policy prefix_attrs[PREFIX_ATTR_MAX] = {
-	[PREFIX_ATTR_ADDRESS] = { .name = "address", .type = BLOBMSG_TYPE_STRING },
-	[PREFIX_ATTR_MASK] = { .name = "mask", .type = BLOBMSG_TYPE_INT32 },
-	[PREFIX_ATTR_PREFERRED] = { .name = "preferred", .type = BLOBMSG_TYPE_INT32 },
-	[PREFIX_ATTR_EXCLUDED] = { .name = "excluded", .type = BLOBMSG_TYPE_STRING },
-	[PREFIX_ATTR_VALID] = { .name = "valid", .type = BLOBMSG_TYPE_INT32 },
-	[PREFIX_ATTR_CLASS] = { .name = "class", .type = BLOBMSG_TYPE_STRING },
-};
-
-
-
-enum {
-	IFACE_ATTR_HANDLE,
-	IFACE_ATTR_IFNAME,
-	IFACE_ATTR_PROTO,
-	IFACE_ATTR_PREFIX,
-	IFACE_ATTR_ROUTE,
-	IFACE_ATTR_DELEGATION,
-	IFACE_ATTR_DNS,
-	IFACE_ATTR_UP,
-	IFACE_ATTR_DATA,
-	IFACE_ATTR_IPV4,
-	IFACE_ATTR_INACTIVE,
-	IFACE_ATTR_DEVICE,
-	IFACE_ATTR_MAX,
-};
-
-enum {
-	ROUTE_ATTR_TARGET,
-	ROUTE_ATTR_MASK,
-	ROUTE_ATTR_MAX
-};
-
-enum {
-	DATA_ATTR_MODE,
-	DATA_ATTR_PREFIX,
-	DATA_ATTR_LINK_ID,
-	DATA_ATTR_IFACE_ID,
-	DATA_ATTR_IP6_PLEN,
-	DATA_ATTR_IP4_PLEN,
-	DATA_ATTR_DISABLE_PA,
-	DATA_ATTR_PASSTHRU,
-	DATA_ATTR_ULA_DEFAULT_ROUTER,
-	DATA_ATTR_KEEPALIVE_INTERVAL,
-	DATA_ATTR_TRICKLE_K,
-	DATA_ATTR_DNSNAME,
-	DATA_ATTR_IP4UPLINKLIMIT,
-	DATA_ATTR_REQADDRESS,
-	DATA_ATTR_REQPREFIX,
-	DATA_ATTR_DHCPV6_CLIENTID,
-	DATA_ATTR_CREATED,
-	DATA_ATTR_MAX
-};
-
-static const struct blobmsg_policy iface_attrs[IFACE_ATTR_MAX] = {
-	[IFACE_ATTR_HANDLE] = { .name = "interface", .type = BLOBMSG_TYPE_STRING },
-	[IFACE_ATTR_IFNAME] = { .name = "l3_device", .type = BLOBMSG_TYPE_STRING },
-	[IFACE_ATTR_PROTO] = { .name = "proto", .type = BLOBMSG_TYPE_STRING },
-	[IFACE_ATTR_PREFIX] = { .name = "ipv6-prefix", .type = BLOBMSG_TYPE_ARRAY },
-	[IFACE_ATTR_ROUTE] = { .name = "route", .type = BLOBMSG_TYPE_ARRAY },
-	[IFACE_ATTR_DELEGATION] = { .name = "delegation", .type = BLOBMSG_TYPE_BOOL },
-	[IFACE_ATTR_DNS] = { .name = "dns-server", .type = BLOBMSG_TYPE_ARRAY },
-	[IFACE_ATTR_UP] = { .name = "up", .type = BLOBMSG_TYPE_BOOL },
-	[IFACE_ATTR_DATA] = { .name = "data", .type = BLOBMSG_TYPE_TABLE },
-	[IFACE_ATTR_IPV4] = { .name = "ipv4-address", .type = BLOBMSG_TYPE_ARRAY },
-	[IFACE_ATTR_INACTIVE] = { .name = "inactive", .type = BLOBMSG_TYPE_TABLE },
-	[IFACE_ATTR_DEVICE] = { .name = "device", .type = BLOBMSG_TYPE_STRING },
-};
-
-static const struct blobmsg_policy route_attrs[ROUTE_ATTR_MAX] = {
-	[ROUTE_ATTR_TARGET] = { .name = "target", .type = BLOBMSG_TYPE_STRING },
-	[ROUTE_ATTR_MASK] = { .name = "mask", .type = BLOBMSG_TYPE_INT32 },
-};
-
-static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
-	[DATA_ATTR_PREFIX] = { .name = "prefix", .type = BLOBMSG_TYPE_ARRAY },
-	[DATA_ATTR_LINK_ID] = { .name = "link_id", .type = BLOBMSG_TYPE_STRING },
-	[DATA_ATTR_IFACE_ID] = { .name = "iface_id", .type = BLOBMSG_TYPE_ARRAY },
-	[DATA_ATTR_IP6_PLEN] = { .name = "ip6assign", .type = BLOBMSG_TYPE_STRING },
-	[DATA_ATTR_IP4_PLEN] = { .name = "ip4assign", .type = BLOBMSG_TYPE_STRING },
-	[DATA_ATTR_MODE] = { .name = "mode", .type = BLOBMSG_TYPE_STRING },
-	[DATA_ATTR_DISABLE_PA] = { .name = "disable_pa", .type = BLOBMSG_TYPE_BOOL },
-	[DATA_ATTR_PASSTHRU] = { .name = "passthru", .type = BLOBMSG_TYPE_STRING },
-	[DATA_ATTR_ULA_DEFAULT_ROUTER] = { .name = "ula_default_router", .type = BLOBMSG_TYPE_BOOL },
-	[DATA_ATTR_KEEPALIVE_INTERVAL] = { .name = "keepalive_interval", .type = BLOBMSG_TYPE_INT32 },
-	[DATA_ATTR_TRICKLE_K] = { .name = "trickle_k", .type = BLOBMSG_TYPE_INT32 },
-	[DATA_ATTR_DNSNAME] = { .name = "dnsname", .type = BLOBMSG_TYPE_STRING },
-	[DATA_ATTR_CREATED] = { .name = "created", .type = BLOBMSG_TYPE_INT32 },
-	[DATA_ATTR_IP4UPLINKLIMIT] = { .name = "ip4uplinklimit", .type = BLOBMSG_TYPE_BOOL },
-	[DATA_ATTR_REQADDRESS] = { .name = "reqaddress", .type = BLOBMSG_TYPE_STRING },
-	[DATA_ATTR_REQPREFIX] = { .name = "reqprefix", .type = BLOBMSG_TYPE_STRING },
-	[DATA_ATTR_DHCPV6_CLIENTID] = { .name = "dhcpv6_clientid", .type = BLOBMSG_TYPE_STRING },
-};
 
 
 // Decode and analyze all delegated prefixes and commit them to iface
@@ -1193,10 +1246,8 @@ static int handle_update(__unused struct ubus_context *ctx, __unused struct ubus
 
 void platform_restart_dhcpv4(struct iface *c)
 {
-	struct platform_iface *iface = c->platform;
-	struct blob_attr *dtb[DATA_ATTR_MAX];
-	bool hybrid = (c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID;
 	char *buf;
+	struct platform_iface *iface = c->platform;
 
 	if (!iface || ((c->flags & (IFACE_FLAG_INTERNAL | IFACE_FLAG_NODHCP)) &&
 				((c->flags & IFACE_FLAG_HYBRID) != IFACE_FLAG_HYBRID)))
@@ -1206,41 +1257,10 @@ void platform_restart_dhcpv4(struct iface *c)
 	buf = blobmsg_alloc_string_buffer(&b, "name", 32);
 	snprintf(buf, 32, "%s_%d", iface->handle, iface->dhcp_is_v4 ? 4 : 6);
 	blobmsg_add_string_buffer(&b);
-	buf = blobmsg_alloc_string_buffer(&b, "ifname", 32);
-	snprintf(buf, 32, "@%s", iface->handle);
-	blobmsg_add_string_buffer(&b);
-	blobmsg_add_string(&b, "proto", iface->dhcp_is_v4 ? "dhcp" : "dhcpv6");
-
-	if (iface->dhcp_is_v4) {
-		blobmsg_add_string(&b, "sendopts", "0x4d:07484f4d454e4554");
-		blobmsg_add_u8(&b, "defaultroute", c->designatedv4);
-		blobmsg_add_u32(&b, "metric", 1000 + if_nametoindex(c->ifname));
-	} else {
-		memset(dtb, 0, sizeof(dtb));
-		if (iface->config.head)
-			blobmsg_parse(data_attrs, DATA_ATTR_MAX, dtb,
-					blobmsg_data(iface->config.head),
-					blobmsg_len(iface->config.head));
-
-		if (dtb[DATA_ATTR_REQADDRESS])
-				blobmsg_add_blob(&b, dtb[DATA_ATTR_REQADDRESS]);
-
-		if (dtb[DATA_ATTR_REQPREFIX])
-			blobmsg_add_blob(&b, dtb[DATA_ATTR_REQPREFIX]);
-
-		if (dtb[DATA_ATTR_DHCPV6_CLIENTID])
-			blobmsg_add_blob(&b, dtb[DATA_ATTR_DHCPV6_CLIENTID]);
-
-		blobmsg_add_string(&b, "forceprefix", "1");
-		blobmsg_add_string(&b, "userclass", "HOMENET");
-	}
-
-	blobmsg_add_u8(&b, "delegate", 0);
-	blobmsg_add_string(&b, "zone", hybrid ? "lan" : "wan");
 
 	ubus_abort_request(ubus, &iface->dhcp);
-	if (!ubus_invoke_async(ubus, ubus_network, "add_dynamic", b.head, &iface->dhcp)) {
-		iface->dhcp.complete_cb = handle_dhcp;
+	if (!ubus_invoke_async(ubus, ubus_network, "del_dynamic", b.head, &iface->dhcp)) {
+		iface->dhcp.complete_cb = handle_restart_dhcp;
 		ubus_complete_request_async(ubus, &iface->dhcp);
 	}
 }
