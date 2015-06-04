@@ -1203,7 +1203,9 @@ void platform_restart_dhcpv4(struct iface *c)
 		blobmsg_add_u8(&b, "defaultroute", c->designatedv4);
 		blobmsg_add_u32(&b, "metric", 1000 + if_nametoindex(c->ifname));
 	} else {
-		blobmsg_parse(data_attrs, DATA_ATTR_MAX, dtb,
+		memset(dtb, 0, sizeof(dtb));
+		if (iface->config.head)
+			blobmsg_parse(data_attrs, DATA_ATTR_MAX, dtb,
 					blobmsg_data(iface->config.head),
 					blobmsg_len(iface->config.head));
 
