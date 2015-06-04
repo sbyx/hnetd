@@ -57,12 +57,12 @@ static struct ubus_object main_object = {
 };
 
 static void platform_commit(struct uloop_timeout *t);
-static void platform_dhcp(struct uloop_timeout *t);
 struct platform_iface {
 	struct iface *iface;
 	struct uloop_timeout update;
-	struct uloop_timeout dhcp;
 	struct ubus_request req;
+	struct ubus_request dhcp;
+	bool dhcp_is_v4;
 	struct blob_buf config;
 	char handle[];
 };
@@ -265,7 +265,6 @@ void platform_iface_new(struct iface *c, const char *handle)
 	memcpy(iface->handle, handle, handlenamelen);
 	iface->iface = c;
 	iface->update.cb = platform_commit;
-	iface->dhcp.cb = platform_dhcp;
 
 	c->platform = iface;
 
@@ -274,6 +273,7 @@ void platform_iface_new(struct iface *c, const char *handle)
 
 	// reqiest
 	INIT_LIST_HEAD(&iface->req.list);
+	INIT_LIST_HEAD(&iface->dhcp.list);
 	platform_restart_dhcpv4(c);
 }
 
@@ -282,9 +282,9 @@ void platform_iface_free(struct iface *c)
 {
 	struct platform_iface *iface = c->platform;
 	if (iface) {
-		uloop_timeout_cancel(&iface->dhcp);
 		uloop_timeout_cancel(&iface->update);
 		ubus_abort_request(ubus, &iface->req);
+		ubus_abort_request(ubus, &iface->dhcp);
 		blob_buf_free(&iface->config);
 		free(iface);
 		c->platform = NULL;
@@ -344,6 +344,20 @@ static void handle_complete(struct ubus_request *req, int ret)
 {
 	struct platform_iface *iface = container_of(req, struct platform_iface, req);
 	L_INFO("platform: async notify_proto for %s: %s", iface->handle, ubus_strerror(ret));
+}
+
+// Handle netifd ubus event for interfaces updates
+static void handle_dhcp(struct ubus_request *req, int ret)
+{
+	struct platform_iface *iface = container_of(req, struct platform_iface, dhcp);
+	L_INFO("platform: async add_dynamic %s_%d: %s", iface->handle,
+			iface->dhcp_is_v4 ? 4 : 6, ubus_strerror(ret));
+
+	if (!ret)
+		iface->dhcp_is_v4 = !iface->dhcp_is_v4;
+
+	if (ret || iface->dhcp_is_v4)
+		platform_restart_dhcpv4(iface->iface);
 }
 
 
@@ -1161,69 +1175,61 @@ static int handle_update(__unused struct ubus_context *ctx, __unused struct ubus
 }
 
 
-static void platform_dhcp(struct uloop_timeout *t)
+void platform_restart_dhcpv4(struct iface *c)
 {
-	struct platform_iface *iface = container_of(t, struct platform_iface, dhcp);
-	struct iface *c = iface->iface;
+	struct platform_iface *iface = c->platform;
 	struct blob_buf b = {NULL, NULL, 0, NULL};
 	struct blob_attr *dtb[DATA_ATTR_MAX];
 	bool hybrid = (c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID;
 	char *buf;
 
+	if (!iface || ((c->flags & (IFACE_FLAG_INTERNAL | IFACE_FLAG_NODHCP)) &&
+				((c->flags & IFACE_FLAG_HYBRID) != IFACE_FLAG_HYBRID)))
+		return;
+
+
+
 	blob_buf_init(&b, 0);
 	buf = blobmsg_alloc_string_buffer(&b, "name", 32);
-	snprintf(buf, 32, "%s_4", iface->handle);
+	snprintf(buf, 32, "%s_%d", iface->handle, iface->dhcp_is_v4 ? 4 : 6);
 	blobmsg_add_string_buffer(&b);
 	buf = blobmsg_alloc_string_buffer(&b, "ifname", 32);
 	snprintf(buf, 32, "@%s", iface->handle);
 	blobmsg_add_string_buffer(&b);
-	blobmsg_add_string(&b, "proto", "dhcp");
-	blobmsg_add_string(&b, "sendopts", "0x4d:07484f4d454e4554");
-	blobmsg_add_u8(&b, "delegate", 0);
-	blobmsg_add_u8(&b, "defaultroute", c->designatedv4);
-	blobmsg_add_u32(&b, "metric", 1000 + if_nametoindex(c->ifname));
-	blobmsg_add_string(&b, "zone", hybrid ? "lan" : "wan");
+	blobmsg_add_string(&b, "proto", iface->dhcp_is_v4 ? "dhcp" : "dhcpv6");
 
-	ubus_invoke(ubus, ubus_network, "add_dynamic", b.head, NULL, NULL, 1000);
+	if (iface->dhcp_is_v4) {
+		blobmsg_add_string(&b, "sendopts", "0x4d:07484f4d454e4554");
+		blobmsg_add_u8(&b, "defaultroute", c->designatedv4);
+		blobmsg_add_u32(&b, "metric", 1000 + if_nametoindex(c->ifname));
+	} else {
+		blobmsg_parse(data_attrs, DATA_ATTR_MAX, dtb,
+					blobmsg_data(iface->config.head),
+					blobmsg_len(iface->config.head));
 
-	blobmsg_parse(data_attrs, DATA_ATTR_MAX, dtb,
-				blobmsg_data(iface->config.head),
-				blobmsg_len(iface->config.head));
+		if (dtb[DATA_ATTR_REQADDRESS])
+				blobmsg_add_blob(&b, dtb[DATA_ATTR_REQADDRESS]);
 
-	blob_buf_init(&b, 0);
-	buf = blobmsg_alloc_string_buffer(&b, "name", 32);
-	snprintf(buf, 32, "%s_6", iface->handle);
-	blobmsg_add_string_buffer(&b);
-	buf = blobmsg_alloc_string_buffer(&b, "ifname", 32);
-	snprintf(buf, 32, "@%s", iface->handle);
-	blobmsg_add_string_buffer(&b);
-	blobmsg_add_string(&b, "proto", "dhcpv6");
+		if (dtb[DATA_ATTR_REQPREFIX])
+			blobmsg_add_blob(&b, dtb[DATA_ATTR_REQPREFIX]);
 
-	if (dtb[DATA_ATTR_REQADDRESS])
-		blobmsg_add_blob(&b, dtb[DATA_ATTR_REQADDRESS]);
+		if (dtb[DATA_ATTR_DHCPV6_CLIENTID])
+			blobmsg_add_blob(&b, dtb[DATA_ATTR_DHCPV6_CLIENTID]);
 
-	if (dtb[DATA_ATTR_REQPREFIX])
-		blobmsg_add_blob(&b, dtb[DATA_ATTR_REQPREFIX]);
+		blobmsg_add_string(&b, "forceprefix", "1");
+		blobmsg_add_string(&b, "userclass", "HOMENET");
+	}
 
-	if (dtb[DATA_ATTR_DHCPV6_CLIENTID])
-		blobmsg_add_blob(&b, dtb[DATA_ATTR_DHCPV6_CLIENTID]);
-
-	blobmsg_add_string(&b, "forceprefix", "1");
-	blobmsg_add_string(&b, "userclass", "HOMENET");
 	blobmsg_add_u8(&b, "delegate", 0);
 	blobmsg_add_string(&b, "zone", hybrid ? "lan" : "wan");
 
-	ubus_invoke(ubus, ubus_network, "add_dynamic", b.head, NULL, NULL, 1000);
+	ubus_abort_request(ubus, &iface->dhcp);
+	if (!ubus_invoke_async(ubus, ubus_network, "add_dynamic", b.head, &iface->dhcp)) {
+		iface->dhcp.complete_cb = handle_dhcp;
+		ubus_complete_request_async(ubus, &iface->dhcp);
+	}
+
 	blob_buf_free(&b);
-}
-
-
-void platform_restart_dhcpv4(struct iface *c)
-{
-	struct platform_iface *iface = c->platform;
-	if (iface && (!(c->flags & (IFACE_FLAG_INTERNAL | IFACE_FLAG_NODHCP)) ||
-			((c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID)))
-		uloop_timeout_set(&iface->dhcp, 1);
 }
 
 
