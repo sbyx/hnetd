@@ -45,6 +45,7 @@ static struct ubus_request req_dump = { .list = LIST_HEAD_INIT(req_dump.list) };
 
 static struct ubus_method hnet_object_methods[PLATFORM_RPC_MAX];
 static struct platform_rpc_method *hnet_rpc_methods[PLATFORM_RPC_MAX];
+static struct blob_buf b = {NULL, NULL, 0, NULL};
 
 static struct ubus_object_type hnet_object_type =
 		UBUS_OBJECT_TYPE("hnet", hnet_object_methods);
@@ -192,7 +193,6 @@ int platform_rpc_cli(const char *method, struct blob_attr *in)
 static int platform_rpc_handle(struct ubus_context *ctx, __unused struct ubus_object *obj,
 		struct ubus_request_data *req, const char *method, struct blob_attr *msg)
 {
-	static struct blob_buf b = {NULL, NULL, 0, NULL};
 	blob_buf_init(&b, 0);
 
 	ssize_t i;
@@ -346,11 +346,11 @@ static void handle_complete(struct ubus_request *req, int ret)
 	L_INFO("platform: async notify_proto for %s: %s", iface->handle, ubus_strerror(ret));
 }
 
-// Handle netifd ubus event for interfaces updates
-static void handle_dhcp(struct ubus_request *req, int ret)
+// Handle netifd ubus event for subinterface status
+static void handle_status(struct ubus_request *req, int ret)
 {
 	struct platform_iface *iface = container_of(req, struct platform_iface, dhcp);
-	L_INFO("platform: async add_dynamic %s_%d: %s", iface->handle,
+	L_INFO("platform: async status %s_%d: %s", iface->handle,
 			iface->dhcp_is_v4 ? 4 : 6, ubus_strerror(ret));
 
 	if (!ret)
@@ -360,6 +360,25 @@ static void handle_dhcp(struct ubus_request *req, int ret)
 		platform_restart_dhcpv4(iface->iface);
 }
 
+// Handle netifd ubus event for subinterface addition
+static void handle_dhcp(struct ubus_request *req, int ret)
+{
+	struct platform_iface *iface = container_of(req, struct platform_iface, dhcp);
+	char *c;
+
+	blob_buf_init(&b, 0);
+	c = blobmsg_alloc_string_buffer(&b, "interface", 32);
+	snprintf(c, 32, "%s_%d", iface->handle, iface->dhcp_is_v4 ? 4 : 6);
+	blobmsg_add_string_buffer(&b);
+
+	L_INFO("platform: async add_dynamic %s: %s", c, ubus_strerror(ret));
+	ubus_abort_request(ubus, &iface->dhcp);
+	if (!ubus_invoke_async(ubus, ubus_network_interface, "status", b.head, &iface->dhcp)) {
+		iface->dhcp.complete_cb = handle_status;
+		ubus_complete_request_async(ubus, &iface->dhcp);
+	}
+}
+
 
 // Commit platform changes to netifd
 static void platform_commit(struct uloop_timeout *t)
@@ -367,7 +386,6 @@ static void platform_commit(struct uloop_timeout *t)
 	struct platform_iface *iface = container_of(t, struct platform_iface, update);
 	struct iface *c = iface->iface;
 
-	struct blob_buf b = {NULL, NULL, 0, NULL};
 	blob_buf_init(&b, 0);
 	blobmsg_add_u32(&b, "action", 0);
 	blobmsg_add_u8(&b, "link-up", 1);
@@ -703,8 +721,6 @@ static void platform_commit(struct uloop_timeout *t)
 		L_INFO("platform: async notify_proto for %s (%s) failed: %s", iface->handle, c->ifname, ubus_strerror(ret));
 		platform_set_internal(c, false);
 	}
-
-	blob_buf_free(&b);
 }
 
 
@@ -1178,7 +1194,6 @@ static int handle_update(__unused struct ubus_context *ctx, __unused struct ubus
 void platform_restart_dhcpv4(struct iface *c)
 {
 	struct platform_iface *iface = c->platform;
-	struct blob_buf b = {NULL, NULL, 0, NULL};
 	struct blob_attr *dtb[DATA_ATTR_MAX];
 	bool hybrid = (c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID;
 	char *buf;
@@ -1186,8 +1201,6 @@ void platform_restart_dhcpv4(struct iface *c)
 	if (!iface || ((c->flags & (IFACE_FLAG_INTERNAL | IFACE_FLAG_NODHCP)) &&
 				((c->flags & IFACE_FLAG_HYBRID) != IFACE_FLAG_HYBRID)))
 		return;
-
-
 
 	blob_buf_init(&b, 0);
 	buf = blobmsg_alloc_string_buffer(&b, "name", 32);
@@ -1230,15 +1243,11 @@ void platform_restart_dhcpv4(struct iface *c)
 		iface->dhcp.complete_cb = handle_dhcp;
 		ubus_complete_request_async(ubus, &iface->dhcp);
 	}
-
-	blob_buf_free(&b);
 }
 
 
 void platform_set_iface(const char *name, bool enable)
 {
-	struct blob_buf b = {NULL, NULL, 0, NULL};
-
 	blob_buf_init(&b, 0);
 	if (enable) {
 		blobmsg_add_string(&b, "name", name);
@@ -1253,8 +1262,6 @@ void platform_set_iface(const char *name, bool enable)
 		blobmsg_add_string(&b, "interface", name);
 		ubus_invoke(ubus, ubus_network_interface, "down", b.head, NULL, NULL, 1000);
 	}
-
-	blob_buf_free(&b);
 }
 
 
