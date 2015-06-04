@@ -488,7 +488,7 @@ static void handle_start_dhcp(struct ubus_request *req, int ret)
 // Handle netifd ubus event for interfaces updates
 static void handle_restart_dhcp(struct ubus_request *req, int ret __unused)
 {
-	struct platform_iface *iface = container_of(req, struct platform_iface, req);
+	struct platform_iface *iface = container_of(req, struct platform_iface, dhcp);
 	struct iface *c = iface->iface;
 	struct blob_attr *dtb[DATA_ATTR_MAX];
 	bool hybrid = (c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID;
