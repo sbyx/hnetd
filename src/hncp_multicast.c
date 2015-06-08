@@ -6,7 +6,7 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 20:39:45 2015 mstenber
- * Last modified: Mon Jun  8 13:37:09 2015 mstenber
+ * Last modified: Mon Jun  8 14:48:00 2015 mstenber
  * Edit time:     102 min
  *
  */
@@ -134,7 +134,7 @@ static void _rp_timeout(struct uloop_timeout *t)
     }
   if (found)
     {
-      dncp_node on = dncp_node_get_node_identifier(dncp_get_own_node(m->dncp));
+      dncp_node on = dncp_get_own_node(m->dncp);
       int ret = dncp_node_cmp(found_node, on);
       if (ret)
         {

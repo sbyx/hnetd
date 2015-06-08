@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Mon Jun  8 13:59:52 2015 mstenber
- * Edit time:     585 min
+ * Last modified: Mon Jun  8 14:42:22 2015 mstenber
+ * Edit time:     587 min
  *
  */
 
@@ -242,7 +242,7 @@ void dncp_ext_timeout(dncp o)
 {
   hnetd_time_t next = 0;
   hnetd_time_t now = o->ext->cb.get_time(o->ext);
-  dncp_ep_i l;
+  dncp_ep ep;
   dncp_tlv t, t2;
 
   /* Assumption: We're within RTC step here -> can use same timestamp
@@ -293,16 +293,18 @@ void dncp_ext_timeout(dncp o)
   /* Recalculate network hash if necessary. */
   dncp_calculate_network_hash(o);
 
-  vlist_for_each_element(&o->links, l, in_links)
+  dncp_for_each_ep(o, ep)
     {
       /* Just configured, not up yet / any more? */
-      if (!l->enabled)
+      if (!dncp_ep_is_enabled(ep))
         continue;
 
       /* Update the 'active' link's published keepalive interval, if need be */
-      dncp_ep_i_set_keepalive_interval(l, l->conf.keepalive_interval);
+      dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
 
-      if (l->conf.unicast_only)
+      dncp_ep_i_set_keepalive_interval(l, ep->keepalive_interval);
+
+      if (ep->unicast_only)
         continue;
 
       hnetd_time_t next_time = handle_trickle_and_ka(&l->trickle, l, NULL);
@@ -316,6 +318,7 @@ void dncp_ext_timeout(dncp o)
     if ((ne = dncp_tlv_neighbor(o, &t->tlv)))
       {
         dncp_ep ep = dncp_find_ep_by_id(o, ne->ep_id);
+        dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
         dncp_neighbor n = dncp_tlv_get_extra(t);
         hnetd_time_t interval = _neighbor_interval(o, ne);
 
