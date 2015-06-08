@@ -72,7 +72,7 @@ typedef struct hpa_conf_struct {
 			uint32_t id;
 			uint8_t mask;
 			struct pa_rule_static rule;
-		} ep_id;
+		} link_id;
 
 		/* HPA_CONF_T_IP4_PLEN
 		 * HPA_CONF_T_IP6_PLEN */
@@ -334,8 +334,8 @@ static int hpa_ifconf_comp(const void *k1, const void *k2, __unused void *ptr)
 				return i;
 			return 0;
 		case HPA_CONF_T_LINK_ID:
-			if((i = (int)e1->ep_id.mask - (int)e2->ep_id.mask) ||
-					(i = (int)e1->ep_id.mask - (int)e2->ep_id.mask))
+			if((i = (int)e1->link_id.mask - (int)e2->link_id.mask) ||
+					(i = (int)e1->link_id.mask - (int)e2->link_id.mask))
 				return i;
 			return 0;
 		case HPA_CONF_T_IP4_PLEN:

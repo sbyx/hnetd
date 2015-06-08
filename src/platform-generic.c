@@ -838,7 +838,7 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			if (iface && tb[OPT_LINK_ID] && sscanf(
 						blobmsg_get_string(tb[OPT_LINK_ID]),
 						"%x/%u", &ep_id, &link_mask) >= 1)
-					hncp_pa_conf_set_ep_id(hncp_pa_p, iface->ifname, ep_id, link_mask);
+					hncp_pa_conf_set_link_id(hncp_pa_p, iface->ifname, ep_id, link_mask);
 
 			if (iface && tb[OPT_IFACE_ID]) {
 				struct blob_attr *k;

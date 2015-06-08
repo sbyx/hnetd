@@ -1012,7 +1012,7 @@ static void hpa_iface_set_pa_enabled(hncp_pa hpa, hpa_iface i, bool enabled)
 				pa_rule_add(&hpa->pa, &c->prefix.rule.rule);
 				break;
 			case HPA_CONF_T_LINK_ID:
-				pa_rule_add(&hpa->pa, &c->ep_id.rule.rule);
+				pa_rule_add(&hpa->pa, &c->link_id.rule.rule);
 				break;
 			case HPA_CONF_T_ADDR:
 				pa_rule_add(&hpa->aa, &c->addr.rule.rule);
@@ -1034,7 +1034,7 @@ static void hpa_iface_set_pa_enabled(hncp_pa hpa, hpa_iface i, bool enabled)
 				pa_rule_del(&hpa->pa, &c->prefix.rule.rule);
 				break;
 			case HPA_CONF_T_LINK_ID:
-				pa_rule_del(&hpa->pa, &c->ep_id.rule.rule);
+				pa_rule_del(&hpa->pa, &c->link_id.rule.rule);
 				break;
 			case HPA_CONF_T_ADDR:
 				pa_rule_del(&hpa->aa, &c->addr.rule.rule);
@@ -1797,22 +1797,22 @@ static int hpa_conf_prefix_get_prefix(struct pa_rule_static *srule,
 	return 0;
 }
 
-static int hpa_conf_ep_id_get_prefix(struct pa_rule_static *srule,
+static int hpa_conf_link_id_get_prefix(struct pa_rule_static *srule,
 		struct pa_ldp *ldp, pa_prefix *prefix, pa_plen *plen)
 {
-	hpa_conf c = container_of(srule, hpa_conf_s, ep_id.rule);
+	hpa_conf c = container_of(srule, hpa_conf_s, link_id.rule);
 	pa_plen desired_plen = hpa_desired_plen(c->iface, ldp, ldp->dp->plen);
 
 	if(desired_plen > 128 ||
-			((int)desired_plen - (int)ldp->dp->plen) < c->ep_id.mask)
+			((int)desired_plen - (int)ldp->dp->plen) < c->link_id.mask)
 		return -1;
 
 	*plen = desired_plen;
-	uint32_t id = cpu_to_be32(c->ep_id.id);
+	uint32_t id = cpu_to_be32(c->link_id.id);
 	memset(prefix, 0, sizeof(struct in6_addr));
 	bmemcpy(prefix, &ldp->dp->prefix, 0, ldp->dp->plen);
-	bmemcpy_shift(prefix, desired_plen - c->ep_id.mask,
-			&id, 32 - c->ep_id.mask, c->ep_id.mask);
+	bmemcpy_shift(prefix, desired_plen - c->link_id.mask,
+			&id, 32 - c->link_id.mask, c->link_id.mask);
 	return 0;
 }
 
@@ -1877,20 +1877,20 @@ static void hpa_conf_update_cb(struct vlist_tree *tree,
 			break;
 		case HPA_CONF_T_LINK_ID:
 			if(old && i->pa_enabled)
-				pa_rule_del(&i->hpa->pa, &old->ep_id.rule.rule);
+				pa_rule_del(&i->hpa->pa, &old->link_id.rule.rule);
 
 			if(new) {
-				pa_rule_static_init(&new->ep_id.rule, "Iface Link ID",
-						hpa_conf_ep_id_get_prefix,
+				pa_rule_static_init(&new->link_id.rule, "Iface Link ID",
+						hpa_conf_link_id_get_prefix,
 						HPA_RULE_LINK_ID, HPA_PRIORITY_LINK_ID);
-				new->ep_id.rule.get_prefix = hpa_conf_ep_id_get_prefix;
-				new->ep_id.rule.override_priority = HPA_PRIORITY_LINK_ID;
-				new->ep_id.rule.override_rule_priority = HPA_RULE_LINK_ID;
-				new->ep_id.rule.safety = 1;
-				new->ep_id.rule.rule.filter_accept = hpa_conf_filter_accept;
-				new->ep_id.rule.rule.filter_private = new;
+				new->link_id.rule.get_prefix = hpa_conf_link_id_get_prefix;
+				new->link_id.rule.override_priority = HPA_PRIORITY_LINK_ID;
+				new->link_id.rule.override_rule_priority = HPA_RULE_LINK_ID;
+				new->link_id.rule.safety = 1;
+				new->link_id.rule.rule.filter_accept = hpa_conf_filter_accept;
+				new->link_id.rule.rule.filter_private = new;
 				if(i->pa_enabled)
-					pa_rule_add(&i->hpa->pa, &new->ep_id.rule.rule);
+					pa_rule_add(&i->hpa->pa, &new->link_id.rule.rule);
 			}
 			break;
 		case HPA_CONF_T_ADDR:
@@ -1981,10 +1981,10 @@ int hncp_pa_conf_address(hncp_pa hp, const char *ifname,
 	return hpa_conf_mod(hp, ifname, HPA_CONF_T_ADDR, &e, del);
 }
 
-int hncp_pa_conf_set_ep_id(hncp_pa hp, const char *ifname, uint32_t id,
+int hncp_pa_conf_set_link_id(hncp_pa hp, const char *ifname, uint32_t id,
 		uint8_t mask)
 {
-	hpa_conf_s e = {.ep_id = { .id = id, .mask = mask}};
+	hpa_conf_s e = {.link_id = { .id = id, .mask = mask}};
 	return hpa_conf_mod(hp, ifname, HPA_CONF_T_LINK_ID, &e, mask > 32);
 }
 

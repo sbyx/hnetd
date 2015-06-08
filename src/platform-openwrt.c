@@ -1108,7 +1108,7 @@ static void platform_update(void *data, size_t len)
 		if (dtb[DATA_ATTR_LINK_ID] && sscanf(
 				blobmsg_get_string(dtb[DATA_ATTR_LINK_ID]),
 				"%x/%u", &ep_id, &link_mask) >= 1)
-			hncp_pa_conf_set_ep_id(hncp_pa_p, c->ifname, ep_id, link_mask);
+			hncp_pa_conf_set_link_id(hncp_pa_p, c->ifname, ep_id, link_mask);
 
 		if (dtb[DATA_ATTR_IFACE_ID]) {
 			struct blob_attr *k;
