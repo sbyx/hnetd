@@ -126,11 +126,11 @@ extern bool tlv_sort(void *buf, int len);
 /* Paranoid version: Have faith only in the caller providing correct
  * buf + len; pos is used to maintain the current position within buf. */
 #define tlv_for_each_in_buf(pos, buf, len)                              \
-  for (pos = (void *)(buf);                                             \
-       (void *)pos + sizeof(struct tlv_attr) <= (void *)(buf) + (len)   \
-         && tlv_raw_len(pos) >= sizeof(struct tlv_attr)                 \
-         && (void *)pos + tlv_raw_len(pos) <= (void *)(buf) + (len);    \
-       pos = tlv_next(pos))
+for ((pos) = (struct tlv_attr *)(buf);                                  \
+     (char *)(pos) + sizeof(*(pos)) <= (char *)(buf) + (len)            \
+       && tlv_raw_len(pos) >= sizeof(*(pos))                            \
+       && (char *)(pos) + tlv_raw_len(pos) <= (char *)(buf) + (len);    \
+     (pos) = tlv_next(pos))
 
 /* Assume the root 'attr' is trusted. The rest may contain garbage and
  * we should still not blow up. */
