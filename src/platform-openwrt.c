@@ -450,6 +450,9 @@ static void handle_complete(struct ubus_request *req, int ret)
 {
 	struct platform_iface *iface = container_of(req, struct platform_iface, req);
 	L_INFO("platform: async notify_proto for %s: %s", iface->handle, ubus_strerror(ret));
+
+	if (!iface->dhcp_is_v4)
+		platform_restart_dhcpv4(iface->iface);
 }
 
 // Handle netifd ubus event for subinterface addition
@@ -1167,7 +1170,6 @@ static void platform_update(void *data, size_t len)
 				blobmsg_add_blob(&iface->config, dtb[k]);
 
 		iface->dhcp_is_v4 = false;
-		platform_restart_dhcpv4(c);
 	}
 
 	L_INFO("platform: interface update for %s detected", ifname);
