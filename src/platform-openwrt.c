@@ -426,7 +426,7 @@ static const struct blobmsg_policy route_attrs[ROUTE_ATTR_MAX] = {
 
 static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_PREFIX] = { .name = "prefix", .type = BLOBMSG_TYPE_ARRAY },
-	[DATA_ATTR_LINK_ID] = { .name = "ep_id", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_LINK_ID] = { .name = "link_id", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_IFACE_ID] = { .name = "iface_id", .type = BLOBMSG_TYPE_ARRAY },
 	[DATA_ATTR_IP6_PLEN] = { .name = "ip6assign", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_IP4_PLEN] = { .name = "ip4assign", .type = BLOBMSG_TYPE_STRING },
@@ -1104,11 +1104,11 @@ static void platform_update(void *data, size_t len)
 			}
 		}
 
-		unsigned ep_id, link_mask = 8;
+		unsigned link_id, link_mask = 8;
 		if (dtb[DATA_ATTR_LINK_ID] && sscanf(
 				blobmsg_get_string(dtb[DATA_ATTR_LINK_ID]),
-				"%x/%u", &ep_id, &link_mask) >= 1)
-			hncp_pa_conf_set_link_id(hncp_pa_p, c->ifname, ep_id, link_mask);
+				"%x/%u", &link_id, &link_mask) >= 1)
+			hncp_pa_conf_set_link_id(hncp_pa_p, c->ifname, link_id, link_mask);
 
 		if (dtb[DATA_ATTR_IFACE_ID]) {
 			struct blob_attr *k;
