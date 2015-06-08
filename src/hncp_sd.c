@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Jun  8 13:24:00 2015 mstenber
- * Edit time:     635 min
+ * Last modified: Mon Jun  8 15:42:22 2015 mstenber
+ * Edit time:     638 min
  *
  */
 
@@ -261,6 +261,11 @@ static void _publish_ddzs(hncp_sd sd)
             }
 
           ep = dncp_find_ep_by_id(sd->dncp, ah->ep_id);
+          if (!ep)
+            {
+              /* May be just race condition or whatever, silently ignore */
+              continue;
+            }
 
           struct prefix p;
           p.plen = ah->prefix_length_bits;
