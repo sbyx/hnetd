@@ -274,7 +274,6 @@ void platform_iface_new(struct iface *c, const char *handle)
 	// reqiest
 	INIT_LIST_HEAD(&iface->req.list);
 	INIT_LIST_HEAD(&iface->dhcp.list);
-	platform_restart_dhcpv4(c);
 }
 
 // Destructor for openwrt-specific interface part
@@ -452,39 +451,8 @@ static void handle_complete(struct ubus_request *req, int ret)
 	L_INFO("platform: async notify_proto for %s: %s", iface->handle, ubus_strerror(ret));
 }
 
-static void handle_data_dhcp(struct ubus_request *req,
-		__unused int type, struct blob_attr *msg)
-{
-	struct platform_iface *iface = container_of(req, struct platform_iface, dhcp);
-	bool available = false;
-	struct blob_attr *b;
-	unsigned rem;
-
-	blob_for_each_attr(b, msg, rem)
-		if (blobmsg_type(b) == BLOBMSG_TYPE_BOOL &&
-				!strcmp(blobmsg_name(b), "available"))
-			available = blobmsg_get_u8(b);
-
-	if (available)
-		iface->dhcp_is_v4 = !iface->dhcp_is_v4;
-
-	if (!available || iface->dhcp_is_v4)
-		platform_restart_dhcpv4(iface->iface);
-}
-
-// Handle netifd ubus event for subinterface status
-static void handle_status_dhcp(struct ubus_request *req, int ret)
-{
-	struct platform_iface *iface = container_of(req, struct platform_iface, dhcp);
-	L_INFO("platform: async status %s_%d: %s", iface->handle,
-			iface->dhcp_is_v4 ? 4 : 6, ubus_strerror(ret));
-
-	if (ret)
-		platform_restart_dhcpv4(iface->iface);
-}
-
 // Handle netifd ubus event for subinterface addition
-static void handle_start_dhcp(struct ubus_request *req, int ret)
+static void handle_start_dhcp(struct ubus_request *req, int ret __unused)
 {
 	struct platform_iface *iface = container_of(req, struct platform_iface, dhcp);
 	char *buf;
@@ -494,13 +462,10 @@ static void handle_start_dhcp(struct ubus_request *req, int ret)
 	snprintf(buf, 32, "%s_%d", iface->handle, iface->dhcp_is_v4 ? 4 : 6);
 	blobmsg_add_string_buffer(&b);
 
-	L_INFO("platform: async add_dynamic %s: %s", buf, ubus_strerror(ret));
-	ubus_abort_request(ubus, &iface->dhcp);
-	if (!ubus_invoke_async(ubus, ubus_network_interface, "status", b.head, &iface->dhcp)) {
-		iface->dhcp.complete_cb = handle_status_dhcp;
-		iface->dhcp.data_cb = handle_data_dhcp;
-		ubus_complete_request_async(ubus, &iface->dhcp);
-	}
+	iface->dhcp_is_v4 = !iface->dhcp_is_v4;
+
+	if (iface->dhcp_is_v4)
+		platform_restart_dhcpv4(iface->iface);
 }
 
 // Handle netifd ubus event for interfaces updates
@@ -551,7 +516,6 @@ static void handle_restart_dhcp(struct ubus_request *req, int ret __unused)
 	ubus_abort_request(ubus, &iface->dhcp);
 	if (!ubus_invoke_async(ubus, ubus_network, "add_dynamic", b.head, &iface->dhcp)) {
 		iface->dhcp.complete_cb = handle_start_dhcp;
-		iface->dhcp.data_cb = NULL;
 		ubus_complete_request_async(ubus, &iface->dhcp);
 	}
 }
@@ -1118,12 +1082,12 @@ static void platform_update(void *data, size_t len)
 
 	bool created = dtb[DATA_ATTR_CREATED] && blobmsg_get_u32(dtb[DATA_ATTR_CREATED]) < timebase;
 
-	if ((!c || !c->platform) && up && !strcmp(proto, "hnet") && (c || created) && (a = tb[IFACE_ATTR_HANDLE])) {
-		const char *handle = blobmsg_get_string(a);
-		c = iface_create(ifname, handle, flags);
+	if (up && !strcmp(proto, "hnet") && created && (a = tb[IFACE_ATTR_HANDLE]))
+		c = iface_create(ifname, blobmsg_get_string(a), flags);
 
+	if (c && c->platform && created) {
 		hncp_pa_conf_iface_update(hncp_pa_p, c->ifname); //Start HNCP PA Conf Update
-		if (c && dtb[DATA_ATTR_PREFIX]) {
+		if (dtb[DATA_ATTR_PREFIX]) {
 			struct blob_attr *k;
 			unsigned rem;
 
@@ -1137,12 +1101,12 @@ static void platform_update(void *data, size_t len)
 		}
 
 		unsigned link_id, link_mask = 8;
-		if (c && dtb[DATA_ATTR_LINK_ID] && sscanf(
+		if (dtb[DATA_ATTR_LINK_ID] && sscanf(
 				blobmsg_get_string(dtb[DATA_ATTR_LINK_ID]),
 				"%x/%u", &link_id, &link_mask) >= 1)
 			hncp_pa_conf_set_link_id(hncp_pa_p, c->ifname, link_id, link_mask);
 
-		if (c && dtb[DATA_ATTR_IFACE_ID]) {
+		if (dtb[DATA_ATTR_IFACE_ID]) {
 			struct blob_attr *k;
 			unsigned rem;
 
@@ -1170,14 +1134,14 @@ static void platform_update(void *data, size_t len)
 		}
 
 		unsigned ip6_plen;
-		if(c && dtb[DATA_ATTR_IP6_PLEN]
+		if(dtb[DATA_ATTR_IP6_PLEN]
 		               && sscanf(blobmsg_get_string(dtb[DATA_ATTR_IP6_PLEN]), "%u", &ip6_plen) == 1
 		               && ip6_plen <= 128) {
 			hncp_pa_conf_set_ip6_plen(hncp_pa_p, c->ifname, ip6_plen);
 		}
 
 		unsigned ip4_plen;
-		if(c && dtb[DATA_ATTR_IP4_PLEN]
+		if(dtb[DATA_ATTR_IP4_PLEN]
 		            && sscanf(blobmsg_get_string(dtb[DATA_ATTR_IP4_PLEN]), "%u", &ip4_plen) == 1
 		            && ip4_plen <= 32) {
 			hncp_pa_conf_set_ip4_plen(hncp_pa_p, c->ifname, ip4_plen + 96);
@@ -1186,22 +1150,23 @@ static void platform_update(void *data, size_t len)
 		hncp_pa_conf_iface_flush(hncp_pa_p, c->ifname); //Stop HNCP_PA UPDATE
 
 		dncp_link_conf conf;
-		if(c && dtb[DATA_ATTR_KEEPALIVE_INTERVAL] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))
+		if(dtb[DATA_ATTR_KEEPALIVE_INTERVAL] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))
 			conf->keepalive_interval = (hnetd_time_t) blobmsg_get_u32(dtb[DATA_ATTR_KEEPALIVE_INTERVAL]);
 
-		if(c && dtb[DATA_ATTR_TRICKLE_K] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))
+		if(dtb[DATA_ATTR_TRICKLE_K] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))
 			conf->trickle_k = (int) blobmsg_get_u32(dtb[DATA_ATTR_TRICKLE_K]);
 
-		if(c && dtb[DATA_ATTR_DNSNAME] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))
+		if(dtb[DATA_ATTR_DNSNAME] && (conf = dncp_if_find_conf_by_name(p_dncp, c->ifname)))
 			strncpy(conf->dnsname, blobmsg_get_string(dtb[DATA_ATTR_DNSNAME]), sizeof(conf->dnsname));
 
-		if (c) {
-			struct platform_iface *iface = c->platform;
-			blob_buf_init(&iface->config, 0);
-			for (size_t k = 0; k < DATA_ATTR_CREATED; ++k)
-				if (dtb[k])
-					blobmsg_add_blob(&iface->config, dtb[k]);
-		}
+		struct platform_iface *iface = c->platform;
+		blob_buf_init(&iface->config, 0);
+		for (size_t k = 0; k < DATA_ATTR_CREATED; ++k)
+			if (dtb[k])
+				blobmsg_add_blob(&iface->config, dtb[k]);
+
+		iface->dhcp_is_v4 = false;
+		platform_restart_dhcpv4(c);
 	}
 
 	L_INFO("platform: interface update for %s detected", ifname);
@@ -1265,24 +1230,13 @@ static int handle_update(__unused struct ubus_context *ctx, __unused struct ubus
 
 void platform_restart_dhcpv4(struct iface *c)
 {
-	char *buf;
 	struct platform_iface *iface = c->platform;
 
 	if (!iface || ((c->flags & (IFACE_FLAG_INTERNAL | IFACE_FLAG_NODHCP)) &&
 				((c->flags & IFACE_FLAG_HYBRID) != IFACE_FLAG_HYBRID)))
 		return;
 
-	blob_buf_init(&b, 0);
-	buf = blobmsg_alloc_string_buffer(&b, "name", 32);
-	snprintf(buf, 32, "%s_%d", iface->handle, iface->dhcp_is_v4 ? 4 : 6);
-	blobmsg_add_string_buffer(&b);
-
-	ubus_abort_request(ubus, &iface->dhcp);
-	if (!ubus_invoke_async(ubus, ubus_network, "del_dynamic", b.head, &iface->dhcp)) {
-		iface->dhcp.complete_cb = handle_restart_dhcp;
-		iface->dhcp.data_cb = NULL;
-		ubus_complete_request_async(ubus, &iface->dhcp);
-	}
+	handle_restart_dhcp(&iface->dhcp, 0);
 }
 
 
