@@ -111,7 +111,7 @@ hncp_io_set_ifname_enabled(hncp h, const char *ifname, bool enabled)
       return false;
     }
   /* Yay. It succeeded(?). */
-  dncp_ext_ep_ready(dncp_ep_find_by_name(h->dncp, ifname), enabled);
+  dncp_ext_ep_ready(dncp_find_ep_by_name(h->dncp, ifname), enabled);
   return true;
 }
 
@@ -178,7 +178,7 @@ _recv(dncp_ext ext,
           continue;
         }
 
-      *ep = dncp_ep_find_by_name(h->dncp, ifname);
+      *ep = dncp_find_ep_by_name(h->dncp, ifname);
 
       if (!*ep)
         continue;

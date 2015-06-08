@@ -6,16 +6,15 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Tue May 26 08:28:45 2015 mstenber
- * Last modified: Wed May 27 18:07:02 2015 mstenber
- * Edit time:     7 min
+ * Last modified: Mon Jun  8 12:19:59 2015 mstenber
+ * Edit time:     8 min
  *
  */
 
 #pragma once
 
 #include "hnetd.h"
-#include "dncp_i.h"
-
+#include "dncp_util.h"
 #include "udp46.h"
 
 #undef __unused

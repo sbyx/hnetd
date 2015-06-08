@@ -37,12 +37,12 @@ bool link_has_neighbors(dncp_ep_i l)
 {
   dncp_tlv t;
 
-  dncp_for_each_local_tlv(l->dncp, t)
+  dncp_for_each_tlv(l->dncp, t)
     {
       if (tlv_id(&t->tlv) == DNCP_T_NEIGHBOR)
         {
           dncp_t_neighbor ne = tlv_data(&t->tlv);
-          if (ne->link_id == l->iid)
+          if (ne->ep_id == l->ep_id)
             return true;
         }
     }
@@ -62,7 +62,7 @@ void hncp_two(void)
   net_sim_init(&s);
   n1 = net_sim_find_dncp(&s, "n1");
   n1->own_node->update_number = 0xFFFFFFFE;
-  dncp_ep lc = dncp_ep_find_by_name(n1, "eth0");
+  dncp_ep lc = dncp_find_ep_by_name(n1, "eth0");
   lc->keepalive_interval = 1000;
   n2 = net_sim_find_dncp(&s, "n2");
   l1 = net_sim_dncp_find_link_by_name(n1, "eth0");
@@ -104,7 +104,7 @@ void hncp_two(void)
               net_sim_dncp_tlv_type_count(n2, HNCP_T_EXTERNAL_CONNECTION) != 1);
 
 #define dncp_ifname_has_highest_id(o, ifname) \
-  dncp_ep_has_highest_id(dncp_ep_find_by_name(o, ifname))
+  dncp_ep_has_highest_id(dncp_find_ep_by_name(o, ifname))
 
     /* Prefix assignment should just happen. Magic(?). */
   /* Wait for prefixes to be assigned too */
@@ -316,7 +316,7 @@ void hncp_bird14_unique()
   net_sim_s s;
 
   net_sim_init(&s);
-  s.use_global_iids = true;
+  s.use_global_ep_ids = true;
   raw_bird14(&s);
 }
 
@@ -455,7 +455,7 @@ void hncp_tube_beyond_multicast_unique(void)
   net_sim_s s;
 
   net_sim_init(&s);
-  s.use_global_iids = true;
+  s.use_global_ep_ids = true;
   raw_hncp_tube(&s, BIG_TUBE_LENGTH, false);
 }
 
@@ -503,9 +503,9 @@ dncp_t_neighbor monkey_neighbor(dncp n1, dncp_ep_i l1,
                                    DNCP_T_NEIGHBOR)
     if ((nh = dncp_tlv_neighbor(n1, a)))
       {
-        if (nh->link_id != l1->iid)
+        if (nh->ep_id != l1->ep_id)
           continue;
-        if (nh->neighbor_link_id != l2->iid)
+        if (nh->neighbor_ep_id != l2->ep_id)
           continue;
         if (memcmp(dncp_tlv_get_node_identifier(n1, nh),
                    &n2->own_node->node_identifier,
@@ -678,7 +678,7 @@ void hncp_random_monkey(void)
         net_sim_dncp_find_link_n(n1, p1);
     }
 
-  /* s.use_global_iids = true; */
+  /* s.use_global_ep_ids = true; */
   for (i = 0 ; i < NUM_MONKEY_ITERATIONS ; i++)
     {
       /* Do random connect/disconnect */

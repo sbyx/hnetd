@@ -27,7 +27,7 @@ typedef struct hpa_iface_struct *hpa_iface, hpa_iface_s;
 
 typedef struct hpa_adjacency_struct {
 	struct avl_node te;
-	hncp_link_id_s id;
+	hncp_ep_id_s id;
 	hpa_iface iface;
 	bool updated;
 } *hpa_adjacency, hpa_adjacency_s;
@@ -35,7 +35,7 @@ typedef struct hpa_adjacency_struct {
 typedef struct hpa_advp_struct {
 	struct pa_advp advp;
 	struct list_head le; //APs are linked in main struct
-	hncp_link_id_s link_id;
+	hncp_ep_id_s ep_id;
 	uint8_t ap_flags;
 	bool fake; //This is not a real advertised prefix, but rather a trick to fool PA.
 } hpa_advp_s, *hpa_advp;
@@ -72,7 +72,7 @@ typedef struct hpa_conf_struct {
 			uint32_t id;
 			uint8_t mask;
 			struct pa_rule_static rule;
-		} link_id;
+		} ep_id;
 
 		/* HPA_CONF_T_IP4_PLEN
 		 * HPA_CONF_T_IP6_PLEN */
@@ -130,7 +130,7 @@ struct hpa_iface_struct {
 	struct pa_store_link aasl;
 
 	//If the interface is dncp enabled
-	dncp_ep_i l;
+	dncp_ep ep;
 
 	//If iface is an external link
 	void *extdata[HNCP_PA_EXTDATA_N];
@@ -189,7 +189,7 @@ typedef struct hpa_dp_struct {
 
 		} local;
 		struct {
-			dncp_node_identifier_s node_id;
+			hncp_node_identifier_s node_id;
 			struct uloop_timeout delete_to;
 		} hncp;
 	};
@@ -334,8 +334,8 @@ static int hpa_ifconf_comp(const void *k1, const void *k2, __unused void *ptr)
 				return i;
 			return 0;
 		case HPA_CONF_T_LINK_ID:
-			if((i = (int)e1->link_id.mask - (int)e2->link_id.mask) ||
-					(i = (int)e1->link_id.mask - (int)e2->link_id.mask))
+			if((i = (int)e1->ep_id.mask - (int)e2->ep_id.mask) ||
+					(i = (int)e1->ep_id.mask - (int)e2->ep_id.mask))
 				return i;
 			return 0;
 		case HPA_CONF_T_IP4_PLEN:
@@ -381,7 +381,7 @@ static void hpa_ap_pd_notify(__unused hncp_pa hpa, struct pa_ldp *ldp)
 				valid, pref, dp->dhcp_data, dp->dhcp_len, l->priv);
 }
 
-static hpa_iface hpa_get_adjacent_iface(hncp_pa hpa, hncp_link_id id)
+static hpa_iface hpa_get_adjacent_iface(hncp_pa hpa, hncp_ep_id id)
 {
 	hpa_adjacency adj;
 	adj = avl_find_element(&hpa->adjacencies, id, adj, te);

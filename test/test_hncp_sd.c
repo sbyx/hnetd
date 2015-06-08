@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Mon Jun  8 09:53:56 2015 mstenber
- * Edit time:     160 min
+ * Last modified: Mon Jun  8 14:16:39 2015 mstenber
+ * Edit time:     161 min
  *
  */
 
@@ -73,16 +73,16 @@ do {                                                            \
   } s = {                                                       \
     .h = { .flags = 0,                                          \
            .prefix_length_bits = p.plen,                        \
-           .link_id = l->iid},                                  \
+           .ep_id = l->ep_id},                                  \
     .addr = p.prefix                                            \
   };                                                            \
   dncp_add_tlv(n, HNCP_T_ASSIGNED_PREFIX, &s.h,                 \
                sizeof(s.h) + ROUND_BITS_TO_BYTES(p.plen), 0);   \
  } while(0)
 
-#define tlv_ra_update(n, iid, a, is_add)                        \
+#define tlv_ra_update(n, id, a, is_add)                         \
 do {                                                            \
-  hncp_t_router_address_s h = {.address = a, .link_id = iid};   \
+  hncp_t_router_address_s h = {.address = a, .ep_id = id};      \
   dncp_add_tlv(n, HNCP_T_ROUTER_ADDRESS, &h, sizeof(h), 0);     \
  } while(0)
 

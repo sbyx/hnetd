@@ -3,8 +3,8 @@
 
 #include "dncp.h"
 #include "dncp_proto.h"
+#include "hncp.h"
 #include "hncp_proto.h"
-#include "dncp_i.h"
 
 struct hncp_link;
 
@@ -27,15 +27,19 @@ struct hncp_link_config {
 	char agent[32];
 };
 
+typedef struct __packed {
+	unsigned char buf[HNCP_NI_LEN];
+} hncp_node_identifier_s, *hncp_node_identifier;
+
 typedef struct {
-	dncp_node_identifier_s node_identifier;
-	uint32_t link_id;
-} *hncp_link_id, hncp_link_id_s;
+	hncp_node_identifier_s node_identifier;
+	uint32_t ep_id;
+} *hncp_ep_id, hncp_ep_id_s;
 
 struct hncp_link_user {
 	struct list_head head;
 	void (*cb_link)(struct hncp_link_user*, const char *ifname,
-			hncp_link_id peers, size_t peercnt);
+			hncp_ep_id peers, size_t peercnt);
 	void (*cb_elected)(struct hncp_link_user*, const char *ifname,
 			enum hncp_link_elected elected);
 };

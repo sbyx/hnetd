@@ -9,7 +9,6 @@
 
 #include "hnetd.h"
 #include "dncp.h"
-#include "dncp_i.h"
 #include "hncp_sd.h"
 #include "hncp_link.h"
 #include "hncp_pa.h"
@@ -129,7 +128,7 @@ struct iface {
 	struct vlist_tree delegated;
 	struct list_head chosen;
 	struct list_head addrconf;
-	struct pa_link_id_rule *id;
+	struct pa_ep_id_rule *id;
 
 	// Other data
 	void *dhcpv6_data_stage;
@@ -204,7 +203,7 @@ void iface_add_chosen_prefix(struct iface *c, const struct prefix *p);
 
 
 // Set link ID
-void iface_set_link_id(struct iface *c, uint32_t linkid, uint8_t mask);
+void iface_set_ep_id(struct iface *c, uint32_t linkid, uint8_t mask);
 
 
 // Add hnet address

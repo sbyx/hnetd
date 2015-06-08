@@ -6,15 +6,20 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Jun  3 16:51:25 2015 mstenber
- * Edit time:     365 min
+ * Last modified: Mon Jun  8 14:27:49 2015 mstenber
+ * Edit time:     381 min
  *
  */
 
 #pragma once
 
+/* NOTE: This is NOT public API. Stay away, unless you're dncp*, or
+ * legacy code that ought to be taken behind the barn and taken care
+ * of. dncp{,_util,_trust}.h are the public API of the dncp module. */
+
 #include "dncp.h"
 #include "dncp_proto.h"
+#include "dncp_util.h"
 
 #include "dns_util.h"
 
@@ -41,8 +46,6 @@ typedef struct __packed {
 typedef struct __packed {
   unsigned char buf[DNCP_NI_MAX_LEN];
 } dncp_node_identifier_s, *dncp_node_identifier;
-
-typedef uint32_t iid_t;
 
 struct dncp_struct {
   /* 'external' handling structure */
@@ -100,7 +103,7 @@ struct dncp_struct {
 
   /* First free local interface identifier (we allocate them in
    * monotonically increasing fashion just to keep things simple). */
-  int first_free_iid;
+  int first_free_ep_id;
 
   /* List of subscribers to change notifications. */
   struct list_head subscribers[NUM_DNCP_CALLBACKS];
@@ -148,7 +151,7 @@ struct dncp_ep_i_struct {
 
   /* Interface identifier - these should be unique over lifetime of
    * dncp process. */
-  iid_t iid;
+  ep_id_t ep_id;
 
   /* What value we have TLV for, if any */
   uint32_t published_keepalive_interval;
@@ -237,16 +240,9 @@ struct dncp_tlv_struct {
 bool dncp_init(dncp o, dncp_ext ext, const void *node_identifier, int len);
 void dncp_uninit(dncp o);
 
-/* Utility to change local node identifier - use with care */
-bool dncp_set_own_node_identifier(dncp o, dncp_node_identifier ni);
-
 dncp_ep_i dncp_find_link_by_name(dncp o, const char *ifname, bool create);
-dncp_ep_i dncp_find_link_by_id(dncp o, uint32_t link_id);
-dncp_node
-dncp_find_node_by_node_identifier(dncp o, dncp_node_identifier ni, bool create);
 
 /* Private utility - shouldn't be used by clients. */
-int dncp_node_cmp(dncp_node n1, dncp_node n2);
 void dncp_node_set(dncp_node n,
                    uint32_t update_number, hnetd_time_t t,
                    struct tlv_attr *a);
@@ -271,27 +267,12 @@ void dncp_ep_i_send_network_state(dncp_ep_i l,
                                   struct sockaddr_in6 *src,
                                   struct sockaddr_in6 *dst,
                                   size_t maximum_size,
-                                  bool always_link_id);
-void dncp_ep_i_send_req_network_state(dncp_ep_i l,
-                                      struct sockaddr_in6 *src,
-                                      struct sockaddr_in6 *dst);
-void dncp_ep_i_set_ipv6_address(dncp_ep_i l, const struct in6_addr *addr);
+                                  bool always_ep_id);
 void dncp_ep_i_set_keepalive_interval(dncp_ep_i l, uint32_t value);
 
 
 /* Miscellaneous utilities that live in dncp_timeout */
 void dncp_trickle_reset(dncp o);
-
-/* Subscription stuff (dncp_notify.c) */
-void dncp_notify_subscribers_tlvs_changed(dncp_node n,
-                                          struct tlv_attr *a_old,
-                                          struct tlv_attr *a_new);
-void dncp_notify_subscribers_node_changed(dncp_node n, bool add);
-void dncp_notify_subscribers_about_to_republish_tlvs(dncp_node n);
-void dncp_notify_subscribers_local_tlv_changed(dncp o,
-                                               struct tlv_attr *a,
-                                               bool add);
-void dncp_notify_subscribers_link_changed(dncp_ep_i l, enum dncp_subscriber_event event);
 
 /* Compatibility / convenience macros to access stuff that used to be fixed. */
 #define DNCP_NI_LEN(o) (o)->ext->conf.node_identifier_length
@@ -308,40 +289,10 @@ static inline hnetd_time_t dncp_time(dncp o)
 
 #define TMIN(x,y) ((x) == 0 ? (y) : (y) == 0 ? (x) : (x) < (y) ? (x) : (y))
 
-#define DNCP_STRUCT_REPR(i) HEX_REPR(&i, sizeof(i))
+#define DNCP_LINK_F "link %s[#%d]"
+#define DNCP_LINK_D(l) l ? l->conf.ifname : "(NULL IF)", l ? l->ep_id : 0
 
 #define DNCP_NI_REPR(o, ni) HEX_REPR(ni, DNCP_NI_LEN(o))
-
-#define DNCP_NODE_REPR(n) DNCP_NI_REPR(n->dncp, &n->node_identifier)
-
-#define DNCP_LINK_F "link %s[#%d]"
-#define DNCP_LINK_D(l) l ? l->conf.ifname : "(NULL IF)", l ? l->iid : 0
-
-#define SA6_F "[%s]:%d%%%d"
-#define SA6_D(sa)                                       \
-  sa ? ADDR_REPR(&(sa)->sin6_addr) : "(NULL SA6)",      \
-    sa ? ntohs((sa)->sin6_port) : 0,                    \
-    sa ? (sa)->sin6_scope_id : 0
-
-
-static inline struct tlv_attr *
-dncp_node_get_tlv_with_type(dncp_node n, uint16_t type, bool first)
-{
-  if (type >= n->dncp->tlv_type_to_index_length
-      || !n->dncp->tlv_type_to_index[type])
-    if (!dncp_add_tlv_index(n->dncp, type))
-      return NULL;
-  if (n->tlv_index_dirty)
-    {
-      dncp_node_recalculate_index(n);
-      if (!n->tlv_index)
-        return NULL;
-    }
-  int index = n->dncp->tlv_type_to_index[type] - 1;
-  assert(index >= 0 && index < n->dncp->num_tlv_indexes);
-  int i = index * 2 + (first ? 0 : 1);
-  return n->tlv_index[i];
-}
 
 #define dncp_for_each_node_including_unreachable(o, n)                  \
   for (n = (avl_is_empty(&o->nodes.avl) ?                               \
@@ -349,14 +300,6 @@ dncp_node_get_tlv_with_type(dncp_node n, uint16_t type, bool first)
        n ;                                                              \
        n = (n == avl_last_element(&o->nodes.avl, n, in_nodes.avl) ?     \
             NULL : avl_next_element(n, in_nodes.avl)))
-
-#define dncp_node_for_each_tlv_with_type(n, a, type)            \
-  for (a = dncp_node_get_tlv_with_type(n, type, true) ;         \
-       a && a != dncp_node_get_tlv_with_type(n, type, false) ;  \
-       a = tlv_next(a))
-
-#define ROUND_BITS_TO_BYTES(b) (((b) + 7) / 8)
-#define ROUND_BYTES_TO_4BYTES(b) ((((b) + 3) / 4) * 4)
 
 static inline dncp_t_neighbor
 dncp_tlv_neighbor2(const struct tlv_attr *a, int nidlen)
@@ -373,7 +316,6 @@ dncp_tlv_neighbor(dncp o, const struct tlv_attr *a)
   return dncp_tlv_neighbor2(a, DNCP_NI_LEN(o));
 }
 
-/* Non-typesafe, better hope exterior handling has done things correctly */
 static inline dncp_node_identifier
 dncp_tlv_get_node_identifier2(void *tlv, int nidlen)
 {
@@ -385,22 +327,6 @@ dncp_tlv_get_node_identifier(dncp o, void *tlv)
 {
   return dncp_tlv_get_node_identifier2(tlv,
                                        o->ext->conf.node_identifier_length);
-}
-
-static inline dncp_t_trust_verdict
-dncp_tlv_trust_verdict(const struct tlv_attr *a)
-{
-  if (tlv_id(a) != DNCP_T_TRUST_VERDICT)
-    return NULL;
-  if (tlv_len(a) < sizeof(dncp_t_trust_verdict_s) + 1)
-    return NULL;
-  if (tlv_len(a) > sizeof(dncp_t_trust_verdict_s) + DNCP_T_TRUST_VERDICT_CNAME_LEN)
-    return NULL;
-  const char *data = (char *)tlv_data(a);
-  /* Make sure it is also null terminated */
-  if (data[tlv_len(a)-1])
-    return NULL;
-  return (dncp_t_trust_verdict)tlv_data(a);
 }
 
 static inline dncp_node
@@ -418,51 +344,12 @@ dncp_node_find_neigh_bidir(dncp_node n, dncp_t_neighbor ne)
   dncp_node_for_each_tlv_with_type(n2, a, DNCP_T_NEIGHBOR)
     if ((ne2 = dncp_tlv_neighbor(n->dncp, a)))
       {
-        if (ne->link_id == ne2->neighbor_link_id
-            && ne->neighbor_link_id == ne2->link_id &&
+        if (ne->ep_id == ne2->neighbor_ep_id
+            && ne->neighbor_ep_id == ne2->ep_id &&
             !memcmp(dncp_tlv_get_node_identifier(n->dncp, ne2),
                     &n->node_identifier, DNCP_NI_LEN(n->dncp)))
           return n2;
       }
 
   return NULL;
-}
-
-#define dncp_md5_end(h, ctx)    \
-do {                            \
-  char tbuf[16];                \
-  md5_end(tbuf, ctx);           \
-  *h = *((dncp_hash)tbuf);      \
-} while (0)
-
-#define dncp_for_each_local_tlv(o, t)  \
-  avl_for_each_element(&o->tlvs.avl, t, in_tlvs.avl)
-
-#define dncp_for_each_local_tlv_safe(o, t, t2)  \
-  avl_for_each_element_safe(&o->tlvs.avl, t, in_tlvs.avl, t2)
-
-#define dncp_update_tlv(o, t, d, dlen, elen, is_add)    \
-do {                                                    \
-  if (is_add)                                           \
-    dncp_add_tlv(o, t, d, dlen, elen);                  \
-  else                                                  \
-    dncp_remove_tlv_matching(o, t, d, dlen);            \
- } while(0)
-
-#define dncp_update_number_gt(a,b) \
-  ((((uint32_t)(a) - (uint32_t)(b)) & ((uint32_t)1<<31)) != 0)
-
-
-static inline void sockaddr_in6_set(struct sockaddr_in6 *sin6,
-                                    struct in6_addr *a6,
-                                    uint16_t port)
-{
-  memset(sin6, 0, sizeof(*sin6));
-#ifdef SIN6_LEN
-  sin6->sin6_len = sizeof(*sin6);
-#endif /* SIN6_LEN */
-  sin6->sin6_family = AF_INET6;
-  if (a6)
-    sin6->sin6_addr = *a6;
-  sin6->sin6_port = htons(port);
 }

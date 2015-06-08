@@ -27,7 +27,7 @@
 dncp_ep_s static_ep = { .ifname = LOOPBACK_NAME,
                         .accept_insecure_nonlocal_traffic = true };
 
-#define dncp_ep_find_by_name(o, n) &static_ep
+#define dncp_find_ep_by_name(o, n) &static_ep
 #include "hncp_io.c"
 #include "sput.h"
 #include "smock.h"
@@ -127,7 +127,7 @@ static void dncp_io_basic_2()
   smock_push_int("dncp_poll_io_recvfrom_dst", &dst);
   smock_push_int("dncp_poll_io_recvfrom_buf", msg);
   smock_push_int("dncp_poll_io_recvfrom_ifname", ifname);
-  h1.ext.cb.send(&h1.ext, dncp_ep_find_by_name(h1.dncp, "lo"),
+  h1.ext.cb.send(&h1.ext, dncp_find_ep_by_name(h1.dncp, "lo"),
                  NULL, &dst, msg, strlen(msg));
   pending_packets++;
 

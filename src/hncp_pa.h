@@ -82,7 +82,7 @@ int hncp_pa_conf_address(hncp_pa hp, const char *ifname,
 
 /* Sets a link ID with its mask length.
  * mask = 0 will remove the link id. */
-int hncp_pa_conf_set_link_id(hncp_pa hp, const char *ifname, uint32_t id,
+int hncp_pa_conf_set_ep_id(hncp_pa hp, const char *ifname, uint32_t id,
 		uint8_t mask);
 
 int hncp_pa_conf_set_ip4_plen(hncp_pa hp, const char *ifname,

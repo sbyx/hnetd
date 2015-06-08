@@ -6,8 +6,8 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 20:39:45 2015 mstenber
- * Last modified: Tue May 26 07:30:59 2015 mstenber
- * Edit time:     99 min
+ * Last modified: Mon Jun  8 13:37:09 2015 mstenber
+ * Edit time:     102 min
  *
  */
 
@@ -23,7 +23,6 @@
 
 #include "hncp_multicast.h"
 #include "iface.h"
-#include "dncp_i.h"
 
 #include <unistd.h>
 #include <sys/wait.h>
@@ -63,7 +62,7 @@ static void _tlv_cb(dncp_subscriber s,
   switch (tlv_id(tlv))
     {
     case HNCP_T_EXTERNAL_CONNECTION:
-      if (n == m->dncp->own_node)
+      if (dncp_node_is_self(n))
         uloop_timeout_set(&m->bp_timeout, BP_UPDATE_TIMEOUT);
       break;
     case HNCP_T_PIM_BORDER_PROXY:
@@ -76,7 +75,7 @@ static void _tlv_cb(dncp_subscriber s,
           char *argv[] = {(char *)m->p.multicast_script,
                           "bp",
                           add ? "add" : "remove",
-                          n == m->dncp->own_node ? "local" : "remote",
+                          dncp_node_is_self(n) ? "local" : "remote",
                           buf, NULL};
           hncp_run(argv);
         }
@@ -135,12 +134,13 @@ static void _rp_timeout(struct uloop_timeout *t)
     }
   if (found)
     {
-      int ret = dncp_node_cmp(found_node, m->dncp->own_node);
+      dncp_node on = dncp_node_get_node_identifier(dncp_get_own_node(m->dncp));
+      int ret = dncp_node_cmp(found_node, on);
       if (ret)
         {
           if (ret > 0)
             dncp_remove_tlvs_by_type(m->dncp, HNCP_T_PIM_RPA_CANDIDATE);
-          _notify_rp(m, tlv_data(found), found_node == m->dncp->own_node);
+          _notify_rp(m, tlv_data(found), dncp_node_is_self(found_node));
           return;
         }
     }
@@ -163,7 +163,7 @@ static void _bp_timeout(struct uloop_timeout *t)
   struct tlv_attr *a;
 
   dncp_remove_tlvs_by_type(m->dncp, HNCP_T_PIM_BORDER_PROXY);
-  dncp_node_for_each_tlv_with_type(m->dncp->own_node, a,
+  dncp_node_for_each_tlv_with_type(dncp_get_own_node(m->dncp), a,
                                    HNCP_T_EXTERNAL_CONNECTION)
     {
       struct in6_addr *addr = hncp_get_ipv6_address(m->hncp, NULL);

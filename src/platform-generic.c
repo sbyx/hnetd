@@ -499,7 +499,7 @@ struct blobmsg_policy ipc_policy[] = {
 	[OPT_IPV4SOURCE] = {"ipv4source", BLOBMSG_TYPE_STRING},
 	[OPT_DNS] = {"dns", BLOBMSG_TYPE_ARRAY},
 	[OPT_MODE] = {"mode", BLOBMSG_TYPE_STRING},
-	[OPT_LINK_ID] = {"link_id", BLOBMSG_TYPE_STRING},
+	[OPT_LINK_ID] = {"ep_id", BLOBMSG_TYPE_STRING},
 	[OPT_IFACE_ID] = {"iface_id", BLOBMSG_TYPE_ARRAY},
 	[OPT_IP6_PLEN] = {"ip6assign", BLOBMSG_TYPE_STRING},
 	[OPT_IP4_PLEN] = {"ip4assign", BLOBMSG_TYPE_STRING},
@@ -562,7 +562,7 @@ int ipc_ifupdown(const char *method, int argc, char *const argv[])
 			break;
 
 		case 'l':
-			blobmsg_add_string(&b, "link_id", optarg);
+			blobmsg_add_string(&b, "ep_id", optarg);
 			break;
 
 		case 'i':
@@ -834,11 +834,11 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 				}
 			}
 
-			unsigned link_id, link_mask = 8;
+			unsigned ep_id, link_mask = 8;
 			if (iface && tb[OPT_LINK_ID] && sscanf(
 						blobmsg_get_string(tb[OPT_LINK_ID]),
-						"%x/%u", &link_id, &link_mask) >= 1)
-					hncp_pa_conf_set_link_id(hncp_pa_p, iface->ifname, link_id, link_mask);
+						"%x/%u", &ep_id, &link_mask) >= 1)
+					hncp_pa_conf_set_ep_id(hncp_pa_p, iface->ifname, ep_id, link_mask);
 
 			if (iface && tb[OPT_IFACE_ID]) {
 				struct blob_attr *k;
@@ -881,13 +881,13 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 			hncp_pa_conf_iface_flush(hncp_pa_p, iface->ifname); //Stop HNCP_PA UPDATE
 
 			dncp_ep conf;
-			if(iface && tb[OPT_KEEPALIVE_INTERVAL] && (conf = dncp_ep_find_by_name(dncp_p, iface->ifname))) {
+			if(iface && tb[OPT_KEEPALIVE_INTERVAL] && (conf = dncp_find_ep_by_name(dncp_p, iface->ifname))) {
 				conf->keepalive_interval = (((hnetd_time_t) blobmsg_get_u32(tb[OPT_KEEPALIVE_INTERVAL])) * HNETD_TIME_PER_SECOND) / 1000;
 			}
 
-			if(iface && tb[OPT_TRICKLE_K] && (conf = dncp_ep_find_by_name(dncp_p, iface->ifname)))
+			if(iface && tb[OPT_TRICKLE_K] && (conf = dncp_find_ep_by_name(dncp_p, iface->ifname)))
 				conf->trickle_k = (int) blobmsg_get_u32(tb[OPT_TRICKLE_K]);
-			if(iface && tb[OPT_DNSNAME] && (conf = dncp_ep_find_by_name(dncp_p, iface->ifname)))
+			if(iface && tb[OPT_DNSNAME] && (conf = dncp_find_ep_by_name(dncp_p, iface->ifname)))
 				strncpy(conf->dnsname, blobmsg_get_string(tb[OPT_DNSNAME]), sizeof(conf->dnsname));
 
 			if (tb[OPT_IPV4SOURCE])

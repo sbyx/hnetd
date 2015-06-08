@@ -6,14 +6,15 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Mon Jun  8 09:54:47 2015 mstenber
- * Edit time:     391 min
+ * Last modified: Mon Jun  8 14:14:53 2015 mstenber
+ * Edit time:     392 min
  *
  */
 
 #ifndef NET_SIM_H
 #define NET_SIM_H
 
+#include "dncp_i.h"
 #include "hncp_i.h"
 #include "hncp_pa.h"
 #include "hncp_sd.h"
@@ -130,8 +131,8 @@ typedef struct net_sim_t {
   int converged_count;
   int not_converged_count;
 
-  bool use_global_iids;
-  int next_free_iid;
+  bool use_global_ep_ids;
+  int next_free_ep_id;
 
   bool accept_time_errors;
 
@@ -150,7 +151,7 @@ void net_sim_init(net_sim s)
   INIT_LIST_HEAD(&s->messages);
   uloop_init();
   s->start = hnetd_time();
-  s->next_free_iid = 100;
+  s->next_free_ep_id = 100;
 }
 
 int net_sim_dncp_tlv_type_count(dncp o, int type)
@@ -383,7 +384,7 @@ dncp_ep_i net_sim_dncp_find_link_by_name(dncp o, const char *name)
   if (l && l->enabled)
     return l;
 
-  dncp_ext_ep_ready(dncp_ep_find_by_name(o, name), true);
+  dncp_ext_ep_ready(dncp_find_ep_by_name(o, name), true);
 
   l = dncp_find_link_by_name(o, name, false);
 
@@ -415,9 +416,9 @@ dncp_ep_i net_sim_dncp_find_link_by_name(dncp o, const char *name)
   hep->has_ipv6_address = !n->s->disable_link_auto_address;
   /* Internally we use the ipv6 address even if it is not
    * officially set(!). Beautiful.. */
-  /* Override the iid to be unique. */
-  if (n->s->use_global_iids)
-    l->iid = n->s->next_free_iid++;
+  /* Override the ep_id to be unique. */
+  if (n->s->use_global_ep_ids)
+    l->ep_id = n->s->next_free_ep_id++;
 
   /* Give callback about it to iface users. */
   net_sim_node_iface_callback(n, cb_intiface, name, true);
@@ -436,7 +437,7 @@ void net_sim_set_connected(dncp_ep_i l1, dncp_ep_i l2, bool enabled)
 
 
   L_DEBUG("connection %p/%d -> %p/%d %s",
-          l1, l1->iid, l2, l2->iid, enabled ? "on" : "off");
+          l1, l1->ep_id, l2, l2->ep_id, enabled ? "on" : "off");
   if (enabled)
     {
       /* Make sure it's not there already */
@@ -640,7 +641,7 @@ _recv(dncp_ext ext,
   list_for_each_entry(m, &node->messages, lh)
     {
       int s = m->len > len ? len : m->len;
-      *ep = dncp_ep_find_by_name(o, m->l->conf.ifname);
+      *ep = dncp_find_ep_by_name(o, m->l->conf.ifname);
       static struct sockaddr_in6 ret_src, ret_dst;
       ret_src = m->src;
       ret_dst = m->dst;
@@ -735,7 +736,7 @@ _send_one(net_sim s, void *buf, size_t len, dncp_ep_i sl, dncp_ep_i dl,
   memset(&m->src, 0, sizeof(m->src));
   m->src.sin6_family = AF_INET6;
   m->src.sin6_addr = shl->ipv6_address;
-  m->src.sin6_scope_id = dl->iid;
+  m->src.sin6_scope_id = dl->ep_id;
   m->dst = *dst;
   list_add(&m->lh, &s->messages);
   m->deliver_to.cb = _message_deliver_cb;
@@ -776,13 +777,16 @@ _send(dncp_ext ext, dncp_ep ep,
     rdst = *dst;
   dst = &rdst;
 
-  /* Cheat and just get iid from the struct; we are unlikely to have
+  /* Cheat and just get ep_id from the struct; we are unlikely to have
    * real matching system interfaces after all. */
   dncp_ep_i lo = container_of(ep, dncp_ep_i_s, conf);
-  dst->sin6_scope_id = lo->iid;
+  dst->sin6_scope_id = lo->ep_id;
 
-  dncp_ep_i l = dncp_find_link_by_id(o, dst->sin6_scope_id);
-  sput_fail_unless(l, "sin6_scope_id lookup ok");
+  dncp_ep ep2 = dncp_find_ep_by_id(o, dst->sin6_scope_id);
+  sput_fail_unless(ep2, "sin6_scope_id lookup ok");
+  sput_fail_unless(ep == ep2, "same returned ep");
+
+  dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
 
   bool is_multicast = memcmp(&dst->sin6_addr, &h->multicast_address,
                              sizeof(h->multicast_address)) == 0;

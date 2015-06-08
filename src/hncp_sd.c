@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Tue Jun  2 10:16:35 2015 mstenber
- * Edit time:     622 min
+ * Last modified: Mon Jun  8 13:24:00 2015 mstenber
+ * Edit time:     635 min
  *
  */
 
@@ -85,10 +85,10 @@ struct hncp_sd_struct
   /* Parameters received when created (pointers within owned by someone else) */
   hncp_sd_params_s p;
 
-  /* State hashes used to keep track of what has been committed. */
-  dncp_hash_s dnsmasq_state;
-  dncp_hash_s ohp_state;
-  dncp_hash_s pcp_state;
+  /* State (md5) hashes used to keep track of what has been committed. */
+  char dnsmasq_state[16];
+  char ohp_state[16];
+  char pcp_state[16];
 
   /* Callbacks from other modules */
   struct iface_user iface;
@@ -105,14 +105,14 @@ static void _should_update(hncp_sd sd, int v)
 }
 
 /* Convenience wrapper around MD5 hashing */
-static bool _sh_changed(md5_ctx_t *ctx, dncp_hash reference)
+static bool _sh_changed(md5_ctx_t *ctx, void *result)
 {
-  dncp_hash_s h;
+  char buf[16];
 
-  dncp_md5_end(&h, ctx);
-  if (memcmp(&h, reference, sizeof(h)))
+  md5_end(buf, ctx);
+  if (memcmp(buf, result, 16))
     {
-      *reference = h;
+      memcpy(result, buf, 16);
       return true;
     }
   return false;
@@ -181,25 +181,25 @@ const char *_rewrite_ifname(const char *src, char *dst)
 #define REWRITE_IFNAME(ifname) \
   _rewrite_ifname(ifname, alloca(strlen(ifname)+1))
 
-void hncp_sd_dump_link_fqdn(hncp_sd sd, dncp_ep_i l,
+void hncp_sd_dump_link_fqdn(hncp_sd sd, dncp_ep ep,
                             const char *ifname, char *buf, size_t buf_len)
 {
-  if (l && l->conf.dnsname[0])
+  if (ep && ep->dnsname[0])
     {
-      if (strcmp(l->conf.ifname, l->conf.dnsname)
-          && strchr(l->conf.dnsname, '.'))
+      if (strcmp(ep->ifname, ep->dnsname)
+          && strchr(ep->dnsname, '.'))
         {
-          strncpy(buf, l->conf.dnsname, buf_len);
+          strncpy(buf, ep->dnsname, buf_len);
           return;
         }
-      ifname = l->conf.dnsname;
+      ifname = ep->dnsname;
     }
   ifname = REWRITE_IFNAME(ifname);
   snprintf(buf, buf_len, "%s.%s.%s",
            ifname, sd->router_name, sd->hncp->domain);
 }
 
-static void _publish_ddz(hncp_sd sd, dncp_ep_i l,
+static void _publish_ddz(hncp_sd sd, dncp_ep ep,
                          int flags_forward,
                          struct prefix *assigned_prefix)
 {
@@ -212,11 +212,11 @@ static void _publish_ddz(hncp_sd sd, dncp_ep_i l,
   /* Forward DDZ handling (note: duplication doesn't matter) */
   dh = (void *)buf;
   memset(dh, 0, sizeof(*dh));
-  struct in6_addr *a = hncp_get_ipv6_address(sd->hncp, l->conf.ifname);
+  struct in6_addr *a = hncp_get_ipv6_address(sd->hncp, ep->ifname);
   if (!a)
     return;
   *((struct in6_addr *)dh->address) = *a;
-  hncp_sd_dump_link_fqdn(sd, l, l->conf.ifname, tbuf, sizeof(tbuf));
+  hncp_sd_dump_link_fqdn(sd, ep, ep->ifname, tbuf, sizeof(tbuf));
   int r = escaped2ll(tbuf, dh->ll, DNS_MAX_ESCAPED_LEN);
   if (r < 0)
     return;
@@ -242,16 +242,16 @@ static void _publish_ddzs(hncp_sd sd)
   struct tlv_attr *a;
   dncp_tlv t;
   hncp_t_assigned_prefix_header ah;
-  dncp_ep_i l;
+  dncp_ep ep;
 
   if (!(sd->should_update & UPDATE_FLAG_DDZ))
     return;
   sd->should_update &= ~UPDATE_FLAG_DDZ;
   L_DEBUG("_publish_ddzs");
   (void)dncp_remove_tlvs_by_type(sd->dncp, HNCP_T_DNS_DELEGATED_ZONE);
-  vlist_for_each_element(&sd->dncp->tlvs, t, in_tlvs)
+  dncp_for_each_tlv(sd->dncp, t)
     {
-      a = &t->tlv;
+      a = dncp_tlv_get_attr(t);
       if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX)
         {
           if (!(ah = dncp_tlv_ap(a)))
@@ -260,18 +260,13 @@ static void _publish_ddzs(hncp_sd sd)
               return;
             }
 
-          l = dncp_find_link_by_id(sd->dncp, ah->link_id);
-          if (!l)
-            {
-              L_ERR("unable to find hncp link by id #%d", ah->link_id);
-              continue;
-            }
+          ep = dncp_find_ep_by_id(sd->dncp, ah->ep_id);
 
           struct prefix p;
           p.plen = ah->prefix_length_bits;
           memcpy(&p.prefix, ah->prefix_data, ROUND_BITS_TO_BYTES(p.plen));
 
-          _publish_ddz(sd, l, HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE
+          _publish_ddz(sd, ep, HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE
                        | HNCP_T_DNS_DELEGATED_ZONE_FLAG_LEGACY_BROWSE, &p);
         }
     }
@@ -279,16 +274,17 @@ static void _publish_ddzs(hncp_sd sd)
   /* Second stage: publish DDZs ALSO for any other interface, but if
    * and only if there is no corresponding DDZ already (which has
    * browse flag set -> duplicate detection would not work). */
-  vlist_for_each_element(&sd->dncp->links, l, in_links)
+  dncp_for_each_ep(sd->dncp, ep)
     {
       bool found = false;
-      vlist_for_each_element(&sd->dncp->tlvs, t, in_tlvs)
+
+      dncp_for_each_tlv(sd->dncp, t)
         {
-          a = &t->tlv;
+          a = dncp_tlv_get_attr(t);
           if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX)
             {
               ah = tlv_data(a);
-              if (ah->link_id == l->iid)
+              if (ah->ep_id == dncp_ep_get_id(ep))
                 {
                   found = true;
                   break;
@@ -298,7 +294,7 @@ static void _publish_ddzs(hncp_sd sd)
       if (found)
         continue;
       /* Not found -> produce forward DDZ only. */
-      _publish_ddz(sd, l, 0, NULL);
+      _publish_ddz(sd, ep, 0, NULL);
     }
 }
 
@@ -421,7 +417,7 @@ bool hncp_sd_restart_dnsmasq(hncp_sd sd)
 
 bool hncp_sd_reconfigure_ohp(hncp_sd sd)
 {
-  dncp_ep_i l;
+  dncp_ep ep;
   char buf[ARGS_MAX_LEN];
   char *c = buf;
   char *args[ARGS_MAX_COUNT];
@@ -444,8 +440,8 @@ bool hncp_sd_reconfigure_ohp(hncp_sd sd)
         continue;
 
       sprintf(tbuf, "%s=", iface->ifname);
-      l = dncp_find_link_by_name(sd->dncp, iface->ifname, false);
-      hncp_sd_dump_link_fqdn(sd, l, iface->ifname,
+      ep = dncp_find_ep_by_name(sd->dncp, iface->ifname);
+      hncp_sd_dump_link_fqdn(sd, dncp_ep_is_enabled(ep) ? ep : NULL, iface->ifname,
                              tbuf+strlen(tbuf), sizeof(tbuf)-strlen(tbuf));
 
       md5_hash(tbuf, strlen(tbuf), &ctx);
@@ -540,7 +536,7 @@ bool hncp_sd_reconfigure_pcp(hncp_sd sd)
                     }
 
                   sprintf(tbuf, "%s=%s", PREFIX_REPR(&p),
-                          n == sd->dncp->own_node ?
+                          dncp_node_is_self(n) ?
                           is_ipv4 ? "127.0.0.1" : "::1" :
                           ADDR_REPR(sa));
                   md5_hash(tbuf, strlen(tbuf), &ctx);
@@ -744,7 +740,7 @@ static void _tlv_cb(dncp_subscriber s,
 
   L_NOTICE("[sd]_tlv_cb %s %s %s",
            add ? "add" : "remove",
-           n == o->own_node ? "local" : DNCP_NODE_REPR(n),
+           dncp_node_is_self(n) ? "local" : DNCP_NODE_REPR(n),
            TLV_REPR(tlv));
   switch (tlv_id(tlv))
     {
@@ -752,10 +748,10 @@ static void _tlv_cb(dncp_subscriber s,
       /* Handle router name collision detection; we're interested only in
        * nodes with higher router id overriding our choice. */
       if (add
-          && n != o->own_node
+          && !dncp_node_is_self(n)
           && _tlv_router_name_matches(sd, tlv))
         {
-          if (dncp_node_cmp(n, o->own_node) > 0)
+          if (dncp_node_cmp(n, dncp_get_own_node(o)) > 0)
             {
               L_DEBUG("router name conflict, we're lower, renaming");
               _change_router_name(sd);
@@ -777,8 +773,7 @@ static void _tlv_cb(dncp_subscriber s,
 
       /* Check also if it's name matches our router name directly ->
        * rename us if it does. */
-      if (_tlv_ddz_matches(sd, tlv)
-          && n != o->own_node)
+      if (_tlv_ddz_matches(sd, tlv) && !dncp_node_is_self(n))
         {
           L_DEBUG("found matching DDZ with our router name -> force rename");
           _change_router_name(sd);

@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 10:04:30 2013 mstenber
- * Last modified: Mon Jun  1 13:27:15 2015 mstenber
+ * Last modified: Mon Jun  8 11:47:25 2015 mstenber
  * Edit time:     61 min
  *
  */
@@ -224,9 +224,10 @@ void dncp_notify_subscribers_about_to_republish_tlvs(dncp_node n)
 }
 
 
-void dncp_notify_subscribers_link_changed(dncp_ep_i l, enum dncp_subscriber_event event)
+void dncp_notify_subscribers_link_changed(dncp_ep ep, enum dncp_subscriber_event event)
 {
   dncp_subscriber s;
+  dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
 
   list_for_each_entry(s, &l->dncp->subscribers[DNCP_CALLBACK_LINK],
                       lhs[DNCP_CALLBACK_LINK])

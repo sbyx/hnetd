@@ -426,7 +426,7 @@ static const struct blobmsg_policy route_attrs[ROUTE_ATTR_MAX] = {
 
 static const struct blobmsg_policy data_attrs[DATA_ATTR_MAX] = {
 	[DATA_ATTR_PREFIX] = { .name = "prefix", .type = BLOBMSG_TYPE_ARRAY },
-	[DATA_ATTR_LINK_ID] = { .name = "link_id", .type = BLOBMSG_TYPE_STRING },
+	[DATA_ATTR_LINK_ID] = { .name = "ep_id", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_IFACE_ID] = { .name = "iface_id", .type = BLOBMSG_TYPE_ARRAY },
 	[DATA_ATTR_IP6_PLEN] = { .name = "ip6assign", .type = BLOBMSG_TYPE_STRING },
 	[DATA_ATTR_IP4_PLEN] = { .name = "ip4assign", .type = BLOBMSG_TYPE_STRING },
@@ -1101,11 +1101,11 @@ static void platform_update(void *data, size_t len)
 			}
 		}
 
-		unsigned link_id, link_mask = 8;
+		unsigned ep_id, link_mask = 8;
 		if (dtb[DATA_ATTR_LINK_ID] && sscanf(
 				blobmsg_get_string(dtb[DATA_ATTR_LINK_ID]),
-				"%x/%u", &link_id, &link_mask) >= 1)
-			hncp_pa_conf_set_link_id(hncp_pa_p, c->ifname, link_id, link_mask);
+				"%x/%u", &ep_id, &link_mask) >= 1)
+			hncp_pa_conf_set_ep_id(hncp_pa_p, c->ifname, ep_id, link_mask);
 
 		if (dtb[DATA_ATTR_IFACE_ID]) {
 			struct blob_attr *k;
@@ -1151,13 +1151,13 @@ static void platform_update(void *data, size_t len)
 		hncp_pa_conf_iface_flush(hncp_pa_p, c->ifname); //Stop HNCP_PA UPDATE
 
 		dncp_ep conf;
-		if(dtb[DATA_ATTR_KEEPALIVE_INTERVAL] && (conf = dncp_ep_find_by_name(p_dncp, c->ifname)))
+		if(dtb[DATA_ATTR_KEEPALIVE_INTERVAL] && (conf = dncp_find_ep_by_name(p_dncp, c->ifname)))
 			conf->keepalive_interval = (hnetd_time_t) blobmsg_get_u32(dtb[DATA_ATTR_KEEPALIVE_INTERVAL]);
 
-		if(dtb[DATA_ATTR_TRICKLE_K] && (conf = dncp_ep_find_by_name(p_dncp, c->ifname)))
+		if(dtb[DATA_ATTR_TRICKLE_K] && (conf = dncp_find_ep_by_name(p_dncp, c->ifname)))
 			conf->trickle_k = (int) blobmsg_get_u32(dtb[DATA_ATTR_TRICKLE_K]);
 
-		if(dtb[DATA_ATTR_DNSNAME] && (conf = dncp_ep_find_by_name(p_dncp, c->ifname)))
+		if(dtb[DATA_ATTR_DNSNAME] && (conf = dncp_find_ep_by_name(p_dncp, c->ifname)))
 			strncpy(conf->dnsname, blobmsg_get_string(dtb[DATA_ATTR_DNSNAME]), sizeof(conf->dnsname));
 
 		struct platform_iface *iface = c->platform;

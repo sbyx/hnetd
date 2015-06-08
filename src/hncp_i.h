@@ -6,16 +6,16 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:33:03 2014 mstenber
- * Last modified: Wed May 27 10:19:44 2015 mstenber
+ * Last modified: Mon Jun  8 11:42:28 2015 mstenber
  * Edit time:     21 min
  *
  */
 
 #pragma once
 
-#include "dncp_i.h"
 #include "hncp.h"
 #include "hncp_proto.h"
+#include "dncp_util.h"
 #include "udp46.h"
 
 /* Pretty arbitrary. I wonder if all links can really guarantee MTU

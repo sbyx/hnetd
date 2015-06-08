@@ -14,6 +14,7 @@
 #include <string.h>
 
 #include "hncp_routing.h"
+#include "dncp_i.h"
 #include "hncp_i.h"
 #include "iface.h"
 
@@ -151,21 +152,21 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 
 
 				if (c == dncp->own_node) { // We are at the start, lookup neighbor
-					dncp_ep_i link = dncp_find_link_by_id(dncp, ne->link_id);
-					if (!link)
+					dncp_ep ep = dncp_find_ep_by_id(dncp, ne->ep_id);
+					if (!ep)
 						continue;
 					dncp_tlv tlv = dncp_find_tlv(dncp, DNCP_T_NEIGHBOR, tlv_data(a), tlv_len(a));
 					dncp_neighbor neigh = tlv ? dncp_tlv_get_extra(tlv) : NULL;
 					if (neigh) {
 						hn->bfs.next_hop = &neigh->last_sa6.sin6_addr;
-						hn->bfs.ifname = link->conf.ifname;
+						hn->bfs.ifname = ep->ifname;
 					}
 
 					struct tlv_attr *na;
 					hncp_t_router_address ra;
 					dncp_node_for_each_tlv_with_type(n, na, HNCP_T_ROUTER_ADDRESS) {
 						if ((ra = dncp_tlv_router_address(na))) {
-							if (ra->link_id == ne->neighbor_link_id &&
+							if (ra->ep_id == ne->neighbor_ep_id &&
 							    IN6_IS_ADDR_V4MAPPED(&ra->address)) {
 								hn->bfs.next_hop4 = &ra->address;
 								break;
@@ -247,8 +248,8 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 				// Skip routes for prefixes on connected links
 				if (link && ifo && (ifo->flags & IFACE_FLAG_ADHOC) != IFACE_FLAG_ADHOC && hc->bfs.hopcount == 1) {
 					dncp_t_neighbor_s np = {
-						.neighbor_link_id = ap->link_id,
-						.link_id = link->iid
+						.neighbor_ep_id = ap->ep_id,
+						.ep_id = link->ep_id
 					};
 					size_t buflen = sizeof(np) + DNCP_NI_LEN(dncp);
 					void *buf = alloca(buflen);
@@ -263,7 +264,7 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 				struct prefix to = { .plen = ap->prefix_length_bits };
 				size_t plen = ROUND_BITS_TO_BYTES(to.plen);
 				memcpy(&to.prefix, &ap[1], plen);
-				unsigned linkid = (link) ? link->iid : 0;
+				unsigned linkid = (link) ? link->ep_id : 0;
 				prefix_ntop(dst, sizeof(dst), &to.prefix, to.plen);
 				snprintf(metric, sizeof(metric), "%u", hc->bfs.hopcount << 8 | linkid);
 

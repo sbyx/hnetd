@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Wed Jun  3 16:45:59 2015 mstenber
- * Edit time:     244 min
+ * Last modified: Mon Jun  8 14:23:56 2015 mstenber
+ * Edit time:     258 min
  *
  */
 
@@ -26,6 +26,9 @@
 #include "dns_util.h"
 
 #include <libubox/list.h>
+
+/* ep_id_t */
+#include "dncp_proto.h"
 
 /********************************************* Opaque object-like structures */
 
@@ -165,7 +168,7 @@ struct dncp_subscriber_struct {
                                 struct tlv_attr *msg);
 };
 
-/********************************************* API for handling single links */
+/***************************************** API for handling single endpoints */
 
 /* (dncp_ep_i itself is implementation detail) */
 
@@ -208,14 +211,32 @@ struct dncp_ep_struct {
 };
 
 /**
- * Find or create a new dncp_ep_s that matches the interface.
+ * Find or create an endpoint that matches the name.
  */
-dncp_ep dncp_ep_find_by_name(dncp o, const char *name);
+dncp_ep dncp_find_ep_by_name(dncp o, const char *name);
+
+/**
+ * Find an endpoint that matches the id, or NULL if it does not exist.
+ */
+dncp_ep dncp_find_ep_by_id(dncp o, ep_id_t ep_id);
 
 /**
  * Does the current DNCP instance have highest ID on the given endpoint?
  */
 bool dncp_ep_has_highest_id(dncp_ep ep);
+
+/**
+ * Get next DNCP endpoint.
+ */
+dncp_ep dncp_ep_get_next(dncp_ep ep);
+
+#define dncp_for_each_ep(o, ep) \
+  for (ep = dncp_get_first_ep(o) ; ep ; ep = dncp_ep_get_next(ep))
+
+/* Various accessors */
+dncp dncp_ep_get_dncp(dncp_ep ep);
+ep_id_t dncp_ep_get_id(dncp_ep ep);
+bool dncp_ep_is_enabled(dncp_ep ep);
 
 /************************************************ API for whole dncp instance */
 
@@ -240,6 +261,11 @@ void dncp_destroy(dncp o);
 dncp_node dncp_get_first_node(dncp o);
 
 /**
+ * Get first DNCP endpoint.
+ */
+dncp_ep dncp_get_first_ep(dncp o);
+
+/**
  * Publish a single TLV.
  *
  * @return The newly allocated TLV, which is valid until
@@ -258,6 +284,11 @@ dncp_tlv dncp_add_tlv(dncp o,
 dncp_tlv dncp_find_tlv(dncp o, uint16_t type, void *data, uint16_t len);
 
 /**
+ * Find node with matching node identifier (if any).
+ */
+dncp_node dncp_find_node_by_node_identifier(dncp o, void *nibuf, bool create);
+
+/**
  * Stop publishing a TLV.
  */
 void dncp_remove_tlv(dncp o, dncp_tlv tlv);
@@ -271,6 +302,13 @@ void dncp_remove_tlv(dncp o, dncp_tlv tlv);
  * @return The number of TLVs removed.
  */
 int dncp_remove_tlvs_by_type(dncp o, int type);
+
+/**
+ * Set the local node identifier.
+ *
+ * 'nibuf' must be of same size as the given node_identifier_length.
+ */
+bool dncp_set_own_node_identifier(dncp o, void *nibuf);
 
 /**
  * Subscribe to DNCP state change events.
@@ -288,6 +326,10 @@ void dncp_subscribe(dncp o, dncp_subscriber s);
  * state).
  */
 void dncp_unsubscribe(dncp o, dncp_subscriber s);
+
+/* Accessors */
+dncp_ext dncp_get_ext(dncp o);
+dncp_node dncp_get_own_node(dncp o);
 
 /************************************************************** Per-node API */
 
@@ -312,6 +354,23 @@ struct tlv_attr *dncp_node_get_tlvs(dncp_node n);
 #define dncp_node_for_each_tlv(n, a)            \
   tlv_for_each_attr(a, dncp_node_get_tlvs(n))
 
+/* Accessors */
+void *dncp_node_get_node_identifier(dncp_node n);
+dncp dncp_node_get_dncp(dncp_node n);
+hnetd_time_t dncp_node_get_origination_time(dncp_node n);
+
+/* Assorted node handling utilities */
+const char *dncp_node_repr(dncp_node n, char *to_buf);
+int dncp_node_cmp(dncp_node n1, dncp_node n2);
+
+struct tlv_attr *dncp_node_get_tlv_with_type(dncp_node n, uint16_t type, bool first);
+
+#define dncp_node_for_each_tlv_with_type(n, a, type)            \
+  for (a = dncp_node_get_tlv_with_type(n, type, true) ;         \
+       a && a != dncp_node_get_tlv_with_type(n, type, false) ;  \
+       a = tlv_next(a))
+
+
 /******************************************************* Per-(local) tlv API */
 
 /**
@@ -322,6 +381,19 @@ struct tlv_attr *dncp_node_get_tlvs(dncp_node n);
  * return value may already be invalid.
  */
 void *dncp_tlv_get_extra(dncp_tlv tlv);
+
+dncp_tlv dncp_get_next_tlv(dncp o, dncp_tlv tlv);
+
+struct tlv_attr *dncp_tlv_get_attr(dncp_tlv tlv);
+
+#define dncp_for_each_tlv(o, t)                         \
+  for (t = dncp_get_first_tlv(o) ; t ; t = dncp_get_next_tlv(o, t))
+
+#define dncp_for_each_tlv_safe(o, t, t2)                                \
+  for (t = dncp_get_first_tlv(o), t2 = dncp_get_next_tlv(o, t) ; t;     \
+       t = t2, t2 = dncp_get_next_tlv(o, t))
+
+dncp_tlv dncp_get_first_tlv(dncp o);
 
 /**************************************************** dncp external bits API */
 
@@ -491,3 +563,17 @@ void dncp_ext_readable(dncp dncp);
  * Notification from the platform that the timeout has expired.
  */
 void dncp_ext_timeout(dncp dncp);
+
+/****************************************** For profile implementation use.. */
+
+/* Subscription stuff (dncp_notify.c) */
+void dncp_notify_subscribers_tlvs_changed(dncp_node n,
+                                          struct tlv_attr *a_old,
+                                          struct tlv_attr *a_new);
+void dncp_notify_subscribers_node_changed(dncp_node n, bool add);
+void dncp_notify_subscribers_about_to_republish_tlvs(dncp_node n);
+void dncp_notify_subscribers_local_tlv_changed(dncp o,
+                                               struct tlv_attr *a,
+                                               bool add);
+void dncp_notify_subscribers_link_changed(dncp_ep ep,
+                                          enum dncp_subscriber_event event);

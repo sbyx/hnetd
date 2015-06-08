@@ -64,13 +64,13 @@ static bool _push_network_state_tlv(struct tlv_buf *tb, dncp o)
   return true;
 }
 
-static bool _push_link_id_tlv(struct tlv_buf *tb, dncp_ep_i l,
-                              struct sockaddr_in6 *dst, bool always_link_id)
+static bool _push_ep_id_tlv(struct tlv_buf *tb, dncp_ep_i l,
+                              struct sockaddr_in6 *dst, bool always_ep_id)
 {
-  dncp_t_link_id lid;
+  dncp_t_ep_id lid;
   int tl = DNCP_NI_LEN(l->dncp) + sizeof(*lid);
 
-  if (l->conf.unicast_is_reliable_stream && dst && !always_link_id)
+  if (l->conf.unicast_is_reliable_stream && dst && !always_ep_id)
     return true;
 
   struct tlv_attr *a = tlv_new(tb, DNCP_T_ENDPOINT_ID, tl);
@@ -79,7 +79,7 @@ static bool _push_link_id_tlv(struct tlv_buf *tb, dncp_ep_i l,
     return false;
   memcpy(tlv_data(a), &l->dncp->own_node->node_identifier, DNCP_NI_LEN(l->dncp));
   lid = tlv_data(a) + DNCP_NI_LEN(l->dncp);
-  lid->link_id = l->iid;
+  lid->ep_id = l->ep_id;
   return true;
 }
 
@@ -89,7 +89,7 @@ void dncp_ep_i_send_network_state(dncp_ep_i l,
                                   struct sockaddr_in6 *src,
                                   struct sockaddr_in6 *dst,
                                   size_t maximum_size,
-                                  bool always_link_id)
+                                  bool always_ep_id)
 {
   struct tlv_buf tb;
   dncp o = l->dncp;
@@ -97,7 +97,7 @@ void dncp_ep_i_send_network_state(dncp_ep_i l,
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
-  if (!_push_link_id_tlv(&tb, l, dst, always_link_id))
+  if (!_push_ep_id_tlv(&tb, l, dst, always_ep_id))
     goto done;
   if (!_push_network_state_tlv(&tb, o))
     goto done;
@@ -148,7 +148,7 @@ void dncp_ep_i_send_node_state(dncp_ep_i l,
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
-  if (_push_link_id_tlv(&tb, l, dst, false)
+  if (_push_ep_id_tlv(&tb, l, dst, false)
       && _push_node_state_tlv(&tb, n, true))
     {
       L_DEBUG("dncp_ep_i_send_node_data %s -> " SA6_F " %%" DNCP_LINK_F,
@@ -168,7 +168,7 @@ void dncp_ep_i_send_req_network_state(dncp_ep_i l,
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
-  if (_push_link_id_tlv(&tb, l, dst, false)
+  if (_push_ep_id_tlv(&tb, l, dst, false)
       && _push_network_state_tlv(&tb, l->dncp) /* SHOULD include local */
       && tlv_new(&tb, DNCP_T_REQ_NET_STATE, 0))
     {
@@ -191,7 +191,7 @@ void dncp_ep_i_send_req_node_data(dncp_ep_i l,
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
-  if (_push_link_id_tlv(&tb, l, dst, false)
+  if (_push_ep_id_tlv(&tb, l, dst, false)
       && (a = tlv_new(&tb, DNCP_T_REQ_NODE_STATE, DNCP_NI_LEN(o))))
     {
       L_DEBUG("dncp_ep_i_send_req_node_data -> " SA6_F "%%" DNCP_LINK_F,
@@ -212,7 +212,7 @@ _find_local_tlv_by_remote(dncp o, struct sockaddr_in6 *remote)
   dncp_tlv t;
   dncp_t_neighbor ne;
 
-  dncp_for_each_local_tlv(o, t)
+  dncp_for_each_tlv(o, t)
     if ((ne = dncp_tlv_neighbor(o, &t->tlv)))
       {
         dncp_neighbor n = dncp_tlv_get_extra(t);
@@ -223,15 +223,15 @@ _find_local_tlv_by_remote(dncp o, struct sockaddr_in6 *remote)
 }
 
 static dncp_tlv
-_heard(dncp_ep_i l, dncp_t_link_id lid, struct sockaddr_in6 *src,
+_heard(dncp_ep_i l, dncp_t_ep_id lid, struct sockaddr_in6 *src,
        bool multicast)
 {
   int nplen = sizeof(dncp_t_neighbor_s) + DNCP_NI_LEN(l->dncp);
   void *np = alloca(nplen);
   dncp_t_neighbor n_sample = np + DNCP_NI_LEN(l->dncp);
   memcpy(np, dncp_tlv_get_node_identifier(l->dncp, lid), DNCP_NI_LEN(l->dncp));
-  n_sample->neighbor_link_id = lid->link_id;
-  n_sample->link_id = l->iid;
+  n_sample->neighbor_ep_id = lid->ep_id;
+  n_sample->ep_id = l->ep_id;
 
   dncp_neighbor n;
   dncp_tlv t = dncp_find_tlv(l->dncp, DNCP_T_NEIGHBOR, np, nplen);
@@ -269,7 +269,7 @@ handle_message(dncp_ep_i l,
   dncp o = l->dncp;
   struct tlv_attr *a;
   dncp_node n;
-  dncp_t_link_id lid = NULL;
+  dncp_t_ep_id lid = NULL;
   dncp_tlv tne = NULL;
   dncp_neighbor ne = NULL;
   struct tlv_buf tb;
@@ -312,7 +312,7 @@ handle_message(dncp_ep_i l,
         {
           memcpy(buf, dncp_tlv_get_node_identifier(o, ne), nilen);
           lid = buf + nilen;
-          lid->link_id = ne->neighbor_link_id;
+          lid->ep_id = ne->neighbor_ep_id;
         }
     }
   bool is_local = false;

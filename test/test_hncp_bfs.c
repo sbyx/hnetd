@@ -20,8 +20,8 @@ struct pa_iface* pa_iface_get(__unused struct pa_data *d, __unused const char *i
 void pa_data_subscribe(__unused struct pa_data *d, __unused struct pa_data_user *u){}
 void pa_core_static_prefix_init(__unused struct pa_static_prefix_rule *rule, __unused const char *ifname,
 		__unused const struct prefix* p, __unused bool hard) {};
-void pa_core_link_id_init(__unused struct pa_link_id_rule *lrule, __unused const char *ifname,
-		__unused uint32_t link_id, __unused uint8_t link_id_len, __unused bool hard) {};
+void pa_core_ep_id_init(__unused struct pa_ep_id_rule *lrule, __unused const char *ifname,
+		__unused uint32_t ep_id, __unused uint8_t ep_id_len, __unused bool hard) {};
 void pa_core_rule_add(__unused struct pa_core *core, __unused struct pa_rule *rule) {};
 void pa_core_rule_del(__unused struct pa_core *core, __unused struct pa_rule *rule) {};
 void pa_core_iface_addr_init(__unused struct pa_iface_addr *addr, __unused const char *ifname,
@@ -83,10 +83,10 @@ void hncp_bfs_one(void)
 	memset(&dummy1.sin6_addr, 1, sizeof(dummy1.sin6_addr));
 	struct sockaddr_in6 dummy3 = {.sin6_family = AF_INET6};
 	memset(&dummy3.sin6_addr, 3, sizeof(dummy3.sin6_addr));
-	dncp_t_link_id_s lid1 = {n1->node_identifier, 0};
+	dncp_t_ep_id_s lid1 = {n1->node_identifier, 0};
 	_heard(l1, &lid1, &dummy1, false);
 
-	dncp_t_link_id_s lid3 = {n3->node_identifier, 0};
+	dncp_t_ep_id_s lid3 = {n3->node_identifier, 0};
 	_heard(l3, &lid3, &dummy3, false);
 
 	// TLV foo
@@ -109,24 +109,24 @@ void hncp_bfs_one(void)
 	tlv_buf_init(&b, 0);
 
 	// N0 link 0
-	n.link_id = l1->iid;
-	n.neighbor_link_id = 0;
+	n.ep_id = l1->ep_id;
+	n.neighbor_ep_id = 0;
 	n.neighbor_node_identifier = n1->node_identifier;
 	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
 
-	ap.hdr.link_id = l1->iid;
+	ap.hdr.ep_id = l1->ep_id;
 	ap.hdr.prefix_length_bits = 64;
 	ap.prefix.s6_addr[6] = 0;
 	ap.prefix.s6_addr[7] = 0;
 	tlv_put(&b, HNCP_T_ASSIGNED_PREFIX, &ap, sizeof(ap));
 
 	// N0 link 1
-	n.link_id = l3->iid;
-	n.neighbor_link_id = 0;
+	n.ep_id = l3->ep_id;
+	n.neighbor_ep_id = 0;
 	n.neighbor_node_identifier = n3->node_identifier;
 	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
 
-	ap.hdr.link_id = 0;
+	ap.hdr.ep_id = 0;
 	ap.hdr.prefix_length_bits = 64;
 	ap.prefix.s6_addr[6] = 0;
 	ap.prefix.s6_addr[7] = 1;
@@ -138,18 +138,18 @@ void hncp_bfs_one(void)
 	tlv_buf_init(&b, 0);
 
 	// N1 link 0
-	n.link_id = 0;
-	n.neighbor_link_id = l1->iid;
+	n.ep_id = 0;
+	n.neighbor_ep_id = l1->ep_id;
 	n.neighbor_node_identifier = n0->node_identifier;
 	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
 
 	// N1 link 1
-	n.link_id = 1;
-	n.neighbor_link_id =0;
+	n.ep_id = 1;
+	n.neighbor_ep_id =0;
 	n.neighbor_node_identifier = n2->node_identifier;
 	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
 
-	ap.hdr.link_id = 0;
+	ap.hdr.ep_id = 0;
 	ap.hdr.prefix_length_bits = 64;
 	ap.prefix.s6_addr[6] = 1;
 	ap.prefix.s6_addr[7] = 1;
@@ -161,24 +161,24 @@ void hncp_bfs_one(void)
 	tlv_buf_init(&b, 0);
 
 	// N2 link 0
-	n.link_id = 0;
-	n.neighbor_link_id = 1;
+	n.ep_id = 0;
+	n.neighbor_ep_id = 1;
 	n.neighbor_node_identifier = n1->node_identifier;
 	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
 
 	// N2 link 1
-	n.link_id = 1;
-	n.neighbor_link_id = 1;
+	n.ep_id = 1;
+	n.neighbor_ep_id = 1;
 	n.neighbor_node_identifier = n3->node_identifier;
 	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
 
 	// N2 link 2
-	n.link_id = 2;
-	n.neighbor_link_id = 0;
+	n.ep_id = 2;
+	n.neighbor_ep_id = 0;
 	n.neighbor_node_identifier = n4->node_identifier;
 	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
 
-	ap.hdr.link_id = 2;
+	ap.hdr.ep_id = 2;
 	ap.hdr.prefix_length_bits = 64;
 	ap.prefix.s6_addr[6] = 2;
 	ap.prefix.s6_addr[7] = 2;
@@ -195,18 +195,18 @@ void hncp_bfs_one(void)
 	tlv_buf_init(&b, 0);
 
 	// N3 link 0
-	n.link_id = 0;
-	n.neighbor_link_id = l3->iid;
+	n.ep_id = 0;
+	n.neighbor_ep_id = l3->ep_id;
 	n.neighbor_node_identifier = n0->node_identifier;
 	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
 
 	// N3 link 1
-	n.link_id = 1;
-	n.neighbor_link_id = 1;
+	n.ep_id = 1;
+	n.neighbor_ep_id = 1;
 	n.neighbor_node_identifier = n2->node_identifier;
 	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
 
-	ap.hdr.link_id = 1;
+	ap.hdr.ep_id = 1;
 	ap.hdr.prefix_length_bits = 64;
 	ap.prefix.s6_addr[6] = 3;
 	ap.prefix.s6_addr[7] = 1;

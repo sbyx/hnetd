@@ -16,20 +16,6 @@
 
 #include "fake_log.h"
 
-/*
-void pa_data_subscribe(__unused struct pa_data *data, __unused struct pa_data_user *user) {}
-struct pa_iface* pa_iface_get(__unused struct pa_data *d, __unused const char *ifname, __unused bool goc){ return NULL; }
-void pa_core_static_prefix_init(__unused struct pa_static_prefix_rule *rule, __unused const char *ifname,
-		__unused const struct prefix* p, __unused bool hard) {};
-void pa_core_link_id_init(__unused struct pa_link_id_rule *lrule, __unused const char *ifname,
-		__unused uint32_t link_id, __unused uint8_t link_id_len, __unused bool hard) {};
-void pa_core_rule_add(__unused struct pa_core *core, __unused struct pa_rule *rule) {};
-void pa_core_rule_del(__unused struct pa_core *core, __unused struct pa_rule *rule) {};
-void pa_core_iface_addr_init(__unused struct pa_iface_addr *addr, __unused const char *ifname,
-		__unused struct in6_addr *address, __unused uint8_t mask, __unused struct prefix *filter) {}
-void pa_core_iface_addr_add(__unused struct pa_core *core, __unused struct pa_iface_addr *addr) {}
-void pa_core_iface_addr_del(__unused struct pa_core *core, __unused struct pa_iface_addr *addr) {}
-*/
 void hncp_pa_iface_user_register(__unused hncp_pa hp, __unused struct hncp_pa_iface_user *user) {}
 struct list_head *__hpa_get_dps(__unused hncp_pa hpa) {return NULL;}
 void platform_set_dhcp(__unused struct iface *c, __unused enum hncp_link_elected elected) {}
@@ -44,8 +30,8 @@ void platform_set_dhcpv6_send(__unused struct iface *c, __unused const void *dhc
 void platform_set_prefix_route(__unused const struct prefix *p, __unused bool enable) {}
 void platform_restart_dhcpv4(__unused struct iface *c) {}
 void platform_set_snat(__unused struct iface *c, __unused const struct prefix *p) {}
-void hncp_sd_dump_link_fqdn(__unused hncp_sd sd, __unused dncp_ep_i l, __unused const char *ifname, __unused char *buf, __unused size_t buf_len) {}
-dncp_ep_i dncp_find_link_by_name(__unused dncp h, __unused const char *ifname, __unused bool create) { return NULL; }
+void hncp_sd_dump_link_fqdn(__unused hncp_sd sd, __unused dncp_ep l, __unused const char *ifname, __unused char *buf, __unused size_t buf_len) {}
+dncp_ep dncp_find_ep_by_name(__unused dncp h, __unused const char *ifname) { return NULL; }
 void hncp_link_register(__unused struct hncp_link *c, __unused struct hncp_link_user *u) {}
 
 void intiface_mock(__unused struct iface_user *u, __unused const char *ifname, bool enabled)

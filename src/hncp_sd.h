@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 20:09:23 2014 mstenber
- * Last modified: Mon May 25 15:24:16 2015 mstenber
+ * Last modified: Mon Jun  8 13:09:13 2015 mstenber
  * Edit time:     8 min
  *
  */
@@ -45,8 +45,8 @@ typedef struct hncp_sd_params_struct
 
 hncp_sd hncp_sd_create(hncp h, hncp_sd_params p, struct hncp_link *l);
 
-void hncp_sd_dump_link_fqdn(hncp_sd sd, dncp_ep_i l,
-		const char *ifname, char *buf, size_t buf_len);
+void hncp_sd_dump_link_fqdn(hncp_sd sd, dncp_ep ep, const char *ifname,
+                            char *buf, size_t buf_len);
 
 void hncp_sd_destroy(hncp_sd sd);
 

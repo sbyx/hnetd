@@ -1,5 +1,6 @@
 #include "hncp_dump.h"
 
+#include "dncp_i.h"
 #include "hncp_i.h"
 #include "platform.h"
 
@@ -83,7 +84,7 @@ static int hd_node_address(struct tlv_attr *tlv, struct blob_buf *b)
 	if(tlv_len(tlv) != 20)
 		return -1;
 	hd_a(!blobmsg_add_string(b, "address", ADDR_REPR(&ra->address)), return -1);
-	hd_a(!blobmsg_add_u32(b, "link-id", ntohl(ra->link_id)), return -1);
+	hd_a(!blobmsg_add_u32(b, "link-id", ntohl(ra->ep_id)), return -1);
 	return 0;
 }
 
@@ -175,8 +176,8 @@ static int hd_node_neighbor(struct tlv_attr *tlv, struct blob_buf *b)
 	if (!(nh = dncp_tlv_neighbor2(tlv, HNCP_NI_LEN)))
 		return -1;
 	hd_a(!blobmsg_add_string(b, "node-id", hd_ni_to_hex(dncp_tlv_get_node_identifier2(tlv, HNCP_NI_LEN))), return -1);
-	hd_a(!blobmsg_add_u32(b, "local-link", ntohl(nh->link_id)), return -1);
-	hd_a(!blobmsg_add_u32(b, "neighbor-link", ntohl(nh->neighbor_link_id)), return -1);
+	hd_a(!blobmsg_add_u32(b, "local-link", ntohl(nh->ep_id)), return -1);
+	hd_a(!blobmsg_add_u32(b, "neighbor-link", ntohl(nh->neighbor_ep_id)), return -1);
 	return 0;
 }
 
@@ -197,7 +198,7 @@ static int hd_node_prefix(struct tlv_attr *tlv, struct blob_buf *b)
 	hd_a(!blobmsg_add_u8(b, "authoritative", 0), return -1); //todo: authoritative should be removed
 	//hd_a(!blobmsg_add_u16(b, "priority", HNCP_T_ASSIGNED_PREFIX_FLAG_PREFERENCE(ah->flags)), return -1);
 	hd_a(!blobmsg_add_u16(b, "priority", HNCP_T_ASSIGNED_PREFIX_FLAG_PRIORITY(ah->flags)), return -1);
-	hd_a(!blobmsg_add_u32(b, "link", ntohl(ah->link_id)), return -1);
+	hd_a(!blobmsg_add_u32(b, "link", ntohl(ah->ep_id)), return -1);
 	return 0;
 }
 
@@ -298,7 +299,7 @@ static int hd_links(dncp o, struct blob_buf *b)
 {
 	dncp_ep_i link;
 	vlist_for_each_element(&o->links, link, in_links)
-		hd_a(!blobmsg_add_u32(b, link->conf.ifname, link->iid), return -1);
+		hd_a(!blobmsg_add_u32(b, link->conf.ifname, link->ep_id), return -1);
 	return 0;
 }
 

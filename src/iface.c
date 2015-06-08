@@ -308,8 +308,8 @@ void iface_unregister_user(struct iface_user *user)
 
 char* iface_get_fqdn(const char *ifname, char *buf, size_t len)
 {
-	dncp_ep_i link = dncp_find_link_by_name(dncp_p, ifname, false);
-	hncp_sd_dump_link_fqdn(hncp_sd_p, link, ifname, buf, len);
+	dncp_ep ep = dncp_find_ep_by_name(dncp_p, ifname);
+	hncp_sd_dump_link_fqdn(hncp_sd_p, ep, ifname, buf, len);
 	return buf;
 }
 
@@ -830,9 +830,9 @@ void iface_add_chosen_prefix(struct iface *c, const struct prefix *p)
 }
 
 
-void iface_set_link_id(struct iface *c, uint32_t linkid, uint8_t mask)
+void iface_set_ep_id(struct iface *c, uint32_t linkid, uint8_t mask)
 {
-	struct pa_link_id_rule *id_rule = c->id;
+	struct pa_ep_id_rule *id_rule = c->id;
 
 	if (id_rule)
 		pa_core_rule_del(&pa_p->core, &id_rule->rule);
@@ -841,7 +841,7 @@ void iface_set_link_id(struct iface *c, uint32_t linkid, uint8_t mask)
 
 	memset(id_rule, 0, sizeof(*id_rule));
 
-	pa_core_link_id_init(id_rule, c->ifname, linkid, mask, true);
+	pa_core_ep_id_init(id_rule, c->ifname, linkid, mask, true);
 	id_rule->rule.result.priority = PA_PRIORITY_AUTO_MAX + 1;
 	pa_core_rule_add(&pa_p->core, &id_rule->rule);
 	c->id = id_rule;

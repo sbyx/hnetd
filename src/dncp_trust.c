@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Nov 19 17:34:25 2014 mstenber
- * Last modified: Tue May 26 09:31:28 2015 mstenber
- * Edit time:     240 min
+ * Last modified: Mon Jun  8 13:39:33 2015 mstenber
+ * Edit time:     243 min
  *
  */
 
@@ -79,7 +79,8 @@ struct dncp_trust_struct {
   char *filename;
 
   /* Hash of the content already persisted. We guarantee not to
-   * rewrite unless something _does_ change.*/
+   * rewrite unless something _does_ change. This is just plain md5
+   * hash.*/
   dncp_hash_s file_hash;
 
   /* Verdict store (both cached and configured ones) */
@@ -122,7 +123,7 @@ typedef struct {
 
 static void _trust_publish_maybe(dncp_trust t, dncp_trust_node n);
 
-static void _trust_calculate_hash(dncp_trust t, dncp_hash h)
+static void _trust_calculate_hash(dncp_trust t, dncp_hash rh)
 {
   md5_ctx_t ctx;
   dncp_trust_node tn;
@@ -134,7 +135,10 @@ static void _trust_calculate_hash(dncp_trust t, dncp_hash h)
         continue;
       md5_hash(&tn->stored, sizeof(tn->stored), &ctx);
     }
-  dncp_md5_end(h, &ctx);
+  char buf[16];
+  memset(rh, 0, sizeof(*rh));
+  md5_end(buf, &ctx);
+  memcpy(rh, buf, sizeof(*rh) < 16 ? sizeof(*rh) : 16);
 }
 
 static void _trust_load(dncp_trust t)
@@ -300,7 +304,7 @@ static dncp_tlv _find_local_tlv(dncp d, dncp_sha256 hash)
   dncp_tlv tlv;
   dncp_t_trust_verdict tv;
 
-  dncp_for_each_local_tlv(d, tlv)
+  dncp_for_each_tlv(d, tlv)
     if ((tv = dncp_tlv_trust_verdict(&tlv->tlv)))
       {
         if (memcmp(hash, &tv->sha256_hash, sizeof(*hash)) == 0)

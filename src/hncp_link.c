@@ -24,7 +24,7 @@ struct hncp_link {
 	struct list_head users;
 };
 
-static void notify(struct hncp_link *l, const char *ifname, hncp_link_id ids, size_t cnt,
+static void notify(struct hncp_link *l, const char *ifname, hncp_ep_id ids, size_t cnt,
 		enum hncp_link_elected elected)
 {
 	L_DEBUG("hncp_link_notify: %s neighbors: %d elected(SMPHL): %x", ifname, (int)cnt, elected);
@@ -43,7 +43,7 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 {
 	hncp_t_version ourvertlv = NULL;
 	enum hncp_link_elected elected = HNCP_LINK_NONE;
-	hncp_link_id peers = NULL;
+	hncp_ep_id peers = NULL;
 	size_t peercnt = 0, peerpos = 0;
 	dncp_ep_i link = dncp_find_link_by_name(l->dncp, ifname, false);
 
@@ -75,9 +75,9 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 			dncp_t_neighbor ne = dncp_tlv_neighbor(l->dncp, c);
 			hncp_t_assigned_prefix_header ah = dncp_tlv_ap(c);
 
-			if (ne && ne->link_id == link->iid)
+			if (ne && ne->ep_id == link->ep_id)
 				++peercnt;
-			else if (ah && ah->link_id == link->iid)
+			else if (ah && ah->ep_id == link->ep_id)
 				elected |= HNCP_LINK_STATELESS;
 		}
 
@@ -85,12 +85,12 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 			peers = calloc(1, sizeof(*peers) * peercnt);
 
 		L_DEBUG("hncp_link_calculate: local node advertises %d "
-				"neighbors on iface %d", (int)peercnt, (int)link->iid);
+				"neighbors on iface %d", (int)peercnt, (int)link->ep_id);
 
 		dncp_node_for_each_tlv(l->dncp->own_node, c) {
 			dncp_t_neighbor cn = dncp_tlv_neighbor(l->dncp, c);
 
-			if (!cn || cn->link_id != link->iid)
+			if (!cn || cn->ep_id != link->ep_id)
 				continue;
 
 			dncp_node peer = dncp_find_node_by_node_identifier(l->dncp, dncp_tlv_get_node_identifier(l->dncp, cn), false);
@@ -108,21 +108,21 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 					peervertlv = tlv_data(pc);
 
 				dncp_t_neighbor pn = dncp_tlv_neighbor(l->dncp, pc);
-				if (!pn || pn->link_id != cn->neighbor_link_id ||
+				if (!pn || pn->ep_id != cn->neighbor_ep_id ||
 				    memcmp(dncp_tlv_get_node_identifier(l->dncp, pn), &l->dncp->own_node->node_identifier, DNCP_NI_LEN(l->dncp)))
 					continue;
 
-				if (pn->neighbor_link_id == link->iid) {
+				if (pn->neighbor_ep_id == link->ep_id) {
 					// Matching reverse neighbor entry
 					L_DEBUG("hncp_link_calculate: if %"PRIu32" -> neigh %s:%"PRIu32,
-							link->iid, DNCP_STRUCT_REPR(peer->node_identifier), pn->link_id);
+							link->ep_id, DNCP_STRUCT_REPR(peer->node_identifier), pn->ep_id);
 					mutual = true;
-					peers[peerpos].node_identifier = peer->node_identifier;
-					peers[peerpos].link_id = pn->link_id;
+					memcpy(&peers[peerpos].node_identifier, &peer->node_identifier, HNCP_NI_LEN);
+					peers[peerpos].ep_id = pn->ep_id;
 					++peerpos;
-				} else if (pn->neighbor_link_id < link->iid) {
+				} else if (pn->neighbor_ep_id < link->ep_id) {
 					L_WARN("hncp_link_calculate: %s links %d and %d appear to be connected",
-							link->conf.ifname, link->iid, pn->neighbor_link_id);
+							link->conf.ifname, link->ep_id, pn->neighbor_ep_id);
 
 					// Two of our links seem to be connected
 					enable = false;
@@ -204,22 +204,22 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 {
 	struct hncp_link *l = container_of(s, struct hncp_link, subscr);
 	dncp_t_neighbor ne = dncp_tlv_neighbor(l->dncp, tlv);
-	dncp_ep_i link = NULL;
+	dncp_ep ep = NULL;
 
 	if (ne) {
 		if (dncp_node_is_self(n)) {
 			L_DEBUG("hncp_link: local neighbor tlv changed");
-			link = dncp_find_link_by_id(l->dncp, ne->link_id);
+			ep = dncp_find_ep_by_id(l->dncp, ne->ep_id);
 		} else if (!memcmp(dncp_tlv_get_node_identifier(l->dncp, ne),  &l->dncp->own_node->node_identifier, DNCP_NI_LEN(l->dncp))) {
 			L_DEBUG("hncp_link: other node neighbor tlv changed");
-			link = dncp_find_link_by_id(l->dncp, ne->neighbor_link_id);
+			ep = dncp_find_ep_by_id(l->dncp, ne->neighbor_ep_id);
 		}
 	}
 
-	if (link) {
-		struct iface *iface = iface_get(link->conf.ifname);
-		L_DEBUG("hncp_link: iface is %s (%d)", link->conf.ifname, (int)link->iid);
-		calculate_link(l, link->conf.ifname, iface && iface->internal);
+	if (ep) {
+		struct iface *iface = iface_get(ep->ifname);
+		L_DEBUG("hncp_link: iface is %s (%d)", ep->ifname, (int)dncp_ep_get_id(ep));
+		calculate_link(l, ep->ifname, iface && iface->internal);
 	}
 }
 

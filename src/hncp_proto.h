@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:52:55 2014 mstenber
- * Last modified: Mon Feb 23 20:45:05 2015 mstenber
- * Edit time:     8 min
+ * Last modified: Mon Jun  8 12:56:00 2015 mstenber
+ * Edit time:     9 min
  *
  */
 
@@ -52,9 +52,6 @@ typedef struct __packed {
 
 /* HNCP_T_DELEGATED_PREFIX */
 typedef struct __packed {
-  /* uint32_t link_id; I don't think this is reasonable; by
-   * definition, the links we get delegated things should be OUTSIDE
-   * this protocol or something weird is going on. */
   uint32_t ms_valid_at_origination;
   uint32_t ms_preferred_at_origination;
   uint8_t prefix_length_bits;
@@ -64,7 +61,7 @@ typedef struct __packed {
 
 /* HNCP_T_ASSIGNED_PREFIX */
 typedef struct __packed {
-  uint32_t link_id;
+  ep_id_t ep_id;
   uint8_t flags;
   uint8_t prefix_length_bits;
   /* Prefix data, padded so that ends at 4 byte boundary (0s). */
@@ -79,7 +76,7 @@ typedef struct __packed {
 
 /* HNCP_T_ROUTER_ADDRESS */
 typedef struct __packed {
-  uint32_t link_id;
+  ep_id_t ep_id;
   struct in6_addr address;
 } hncp_t_router_address_s, *hncp_t_router_address;
 

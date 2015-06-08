@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Jun  3 16:51:36 2015 mstenber
- * Edit time:     584 min
+ * Last modified: Mon Jun  8 13:59:52 2015 mstenber
+ * Edit time:     585 min
  *
  */
 
@@ -194,10 +194,10 @@ _neighbor_interval(dncp o, dncp_t_neighbor neigh)
           L_DEBUG("invalid keepalive tlv length");
           continue;
         }
-      if (ka->link_id && ka->link_id != neigh->neighbor_link_id)
+      if (ka->ep_id && ka->ep_id != neigh->neighbor_ep_id)
         continue;
       value = be32_to_cpu(ka->interval_in_ms) * HNETD_TIME_PER_SECOND / 1000;
-      if (ka->link_id)
+      if (ka->ep_id)
         break;
     }
 #if L_LEVEL >= 8
@@ -312,14 +312,14 @@ void dncp_ext_timeout(dncp o)
   /* Look at neighbors we should be worried about.. */
   /* vlist_for_each_element(&l->neighbors, n, in_neighbors) */
   dncp_t_neighbor ne;
-  dncp_for_each_local_tlv_safe(o, t, t2)
+  dncp_for_each_tlv_safe(o, t, t2)
     if ((ne = dncp_tlv_neighbor(o, &t->tlv)))
       {
-        l = dncp_find_link_by_id(o, ne->link_id);
+        dncp_ep ep = dncp_find_ep_by_id(o, ne->ep_id);
         dncp_neighbor n = dncp_tlv_get_extra(t);
         hnetd_time_t interval = _neighbor_interval(o, ne);
 
-        if (l->conf.unicast_only)
+        if (ep->unicast_only)
           {
             hnetd_time_t next_time = handle_trickle_and_ka(&n->trickle, l, n);
             SET_NEXT(next_time, "n-trickle-ka");
@@ -328,7 +328,7 @@ void dncp_ext_timeout(dncp o)
         /* Zero interval is valid only on unicast stream connection
          * (=~TCP/TLS/..). In that case, we can ignore keepalive
          * handling here. */
-        if (!interval && l->conf.unicast_is_reliable_stream)
+        if (!interval && ep->unicast_is_reliable_stream)
           continue;
 
         hnetd_time_t next_time = n->last_contact
@@ -381,12 +381,14 @@ void dncp_trickle_reset(dncp o)
   /* Per-peer */
   dncp_t_neighbor ne;
   dncp_tlv t;
-  dncp_for_each_local_tlv(o, t)
+  dncp_for_each_tlv(o, t)
     if ((ne = dncp_tlv_neighbor(o, &t->tlv)))
       {
         dncp_neighbor n = dncp_tlv_get_extra(t);
-        l = dncp_find_link_by_id(o, ne->link_id);
-        trickle_set_i(&n->trickle, l, l->conf.trickle_imin);
+        dncp_ep ep = dncp_find_ep_by_id(o, ne->ep_id);
+        dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
+
+        trickle_set_i(&n->trickle, l, ep->trickle_imin);
       }
 }
 
@@ -398,7 +400,7 @@ void dncp_ext_ep_ready(dncp_ep ep, bool enabled)
           !l->enabled == !enabled ? "(redundant)" : "");
   if (!l->enabled == !enabled)
       return;
-  dncp_notify_subscribers_link_changed(l, enabled ? DNCP_EVENT_ADD : DNCP_EVENT_REMOVE);
+  dncp_notify_subscribers_link_changed(ep, enabled ? DNCP_EVENT_ADD : DNCP_EVENT_REMOVE);
   l->enabled = enabled;
   if (enabled)
     {

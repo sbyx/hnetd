@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 14:50:58 2014 mstenber
- * Last modified: Thu May 28 14:29:08 2015 mstenber
- * Edit time:     57 min
+ * Last modified: Mon Jun  8 12:17:58 2015 mstenber
+ * Edit time:     69 min
  *
  */
 
@@ -22,14 +22,14 @@ static bool hncp_handle_collision_randomly(dncp_ext ext)
 {
   hncp h = container_of(ext, hncp_s, ext);
   dncp o = h->dncp;
-  dncp_node_identifier_s ni;
+  int nilen = ext->conf.node_identifier_length;
+  char *nibuf = alloca(nilen);
   int i;
 
   L_ERR("second+ collision -> changing node identifier");
-  for (i = 0; i < DNCP_NI_LEN(o); i++)
-    ni.buf[i] = random() % 256;
-  dncp_set_own_node_identifier(o, &ni);
-  return true;
+  for (i = 0; i < nilen; i++)
+    nibuf[i] = random() % 256;
+  return dncp_set_own_node_identifier(o, nibuf);
 }
 
 
@@ -52,8 +52,8 @@ hncp_validate_node_data(dncp_node n, struct tlv_attr *a)
   int agent_len = 0;
 #endif /* L_LEVEL >= LOG_ERR */
   struct tlv_attr *va, *a_valid = a;
-  dncp o = n->dncp;
-  dncp_node on = o->own_node;
+  dncp o = dncp_node_get_dncp(n);
+  dncp_node on = dncp_get_own_node(o);
   hncp_node onh = dncp_node_get_ext_data(on);
   hncp_node nh = dncp_node_get_ext_data(n);
 
@@ -113,24 +113,27 @@ hncp hncp_create(void)
 struct in6_addr *hncp_get_ipv6_address(hncp h, const char *prefer_ifname)
 {
   dncp o = h->dncp;
-  dncp_ep_i l = NULL;
-  hncp_ep hl;
+  dncp_ep ep = NULL;
+  hncp_ep hl = NULL;
 
   if (prefer_ifname)
-    l = dncp_find_link_by_name(o, prefer_ifname, false);
-  hl = dncp_ep_get_ext_data(&l->conf);
-  if (!( l && hl && hl->has_ipv6_address))
+    {
+      ep = dncp_find_ep_by_name(o, prefer_ifname);
+      hl = dncp_ep_get_ext_data(ep);
+    }
+  if (!(hl && hl->has_ipv6_address))
     {
       /* Iterate through the links in order, stopping at one with IPv6
        * address. */
-      vlist_for_each_element(&o->links, l, in_links)
-        {
-          hl = dncp_ep_get_ext_data(&l->conf);
-          if (hl->has_ipv6_address)
-            break;
-        }
+      dncp_for_each_ep(o, ep)
+        if (dncp_ep_is_enabled(ep))
+          {
+            hl = dncp_ep_get_ext_data(ep);
+            if (hl->has_ipv6_address)
+              break;
+          }
     }
-  if (l && hl && hl->has_ipv6_address)
+  if (hl && hl->has_ipv6_address)
     return &hl->ipv6_address;
   return NULL;
 }
@@ -140,10 +143,9 @@ hncp_set_ipv6_address(hncp h, const char *ifname, const struct in6_addr *addr)
 {
   dncp o = h->dncp;
   bool has_addr = addr != NULL;
-  dncp_ep_i l = dncp_find_link_by_name(o, ifname, false);
-  if (!l)
-    return;
-  hncp_ep hl = dncp_ep_get_ext_data(&l->conf);
+  dncp_ep ep = dncp_find_ep_by_name(o, ifname);
+  hncp_ep hl = dncp_ep_get_ext_data(ep);
+
   if (hl->has_ipv6_address == has_addr &&
       (!has_addr || memcmp(&hl->ipv6_address, addr, sizeof(*addr)) == 0))
     return;
@@ -152,13 +154,13 @@ hncp_set_ipv6_address(hncp h, const char *ifname, const struct in6_addr *addr)
     {
       hl->ipv6_address = *addr;
       L_DEBUG("hncp_set_ipv6_address: address on %s: %s",
-              l->conf.ifname, ADDR_REPR(addr));
+              ep->ifname, ADDR_REPR(addr));
     }
   else
     {
-      L_DEBUG("hncp_set_ipv6_address: no %s any more", l->conf.ifname);
+      L_DEBUG("hncp_set_ipv6_address: no %s any more", ep->ifname);
     }
-  dncp_notify_subscribers_link_changed(l, DNCP_EVENT_UPDATE);
+  dncp_notify_subscribers_link_changed(ep, DNCP_EVENT_UPDATE);
 }
 
 bool hncp_init(hncp o)
@@ -210,12 +212,12 @@ bool hncp_init(hncp o)
 void hncp_uninit(hncp h)
 {
   dncp o = h->dncp;
+  dncp_ep ep;
   hncp_ep hep;
-  dncp_ep_i l;
 
-  vlist_for_each_element(&o->links, l, in_links)
+  dncp_for_each_ep(o, ep)
     {
-      hep = dncp_ep_get_ext_data(&l->conf);
+      hep = dncp_ep_get_ext_data(ep);
       uloop_timeout_cancel(&hep->join_timeout);
     }
   hncp_io_uninit(h);
@@ -233,24 +235,22 @@ static void _join_timeout(struct uloop_timeout *t)
 {
   hncp_ep hep = container_of(t, hncp_ep_s, join_timeout);
   dncp_ep ep = dncp_ep_from_ext_data(hep);
-  dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
-  hncp h = container_of(l->dncp->ext, hncp_s, ext);
+  dncp o = dncp_ep_get_dncp(ep);
+  hncp h = container_of(dncp_get_ext(o), hncp_s, ext);
 
   /* If it fails immediately, schedule another timeout to try it
    * again */
-  if (!hncp_io_set_ifname_enabled(h, ep->ifname, !l->enabled))
+  if (!hncp_io_set_ifname_enabled(h, ep->ifname, !dncp_ep_is_enabled(ep)))
     uloop_timeout_set(&hep->join_timeout, HNCP_REJOIN_INTERVAL);
 }
 
 void hncp_set_enabled(hncp h, const char *ifname, bool enabled)
 {
-  dncp_ep_i l = dncp_find_link_by_name(h->dncp, ifname, enabled);
+  dncp_ep ep = dncp_find_ep_by_name(h->dncp, ifname);
 
-  if (!l)
+  if (!dncp_ep_is_enabled(ep) == !enabled)
     return;
-  if (!l->enabled == !enabled)
-    return;
-  hncp_ep hep = dncp_ep_get_ext_data(&l->conf);
+  hncp_ep hep = dncp_ep_get_ext_data(ep);
   uloop_timeout_cancel(&hep->join_timeout);
   hep->join_timeout.cb = _join_timeout;
   _join_timeout(&hep->join_timeout);

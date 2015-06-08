@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Tue May 26 09:44:06 2015 mstenber
- * Edit time:     124 min
+ * Last modified: Mon Jun  8 11:56:29 2015 mstenber
+ * Edit time:     125 min
  *
  */
 
@@ -48,11 +48,13 @@ typedef struct __packed {
 
 /* DNCP_T_REQ_NODE_STATE has only (node identifier) hash */
 
+typedef uint32_t ep_id_t;
+
 /* DNCP_T_ENDPOINT_ID */
 typedef struct __packed {
   /* dncp_node_identifier_s node_identifier; variable length, encoded here */
-  uint32_t link_id;
-} dncp_t_link_id_s, *dncp_t_link_id;
+  ep_id_t ep_id;
+} dncp_t_ep_id_s, *dncp_t_ep_id;
 
 /* DNCP_T_NET_STATE has only (network state) hash */
 
@@ -69,13 +71,13 @@ typedef struct __packed {
 /* DNCP_T_NEIGHBOR */
 typedef struct __packed {
   /* dncp_node_identifier_s node_identifier; variable length, encoded here */
-  uint32_t neighbor_link_id;
-  uint32_t link_id;
+  uint32_t neighbor_ep_id;
+  uint32_t ep_id;
 } dncp_t_neighbor_s, *dncp_t_neighbor;
 
 /* DNCP_T_KEEPALIVE_INTERVAL */
 typedef struct __packed {
-  uint32_t link_id;
+  uint32_t ep_id;
   uint32_t interval_in_ms;
 } dncp_t_keepalive_interval_s, *dncp_t_keepalive_interval;
 

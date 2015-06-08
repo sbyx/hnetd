@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Wed Jun  3 14:25:26 2015 mstenber
- * Edit time:     956 min
+ * Last modified: Mon Jun  8 14:12:49 2015 mstenber
+ * Edit time:     972 min
  *
  */
 
@@ -178,13 +178,13 @@ void dncp_ep_i_set_keepalive_interval(dncp_ep_i l, uint32_t value)
   dncp o = l->dncp;
   if (l->published_keepalive_interval != DNCP_KEEPALIVE_INTERVAL(o))
     {
-      dncp_t_keepalive_interval_s ka = { .link_id = l->iid,
+      dncp_t_keepalive_interval_s ka = { .ep_id = l->ep_id,
                                          .interval_in_ms = cpu_to_be32(l->published_keepalive_interval) };
       dncp_remove_tlv_matching(o, DNCP_T_KEEPALIVE_INTERVAL, &ka, sizeof(ka));
     }
   if (value != DNCP_KEEPALIVE_INTERVAL(o))
     {
-      dncp_t_keepalive_interval_s ka = { .link_id = l->iid,
+      dncp_t_keepalive_interval_s ka = { .ep_id = l->ep_id,
                                          .interval_in_ms = cpu_to_be32(value) };
       dncp_add_tlv(o, DNCP_T_KEEPALIVE_INTERVAL, &ka, sizeof(ka), 0);
     }
@@ -204,10 +204,10 @@ static void update_link(struct vlist_tree *t,
     {
       dncp_tlv t, t2;
       dncp_t_neighbor ne;
-      dncp_for_each_local_tlv_safe(o, t, t2)
+      dncp_for_each_tlv_safe(o, t, t2)
         if ((ne = dncp_tlv_neighbor(o, &t->tlv)))
           {
-            if (ne->link_id == t_old->iid)
+            if (ne->ep_id == t_old->ep_id)
               dncp_remove_tlv(o, t);
           }
       /* kill TLV, if any */
@@ -223,7 +223,7 @@ static void update_link(struct vlist_tree *t,
 
 
 dncp_node
-dncp_find_node_by_node_identifier(dncp o, dncp_node_identifier ni, bool create)
+dncp_find_node_by_node_identifier(dncp o, void *ni, bool create)
 {
   /* Unfortunately as DNCP_NI_LEN refers to node -> dncp, we cannot
    * simply use the dncp_node_identifier pointer as is anymore.. */
@@ -265,20 +265,23 @@ bool dncp_init(dncp o, dncp_ext ext, const void *node_identifier, int len)
   INIT_LIST_HEAD(&o->link_confs);
   memset(&nih, 0, sizeof(nih));
   ext->cb.hash(node_identifier, len, &nih.h);
-  o->first_free_iid = 1;
+  o->first_free_ep_id = 1;
   o->last_prune = 1;
   /* this way new nodes with last_prune=0 won't be reachable */
   return dncp_set_own_node_identifier(o, &nih.ni);
 }
 
-bool dncp_set_own_node_identifier(dncp o, dncp_node_identifier ni)
+bool dncp_set_own_node_identifier(dncp o, void *nibuf)
 {
   if (o->own_node)
     {
       vlist_delete(&o->nodes, &o->own_node->in_nodes);
       o->own_node = NULL;
     }
-  dncp_node n = dncp_find_node_by_node_identifier(o, ni, true);
+  dncp_node_identifier_s ni;
+  memset(&ni, 0, sizeof(ni));
+  memcpy(&ni, nibuf, DNCP_NI_LEN(o));
+  dncp_node n = dncp_find_node_by_node_identifier(o, &ni, true);
   if (!n)
     {
       L_ERR("unable to create own node");
@@ -359,6 +362,25 @@ dncp_node dncp_get_first_node(dncp o)
   return dncp_node_get_next(n);
 }
 
+dncp_tlv dncp_get_first_tlv(dncp o)
+{
+  dncp_tlv t;
+
+  if (avl_is_empty(&o->tlvs.avl))
+    return NULL;
+  t = avl_first_element(&o->tlvs.avl, t, in_tlvs.avl);
+  return t;
+}
+
+dncp_ep dncp_get_first_ep(dncp o)
+{
+  if (avl_is_empty(&o->links.avl))
+    return NULL;
+  dncp_ep_i l = avl_first_element(&o->links.avl, l, in_links.avl);
+  return &l->conf;
+}
+
+
 dncp_tlv
 dncp_add_tlv(dncp o, uint16_t type, void *data, uint16_t len, int extra_bytes)
 {
@@ -405,7 +427,7 @@ static void dncp_ep_set_default(dncp o, dncp_ep conf, const char *ifname)
   strncpy(conf->ifname, ifname, sizeof(conf->ifname));
 }
 
-dncp_ep dncp_ep_find_by_name(dncp o, const char *ifname)
+dncp_ep dncp_find_ep_by_name(dncp o, const char *ifname)
 {
   dncp_ep_i l = dncp_find_link_by_name(o, ifname, true);
 
@@ -428,20 +450,20 @@ dncp_ep_i dncp_find_link_by_name(dncp o, const char *ifname, bool create)
       if (!l)
         return NULL;
       l->dncp = o;
-      l->iid = o->first_free_iid++;
+      l->ep_id = o->first_free_ep_id++;
       dncp_ep_set_default(o, &l->conf, ifname);
       vlist_add(&o->links, &l->in_links, l);
     }
   return l;
 }
 
-dncp_ep_i dncp_find_link_by_id(dncp o, uint32_t link_id)
+dncp_ep dncp_find_ep_by_id(dncp o, uint32_t ep_id)
 {
   dncp_ep_i l;
   /* XXX - this could be also made more efficient. Oh well. */
   vlist_for_each_element(&o->links, l, in_links)
-    if (l->iid == link_id)
-      return l;
+    if (l->ep_id == ep_id)
+      return &l->conf;
   return NULL;
 }
 
@@ -466,6 +488,29 @@ dncp_node dncp_node_get_next(dncp_node n)
         return NULL;
     }
 }
+
+dncp_ep dncp_ep_get_next(dncp_ep ep)
+{
+  dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
+  dncp o = l->dncp;
+  dncp_ep_i last = avl_last_element(&o->links.avl, l, in_links.avl);
+
+  if (!ep || l == last)
+    return NULL;
+  l = avl_next_element(l, in_links.avl);
+  return &l->conf;
+}
+
+dncp_tlv dncp_get_next_tlv(dncp o, dncp_tlv n)
+{
+  dncp_tlv last = avl_last_element(&o->tlvs.avl, n, in_tlvs.avl);
+
+  if (!n || n == last)
+    return NULL;
+  n = avl_next_element(n, in_tlvs.avl);
+  return n;
+}
+
 
 static struct tlv_attr *_produce_new_tlvs(dncp_node n)
 {
@@ -640,14 +685,14 @@ bool dncp_ep_has_highest_id(dncp_ep ep)
 {
   dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
   dncp o = l->dncp;
-  uint32_t iid = l->iid;
+  uint32_t ep_id = l->ep_id;
   struct tlv_attr *a;
   dncp_t_neighbor nh;
 
   dncp_node_for_each_tlv_with_type(o->own_node, a, DNCP_T_NEIGHBOR)
     if ((nh = dncp_tlv_neighbor(o, a)))
       {
-        if (nh->link_id != iid)
+        if (nh->ep_id != ep_id)
           continue;
 
         if (memcmp(dncp_tlv_get_node_identifier(o, nh),
@@ -741,4 +786,77 @@ dncp_ep dncp_ep_from_ext_data(void *ext_data)
 {
   dncp_ep_i l = ext_data - sizeof(dncp_ep_i_s);
   return &l->conf;
+}
+
+struct tlv_attr *
+dncp_node_get_tlv_with_type(dncp_node n, uint16_t type, bool first)
+{
+  if (type >= n->dncp->tlv_type_to_index_length
+      || !n->dncp->tlv_type_to_index[type])
+    if (!dncp_add_tlv_index(n->dncp, type))
+      return NULL;
+  if (n->tlv_index_dirty)
+    {
+      dncp_node_recalculate_index(n);
+      if (!n->tlv_index)
+        return NULL;
+    }
+  int index = n->dncp->tlv_type_to_index[type] - 1;
+  assert(index >= 0 && index < n->dncp->num_tlv_indexes);
+  int i = index * 2 + (first ? 0 : 1);
+  return n->tlv_index[i];
+}
+
+dncp_node dncp_get_own_node(dncp o)
+{
+  return o->own_node;
+}
+
+void *dncp_node_get_node_identifier(dncp_node n)
+{
+  return &n->node_identifier;
+}
+
+dncp dncp_node_get_dncp(dncp_node n)
+{
+  return n->dncp;
+}
+
+const char *dncp_node_repr(dncp_node n, char *to_buf)
+{
+  return hex_repr(to_buf, &n->node_identifier, DNCP_NI_LEN(n->dncp));
+}
+
+dncp dncp_ep_get_dncp(dncp_ep ep)
+{
+  dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
+  return l->dncp;
+}
+
+ep_id_t dncp_ep_get_id(dncp_ep ep)
+{
+  dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
+
+  return ep ? l->ep_id : 0;
+}
+
+bool dncp_ep_is_enabled(dncp_ep ep)
+{
+  dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
+  return ep && l->enabled;
+}
+
+dncp_ext dncp_get_ext(dncp o)
+{
+  return o->ext;
+}
+
+hnetd_time_t dncp_node_get_origination_time(dncp_node n)
+{
+  return n->origination_time;
+}
+
+struct tlv_attr *dncp_tlv_get_attr(dncp_tlv tlv)
+{
+  return &tlv->tlv;
 }
