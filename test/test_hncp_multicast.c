@@ -6,7 +6,7 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 21:40:08 2015 mstenber
- * Last modified: Wed May 27 09:59:32 2015 mstenber
+ * Last modified: Mon Jun  8 09:53:48 2015 mstenber
  * Edit time:     21 min
  *
  */
@@ -23,9 +23,6 @@
 #include "smock.h"
 
 #include "hncp_multicast.h"
-
-int log_level = LOG_DEBUG;
-void (*hnetd_log)(int priority, const char *format, ...) = syslog;
 
 void test_hncp_multicast_base(bool aa_enabled)
 {

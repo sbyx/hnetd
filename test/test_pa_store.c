@@ -4,9 +4,8 @@
 #define TEST_DEBUG(format, ...) printf("TEST Debug   : "format"\n", ##__VA_ARGS__)
 
 #include "fake_uloop.h"
+#include "fake_log.h"
 
-int log_level = 8;
-void (*hnetd_log)(int priority, const char *format, ...) = syslog;
 #include "pa_core.c"
 
 /* Fake file handling */

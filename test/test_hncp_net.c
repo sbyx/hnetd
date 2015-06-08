@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Jun  3 17:16:50 2015 mstenber
+ * Last modified: Mon Jun  8 09:53:53 2015 mstenber
  * Edit time:     642 min
  *
  */
@@ -20,9 +20,6 @@
 /* Test utilities */
 #include "net_sim.h"
 #include "sput.h"
-
-int log_level = LOG_DEBUG;
-void (*hnetd_log)(int priority, const char *format, ...) = syslog;
 
 /**************************************************************** Test cases */
 

@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 12:51:48 2013 mstenber
- * Last modified: Tue Jun 17 16:12:48 2014 mstenber
+ * Last modified: Mon Jun  8 09:53:07 2015 mstenber
  * Edit time:     15 min
  *
  */
@@ -21,8 +21,7 @@
 #include "sput.h"
 #include "smock.h"
 
-int log_level = LOG_DEBUG;
-void (*hnetd_log)(int priority, const char *format, ...) = syslog;
+#include "fake_log.h"
 
 #include <stdio.h>
 

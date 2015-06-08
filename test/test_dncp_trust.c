@@ -6,7 +6,7 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Tue Jan 13 15:03:51 2015 mstenber
- * Last modified: Thu May 28 11:32:38 2015 mstenber
+ * Last modified: Mon Jun  8 09:52:18 2015 mstenber
  * Edit time:     50 min
  *
  */
@@ -15,9 +15,6 @@
 #include "dncp_trust.h"
 
 #include <unistd.h>
-
-int log_level = LOG_DEBUG;
-void (*hnetd_log)(int priority, const char *format, ...) = syslog;
 
 /************************************************************ NOP callbacks. */
 

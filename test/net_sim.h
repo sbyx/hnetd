@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Wed Jun  3 17:34:04 2015 mstenber
+ * Last modified: Mon Jun  8 09:54:47 2015 mstenber
  * Edit time:     391 min
  *
  */
@@ -35,6 +35,9 @@
 
 /* hncp_run and friends */
 #include "fake_fork_exec.h"
+
+/* Logging stuff for tests */
+#include "fake_log.h"
 
 #ifdef L_PREFIX
 #undef L_PREFIX

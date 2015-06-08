@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Wed May 27 17:18:57 2015 mstenber
+ * Last modified: Mon Jun  8 09:53:21 2015 mstenber
  * Edit time:     100 min
  *
  */
@@ -17,8 +17,7 @@
 #include "smock.h"
 #include "platform.h"
 
-int log_level = LOG_DEBUG;
-void (*hnetd_log)(int priority, const char *format, ...) = syslog;
+#include "fake_log.h"
 
 /* Lots of stubs here, rather not put __unused all over the place. */
 #pragma GCC diagnostic ignored "-Wunused-parameter"

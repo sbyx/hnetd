@@ -14,8 +14,7 @@
 
 #include "iface.c"
 
-int log_level = LOG_DEBUG;
-void (*hnetd_log)(int priority, const char *format, ...) = syslog;
+#include "fake_log.h"
 
 /*
 void pa_data_subscribe(__unused struct pa_data *data, __unused struct pa_data_user *user) {}

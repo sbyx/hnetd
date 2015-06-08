@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 09:56:00 2014 mstenber
- * Last modified: Tue Jun  2 12:40:12 2015 mstenber
+ * Last modified: Mon Jun  8 09:53:40 2015 mstenber
  * Edit time:     64 min
  *
  */
@@ -32,8 +32,7 @@ dncp_ep_s static_ep = { .ifname = LOOPBACK_NAME,
 #include "sput.h"
 #include "smock.h"
 
-int log_level = LOG_DEBUG;
-void (*hnetd_log)(int priority, const char *format, ...) = syslog;
+#include "fake_log.h"
 
 /* Lots of stubs here, rather not put __unused all over the place. */
 #pragma GCC diagnostic ignored "-Wunused-parameter"

@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:31 2014 mstenber
- * Last modified: Thu May 28 17:23:18 2015 mstenber
+ * Last modified: Mon Jun  8 09:52:33 2015 mstenber
  * Edit time:     144 min
  *
  */
@@ -31,8 +31,7 @@
 /* in ms */
 #define SINGLE_TEST_ERROR_TIMEOUT 2000
 
-int log_level = LOG_DEBUG;
-void (*hnetd_log)(int priority, const char *format, ...) = syslog;
+#include "fake_log.h"
 
 dtls d1, d2;
 
