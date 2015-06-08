@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 14:50:58 2014 mstenber
- * Last modified: Mon Jun  8 12:17:58 2015 mstenber
- * Edit time:     69 min
+ * Last modified: Mon Jun  8 21:55:25 2015 mstenber
+ * Edit time:     71 min
  *
  */
 
@@ -120,21 +120,19 @@ struct in6_addr *hncp_get_ipv6_address(hncp h, const char *prefer_ifname)
     {
       ep = dncp_find_ep_by_name(o, prefer_ifname);
       hl = dncp_ep_get_ext_data(ep);
+      if (dncp_ep_is_enabled(ep) && hl->has_ipv6_address)
+        return &hl->ipv6_address;
     }
-  if (!(hl && hl->has_ipv6_address))
-    {
-      /* Iterate through the links in order, stopping at one with IPv6
-       * address. */
-      dncp_for_each_ep(o, ep)
-        if (dncp_ep_is_enabled(ep))
-          {
-            hl = dncp_ep_get_ext_data(ep);
-            if (hl->has_ipv6_address)
-              break;
-          }
-    }
-  if (hl && hl->has_ipv6_address)
-    return &hl->ipv6_address;
+
+  /* Iterate through the links in order, stopping at one with IPv6
+   * address. */
+  dncp_for_each_ep(o, ep)
+    if (dncp_ep_is_enabled(ep))
+      {
+        hl = dncp_ep_get_ext_data(ep);
+        if (hl->has_ipv6_address)
+          return &hl->ipv6_address;
+      }
   return NULL;
 }
 
