@@ -39,10 +39,10 @@
 #include "hncp_i.h"
 
 #define DNCP_ID_CMP(id1, id2) memcmp(id1, id2, HNCP_NI_LEN)
-#define DNCP_NODE_TO_PA(n, pa_id)                                       \
-do {                                                                    \
-        memset(pa_id, 0, sizeof(*pa_id));                               \
-        memcpy(pa_id, dncp_node_get_node_identifier(n), HNCP_NI_LEN);   \
+#define DNCP_NODE_TO_PA(n, pa_id)                               \
+do {                                                            \
+        memset(pa_id, 0, sizeof(*pa_id));                       \
+        memcpy(pa_id, dncp_node_get_id(n), HNCP_NI_LEN);        \
 } while(0)
 
 #define HNCP_ROUTER_ADDRESS_PA_PRIORITY 3
@@ -683,7 +683,7 @@ static int hpa_has_other_v4(hncp_pa hpa)
 {
 	hpa_dp dp;
 	hpa_for_each_dp(hpa, dp)
-			if(dp->pa.type == HPA_DP_T_HNCP && prefix_is_ipv4(&dp->dp.prefix) && memcmp(&dp->hncp.node_id, dncp_node_get_node_identifier(dncp_get_own_node(hpa->dncp)), HNCP_NI_LEN) >= 0)
+			if(dp->pa.type == HPA_DP_T_HNCP && prefix_is_ipv4(&dp->dp.prefix) && memcmp(&dp->hncp.node_id, dncp_node_get_id(dncp_get_own_node(hpa->dncp)), HNCP_NI_LEN) >= 0)
 			return 1;
 	return 0;
 }
@@ -1370,7 +1370,7 @@ static void hpa_update_dp_tlv(hncp_pa hpa, dncp_node n,
 	//Fetch existing dp
 	struct prefix p = { .plen = 0 };
 	pa_prefix_cpy(dh->prefix_data, dh->prefix_length_bits, &p.prefix, p.plen);
-	hpa_dp dp = hpa_dp_get_hncp(hpa, &p, dncp_node_get_node_identifier(n));
+	hpa_dp dp = hpa_dp_get_hncp(hpa, &p, dncp_node_get_id(n));
 
 	if(!add) { //Removing the dp
 		if(dp && !dp->hncp.delete_to.pending) {
@@ -1473,8 +1473,8 @@ static void hpa_dncp_node_change_cb(dncp_subscriber s,
 	if (dncp_get_own_node(o) || !add)
 		return;
 
-	pa_core_set_node_id(&hpa->pa, (uint32_t *)dncp_node_get_node_identifier(n));
-	pa_core_set_node_id(&hpa->aa, (uint32_t *)dncp_node_get_node_identifier(n));
+	pa_core_set_node_id(&hpa->pa, (uint32_t *)dncp_node_get_id(n));
+	pa_core_set_node_id(&hpa->aa, (uint32_t *)dncp_node_get_id(n));
 }
 
 static void hpa_aa_unpublish(hncp_pa hpa, struct pa_ldp *ldp)
@@ -2074,7 +2074,7 @@ hncp_pa hncp_pa_create(hncp hncp, struct hncp_link *hncp_link)
 	pa_rule_add(&hp->aa, &hp->store_aa_r.rule);
 
 	//Set node IDs based on dncd node ID
-	void *nid = dncp_node_get_node_identifier(dncp_get_own_node(hncp->dncp));
+	void *nid = dncp_node_get_id(dncp_get_own_node(hncp->dncp));
 	pa_core_set_node_id(&hp->pa, (uint32_t *)nid);
 	pa_core_set_node_id(&hp->aa, (uint32_t *)nid);
 

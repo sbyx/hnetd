@@ -812,7 +812,7 @@ dncp_node dncp_get_own_node(dncp o)
   return o->own_node;
 }
 
-void *dncp_node_get_node_identifier(dncp_node n)
+void *dncp_node_get_id(dncp_node n)
 {
   return &n->node_identifier;
 }

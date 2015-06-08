@@ -355,7 +355,7 @@ struct tlv_attr *dncp_node_get_tlvs(dncp_node n);
   tlv_for_each_attr(a, dncp_node_get_tlvs(n))
 
 /* Accessors */
-void *dncp_node_get_node_identifier(dncp_node n);
+void *dncp_node_get_id(dncp_node n);
 dncp dncp_node_get_dncp(dncp_node n);
 hnetd_time_t dncp_node_get_origination_time(dncp_node n);
 
