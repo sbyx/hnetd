@@ -36,7 +36,7 @@ static bool _push_node_state_tlv(struct tlv_buf *tb, dncp_node n,
     return false;
 
   void *p = tlv_data(a);
-  memcpy(p, &n->node_identifier, nilen);
+  memcpy(p, &n->node_id, nilen);
   p += nilen;
 
   s = p;
@@ -77,7 +77,7 @@ static bool _push_ep_id_tlv(struct tlv_buf *tb, dncp_ep_i l,
 
   if (!a)
     return false;
-  memcpy(tlv_data(a), &l->dncp->own_node->node_identifier, DNCP_NI_LEN(l->dncp));
+  memcpy(tlv_data(a), &l->dncp->own_node->node_id, DNCP_NI_LEN(l->dncp));
   lid = tlv_data(a) + DNCP_NI_LEN(l->dncp);
   lid->ep_id = l->ep_id;
   return true;
@@ -196,7 +196,7 @@ void dncp_ep_i_send_req_node_data(dncp_ep_i l,
     {
       L_DEBUG("dncp_ep_i_send_req_node_data -> " SA6_F "%%" DNCP_LINK_F,
               SA6_D(dst), DNCP_LINK_D(l));
-      dncp_node_identifier ni = dncp_tlv_get_node_identifier(l->dncp, ns);
+      dncp_node_id ni = dncp_tlv_get_node_id(l->dncp, ns);
       memcpy(tlv_data(a), ni, DNCP_NI_LEN(o));
       o->ext->cb.send(o->ext, &l->conf, src, dst,
                       tlv_data(tb.head), tlv_len(tb.head));
@@ -229,7 +229,7 @@ _heard(dncp_ep_i l, dncp_t_ep_id lid, struct sockaddr_in6 *src,
   int nplen = sizeof(dncp_t_neighbor_s) + DNCP_NI_LEN(l->dncp);
   void *np = alloca(nplen);
   dncp_t_neighbor n_sample = np + DNCP_NI_LEN(l->dncp);
-  memcpy(np, dncp_tlv_get_node_identifier(l->dncp, lid), DNCP_NI_LEN(l->dncp));
+  memcpy(np, dncp_tlv_get_node_id(l->dncp, lid), DNCP_NI_LEN(l->dncp));
   n_sample->neighbor_ep_id = lid->ep_id;
   n_sample->ep_id = l->ep_id;
 
@@ -246,7 +246,7 @@ _heard(dncp_ep_i l, dncp_t_ep_id lid, struct sockaddr_in6 *src,
       n = dncp_tlv_get_extra(t);
       n->last_contact = dncp_time(l->dncp);
       L_DEBUG("Neighbor %s added on " DNCP_LINK_F,
-              DNCP_NI_REPR(l->dncp, dncp_tlv_get_node_identifier(l->dncp, lid)),
+              DNCP_NI_REPR(l->dncp, dncp_tlv_get_node_id(l->dncp, lid)),
               DNCP_LINK_D(l));
     }
   else
@@ -280,7 +280,7 @@ handle_message(dncp_ep_i l,
   bool multicast = dst == NULL;
   int nilen = DNCP_NI_LEN(l->dncp);
   int hlen = DNCP_HASH_LEN(l->dncp);
-  dncp_node_identifier ni;
+  dncp_node_id ni;
   char fake_lid[DNCP_NI_MAX_LEN + sizeof(*lid)];
 
   /* Validate that link id exists (if this were TCP, we would keep
@@ -310,7 +310,7 @@ handle_message(dncp_ep_i l,
       dncp_t_neighbor ne;
       if (t && (ne = dncp_tlv_neighbor(o, &t->tlv)))
         {
-          memcpy(buf, dncp_tlv_get_node_identifier(o, ne), nilen);
+          memcpy(buf, dncp_tlv_get_node_id(o, ne), nilen);
           lid = buf + nilen;
           lid->ep_id = ne->neighbor_ep_id;
         }
@@ -319,8 +319,8 @@ handle_message(dncp_ep_i l,
 
   if (lid)
     {
-      is_local = memcmp(dncp_tlv_get_node_identifier(l->dncp, lid),
-                        &o->own_node->node_identifier,
+      is_local = memcmp(dncp_tlv_get_node_id(l->dncp, lid),
+                        &o->own_node->node_id,
                         nilen) == 0;
       if (!is_local)
         {
@@ -362,7 +362,7 @@ handle_message(dncp_ep_i l,
               break;
             }
           ni = tlv_data(a);
-          n = dncp_find_node_by_node_identifier(o, ni, false);
+          n = dncp_find_node_by_node_id(o, ni, false);
           if (!n)
             {
               L_DEBUG("got request for node for which we have no data");
@@ -437,7 +437,7 @@ handle_message(dncp_ep_i l,
               L_INFO("invalid length node state TLV received - ignoring");
               break;
             }
-          n = dncp_find_node_by_node_identifier(o, ni, false);
+          n = dncp_find_node_by_node_id(o, ni, false);
           new_update_number = be32_to_cpu(ns->update_number);
           bool interesting = !n
             || (dncp_update_number_gt(n->update_number, new_update_number)
@@ -457,7 +457,7 @@ handle_message(dncp_ep_i l,
             {
               void *nd_data = tlv_data(a) + ns_len;
 
-              n = n ? n: dncp_find_node_by_node_identifier(o, ni, true);
+              n = n ? n: dncp_find_node_by_node_id(o, ni, true);
               if (!n)
                 return; /* OOM */
               if (dncp_node_is_self(n))

@@ -212,7 +212,7 @@ bool net_sim_is_converged(net_sim s)
       list_for_each_entry(n2, &s->nodes, lh)
         {
           /* Make sure that the information about other node _is_ valid */
-          hn = dncp_find_node_by_node_identifier(n->d, &n2->d->own_node->node_identifier, false);
+          hn = dncp_find_node_by_node_id(n->d, &n2->d->own_node->node_id, false);
           if (!hn)
             {
               L_DEBUG("unable to find other node hash - %s -> %s",

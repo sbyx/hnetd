@@ -891,14 +891,14 @@ static void hpa_link_link_cb(struct hncp_link_user *u, const char *ifname,
 	for(n=0; n<peercnt; n++) {
 		if((adj = avl_find_element(&hpa->adjacencies, &peers[n], adj, te))) {
 			L_DEBUG("hpa_link_link_cb: updating adjacency %s:%"PRIu32,
-								DNCP_STRUCT_REPR(peers[n].node_identifier), peers[n].ep_id);
+								DNCP_STRUCT_REPR(peers[n].node_id), peers[n].ep_id);
 			adj->iface = i;
 			adj->updated = 1;
 		} else if(!(adj = malloc(sizeof(*adj)))) {
 			L_ERR("hpa_link_link_cb: malloc error");
 		} else {
 			L_DEBUG("hpa_link_link_cb: adding adjacency %s:%"PRIu32,
-					DNCP_STRUCT_REPR(peers[n].node_identifier), peers[n].ep_id);
+					DNCP_STRUCT_REPR(peers[n].node_id), peers[n].ep_id);
 			adj->id = peers[n];
 			adj->iface = i;
 			adj->updated = 1;
@@ -911,7 +911,7 @@ static void hpa_link_link_cb(struct hncp_link_user *u, const char *ifname,
 		if(adj->iface == i) {
 			if(!adj->updated) {
 				L_DEBUG("hpa_link_link_cb: deleting adjacency %s:%"PRIu32,
-							DNCP_STRUCT_REPR(adj->id.node_identifier), adj->id.ep_id);
+							DNCP_STRUCT_REPR(adj->id.node_id), adj->id.ep_id);
 				avl_delete(&hpa->adjacencies, &adj->te);
 				free(adj);
 			} else {
@@ -1201,7 +1201,7 @@ static hpa_advp hpa_get_hpa_advp(struct pa_core *core, dncp_node n,
 	hpa_advp hap;
 	hncp_ep_id_s id = {.ep_id = ep_id};
 
-	DNCP_NODE_TO_PA(n, &id.node_identifier);
+	DNCP_NODE_TO_PA(n, &id.node_id);
 	pa_for_each_advp(core, ap, addr, plen) {
 		hap = container_of(ap, hpa_advp_s, advp);
 		//We must compare every field of the TLV in case it was modified
@@ -1245,7 +1245,7 @@ static void hpa_update_ap_tlv(hncp_pa hpa, dncp_node n,
 		L_DEBUG("hpa_update_ap_tlv: creating new assigned prefix from %s",
 									HEX_REPR(tlv_data(tlv), tlv_len(tlv)));
 		hncp_ep_id_s id = { .ep_id = ah->ep_id};
-		DNCP_NODE_TO_PA(n, &id.node_identifier);
+		DNCP_NODE_TO_PA(n, &id.node_id);
 		hpa_iface i = hpa_get_adjacent_iface(hpa, &id);
 		hap->advp.plen = p.plen;
 		hap->advp.prefix = p.prefix;
@@ -1292,7 +1292,7 @@ static void hpa_update_ra_tlv(hncp_pa hpa, dncp_node n,
 		DNCP_NODE_TO_PA(n, &hap->advp.node_id);
 		pa_advp_add(&hpa->aa, &hap->advp);
 
-		DNCP_NODE_TO_PA(n, &hap->ep_id.node_identifier);
+		DNCP_NODE_TO_PA(n, &hap->ep_id.node_id);
 		hap->ep_id.ep_id = ra->ep_id;
 		hap->ap_flags = 0;
 	}
@@ -1314,7 +1314,7 @@ static void hpa_dp_delete_to(struct uloop_timeout *to)
 }
 
 static hpa_dp hpa_dp_get_hncp(hncp_pa hpa, const struct prefix *p,
-		hncp_node_identifier id)
+		hncp_node_id id)
 {
 	hpa_dp dp;
 	hpa_for_each_dp(hpa, dp) {

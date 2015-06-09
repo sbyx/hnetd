@@ -57,16 +57,16 @@ void hncp_bfs_one(void)
 
 	hncp_bfs bfs = hncp_routing_create(hncp, NULL, true);
 
-	dncp_node_identifier_s h = {{0}};
+	dncp_node_id_s h = {{0}};
 	dncp_node n0 = hncp->own_node;
 	h.buf[0] = 1;
-	dncp_node n1 = dncp_find_node_by_node_identifier(hncp, &h, true);
+	dncp_node n1 = dncp_find_node_by_node_id(hncp, &h, true);
 	h.buf[0] = 2;
-	dncp_node n2 = dncp_find_node_by_node_identifier(hncp, &h, true);
+	dncp_node n2 = dncp_find_node_by_node_id(hncp, &h, true);
 	h.buf[0] = 3;
-	dncp_node n3 = dncp_find_node_by_node_identifier(hncp, &h, true);
+	dncp_node n3 = dncp_find_node_by_node_id(hncp, &h, true);
 	h.buf[0] = 4;
-	dncp_node n4 = dncp_find_node_by_node_identifier(hncp, &h, true);
+	dncp_node n4 = dncp_find_node_by_node_id(hncp, &h, true);
 
 	// Create a network topology with us + 4 routers:
 	// US -- N1 -- N2 |- N4
@@ -83,10 +83,10 @@ void hncp_bfs_one(void)
 	memset(&dummy1.sin6_addr, 1, sizeof(dummy1.sin6_addr));
 	struct sockaddr_in6 dummy3 = {.sin6_family = AF_INET6};
 	memset(&dummy3.sin6_addr, 3, sizeof(dummy3.sin6_addr));
-	dncp_t_ep_id_s lid1 = {n1->node_identifier, 0};
+	dncp_t_ep_id_s lid1 = {n1->node_id, 0};
 	_heard(l1, &lid1, &dummy1, false);
 
-	dncp_t_ep_id_s lid3 = {n3->node_identifier, 0};
+	dncp_t_ep_id_s lid3 = {n3->node_id, 0};
 	_heard(l3, &lid3, &dummy3, false);
 
 	// TLV foo
@@ -111,7 +111,7 @@ void hncp_bfs_one(void)
 	// N0 link 0
 	n.ep_id = l1->ep_id;
 	n.neighbor_ep_id = 0;
-	n.neighbor_node_identifier = n1->node_identifier;
+	n.neighbor_node_id = n1->node_id;
 	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
 
 	ap.hdr.ep_id = l1->ep_id;
@@ -123,7 +123,7 @@ void hncp_bfs_one(void)
 	// N0 link 1
 	n.ep_id = l3->ep_id;
 	n.neighbor_ep_id = 0;
-	n.neighbor_node_identifier = n3->node_identifier;
+	n.neighbor_node_id = n3->node_id;
 	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
 
 	ap.hdr.ep_id = 0;
@@ -140,13 +140,13 @@ void hncp_bfs_one(void)
 	// N1 link 0
 	n.ep_id = 0;
 	n.neighbor_ep_id = l1->ep_id;
-	n.neighbor_node_identifier = n0->node_identifier;
+	n.neighbor_node_id = n0->node_id;
 	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
 
 	// N1 link 1
 	n.ep_id = 1;
 	n.neighbor_ep_id =0;
-	n.neighbor_node_identifier = n2->node_identifier;
+	n.neighbor_node_id = n2->node_id;
 	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
 
 	ap.hdr.ep_id = 0;
@@ -163,19 +163,19 @@ void hncp_bfs_one(void)
 	// N2 link 0
 	n.ep_id = 0;
 	n.neighbor_ep_id = 1;
-	n.neighbor_node_identifier = n1->node_identifier;
+	n.neighbor_node_id = n1->node_id;
 	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
 
 	// N2 link 1
 	n.ep_id = 1;
 	n.neighbor_ep_id = 1;
-	n.neighbor_node_identifier = n3->node_identifier;
+	n.neighbor_node_id = n3->node_id;
 	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
 
 	// N2 link 2
 	n.ep_id = 2;
 	n.neighbor_ep_id = 0;
-	n.neighbor_node_identifier = n4->node_identifier;
+	n.neighbor_node_id = n4->node_id;
 	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
 
 	ap.hdr.ep_id = 2;
@@ -197,13 +197,13 @@ void hncp_bfs_one(void)
 	// N3 link 0
 	n.ep_id = 0;
 	n.neighbor_ep_id = l3->ep_id;
-	n.neighbor_node_identifier = n0->node_identifier;
+	n.neighbor_node_id = n0->node_id;
 	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
 
 	// N3 link 1
 	n.ep_id = 1;
 	n.neighbor_ep_id = 1;
-	n.neighbor_node_identifier = n2->node_identifier;
+	n.neighbor_node_id = n2->node_id;
 	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
 
 	ap.hdr.ep_id = 1;

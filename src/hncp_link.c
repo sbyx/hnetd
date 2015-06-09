@@ -93,7 +93,7 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 			if (!cn || cn->ep_id != link->ep_id)
 				continue;
 
-			dncp_node peer = dncp_find_node_by_node_identifier(l->dncp, dncp_tlv_get_node_identifier(l->dncp, cn), false);
+			dncp_node peer = dncp_find_node_by_node_id(l->dncp, dncp_tlv_get_node_id(l->dncp, cn), false);
 
 			if (!peer || !peers)
 				continue;
@@ -109,15 +109,15 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 
 				dncp_t_neighbor pn = dncp_tlv_neighbor(l->dncp, pc);
 				if (!pn || pn->ep_id != cn->neighbor_ep_id ||
-				    memcmp(dncp_tlv_get_node_identifier(l->dncp, pn), &l->dncp->own_node->node_identifier, DNCP_NI_LEN(l->dncp)))
+				    memcmp(dncp_tlv_get_node_id(l->dncp, pn), &l->dncp->own_node->node_id, DNCP_NI_LEN(l->dncp)))
 					continue;
 
 				if (pn->neighbor_ep_id == link->ep_id) {
 					// Matching reverse neighbor entry
 					L_DEBUG("hncp_link_calculate: if %"PRIu32" -> neigh %s:%"PRIu32,
-							link->ep_id, DNCP_STRUCT_REPR(peer->node_identifier), pn->ep_id);
+							link->ep_id, DNCP_STRUCT_REPR(peer->node_id), pn->ep_id);
 					mutual = true;
-					memcpy(&peers[peerpos].node_identifier, &peer->node_identifier, HNCP_NI_LEN);
+					memcpy(&peers[peerpos].node_id, &peer->node_id, HNCP_NI_LEN);
 					peers[peerpos].ep_id = pn->ep_id;
 					++peerpos;
 				} else if (pn->neighbor_ep_id < link->ep_id) {
@@ -157,7 +157,7 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 					elected &= ~HNCP_LINK_LEGACY;
 
 				if (ourcaps < peercaps || (ourcaps == peercaps &&
-						memcmp(&l->dncp->own_node->node_identifier, &peer->node_identifier, DNCP_NI_LEN(l->dncp)) < 0)) {
+						memcmp(&l->dncp->own_node->node_id, &peer->node_id, DNCP_NI_LEN(l->dncp)) < 0)) {
 					if (peervertlv->cap_mdnsproxy &&
 							ourvertlv->cap_mdnsproxy == peervertlv->cap_mdnsproxy)
 						elected &= ~HNCP_LINK_MDNSPROXY;
@@ -176,7 +176,7 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 				}
 
 				L_DEBUG("hncp_link_calculate: %s peer: %x peer-caps: %x ourcaps: %x pre-elected(SMPHL): %x",
-						link->conf.ifname, *((uint32_t*)&peer->node_identifier), peercaps, ourcaps, elected);
+						link->conf.ifname, *((uint32_t*)&peer->node_id), peercaps, ourcaps, elected);
 			}
 		}
 	}
@@ -210,7 +210,7 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 		if (dncp_node_is_self(n)) {
 			L_DEBUG("hncp_link: local neighbor tlv changed");
 			ep = dncp_find_ep_by_id(l->dncp, ne->ep_id);
-		} else if (!memcmp(dncp_tlv_get_node_identifier(l->dncp, ne),  &l->dncp->own_node->node_identifier, DNCP_NI_LEN(l->dncp))) {
+		} else if (!memcmp(dncp_tlv_get_node_id(l->dncp, ne),  &l->dncp->own_node->node_id, DNCP_NI_LEN(l->dncp))) {
 			L_DEBUG("hncp_link: other node neighbor tlv changed");
 			ep = dncp_find_ep_by_id(l->dncp, ne->neighbor_ep_id);
 		}

@@ -45,7 +45,7 @@ typedef struct __packed {
 
 typedef struct __packed {
   unsigned char buf[DNCP_NI_MAX_LEN];
-} dncp_node_identifier_s, *dncp_node_identifier;
+} dncp_node_id_s, *dncp_node_id;
 
 struct dncp_struct {
   /* 'external' handling structure */
@@ -187,7 +187,7 @@ struct dncp_node_struct {
   dncp dncp;
 
   /* These map 1:1 to node data TLV's start */
-  dncp_node_identifier_s node_identifier;
+  dncp_node_id_s node_id;
   uint32_t update_number;
 
   /* When was the last prune during which this node was reachable */
@@ -237,7 +237,7 @@ struct dncp_tlv_struct {
 
 /* Internal or testing-only way to initialize hp struct _without_
  * dynamic allocations (and some of the steps omitted too). */
-bool dncp_init(dncp o, dncp_ext ext, const void *node_identifier, int len);
+bool dncp_init(dncp o, dncp_ext ext, const void *node_id, int len);
 void dncp_uninit(dncp o);
 
 dncp_ep_i dncp_find_link_by_name(dncp o, const char *ifname, bool create);
@@ -274,7 +274,7 @@ void dncp_ep_i_send_network_state(dncp_ep_i l,
 void dncp_trickle_reset(dncp o);
 
 /* Compatibility / convenience macros to access stuff that used to be fixed. */
-#define DNCP_NI_LEN(o) (o)->ext->conf.node_identifier_length
+#define DNCP_NI_LEN(o) (o)->ext->conf.node_id_length
 #define DNCP_HASH_LEN(o) (o)->ext->conf.hash_length
 #define DNCP_KEEPALIVE_INTERVAL(o) (o)->ext->conf.per_link.keepalive_interval
 
@@ -315,17 +315,17 @@ dncp_tlv_neighbor(dncp o, const struct tlv_attr *a)
   return dncp_tlv_neighbor2(a, DNCP_NI_LEN(o));
 }
 
-static inline dncp_node_identifier
-dncp_tlv_get_node_identifier2(void *tlv, int nidlen)
+static inline dncp_node_id
+dncp_tlv_get_node_id2(void *tlv, int nidlen)
 {
-  return (dncp_node_identifier)(tlv - nidlen);
+  return (dncp_node_id)(tlv - nidlen);
 }
 
-static inline dncp_node_identifier
-dncp_tlv_get_node_identifier(dncp o, void *tlv)
+static inline dncp_node_id
+dncp_tlv_get_node_id(dncp o, void *tlv)
 {
-  return dncp_tlv_get_node_identifier2(tlv,
-                                       o->ext->conf.node_identifier_length);
+  return dncp_tlv_get_node_id2(tlv,
+                                       o->ext->conf.node_id_length);
 }
 
 static inline dncp_node
@@ -333,8 +333,8 @@ dncp_node_find_neigh_bidir(dncp_node n, dncp_t_neighbor ne)
 {
   if (!n)
     return NULL;
-  dncp_node_identifier ni = dncp_tlv_get_node_identifier(n->dncp, ne);
-  dncp_node n2 = dncp_find_node_by_node_identifier(n->dncp, ni, false);
+  dncp_node_id ni = dncp_tlv_get_node_id(n->dncp, ne);
+  dncp_node n2 = dncp_find_node_by_node_id(n->dncp, ni, false);
   if (!n2)
     return NULL;
   struct tlv_attr *a;
@@ -345,8 +345,8 @@ dncp_node_find_neigh_bidir(dncp_node n, dncp_t_neighbor ne)
       {
         if (ne->ep_id == ne2->neighbor_ep_id
             && ne->neighbor_ep_id == ne2->ep_id &&
-            !memcmp(dncp_tlv_get_node_identifier(n->dncp, ne2),
-                    &n->node_identifier, DNCP_NI_LEN(n->dncp)))
+            !memcmp(dncp_tlv_get_node_id(n->dncp, ne2),
+                    &n->node_id, DNCP_NI_LEN(n->dncp)))
           return n2;
       }
 

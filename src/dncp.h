@@ -289,7 +289,7 @@ dncp_tlv dncp_find_tlv(dncp o, uint16_t type, void *data, uint16_t len);
 /**
  * Find node with matching node identifier (if any).
  */
-dncp_node dncp_find_node_by_node_identifier(dncp o, void *nibuf, bool create);
+dncp_node dncp_find_node_by_node_id(dncp o, void *nibuf, bool create);
 
 /**
  * Stop publishing a TLV.
@@ -309,9 +309,9 @@ int dncp_remove_tlvs_by_type(dncp o, int type);
 /**
  * Set the local node identifier.
  *
- * 'nibuf' must be of same size as the given node_identifier_length.
+ * 'nibuf' must be of same size as the given node_id_length.
  */
-bool dncp_set_own_node_identifier(dncp o, void *nibuf);
+bool dncp_set_own_node_id(dncp o, void *nibuf);
 
 /**
  * Subscribe to DNCP state change events.
@@ -421,7 +421,7 @@ struct dncp_ext_configuration_struct {
   dncp_ep_s per_link;
 
   /* Size of the node identifier; MUST be <= DNCP_NI_MAX_LEN */
-  uint8_t node_identifier_length;
+  uint8_t node_id_length;
 
   /* Hash length; MUST be <= DNCP_HASH_MAX_LEN */
   uint8_t hash_length;

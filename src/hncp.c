@@ -22,14 +22,14 @@ static bool hncp_handle_collision_randomly(dncp_ext ext)
 {
   hncp h = container_of(ext, hncp_s, ext);
   dncp o = h->dncp;
-  int nilen = ext->conf.node_identifier_length;
+  int nilen = ext->conf.node_id_length;
   char *nibuf = alloca(nilen);
   int i;
 
   L_ERR("second+ collision -> changing node identifier");
   for (i = 0; i < nilen; i++)
     nibuf[i] = random() % 256;
-  return dncp_set_own_node_identifier(o, nibuf);
+  return dncp_set_own_node_id(o, nibuf);
 }
 
 
@@ -175,7 +175,7 @@ bool hncp_init(hncp o)
          * to turn it off _for every link_ when dtls is enabled. */
         .accept_node_data_updates_via_multicast = false
       },
-      .node_identifier_length = HNCP_NI_LEN,
+      .node_id_length = HNCP_NI_LEN,
       .hash_length = HNCP_HASH_LEN,
       .keepalive_multiplier_percent = HNCP_KEEPALIVE_MULTIPLIER * 100,
       .grace_interval = HNCP_PRUNE_GRACE_PERIOD,

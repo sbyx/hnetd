@@ -253,7 +253,7 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 					};
 					size_t buflen = sizeof(np) + DNCP_NI_LEN(dncp);
 					void *buf = alloca(buflen);
-					memcpy(buf, &c->node_identifier, DNCP_NI_LEN(dncp));
+					memcpy(buf, &c->node_id, DNCP_NI_LEN(dncp));
 					memcpy(buf + DNCP_NI_LEN(dncp), &np, sizeof(np));
 
 

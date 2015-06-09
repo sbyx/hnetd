@@ -324,7 +324,7 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes, bool no_conflicts)
 {
   /* A LOT of routers connected in a tube (R1 R2 R3 .. RN). */
   unsigned int i;
-  dncp_node_identifier_s h1, h2;
+  dncp_node_id_s h1, h2;
 
   memset(&h1, 0, sizeof(h1));
   memset(&h2, 1, sizeof(h2));
@@ -345,9 +345,9 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes, bool no_conflicts)
       if (!no_conflicts)
         {
           if (i == 0 || i == 1 || i == 3)
-            dncp_set_own_node_identifier(n1, &h1);
+            dncp_set_own_node_id(n1, &h1);
           else if (i == 2 || i == 4)
-            dncp_set_own_node_identifier(n1, &h2);
+            dncp_set_own_node_id(n1, &h2);
         }
 
       sprintf(buf, "node%d", i+1);
@@ -507,8 +507,8 @@ dncp_t_neighbor monkey_neighbor(dncp n1, dncp_ep_i l1,
           continue;
         if (nh->neighbor_ep_id != l2->ep_id)
           continue;
-        if (memcmp(dncp_tlv_get_node_identifier(n1, nh),
-                   &n2->own_node->node_identifier,
+        if (memcmp(dncp_tlv_get_node_id(n1, nh),
+                   &n2->own_node->node_id,
                    HNCP_NI_LEN))
           continue;
         return nh;

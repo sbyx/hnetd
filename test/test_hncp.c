@@ -149,15 +149,15 @@ void hncp_int(void)
   sput_fail_unless(o->network_hash_dirty, "network hash should be dirty");
 
   /* Make sure we can add nodes if we feel like it. */
-  dncp_node_identifier_s ni;
+  dncp_node_id_s ni;
   memset(&ni, 0, sizeof(ni));
 
-  n = dncp_find_node_by_node_identifier(o, &ni, false);
+  n = dncp_find_node_by_node_id(o, &ni, false);
   sput_fail_unless(!n, "dncp_find_node_by_hash w/ create=false => none");
-  n = dncp_find_node_by_node_identifier(o, &ni, true);
+  n = dncp_find_node_by_node_id(o, &ni, true);
   sput_fail_unless(n, "dncp_find_node_by_hash w/ create=false => !none");
-  sput_fail_unless(dncp_find_node_by_node_identifier(o, &ni, false), "should exist");
-  sput_fail_unless(dncp_find_node_by_node_identifier(o, &ni, false) == n, "still same");
+  sput_fail_unless(dncp_find_node_by_node_id(o, &ni, false), "should exist");
+  sput_fail_unless(dncp_find_node_by_node_id(o, &ni, false) == n, "still same");
 
   n = dncp_get_first_node(o);
   sput_fail_unless(n, "dncp_get_first_node");

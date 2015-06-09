@@ -189,7 +189,7 @@ typedef struct hpa_dp_struct {
 
 		} local;
 		struct {
-			hncp_node_identifier_s node_id;
+			hncp_node_id_s node_id;
 			struct uloop_timeout delete_to;
 		} hncp;
 	};

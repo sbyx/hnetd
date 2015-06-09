@@ -29,10 +29,10 @@ struct hncp_link_config {
 
 typedef struct __packed {
 	unsigned char buf[HNCP_NI_LEN];
-} hncp_node_identifier_s, *hncp_node_identifier;
+} hncp_node_id_s, *hncp_node_id;
 
 typedef struct {
-	hncp_node_identifier_s node_identifier;
+	hncp_node_id_s node_id;
 	uint32_t ep_id;
 } *hncp_ep_id, hncp_ep_id_s;
 

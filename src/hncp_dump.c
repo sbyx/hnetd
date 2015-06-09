@@ -175,7 +175,7 @@ static int hd_node_neighbor(struct tlv_attr *tlv, struct blob_buf *b)
 
 	if (!(nh = dncp_tlv_neighbor2(tlv, HNCP_NI_LEN)))
 		return -1;
-	hd_a(!blobmsg_add_string(b, "node-id", hd_ni_to_hex(dncp_tlv_get_node_identifier2(tlv, HNCP_NI_LEN))), return -1);
+	hd_a(!blobmsg_add_string(b, "node-id", hd_ni_to_hex(dncp_tlv_get_node_id2(tlv, HNCP_NI_LEN))), return -1);
 	hd_a(!blobmsg_add_u32(b, "local-link", ntohl(nh->ep_id)), return -1);
 	hd_a(!blobmsg_add_u32(b, "neighbor-link", ntohl(nh->neighbor_ep_id)), return -1);
 	return 0;
@@ -291,7 +291,7 @@ static int hd_nodes(dncp o, struct blob_buf *b)
 {
 	dncp_node node;
 	dncp_for_each_node(o, node)
-		hd_do_in_table(b, hd_ni_to_hex(&node->node_identifier), hd_node(o, node,b), return -1);
+		hd_do_in_table(b, hd_ni_to_hex(&node->node_id), hd_node(o, node,b), return -1);
 	return 0;
 }
 
@@ -306,7 +306,7 @@ static int hd_links(dncp o, struct blob_buf *b)
 static int hd_info(dncp o, struct blob_buf *b)
 {
 	hd_a(!blobmsg_add_u64(b, "time", hd_now), return -1);
-	hd_a(!blobmsg_add_string(b, "node-id", hd_ni_to_hex(&o->own_node->node_identifier)), return -1);
+	hd_a(!blobmsg_add_string(b, "node-id", hd_ni_to_hex(&o->own_node->node_id)), return -1);
 	return 0;
 }
 

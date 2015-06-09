@@ -196,8 +196,8 @@ do {                                                            \
 static hnetd_time_t
 _neighbor_interval(dncp o, dncp_t_neighbor neigh)
 {
-  dncp_node_identifier ni = dncp_tlv_get_node_identifier(o, neigh);
-  dncp_node n = dncp_find_node_by_node_identifier(o, ni, false);
+  dncp_node_id ni = dncp_tlv_get_node_id(o, neigh);
+  dncp_node n = dncp_find_node_by_node_id(o, ni, false);
 
   if (!n)
     {
@@ -364,7 +364,7 @@ void dncp_ext_timeout(dncp o)
         /* Zap the neighbor */
 #if L_LEVEL >= 7
         L_DEBUG("Neighbor %s gone on " DNCP_LINK_F " - nothing in %d ms",
-                DNCP_NI_REPR(o, dncp_tlv_get_node_identifier(o, ne)),
+                DNCP_NI_REPR(o, dncp_tlv_get_node_id(o, ne)),
                 DNCP_LINK_D(l), (int) (now - n->last_contact));
 #endif /* L_LEVEL >= 7 */
         dncp_remove_tlv(o, t);

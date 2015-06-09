@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Jun  9 12:19:44 2015 mstenber
- * Edit time:     974 min
+ * Last modified: Tue Jun  9 16:04:12 2015 mstenber
+ * Edit time:     976 min
  *
  */
 
@@ -17,8 +17,7 @@
 
 int dncp_node_cmp(dncp_node n1, dncp_node n2)
 {
-  return memcmp(&n1->node_identifier, &n2->node_identifier,
-                DNCP_NI_LEN(n1->dncp));
+  return memcmp(&n1->node_id, &n2->node_id, DNCP_NI_LEN(n1->dncp));
 }
 
 static int
@@ -192,12 +191,12 @@ static void update_link(struct vlist_tree *t,
 
 
 dncp_node
-dncp_find_node_by_node_identifier(dncp o, void *ni, bool create)
+dncp_find_node_by_node_id(dncp o, void *ni, bool create)
 {
   /* Unfortunately as DNCP_NI_LEN refers to node -> dncp, we cannot
-   * simply use the dncp_node_identifier pointer as is anymore.. */
+   * simply use the dncp_node_id pointer as is anymore.. */
   dncp_node_s fake_node = { .dncp = o };
-  memcpy(&fake_node.node_identifier, ni, DNCP_NI_LEN(o));
+  memcpy(&fake_node.node_id, ni, DNCP_NI_LEN(o));
 
   dncp_node n = vlist_find(&o->nodes, &fake_node, &fake_node, in_nodes);
 
@@ -208,18 +207,18 @@ dncp_find_node_by_node_identifier(dncp o, void *ni, bool create)
   n = calloc(1, sizeof(*n) + o->ext->conf.ext_node_data_size);
   if (!n)
     return false;
-  memcpy(&n->node_identifier, ni, DNCP_NI_LEN(o));
+  memcpy(&n->node_id, ni, DNCP_NI_LEN(o));
   n->dncp = o;
   n->tlv_index_dirty = true;
   vlist_add(&o->nodes, &n->in_nodes, n);
   return n;
 }
 
-bool dncp_init(dncp o, dncp_ext ext, const void *node_identifier, int len)
+bool dncp_init(dncp o, dncp_ext ext, const void *node_id, int len)
 {
   union __packed {
     dncp_hash_s h;
-    dncp_node_identifier_s ni;
+    dncp_node_id_s ni;
   } nih;
   int i;
 
@@ -233,24 +232,24 @@ bool dncp_init(dncp o, dncp_ext ext, const void *node_identifier, int len)
   vlist_init(&o->links, compare_links, update_link);
   INIT_LIST_HEAD(&o->link_confs);
   memset(&nih, 0, sizeof(nih));
-  ext->cb.hash(node_identifier, len, &nih.h);
+  ext->cb.hash(node_id, len, &nih.h);
   o->first_free_ep_id = 1;
   o->last_prune = 1;
   /* this way new nodes with last_prune=0 won't be reachable */
-  return dncp_set_own_node_identifier(o, &nih.ni);
+  return dncp_set_own_node_id(o, &nih.ni);
 }
 
-bool dncp_set_own_node_identifier(dncp o, void *nibuf)
+bool dncp_set_own_node_id(dncp o, void *nibuf)
 {
   if (o->own_node)
     {
       vlist_delete(&o->nodes, &o->own_node->in_nodes);
       o->own_node = NULL;
     }
-  dncp_node_identifier_s ni;
+  dncp_node_id_s ni;
   memset(&ni, 0, sizeof(ni));
   memcpy(&ni, nibuf, DNCP_NI_LEN(o));
-  dncp_node n = dncp_find_node_by_node_identifier(o, &ni, true);
+  dncp_node n = dncp_find_node_by_node_id(o, &ni, true);
   if (!n)
     {
       L_ERR("unable to create own node");
@@ -389,13 +388,6 @@ int dncp_remove_tlvs_by_type(dncp o, int type)
   return c;
 }
 
-static void dncp_ep_set_default(dncp o, dncp_ep conf, const char *ifname)
-{
-  *conf = o->ext->conf.per_link;
-  strncpy(conf->dnsname, ifname, sizeof(conf->ifname));
-  strncpy(conf->ifname, ifname, sizeof(conf->ifname));
-}
-
 dncp_ep dncp_find_ep_by_name(dncp o, const char *ifname)
 {
   dncp_ep_i l = dncp_find_link_by_name(o, ifname, true);
@@ -420,7 +412,9 @@ dncp_ep_i dncp_find_link_by_name(dncp o, const char *ifname, bool create)
         return NULL;
       l->dncp = o;
       l->ep_id = o->first_free_ep_id++;
-      dncp_ep_set_default(o, &l->conf, ifname);
+      l->conf = o->ext->conf.per_link;
+      strncpy(l->conf.dnsname, ifname, sizeof(l->conf.ifname));
+      strncpy(l->conf.ifname, ifname, sizeof(l->conf.ifname));
       vlist_add(&o->links, &l->in_links, l);
     }
   return l;
@@ -585,9 +579,8 @@ void dncp_calculate_network_hash(dncp o)
   void *dst = buf;
   dncp_for_each_node(o, n)
     {
-      uint32_t update_number = cpu_to_be32(n->update_number);
       dncp_calculate_node_data_hash(n);
-      *((uint32_t *)dst) = update_number;
+      *((uint32_t *)dst) = cpu_to_be32(n->update_number);
       memcpy(dst + 4, &n->node_data_hash, DNCP_HASH_LEN(o));
       L_DEBUG(".. %s/%d=%llx",
               DNCP_NODE_REPR(n), n->update_number,
@@ -664,8 +657,8 @@ bool dncp_ep_has_highest_id(dncp_ep ep)
         if (nh->ep_id != ep_id)
           continue;
 
-        if (memcmp(dncp_tlv_get_node_identifier(o, nh),
-                   &o->own_node->node_identifier, DNCP_NI_LEN(o)) > 0)
+        if (memcmp(dncp_tlv_get_node_id(o, nh),
+                   &o->own_node->node_id, DNCP_NI_LEN(o)) > 0)
           return false;
       }
   return true;
@@ -783,7 +776,7 @@ dncp_node dncp_get_own_node(dncp o)
 
 void *dncp_node_get_id(dncp_node n)
 {
-  return &n->node_identifier;
+  return &n->node_id;
 }
 
 dncp dncp_node_get_dncp(dncp_node n)
@@ -793,7 +786,7 @@ dncp dncp_node_get_dncp(dncp_node n)
 
 const char *dncp_node_repr(dncp_node n, char *to_buf)
 {
-  return hex_repr(to_buf, &n->node_identifier, DNCP_NI_LEN(n->dncp));
+  return hex_repr(to_buf, &n->node_id, DNCP_NI_LEN(n->dncp));
 }
 
 dncp dncp_ep_get_dncp(dncp_ep ep)

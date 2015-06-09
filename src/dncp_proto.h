@@ -52,7 +52,7 @@ typedef uint32_t ep_id_t;
 
 /* DNCP_T_ENDPOINT_ID */
 typedef struct __packed {
-  /* dncp_node_identifier_s node_identifier; variable length, encoded here */
+  /* dncp_node_id_s node_id; variable length, encoded here */
   ep_id_t ep_id;
 } dncp_t_ep_id_s, *dncp_t_ep_id;
 
@@ -60,7 +60,7 @@ typedef struct __packed {
 
 /* DNCP_T_NODE_STATE */
 typedef struct __packed {
-  /* dncp_node_identifier_s node_identifier; variable length, encoded here */
+  /* dncp_node_id_s node_id; variable length, encoded here */
   uint32_t update_number;
   uint32_t ms_since_origination;
   /* + hash + + optional node data after this */
@@ -70,7 +70,7 @@ typedef struct __packed {
 
 /* DNCP_T_NEIGHBOR */
 typedef struct __packed {
-  /* dncp_node_identifier_s node_identifier; variable length, encoded here */
+  /* dncp_node_id_s node_id; variable length, encoded here */
   uint32_t neighbor_ep_id;
   uint32_t ep_id;
 } dncp_t_neighbor_s, *dncp_t_neighbor;
