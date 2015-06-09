@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Jun  8 15:42:22 2015 mstenber
+ * Last modified: Tue Jun  9 12:22:09 2015 mstenber
  * Edit time:     638 min
  *
  */
@@ -283,6 +283,7 @@ static void _publish_ddzs(hncp_sd sd)
     {
       bool found = false;
 
+      /* TBD - should we care about enabled flag, or not? */
       dncp_for_each_tlv(sd->dncp, t)
         {
           a = dncp_tlv_get_attr(t);

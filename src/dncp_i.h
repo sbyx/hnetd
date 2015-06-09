@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Jun  8 14:27:49 2015 mstenber
+ * Last modified: Tue Jun  9 12:19:33 2015 mstenber
  * Edit time:     381 min
  *
  */
@@ -268,7 +268,6 @@ void dncp_ep_i_send_network_state(dncp_ep_i l,
                                   struct sockaddr_in6 *dst,
                                   size_t maximum_size,
                                   bool always_ep_id);
-void dncp_ep_i_set_keepalive_interval(dncp_ep_i l, uint32_t value);
 
 
 /* Miscellaneous utilities that live in dncp_timeout */

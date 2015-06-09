@@ -6,12 +6,33 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Mon Jun  8 14:42:22 2015 mstenber
- * Edit time:     587 min
+ * Last modified: Tue Jun  9 12:21:34 2015 mstenber
+ * Edit time:     592 min
  *
  */
 
 #include "dncp_i.h"
+
+static void ep_i_set_keepalive_interval(dncp_ep_i l, uint32_t value)
+{
+  if (l->published_keepalive_interval == value)
+    return;
+  dncp o = l->dncp;
+  if (l->published_keepalive_interval != DNCP_KEEPALIVE_INTERVAL(o))
+    {
+      dncp_t_keepalive_interval_s ka = { .ep_id = l->ep_id,
+                                         .interval_in_ms = cpu_to_be32(l->published_keepalive_interval) };
+      dncp_remove_tlv_matching(o, DNCP_T_KEEPALIVE_INTERVAL, &ka, sizeof(ka));
+    }
+  if (value != DNCP_KEEPALIVE_INTERVAL(o))
+    {
+      dncp_t_keepalive_interval_s ka = { .ep_id = l->ep_id,
+                                         .interval_in_ms = cpu_to_be32(value) };
+      dncp_add_tlv(o, DNCP_T_KEEPALIVE_INTERVAL, &ka, sizeof(ka), 0);
+    }
+  l->published_keepalive_interval = value;
+}
+
 
 static void trickle_set_i(dncp_trickle t, dncp_ep_i l, int i)
 {
@@ -293,16 +314,12 @@ void dncp_ext_timeout(dncp o)
   /* Recalculate network hash if necessary. */
   dncp_calculate_network_hash(o);
 
-  dncp_for_each_ep(o, ep)
+  dncp_for_each_enabled_ep(o, ep)
     {
-      /* Just configured, not up yet / any more? */
-      if (!dncp_ep_is_enabled(ep))
-        continue;
-
       /* Update the 'active' link's published keepalive interval, if need be */
       dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
 
-      dncp_ep_i_set_keepalive_interval(l, ep->keepalive_interval);
+      ep_i_set_keepalive_interval(l, ep->keepalive_interval);
 
       if (ep->unicast_only)
         continue;
@@ -410,5 +427,19 @@ void dncp_ext_ep_ready(dncp_ep ep, bool enabled)
       trickle_set_i(&l->trickle, l, l->conf.trickle_imin);
       l->trickle.last_sent = dncp_time(l->dncp);
       dncp_schedule(l->dncp);
+    }
+  else
+    {
+      dncp o = l->dncp;
+      dncp_tlv t, t2;
+      dncp_t_neighbor ne;
+
+      dncp_for_each_tlv_safe(o, t, t2)
+        if ((ne = dncp_tlv_neighbor(o, &t->tlv)))
+          if (ne->ep_id == l->ep_id)
+            dncp_remove_tlv(o, t);
+
+      /* kill TLV, if any */
+      ep_i_set_keepalive_interval(l, DNCP_KEEPALIVE_INTERVAL(o));
     }
 }

@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Jun  8 14:12:49 2015 mstenber
- * Edit time:     972 min
+ * Last modified: Tue Jun  9 12:19:44 2015 mstenber
+ * Edit time:     974 min
  *
  */
 
@@ -171,27 +171,6 @@ compare_links(const void *a, const void *b, void *ptr __unused)
   return strcmp(t1->conf.ifname, t2->conf.ifname);
 }
 
-void dncp_ep_i_set_keepalive_interval(dncp_ep_i l, uint32_t value)
-{
-  if (l->published_keepalive_interval == value)
-    return;
-  dncp o = l->dncp;
-  if (l->published_keepalive_interval != DNCP_KEEPALIVE_INTERVAL(o))
-    {
-      dncp_t_keepalive_interval_s ka = { .ep_id = l->ep_id,
-                                         .interval_in_ms = cpu_to_be32(l->published_keepalive_interval) };
-      dncp_remove_tlv_matching(o, DNCP_T_KEEPALIVE_INTERVAL, &ka, sizeof(ka));
-    }
-  if (value != DNCP_KEEPALIVE_INTERVAL(o))
-    {
-      dncp_t_keepalive_interval_s ka = { .ep_id = l->ep_id,
-                                         .interval_in_ms = cpu_to_be32(value) };
-      dncp_add_tlv(o, DNCP_T_KEEPALIVE_INTERVAL, &ka, sizeof(ka), 0);
-    }
-  l->published_keepalive_interval = value;
-}
-
-
 static void update_link(struct vlist_tree *t,
                         struct vlist_node *node_new,
                         struct vlist_node *node_old)
@@ -202,16 +181,6 @@ static void update_link(struct vlist_tree *t,
 
   if (t_old)
     {
-      dncp_tlv t, t2;
-      dncp_t_neighbor ne;
-      dncp_for_each_tlv_safe(o, t, t2)
-        if ((ne = dncp_tlv_neighbor(o, &t->tlv)))
-          {
-            if (ne->ep_id == t_old->ep_id)
-              dncp_remove_tlv(o, t);
-          }
-      /* kill TLV, if any */
-      dncp_ep_i_set_keepalive_interval(t_old, DNCP_KEEPALIVE_INTERVAL(o));
       free(t_old);
     }
   else

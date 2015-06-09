@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Mon Jun  8 14:23:56 2015 mstenber
- * Edit time:     258 min
+ * Last modified: Tue Jun  9 12:21:16 2015 mstenber
+ * Edit time:     259 min
  *
  */
 
@@ -232,6 +232,9 @@ dncp_ep dncp_ep_get_next(dncp_ep ep);
 
 #define dncp_for_each_ep(o, ep) \
   for (ep = dncp_get_first_ep(o) ; ep ; ep = dncp_ep_get_next(ep))
+
+#define dncp_for_each_enabled_ep(o, ep) \
+  dncp_for_each_ep(o, ep) if (dncp_ep_is_enabled(ep))
 
 /* Various accessors */
 dncp dncp_ep_get_dncp(dncp_ep ep);
