@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Jun 10 10:32:02 2015 mstenber
+ * Last modified: Wed Jun 10 16:53:07 2015 mstenber
  * Edit time:     595 min
  *
  */
@@ -424,7 +424,6 @@ void dncp_ext_ep_ready(dncp_ep ep, bool enabled)
           !l->enabled == !enabled ? "(redundant)" : "");
   if (!l->enabled == !enabled)
       return;
-  dncp_notify_subscribers_link_changed(ep, enabled ? DNCP_EVENT_ADD : DNCP_EVENT_REMOVE);
   l->enabled = enabled;
   if (enabled)
     {
@@ -446,4 +445,5 @@ void dncp_ext_ep_ready(dncp_ep ep, bool enabled)
       /* kill TLV, if any */
       ep_i_set_keepalive_interval(l, DNCP_KEEPALIVE_INTERVAL(o));
     }
+  dncp_notify_subscribers_link_changed(ep, enabled ? DNCP_EVENT_ADD : DNCP_EVENT_REMOVE);
 }
