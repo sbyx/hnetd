@@ -813,58 +813,6 @@ void iface_add_dhcpv6_received(struct iface *c, const void *data, size_t len)
 	c->dhcpv6_len_stage += len;
 }
 
-/*
-void iface_add_chosen_prefix(struct iface *c, const struct prefix *p)
-{
-	struct pa_static_prefix_rule *sprule;
-	//Check if that prefix is already configured
-	list_for_each_entry(sprule, &c->chosen, user) {
-		if(!prefix_cmp(p, &sprule->prefix))
-			return;
-	}
-	sprule = calloc(1, sizeof(*sprule));
-	pa_core_static_prefix_init(sprule, c->ifname, p, true);
-	sprule->rule.result.priority = PA_PRIORITY_AUTO_MAX + 2;
-	pa_core_rule_add(&pa_p->core, &sprule->rule);
-	list_add_tail(&sprule->user, &c->chosen);
-}
-
-
-void iface_set_ep_id(struct iface *c, uint32_t linkid, uint8_t mask)
-{
-	struct pa_ep_id_rule *id_rule = c->id;
-
-	if (id_rule)
-		pa_core_rule_del(&pa_p->core, &id_rule->rule);
-	else
-		id_rule = malloc(sizeof(*id_rule));
-
-	memset(id_rule, 0, sizeof(*id_rule));
-
-	pa_core_ep_id_init(id_rule, c->ifname, linkid, mask, true);
-	id_rule->rule.result.priority = PA_PRIORITY_AUTO_MAX + 1;
-	pa_core_rule_add(&pa_p->core, &id_rule->rule);
-	c->id = id_rule;
-}
-
-void iface_add_addrconf(struct iface *c, struct in6_addr *addr,
-		uint8_t mask, struct prefix *filter)
-{
-	struct pa_iface_addr *a;
-	list_for_each_entry(a, &c->addrconf, user) {
-		if(memcmp(addr, &a->address, sizeof(struct in6_addr)) || mask != a->mask ||
-				strcmp(c->ifname, a->ifname))
-			continue;
-		if((filter && !prefix_cmp(filter, &a->filter)) || (!filter && a->filter.plen == 0))
-			return; //It is the same entry
-	}
-	a = malloc(sizeof(*a));
-	pa_core_iface_addr_init(a, c->ifname, addr, mask, filter);
-	list_add_tail(&a->user, &c->addrconf);
-	pa_core_iface_addr_add(&pa_p->core, a);
-}
-*/
-
 void iface_update(void)
 {
 	struct iface *c;
