@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Tue Jun  9 12:22:09 2015 mstenber
- * Edit time:     638 min
+ * Last modified: Wed Jun 10 11:15:54 2015 mstenber
+ * Edit time:     657 min
  *
  */
 
@@ -59,10 +59,14 @@
 /* How long a timeout we schedule for the actual update (that occurs
  * in a timeout). This effectively sets an upper bound on how
  * frequently the dnsmasq/ohp scripts are called. If there's changes
- * that mutate system state, the timer gets reset. At SOME POINT the
- * system should calm down though, and if it doesn't, it's perhaps
- * best it is visible to user it's broken in some way :) */
+ * that mutate system state, the timer gets reset. */
 #define UPDATE_TIMEOUT 3000
+
+/* As networks grow larger, there is no real guarantee this will
+ * _ever_ get executed. Therefore, provide an upper bound at which
+ * point we are guaranteed one update. Otherwise e.g. address
+ * information may be invalid unacceptably long.*/
+#define MAXIMUM_UPDATE_DELAY 10000
 
 struct hncp_sd_struct
 {
@@ -75,6 +79,7 @@ struct hncp_sd_struct
   /* Mask of what we need to update (in a timeout or at republish(ddz)). */
   int should_update;
   struct uloop_timeout timeout;
+  hnetd_time_t initial_timeout_set;
 
   /* What we were given as router name base (or just 'r' by default). */
   char router_name_base[DNS_MAX_ESCAPED_L_LEN];
@@ -101,7 +106,13 @@ static void _should_update(hncp_sd sd, int v)
   sd->should_update |= v;
   /* Reset the timeout. We intentionally will not configure anything
    * until the churn slows down.*/
-  uloop_timeout_set(&sd->timeout, UPDATE_TIMEOUT);
+  if (!sd->timeout.pending)
+    sd->initial_timeout_set = hnetd_time();
+  if ((sd->initial_timeout_set + MAXIMUM_UPDATE_DELAY) >
+      (hnetd_time() + UPDATE_TIMEOUT))
+    uloop_timeout_set(&sd->timeout, UPDATE_TIMEOUT);
+  else
+    L_DEBUG(" .. already pending, and should be run");
 }
 
 /* Convenience wrapper around MD5 hashing */
