@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Mon Jun  8 14:14:53 2015 mstenber
- * Edit time:     392 min
+ * Last modified: Wed Jun 10 10:40:39 2015 mstenber
+ * Edit time:     400 min
  *
  */
 
@@ -59,6 +59,25 @@
 #else
 #define MESSAGE_PROPAGATION_DELAY 1
 #endif
+
+#ifndef MESSAGE_LOSS_CHANCE
+/* Percentage chance of losing a message in transit. */
+#define MESSAGE_LOSS_CHANCE 0
+
+/* Note: some of the test topologies (notably, the 'huge' tube) start
+ * breaking if any message loss happens. That is not really
+ * unexpected, as given 1% chance of message drop, one in 1e4
+ * keepalives is dropped twice, and neighbor is lost. That leads to
+ * funny churn in the tube testcases. TBD: Should the message loss
+ * chance be made net_sim parameter instead so individual test cases
+ * could test this? */
+
+#if MESSAGE_LOSS_CHANCE > 0
+#define MESSAGE_WAS_LOST (random() % 100 <= MESSAGE_LOSS_CHANCE)
+#else
+#define MESSAGE_WAS_LOST false
+#endif /* MESSAGE_LOSS_CHANCE > 0 */
+#endif /* !MESSAGE_LOSS_CHANCE */
 
 typedef struct {
   struct list_head lh;
@@ -286,6 +305,7 @@ bool net_sim_is_busy(net_sim s)
 void net_sim_local_tlv_callback(dncp_subscriber sub,
                                 struct tlv_attr *tlv, bool add)
 {
+#if MESSAGE_LOSS_CHANCE < 1
   net_node n = container_of(sub, net_node_s, debug_subscriber);
   net_sim s = n->s;
 
@@ -294,6 +314,7 @@ void net_sim_local_tlv_callback(dncp_subscriber sub,
       sput_fail_unless(!add || !s->add_neighbor_is_error, "undesired add");
       sput_fail_unless(add || !s->del_neighbor_is_error, "undesired del");
     }
+#endif /* MESSAGE_LOSS_CHANCE < 1 */
 }
 
 hncp net_sim_find_hncp(net_sim s, const char *name)
@@ -724,6 +745,8 @@ static void
 _send_one(net_sim s, void *buf, size_t len, dncp_ep_i sl, dncp_ep_i dl,
           const struct sockaddr_in6 *dst)
 {
+  if (MESSAGE_WAS_LOST)
+    return;
   net_msg m = calloc(1, sizeof(*m));
   hncp_ep shl = dncp_ep_get_ext_data(&sl->conf);
 

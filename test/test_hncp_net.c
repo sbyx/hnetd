@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Jun  8 09:53:53 2015 mstenber
- * Edit time:     642 min
+ * Last modified: Wed Jun 10 10:39:00 2015 mstenber
+ * Edit time:     643 min
  *
  */
 
@@ -224,8 +224,10 @@ static void raw_bird14(net_sim s)
 
   /* Then, simulate network for a while, keeping eye on how often it's
    * NOT converged. */
+#if MESSAGE_LOSS_CHANCE < 1
   int converged_count = s->converged_count;
   int not_converged_count = s->not_converged_count;
+#endif /* MESSAGE_LOSS_CHANCE < 1 */
 #if L_LEVEL >= LOG_NOTICE
   int sent_unicast = s->sent_unicast;
 #endif /* L_LEVEL >= LOG_NOTICE */
@@ -244,10 +246,12 @@ static void raw_bird14(net_sim s)
   sput_fail_unless((s->sent_unicast - sent_unicast) < 50,
                    "did not send (many) unicasts");
 #endif /* 0 */
+#if MESSAGE_LOSS_CHANCE < 1
   sput_fail_unless(s->not_converged_count == not_converged_count,
                    "should stay converged");
   sput_fail_unless(s->converged_count > converged_count,
                    "converged count rising");
+#endif /* MESSAGE_LOSS_CHANCE < 1 */
 
   L_DEBUG("assume unstable topology");
   s->add_neighbor_is_error = false;
@@ -370,14 +374,14 @@ static void raw_hncp_tube(net_sim s, unsigned int num_nodes, bool no_conflicts)
       char buf[128];
 
       sprintf(buf, "node%d", i);
+#if MESSAGE_LOSS_CHANCE < 1
       dncp n = net_sim_find_dncp(s, buf);
       /* <= 5 may have up to 2 drops; >5 0. */
       if (i <= 5)
         sput_fail_unless(n->num_neighbor_dropped <= 2, "few drops (start)");
       else
         sput_fail_unless(!n->num_neighbor_dropped, "no drops (end)");
-
-
+#endif /* MESSAGE_LOSS_CHANCE < 1 */
     }
 
   net_sim_uninit(s);

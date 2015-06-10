@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Tue Jun  9 12:21:34 2015 mstenber
- * Edit time:     592 min
+ * Last modified: Wed Jun 10 10:32:02 2015 mstenber
+ * Edit time:     595 min
  *
  */
 
@@ -56,10 +56,14 @@ static void trickle_send_nocheck(dncp_trickle t, dncp_ep_i l, dncp_neighbor ne)
 {
   t->num_sent++;
   t->last_sent = dncp_time(l->dncp);
-  /* TBD: Is sending full network state always advisable in unicast mode?
-   * I hope so.. */
+  int maximum_size = ne ? 0 : l->conf.maximum_multicast_size;
+  /* If Trickle has backed off, just send the short form, i.e. at most
+   * just endpoint id + network state. */
+  if (t->i != l->conf.trickle_imin)
+    maximum_size = 4 + sizeof(dncp_t_ep_id_s) + DNCP_NI_LEN(l->dncp)
+      + 4 + DNCP_HASH_LEN(l->dncp);
   dncp_ep_i_send_network_state(l, NULL, ne ? &ne->last_sa6: NULL,
-                               ne ? 0 : l->conf.maximum_multicast_size, false);
+                               maximum_size, false);
 }
 
 static void trickle_send(dncp_trickle t, dncp_ep_i l, dncp_neighbor ne)
