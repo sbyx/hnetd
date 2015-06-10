@@ -98,7 +98,7 @@ static int hd_node_externals_dp(struct tlv_attr *tlv, struct blob_buf *b)
 	int ret = -1;
 	struct blob_buf dps = {NULL, NULL, 0, NULL};
 
-	if (!(dh = dncp_tlv_dp(tlv)))
+	if (!(dh = hncp_tlv_dp(tlv)))
 		return -1;
 	memset(&p, 0, sizeof(p));
 	p.plen = dh->prefix_length_bits;
@@ -187,7 +187,7 @@ static int hd_node_prefix(struct tlv_attr *tlv, struct blob_buf *b)
 	int plen;
 	struct prefix p;
 
-	if (!(ah = dncp_tlv_ap(tlv)))
+	if (!(ah = hncp_tlv_ap(tlv)))
 		return -1;
 	memset(&p, 0, sizeof(p));
 	p.plen = ah->prefix_length_bits;

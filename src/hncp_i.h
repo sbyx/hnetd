@@ -22,7 +22,7 @@
 #include "prefix_utils.h"
 
 static inline hncp_t_assigned_prefix_header
-dncp_tlv_ap(const struct tlv_attr *a)
+hncp_tlv_ap(const struct tlv_attr *a)
 {
   hncp_t_assigned_prefix_header ah;
 
@@ -36,7 +36,7 @@ dncp_tlv_ap(const struct tlv_attr *a)
 }
 
 static inline hncp_t_delegated_prefix_header
-dncp_tlv_dp(const struct tlv_attr *a)
+hncp_tlv_dp(const struct tlv_attr *a)
 {
   hncp_t_delegated_prefix_header dh;
 
@@ -50,7 +50,7 @@ dncp_tlv_dp(const struct tlv_attr *a)
 }
 
 static inline hncp_t_router_address
-dncp_tlv_router_address(const struct tlv_attr *a)
+hncp_tlv_ra(const struct tlv_attr *a)
 {
   if (tlv_id(a) != HNCP_T_ROUTER_ADDRESS
       || tlv_len(a) != sizeof(hncp_t_router_address_s))

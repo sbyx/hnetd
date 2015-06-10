@@ -165,7 +165,7 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 					struct tlv_attr *na;
 					hncp_t_router_address ra;
 					dncp_node_for_each_tlv_with_type(n, na, HNCP_T_ROUTER_ADDRESS) {
-						if ((ra = dncp_tlv_router_address(na))) {
+						if ((ra = hncp_tlv_ra(na))) {
 							if (ra->ep_id == ne->neighbor_ep_id &&
 							    IN6_IS_ADDR_V4MAPPED(&ra->address)) {
 								hn->bfs.next_hop4 = &ra->address;
@@ -187,7 +187,7 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 			} else if (tlv_id(a) == HNCP_T_EXTERNAL_CONNECTION) {
 				hncp_t_delegated_prefix_header dp;
 				tlv_for_each_attr(a2, a)
-					if ((dp = dncp_tlv_dp(a2))) {
+					if ((dp = hncp_tlv_dp(a2))) {
 						struct prefix from = { .plen = dp->prefix_length_bits };
 						size_t plen = ROUND_BITS_TO_BYTES(from.plen);
 						unsigned int flen = ROUND_BYTES_TO_4BYTES(sizeof(*dp) +
@@ -242,7 +242,7 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 							}
 						}
 					}
-			} else if ((ap = dncp_tlv_ap(a)) && c != dncp->own_node && hc->bfs.ifname) {
+			} else if ((ap = hncp_tlv_ap(a)) && c != dncp->own_node && hc->bfs.ifname) {
 				dncp_ep_i link = dncp_find_link_by_name(dncp, hc->bfs.ifname, false);
 				struct iface *ifo = link ? iface_get(hc->bfs.ifname) : NULL;
 				// Skip routes for prefixes on connected links

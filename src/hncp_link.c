@@ -73,7 +73,7 @@ static void calculate_link(struct hncp_link *l, const char *ifname, bool enable)
 		struct tlv_attr *c;
 		dncp_node_for_each_tlv(l->dncp->own_node, c) {
 			dncp_t_neighbor ne = dncp_tlv_neighbor(l->dncp, c);
-			hncp_t_assigned_prefix_header ah = dncp_tlv_ap(c);
+			hncp_t_assigned_prefix_header ah = hncp_tlv_ap(c);
 
 			if (ne && ne->ep_id == link->ep_id)
 				++peercnt;

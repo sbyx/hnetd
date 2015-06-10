@@ -1218,7 +1218,7 @@ static void hpa_update_ap_tlv(hncp_pa hpa, dncp_node n,
 		struct tlv_attr *tlv, bool add)
 {
 	hncp_t_assigned_prefix_header ah;
-	if (!(ah = dncp_tlv_ap(tlv)))
+	if (!(ah = hncp_tlv_ap(tlv)))
 		return;
 
 	struct prefix p = { .plen = 0 };
@@ -1265,7 +1265,7 @@ static void hpa_update_ra_tlv(hncp_pa hpa, dncp_node n,
 		struct tlv_attr *tlv, bool add)
 {
 	hncp_t_router_address ra;
-	if (!(ra = dncp_tlv_router_address(tlv)))
+	if (!(ra = hncp_tlv_ra(tlv)))
 		return;
 
 	hpa_advp hap;
@@ -1335,7 +1335,7 @@ static void hpa_update_dp_tlv(hncp_pa hpa, dncp_node n,
 	size_t dhcpv6_len = 0;
 	hncp_t_delegated_prefix_header dh;
 
-	if (!(dh = dncp_tlv_dp(tlv)))
+	if (!(dh = hncp_tlv_dp(tlv)))
 		return;
 
 	valid = _remote_rel_to_local_abs(dncp_node_get_origination_time(n),

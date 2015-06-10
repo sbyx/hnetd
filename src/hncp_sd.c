@@ -254,7 +254,7 @@ static void _publish_ddzs(hncp_sd sd)
       a = dncp_tlv_get_attr(t);
       if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX)
         {
-          if (!(ah = dncp_tlv_ap(a)))
+          if (!(ah = hncp_tlv_ap(a)))
             {
               L_ERR("invalid ap _published by us: %s", TLV_REPR(a));
               return;
@@ -510,7 +510,7 @@ bool hncp_sd_reconfigure_pcp(hncp_sd sd)
             {
               dncp_node_for_each_tlv(n, a)
                 {
-                  if ((ra = dncp_tlv_router_address(a)))
+                  if ((ra = hncp_tlv_ra(a)))
                     {
                       if (IN6_IS_ADDR_V4MAPPED(&ra->address))
                         a4 = &ra->address;
@@ -528,7 +528,7 @@ bool hncp_sd_reconfigure_pcp(hncp_sd sd)
             }
           tlv_for_each_attr(a, tlv)
             {
-              if ((dp = dncp_tlv_dp(a)))
+              if ((dp = hncp_tlv_dp(a)))
                 {
                   struct prefix p = {.plen = dp->prefix_length_bits };
                   bmemcpy(&p.prefix, dp->prefix_data, 0, p.plen);
