@@ -6,7 +6,7 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 20:50:57 2015 mstenber
- * Last modified: Tue May 26 06:20:37 2015 mstenber
+ * Last modified: Thu Jun 11 09:50:54 2015 mstenber
  * Edit time:     4 min
  *
  */
@@ -30,4 +30,3 @@ hncp_multicast hncp_multicast_create(hncp h, hncp_multicast_params p);
 void hncp_multicast_destroy(hncp_multicast m);
 
 bool hncp_multicast_busy(hncp_multicast m);
-

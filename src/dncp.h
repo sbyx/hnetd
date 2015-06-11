@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Tue Jun  9 12:21:16 2015 mstenber
- * Edit time:     259 min
+ * Last modified: Thu Jun 11 09:48:33 2015 mstenber
+ * Edit time:     261 min
  *
  */
 
@@ -230,10 +230,10 @@ bool dncp_ep_has_highest_id(dncp_ep ep);
  */
 dncp_ep dncp_ep_get_next(dncp_ep ep);
 
-#define dncp_for_each_ep(o, ep) \
+#define dncp_for_each_ep(o, ep)                                         \
   for (ep = dncp_get_first_ep(o) ; ep ; ep = dncp_ep_get_next(ep))
 
-#define dncp_for_each_enabled_ep(o, ep) \
+#define dncp_for_each_enabled_ep(o, ep)                 \
   dncp_for_each_ep(o, ep) if (dncp_ep_is_enabled(ep))
 
 /* Various accessors */
@@ -389,7 +389,7 @@ dncp_tlv dncp_get_next_tlv(dncp o, dncp_tlv tlv);
 
 struct tlv_attr *dncp_tlv_get_attr(dncp_tlv tlv);
 
-#define dncp_for_each_tlv(o, t)                         \
+#define dncp_for_each_tlv(o, t)                                         \
   for (t = dncp_get_first_tlv(o) ; t ; t = dncp_get_next_tlv(o, t))
 
 #define dncp_for_each_tlv_safe(o, t, t2)                                \

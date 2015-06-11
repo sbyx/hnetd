@@ -6,7 +6,7 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Jun  8 11:36:06 2015 mstenber
- * Last modified: Mon Jun  8 13:52:28 2015 mstenber
+ * Last modified: Thu Jun 11 09:49:51 2015 mstenber
  * Edit time:     5 min
  *
  */
@@ -49,16 +49,16 @@ dncp_tlv_trust_verdict(const struct tlv_attr *a)
   return (dncp_t_trust_verdict)tlv_data(a);
 }
 
-#define dncp_update_number_gt(a,b) \
+#define dncp_update_number_gt(a,b)                              \
   ((((uint32_t)(a) - (uint32_t)(b)) & ((uint32_t)1<<31)) != 0)
 
 #define dncp_update_tlv(o, t, d, dlen, elen, is_add)    \
-do {                                                    \
-  if (is_add)                                           \
-    dncp_add_tlv(o, t, d, dlen, elen);                  \
-  else                                                  \
-    dncp_remove_tlv_matching(o, t, d, dlen);            \
- } while(0)
+  do {                                                  \
+    if (is_add)                                         \
+      dncp_add_tlv(o, t, d, dlen, elen);                \
+    else                                                \
+      dncp_remove_tlv_matching(o, t, d, dlen);          \
+  } while(0)
 
 static inline void sockaddr_in6_set(struct sockaddr_in6 *sin6,
                                     struct in6_addr *a6,

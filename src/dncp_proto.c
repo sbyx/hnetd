@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Jun  3 17:40:14 2015 mstenber
+ * Last modified: Thu Jun 11 09:49:13 2015 mstenber
  * Edit time:     996 min
  *
  */
@@ -65,7 +65,7 @@ static bool _push_network_state_tlv(struct tlv_buf *tb, dncp o)
 }
 
 static bool _push_ep_id_tlv(struct tlv_buf *tb, dncp_ep_i l,
-                              struct sockaddr_in6 *dst, bool always_ep_id)
+                            struct sockaddr_in6 *dst, bool always_ep_id)
 {
   dncp_t_ep_id lid;
   int tl = DNCP_NI_LEN(l->dncp) + sizeof(*lid);
@@ -555,7 +555,7 @@ void dncp_ext_readable(dncp o)
 
       if (dst
           && !(flags & DNCP_RECV_FLAG_SRC_LINKLOCAL) !=
-             !(flags & DNCP_RECV_FLAG_DST_LINKLOCAL))
+          !(flags & DNCP_RECV_FLAG_DST_LINKLOCAL))
         {
           L_DEBUG("ignoring linklocal <> non-linklocal traffic");
           continue;

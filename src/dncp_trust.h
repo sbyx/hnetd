@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Nov 20 11:46:44 2014 mstenber
- * Last modified: Tue May 26 08:42:01 2015 mstenber
+ * Last modified: Thu Jun 11 09:49:42 2015 mstenber
  * Edit time:     34 min
  *
  */
@@ -54,7 +54,7 @@ void dncp_trust_set(dncp_trust t, const dncp_sha256 h,
  */
 dncp_sha256 dncp_trust_next_hash(dncp_trust t, const dncp_sha256 prev);
 
-#define dncp_trust_for_each_hash(t, h) \
+#define dncp_trust_for_each_hash(t, h)                                  \
   for (h = dncp_trust_next_hash(t, NULL) ; h ; h = dncp_trust_next_hash(t, h))
 
 /*

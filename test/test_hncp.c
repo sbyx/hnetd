@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Mon Jun  8 09:53:21 2015 mstenber
+ * Last modified: Thu Jun 11 09:54:45 2015 mstenber
  * Edit time:     100 min
  *
  */
@@ -58,12 +58,12 @@ struct blob_attr;
 
 int platform_rpc_register(struct platform_rpc_method *m)
 {
-	return 0;
+  return 0;
 }
 
 int platform_rpc_cli(const char *method, struct blob_attr *in)
 {
-	return 0;
+  return 0;
 }
 
 /**************************************************************** Test cases */

@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Tue Jun  2 14:02:05 2015 mstenber
+ * Last modified: Thu Jun 11 09:50:10 2015 mstenber
  * Edit time:     339 min
  *
  */
@@ -851,15 +851,15 @@ ssize_t dtls_send(dtls d,
 }
 
 #define R1(where, x) do                                 \
-{                                                       \
-  int rv = (x);                                         \
-  if (rv != 1)                                          \
     {                                                   \
-      L_ERR("error in %s:%d/%d", where, rv, errno);     \
-      _drain_errors();                                  \
-      goto fail;                                        \
-    }                                                   \
-} while(0)
+      int rv = (x);                                     \
+      if (rv != 1)                                      \
+        {                                               \
+          L_ERR("error in %s:%d/%d", where, rv, errno); \
+          _drain_errors();                              \
+          goto fail;                                    \
+        }                                               \
+    } while(0)
 
 static int _verify_cert_cb(int ok, X509_STORE_CTX *ctx)
 {

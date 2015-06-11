@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Wed Jun 10 10:40:39 2015 mstenber
+ * Last modified: Thu Jun 11 09:54:14 2015 mstenber
  * Edit time:     400 min
  *
  */
@@ -181,7 +181,7 @@ int net_sim_dncp_tlv_type_count(dncp o, int type)
 
   dncp_for_each_node(o, n)
     dncp_node_for_each_tlv_with_type(n, a, type)
-      c++;
+    c++;
   L_DEBUG("net_sim_dncp_tlv_type_count %d -> %d", type, c);
   return c;
 }
@@ -821,7 +821,8 @@ _send(dncp_ext ext, dncp_ep ep,
   if (is_multicast)
     {
       s->sent_multicast++;
-      sput_fail_unless(len <= HNCP_MAXIMUM_MULTICAST_SIZE, "not too long multicast");
+      sput_fail_unless(len <= HNCP_MAXIMUM_MULTICAST_SIZE,
+                       "not too long multicast");
     }
   else
     {

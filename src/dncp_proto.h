@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Mon Jun  8 11:56:29 2015 mstenber
+ * Last modified: Thu Jun 11 09:49:19 2015 mstenber
  * Edit time:     125 min
  *
  */
@@ -100,5 +100,3 @@ typedef struct __packed {
   dncp_sha256_s sha256_hash;
   char cname[];
 } dncp_t_trust_verdict_s, *dncp_t_trust_verdict;
-
-

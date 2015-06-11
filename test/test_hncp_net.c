@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Wed Jun 10 10:39:00 2015 mstenber
+ * Last modified: Thu Jun 11 09:55:06 2015 mstenber
  * Edit time:     643 min
  *
  */
@@ -103,10 +103,10 @@ void hncp_two(void)
               !net_sim_is_converged(&s) ||
               net_sim_dncp_tlv_type_count(n2, HNCP_T_EXTERNAL_CONNECTION) != 1);
 
-#define dncp_ifname_has_highest_id(o, ifname) \
+#define dncp_ifname_has_highest_id(o, ifname)                   \
   dncp_ep_has_highest_id(dncp_find_ep_by_name(o, ifname))
 
-    /* Prefix assignment should just happen. Magic(?). */
+  /* Prefix assignment should just happen. Magic(?). */
   /* Wait for prefixes to be assigned too */
   if (net_sim_dncp_tlv_type_count(n2, HNCP_T_ASSIGNED_PREFIX) != 2)
     SIM_WHILE(&s, 10000,
@@ -442,8 +442,8 @@ void hncp_tube_medium_nc(void)
                    "fastish convergence");
 }
 
-  /* Intentionally pick a number that is >> IPv6 MTU / node state
-   * (network state hash etc left as rounding errors) */
+/* Intentionally pick a number that is >> IPv6 MTU / node state
+ * (network state hash etc left as rounding errors) */
 #define BIG_TUBE_LENGTH 3000 / NS_LENGTH
 
 void hncp_tube_beyond_multicast_nc(void)
@@ -484,7 +484,7 @@ dncp_ep_i net_sim_dncp_find_link_n(dncp o, int i)
   return net_sim_dncp_find_link_by_name(o, n);
 }
 
-#define MONKEY_MASK(p1,r2,p2) \
+#define MONKEY_MASK(p1,r2,p2)                                           \
   (1 << (r2 + (p1 + p2 * NUM_MONKEY_PORTS) * NUM_MONKEY_ROUTERS))
 
 #define MONKEY_CONNECTED(ma,r1,p1,r2,p2)        \
@@ -498,7 +498,7 @@ dncp_ep_i net_sim_dncp_find_link_n(dncp o, int i)
 
 
 dncp_t_neighbor monkey_neighbor(dncp n1, dncp_ep_i l1,
-                                          dncp n2, dncp_ep_i l2)
+                                dncp n2, dncp_ep_i l2)
 {
   dncp_t_neighbor nh;
   struct tlv_attr *a;
@@ -698,9 +698,9 @@ void hncp_random_monkey(void)
       bool is_connect = random() % 2;
 
       if (is_connect)
-          MONKEY_SET_CONNECTED(ma, r1, p1, r2, p2);
+        MONKEY_SET_CONNECTED(ma, r1, p1, r2, p2);
       else
-          MONKEY_CLEAR_CONNECTED(ma, r1, p1, r2, p2);
+        MONKEY_CLEAR_CONNECTED(ma, r1, p1, r2, p2);
       net_sim_set_connected(l1, l2, is_connect);
 
       monkey_debug_print(&s, ma);

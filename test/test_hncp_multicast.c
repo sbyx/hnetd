@@ -6,7 +6,7 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Feb 23 21:40:08 2015 mstenber
- * Last modified: Mon Jun  8 09:53:48 2015 mstenber
+ * Last modified: Thu Jun 11 09:54:57 2015 mstenber
  * Edit time:     21 min
  *
  */
@@ -53,11 +53,11 @@ void test_hncp_multicast_base(bool aa_enabled)
                   0
   };
   for (int i = 0 ; types[i] ; i++)
-  {
-    int c = net_sim_dncp_tlv_type_count(n1, types[i]);
-    L_DEBUG("tlv #%d: %d", types[i], c);
-    sput_fail_unless(c == (aa_enabled ? 1 : 0), "1 of tlv");
-  }
+    {
+      int c = net_sim_dncp_tlv_type_count(n1, types[i]);
+      L_DEBUG("tlv #%d: %d", types[i], c);
+      sput_fail_unless(c == (aa_enabled ? 1 : 0), "1 of tlv");
+    }
   net_sim_uninit(&s);
 }
 

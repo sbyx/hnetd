@@ -6,7 +6,7 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Thu Feb 26 13:40:08 2015 mstenber
- * Last modified: Thu Feb 26 13:56:27 2015 mstenber
+ * Last modified: Thu Jun 11 09:53:46 2015 mstenber
  * Edit time:     3 min
  *
  */
@@ -48,7 +48,8 @@ void iface_all_set_dhcp_send(const void *dhcpv6_data, size_t dhcpv6_len,
 {
 }
 
-int iface_get_preferred_address(struct in6_addr *foo, bool v4, const char *ifname)
+int iface_get_preferred_address(struct in6_addr *foo, bool v4,
+                                const char *ifname)
 {
   inet_pton(AF_INET6, (v4) ? "::ffff:192.168.1.2" : "2001:db8::f00:1", foo);
   return 0;
@@ -69,9 +70,9 @@ void iface_unregister_user(struct iface_user *user)
 }
 
 #define net_sim_node_iface_callback(n, cb_name, ...)    \
-do {                                                    \
-  struct iface_user *u;                                 \
-  list_for_each_entry(u, &n->iface_users, head)         \
-  if (u->cb_name)                                       \
-    u->cb_name(u, __VA_ARGS__);                         \
-} while(0)
+  do {                                                  \
+    struct iface_user *u;                               \
+    list_for_each_entry(u, &n->iface_users, head)       \
+      if (u->cb_name)                                   \
+        u->cb_name(u, __VA_ARGS__);                     \
+  } while(0)

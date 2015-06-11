@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Tue Jun  9 12:19:33 2015 mstenber
+ * Last modified: Thu Jun 11 09:48:44 2015 mstenber
  * Edit time:     381 min
  *
  */
@@ -325,7 +325,7 @@ static inline dncp_node_id
 dncp_tlv_get_node_id(dncp o, void *tlv)
 {
   return dncp_tlv_get_node_id2(tlv,
-                                       o->ext->conf.node_id_length);
+                               o->ext->conf.node_id_length);
 }
 
 static inline dncp_node

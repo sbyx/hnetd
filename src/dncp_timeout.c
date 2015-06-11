@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Jun 10 16:53:07 2015 mstenber
- * Edit time:     595 min
+ * Last modified: Thu Jun 11 09:49:29 2015 mstenber
+ * Edit time:     596 min
  *
  */
 
@@ -173,23 +173,23 @@ static void dncp_prune(dncp o)
 #if L_LEVEL >= 8
 
 #define SET_NEXT(_v, reason)                                    \
-do {                                                            \
-  hnetd_time_t v = _v;                                          \
-  if (v)                                                        \
-    {                                                           \
-      if (v < now)                                              \
-        {                                                       \
-          L_DEBUG("invalid value due to %s: %d in past",        \
-                  reason, (int)(now-v));                        \
-        }                                                       \
-      else if (!next || next > v)                               \
-        {                                                       \
-          L_DEBUG("setting next to %ld due to %s",              \
-                  (long int)(v-now), reason);                   \
-          next = v;                                             \
-        }                                                       \
-    }                                                           \
- } while(0)
+  do {                                                          \
+    hnetd_time_t v = _v;                                        \
+    if (v)                                                      \
+      {                                                         \
+        if (v < now)                                            \
+          {                                                     \
+            L_DEBUG("invalid value due to %s: %d in past",      \
+                    reason, (int)(now-v));                      \
+          }                                                     \
+        else if (!next || next > v)                             \
+          {                                                     \
+            L_DEBUG("setting next to %ld due to %s",            \
+                    (long int)(v-now), reason);                 \
+            next = v;                                           \
+          }                                                     \
+      }                                                         \
+  } while(0)
 
 #else
 
@@ -423,7 +423,7 @@ void dncp_ext_ep_ready(dncp_ep ep, bool enabled)
   L_DEBUG("dncp_ext_ep_ready %s %s %s", ep->ifname, enabled ? "+" : "-",
           !l->enabled == !enabled ? "(redundant)" : "");
   if (!l->enabled == !enabled)
-      return;
+    return;
   l->enabled = enabled;
   if (enabled)
     {

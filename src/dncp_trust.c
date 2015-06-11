@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Nov 19 17:34:25 2014 mstenber
- * Last modified: Mon Jun  8 13:39:33 2015 mstenber
+ * Last modified: Thu Jun 11 09:49:36 2015 mstenber
  * Edit time:     243 min
  *
  */
@@ -584,8 +584,8 @@ int _rpc_set_timer(struct platform_rpc_method *m, const struct blob_attr *in, __
   struct blob_attr *a;
   unsigned rem;
   blobmsg_for_each_attr(a, in, rem)
-	  if (blobmsg_type(a) == BLOBMSG_TYPE_INT32 && !strcmp(blobmsg_name(a), "timer_value"))
-		  seconds = blobmsg_get_u32(a);
+    if (blobmsg_type(a) == BLOBMSG_TYPE_INT32 && !strcmp(blobmsg_name(a), "timer_value"))
+      seconds = blobmsg_get_u32(a);
 
   t->trust_until = hnetd_time() + seconds * HNETD_TIME_PER_SECOND;
   return 0;
@@ -600,14 +600,14 @@ int _rpc_set(struct platform_rpc_method *m, const struct blob_attr *in, __unused
   struct blob_attr *a;
   unsigned rem;
   blobmsg_for_each_attr(a, in, rem) {
-	  if (blobmsg_type(a) == BLOBMSG_TYPE_STRING && !strcmp(blobmsg_name(a), "hash"))
-		  hs = blobmsg_get_string(a);
-	  else if (blobmsg_type(a) == BLOBMSG_TYPE_INT32 && !strcmp(blobmsg_name(a), "verdict"))
-		  verdict = blobmsg_get_u32(a);
+    if (blobmsg_type(a) == BLOBMSG_TYPE_STRING && !strcmp(blobmsg_name(a), "hash"))
+      hs = blobmsg_get_string(a);
+    else if (blobmsg_type(a) == BLOBMSG_TYPE_INT32 && !strcmp(blobmsg_name(a), "verdict"))
+      verdict = blobmsg_get_u32(a);
   }
 
   if (!hs || verdict < 0)
-	  return -EINVAL;
+    return -EINVAL;
 
   dncp_sha256_s h;
   if (unhexlify((uint8_t *)&h, sizeof(h), hs) == sizeof(h)) {
@@ -727,55 +727,55 @@ dncp_trust_verdict dncp_trust_verdict_from_string(const char *verdict)
 
 static int _trust_help(const char *prog)
 {
-	fprintf(stderr, "usage:\n");
-	fprintf(stderr, "\t%s\n", prog);
-	fprintf(stderr, "\t\tlist\n");
-	fprintf(stderr, "\t\tset <hash> <value>\n");
-	fprintf(stderr, "\t\tset-trust-timer <value-in-seconds>\n");
-	return 1;
+  fprintf(stderr, "usage:\n");
+  fprintf(stderr, "\t%s\n", prog);
+  fprintf(stderr, "\t\tlist\n");
+  fprintf(stderr, "\t\tset <hash> <value>\n");
+  fprintf(stderr, "\t\tset-trust-timer <value-in-seconds>\n");
+  return 1;
 }
 
 static int _trust_multicall(__unused struct platform_rpc_method *m, int argc, char* const argv[])
 {
-	struct blob_buf b = {NULL, NULL, 0, NULL};
+  struct blob_buf b = {NULL, NULL, 0, NULL};
 
-	if (argc > 1) {
-		if (strcmp(argv[1], "list") == 0) {
-			return platform_rpc_cli("trust-list", NULL);
-		} else if (strcmp(argv[1], "set") == 0) {
-			if (argc != 4)
-				return _trust_help(argv[0]);
-			blob_buf_init(&b, 0);
-			blobmsg_add_string(&b, "hash", argv[2]);
-			int verdict = dncp_trust_verdict_from_string(argv[3]);
-			if (verdict < 0) {
-				L_ERR("invalid verdict: %s"
-				      " (try e.g. 0, 1 or returned values)",
-				      argv[3]);
-			} else {
-				blobmsg_add_u32(&b, "verdict", verdict);
-				return platform_rpc_cli("trust-set", b.head);
-			}
-		} else if (strcmp(argv[1], "set-trust-timer") == 0) {
-			if (argc == 3) {
-				int value = atoi(argv[2]);
-				if (value >= 0) {
-					blob_buf_init(&b, 0);
-					blobmsg_add_u32(&b, "timer_value", value);
-					return platform_rpc_cli("trust-set-timer", b.head);
-				}
-			}
-		}
-	}
+  if (argc > 1) {
+    if (strcmp(argv[1], "list") == 0) {
+      return platform_rpc_cli("trust-list", NULL);
+    } else if (strcmp(argv[1], "set") == 0) {
+      if (argc != 4)
+        return _trust_help(argv[0]);
+      blob_buf_init(&b, 0);
+      blobmsg_add_string(&b, "hash", argv[2]);
+      int verdict = dncp_trust_verdict_from_string(argv[3]);
+      if (verdict < 0) {
+        L_ERR("invalid verdict: %s"
+              " (try e.g. 0, 1 or returned values)",
+              argv[3]);
+      } else {
+        blobmsg_add_u32(&b, "verdict", verdict);
+        return platform_rpc_cli("trust-set", b.head);
+      }
+    } else if (strcmp(argv[1], "set-trust-timer") == 0) {
+      if (argc == 3) {
+        int value = atoi(argv[2]);
+        if (value >= 0) {
+          blob_buf_init(&b, 0);
+          blobmsg_add_u32(&b, "timer_value", value);
+          return platform_rpc_cli("trust-set-timer", b.head);
+        }
+      }
+    }
+  }
 
-	return _trust_help(argv[0]);
+  return _trust_help(argv[0]);
 }
 
 static struct platform_rpc_method _trust_multicall_method = {
-	.name = "trust", .main = _trust_multicall
+  .name = "trust", .main = _trust_multicall
 };
 
 void dncp_trust_register_multicall(void)
 {
-	platform_rpc_register(&_trust_multicall_method);
+  platform_rpc_register(&_trust_multicall_method);
 }

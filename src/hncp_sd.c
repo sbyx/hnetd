@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Wed Jun 10 11:15:54 2015 mstenber
+ * Last modified: Thu Jun 11 09:51:03 2015 mstenber
  * Edit time:     657 min
  *
  */
@@ -189,7 +189,7 @@ const char *_rewrite_ifname(const char *src, char *dst)
   return dst;
 }
 
-#define REWRITE_IFNAME(ifname) \
+#define REWRITE_IFNAME(ifname)                          \
   _rewrite_ifname(ifname, alloca(strlen(ifname)+1))
 
 void hncp_sd_dump_link_fqdn(hncp_sd sd, dncp_ep ep,
@@ -351,8 +351,8 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
             hncp_t_dns_router_name rname = tlv_data(a);
             md5_hash(rname, tlv_len(a), &ctx);
             fprintf(f, "host-record=%.*s.%s,%s\n",
-              namelen, rname->name, sd->hncp->domain,
-              ADDR_REPR(&rname->address));
+                    namelen, rname->name, sd->hncp->domain,
+                    ADDR_REPR(&rname->address));
           }
       }
 
@@ -376,11 +376,11 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
           md5_hash(a, tlv_raw_len(a), &ctx);
 
           if (dh->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE)
-              fprintf(f, "ptr-record=b._dns-sd._udp.%s,%s\n",
-                      sd->hncp->domain, buf);
+            fprintf(f, "ptr-record=b._dns-sd._udp.%s,%s\n",
+                    sd->hncp->domain, buf);
           if (dh->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_LEGACY_BROWSE)
-              fprintf(f, "ptr-record=lb._dns-sd._udp.%s,%s\n",
-                      sd->hncp->domain, buf);
+            fprintf(f, "ptr-record=lb._dns-sd._udp.%s,%s\n",
+                    sd->hncp->domain, buf);
           if (dncp_node_is_self(n))
             {
               server = LOCAL_OHP_ADDRESS;
@@ -600,11 +600,11 @@ _set_router_name(hncp_sd sd)
 
   if (!iface_get_preferred_address(&rname->address, false, NULL))
     dncp_add_tlv(sd->dncp, HNCP_T_DNS_ROUTER_NAME,
-      rname, sizeof(*rname) + namelen, 0);
+                 rname, sizeof(*rname) + namelen, 0);
 
   if (!iface_get_preferred_address(&rname->address, true, NULL))
     dncp_add_tlv(sd->dncp, HNCP_T_DNS_ROUTER_NAME,
-      rname, sizeof(*rname) + namelen, 0);
+                 rname, sizeof(*rname) + namelen, 0);
 }
 
 static bool

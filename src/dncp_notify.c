@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 10:04:30 2013 mstenber
- * Last modified: Mon Jun  8 11:47:25 2015 mstenber
+ * Last modified: Thu Jun 11 09:48:56 2015 mstenber
  * Edit time:     61 min
  *
  */
@@ -17,17 +17,17 @@
 
 #include "dncp_i.h"
 
-#define HANDLE_ENUM_CB(o, s, x)                                 \
-do {                                                            \
-  x(o, s, DNCP_CALLBACK_LOCAL_TLV, local_tlv_change_callback);  \
-  x(o, s, DNCP_CALLBACK_REPUBLISH, republish_callback);         \
-  x(o, s, DNCP_CALLBACK_TLV, tlv_change_callback);              \
-  x(o, s, DNCP_CALLBACK_NODE, node_change_callback);            \
-  x(o, s, DNCP_CALLBACK_LINK, link_change_callback);            \
-  x(o, s, DNCP_CALLBACK_SOCKET_MSG, msg_received_callback);     \
- } while(0)
+#define HANDLE_ENUM_CB(o, s, x)                                         \
+  do {                                                                  \
+    x(o, s, DNCP_CALLBACK_LOCAL_TLV, local_tlv_change_callback);        \
+    x(o, s, DNCP_CALLBACK_REPUBLISH, republish_callback);               \
+    x(o, s, DNCP_CALLBACK_TLV, tlv_change_callback);                    \
+    x(o, s, DNCP_CALLBACK_NODE, node_change_callback);                  \
+    x(o, s, DNCP_CALLBACK_LINK, link_change_callback);                  \
+    x(o, s, DNCP_CALLBACK_SOCKET_MSG, msg_received_callback);           \
+  } while(0)
 
-#define HANDLE_ADD(o, s, e, cb) \
+#define HANDLE_ADD(o, s, e, cb)                         \
   if (s->cb) list_add(&s->lhs[e], &o->subscribers[e])
 
 void dncp_subscribe(dncp o, dncp_subscriber s)
@@ -52,7 +52,7 @@ void dncp_subscribe(dncp o, dncp_subscriber s)
     }
 }
 
-#define HANDLE_DEL(o, s, e, cb) \
+#define HANDLE_DEL(o, s, e, cb)                 \
   if (s->cb) list_del(&s->lhs[e])
 
 void dncp_unsubscribe(dncp o, dncp_subscriber s)
@@ -224,7 +224,8 @@ void dncp_notify_subscribers_about_to_republish_tlvs(dncp_node n)
 }
 
 
-void dncp_notify_subscribers_link_changed(dncp_ep ep, enum dncp_subscriber_event event)
+void dncp_notify_subscribers_link_changed(dncp_ep ep,
+                                          enum dncp_subscriber_event event)
 {
   dncp_subscriber s;
   dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
