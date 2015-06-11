@@ -294,7 +294,9 @@ static void _publish_ddzs(hncp_sd sd)
     {
       bool found = false;
 
-      /* TBD - should we care about enabled flag, or not? */
+      if (!dncp_ep_is_enabled(ep))
+        continue;
+
       dncp_for_each_tlv(sd->dncp, t)
         {
           a = dncp_tlv_get_attr(t);
