@@ -291,6 +291,7 @@ int udp46_send_iovec(udp46 s,
           struct in_pktinfo *ipi = (struct in_pktinfo *)CMSG_DATA(cmsg);
           memset(ipi, 0, sizeof(*ipi));
           MAPPED_IN6_ADDR_TO_IN_ADDR(&src->sin6_addr, &ipi->ipi_spec_dst);
+          ipi->ipi_ifindex = src->sin6_scope_id;
           cmsg->cmsg_type = IP_PKTINFO;
           cmsg->cmsg_len = CMSG_LEN(sizeof(*ipi));
 #else
