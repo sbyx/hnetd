@@ -220,6 +220,7 @@ ssize_t udp46_recv(udp46 s,
       {
         struct in_pktinfo *ipi = (struct in_pktinfo *) CMSG_DATA(h);
         IN_ADDR_TO_MAPPED_IN6_ADDR(&ipi->ipi_addr, &dst->sin6_addr);
+        dst->sin6_scope_id = ipi->ipi_ifindex;
         return l;
       }
 #endif /* IP_PKTINFO */
