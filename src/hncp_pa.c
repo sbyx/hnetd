@@ -998,6 +998,8 @@ static void hpa_iface_set_pa_enabled(hncp_pa hpa, hpa_iface i, bool enabled)
 			enabled?"Enabling":"Disabling", i->ifname);
 
 	if(i->pa_enabled) {
+		i->ep = dncp_find_ep_by_name(hpa->dncp, i->ifname);
+
 		pa_rule_add(&hpa->pa, &i->pa_adopt.rule);
 		pa_rule_add(&hpa->pa, &i->pa_rand.rule);
 		pa_rule_add(&hpa->pa, &i->pa_override.rule);
@@ -1530,42 +1532,6 @@ static void hpa_ap_publish(hncp_pa hpa, struct pa_ldp *ldp)
 	ldp->userdata[PA_LDP_U_HNCP_TLV] =
 			dncp_add_tlv(hpa->dncp, HNCP_T_ASSIGNED_PREFIX, &s.h,
 			sizeof(s.h) + ROUND_BITS_TO_BYTES(ldp->plen), 0);
-}
-
-static void hpa_dncp_link_change_cb(dncp_subscriber s, dncp_ep ep,
-                                    __unused enum dncp_subscriber_event event)
-{
-	/*
-	 * What was not, previously, a dncp link, has become one.
-	 * Advertised Prefixes and Addresses must now be advertised
-	 * as on a DNCP link (Change link ID).
-	 */
-	hncp_pa hpa = container_of(s, hncp_pa_s, dncp_user);
-	hpa_iface i = hpa_iface_goc(hpa, ep->ifname, dncp_ep_is_enabled(ep));
-	if (!dncp_ep_is_enabled(ep))
-		ep = NULL;
-
-	if(!i || i->ep == ep) //No need for i, or link did not change
-		return;
-
-	i->ep = ep;
-	if(i && i->pa_enabled) {
-		//Change IID of all Published Prefixes on that link
-		struct pa_ldp *ldp;
-		pa_for_each_ldp_in_link(&i->pal, ldp) {
-			if(ldp->published) {
-				hpa_ap_unpublish(hpa, ldp);
-				hpa_ap_publish(hpa, ldp);
-			}
-		}
-		//Change IID of all Published Addresses on that link
-		pa_for_each_ldp_in_link(&i->aal, ldp) {
-			if(ldp->published) {
-				hpa_aa_unpublish(hpa, ldp);
-				hpa_aa_publish(hpa, ldp);
-			}
-		}
-	}
 }
 
 /******** PA Callbacks *******/
@@ -2107,7 +2073,7 @@ hncp_pa hncp_pa_create(hncp hncp, struct hncp_link *hncp_link)
 	//Subscribe to DNCP callbacks
 	hp->hncp = hncp;
 	hp->dncp = hncp->dncp;
-	hp->dncp_user.link_change_callback = hpa_dncp_link_change_cb;
+	hp->dncp_user.link_change_callback = NULL;
 	hp->dncp_user.local_tlv_change_callback = NULL; //hpa_dncp_local_tlv_change_cb;
 	hp->dncp_user.node_change_callback = hpa_dncp_node_change_cb;
 	hp->dncp_user.republish_callback = hpa_dncp_republish_cb;
