@@ -6,7 +6,7 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Tue Jan 13 15:03:51 2015 mstenber
- * Last modified: Mon Jun  8 09:52:18 2015 mstenber
+ * Last modified: Mon Jun 15 13:17:54 2015 mstenber
  * Edit time:     50 min
  *
  */
@@ -52,8 +52,8 @@ void dncp_trust_base()
   dncp_trust dt2 = dncp_trust_create(d2, NULL);
 
 
-  dncp_ep_i l1 = net_sim_dncp_find_link_by_name(d1, "down");
-  dncp_ep_i l2 = net_sim_dncp_find_link_by_name(d2, "up");
+  dncp_ep l1 = net_sim_dncp_find_ep_by_name(d1, "down");
+  dncp_ep l2 = net_sim_dncp_find_ep_by_name(d2, "up");
   net_sim_set_connected(l1, l2, true);
   net_sim_set_connected(l2, l1, true);
 

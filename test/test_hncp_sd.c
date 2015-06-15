@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Mon Jun  8 14:16:39 2015 mstenber
- * Edit time:     161 min
+ * Last modified: Mon Jun 15 13:43:43 2015 mstenber
+ * Edit time:     162 min
  *
  */
 
@@ -73,7 +73,7 @@ do {                                                            \
   } s = {                                                       \
     .h = { .flags = 0,                                          \
            .prefix_length_bits = p.plen,                        \
-           .ep_id = l->ep_id},                                  \
+           .ep_id = dncp_ep_get_id(l)},                         \
     .addr = p.prefix                                            \
   };                                                            \
   dncp_add_tlv(n, HNCP_T_ASSIGNED_PREFIX, &s.h,                 \
@@ -90,7 +90,7 @@ void test_hncp_sd(void)
 {
   net_sim_s s;
   dncp n1, n2, n3;
-  dncp_ep_i l1, l2, l21 __unused, l3;
+  dncp_ep l1, l2, l21 __unused, l3;
   net_node node1, node2, node3;
   struct prefix p;
   bool rv;
@@ -101,8 +101,8 @@ void test_hncp_sd(void)
   net_sim_init(&s);
   n1 = net_sim_find_dncp(&s, "n1");
   node1 = net_sim_node_from_dncp(n1);
-  l1 = net_sim_dncp_find_link_by_name(n1, "eth0.0");
-  strcpy(l1->conf.dnsname, "label");
+  l1 = net_sim_dncp_find_ep_by_name(n1, "eth0.0");
+  strcpy(l1->dnsname, "label");
   sput_fail_unless(prefix_pton("2001:dead:beef::/64", &p.prefix, &p.plen), "prefix_pton");
 
   tlv_ap_update(n1, p, l1, false, 0, true);
@@ -118,9 +118,9 @@ void test_hncp_sd(void)
 
   n2 = net_sim_find_dncp(&s, "n2");
   node2 = net_sim_node_from_dncp(n2);
-  l2 = net_sim_dncp_find_link_by_name(n2, "eth1");
-  l21 = net_sim_dncp_find_link_by_name(n2, "eth2");
-  strcpy(l21->conf.dnsname, "fqdn.");
+  l2 = net_sim_dncp_find_ep_by_name(n2, "eth1");
+  l21 = net_sim_dncp_find_ep_by_name(n2, "eth2");
+  strcpy(l21->dnsname, "fqdn.");
   net_sim_set_connected(l1, l2, true);
   net_sim_set_connected(l2, l1, true);
 
@@ -235,7 +235,7 @@ void test_hncp_sd(void)
   node3->sd = hncp_sd_create(&node3->h, &sd_params, NULL);
   current_iface_users = NULL;
   s.disable_sd = false;
-  l3 = net_sim_dncp_find_link_by_name(n3, "eth0");
+  l3 = net_sim_dncp_find_ep_by_name(n3, "eth0");
   net_sim_set_connected(l2, l3, true);
   net_sim_set_connected(l3, l2, true);
   SIM_WHILE(&s, 1000, net_sim_is_busy(&s) || !net_sim_is_converged(&s));
