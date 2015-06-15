@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Thu Jun 11 09:51:03 2015 mstenber
- * Edit time:     657 min
+ * Last modified: Mon Jun 15 10:56:41 2015 mstenber
+ * Edit time:     669 min
  *
  */
 
@@ -250,7 +250,6 @@ static void _publish_ddz(hncp_sd sd, dncp_ep ep,
 
 static void _publish_ddzs(hncp_sd sd)
 {
-  struct tlv_attr *a;
   dncp_tlv t;
   hncp_t_assigned_prefix_header ah;
   dncp_ep ep;
@@ -261,55 +260,44 @@ static void _publish_ddzs(hncp_sd sd)
   L_DEBUG("_publish_ddzs");
   (void)dncp_remove_tlvs_by_type(sd->dncp, HNCP_T_DNS_DELEGATED_ZONE);
   dncp_for_each_tlv(sd->dncp, t)
-    {
-      a = dncp_tlv_get_attr(t);
-      if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX)
-        {
-          if (!(ah = hncp_tlv_ap(a)))
-            {
-              L_ERR("invalid ap _published by us: %s", TLV_REPR(a));
-              return;
-            }
+    if ((ah = hncp_tlv_ap(dncp_tlv_get_attr(t))))
+      {
+        ep = dncp_find_ep_by_id(sd->dncp, ah->ep_id);
 
-          ep = dncp_find_ep_by_id(sd->dncp, ah->ep_id);
-          if (!ep)
-            {
-              /* May be just race condition or whatever, silently ignore */
-              continue;
-            }
+        /* May be just race condition or whatever, silently ignore */
+        if (!ep)
+          continue;
 
-          struct prefix p;
-          p.plen = ah->prefix_length_bits;
-          memcpy(&p.prefix, ah->prefix_data, ROUND_BITS_TO_BYTES(p.plen));
+        struct prefix p;
+        p.plen = ah->prefix_length_bits;
+        memcpy(&p.prefix, ah->prefix_data, ROUND_BITS_TO_BYTES(p.plen));
 
-          _publish_ddz(sd, ep, HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE
-                       | HNCP_T_DNS_DELEGATED_ZONE_FLAG_LEGACY_BROWSE, &p);
-        }
-    }
+        _publish_ddz(sd, ep, HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE
+                     | HNCP_T_DNS_DELEGATED_ZONE_FLAG_LEGACY_BROWSE, &p);
+      }
 
-  /* Second stage: publish DDZs ALSO for any other interface, but if
+  /*
+   * Second stage: publish DDZs ALSO for any other interface, but if
    * and only if there is no corresponding DDZ already (which has
-   * browse flag set -> duplicate detection would not work). */
-  dncp_for_each_ep(sd->dncp, ep)
+   * browse flag set -> duplicate detection would not work).
+   *
+   * This applies to cases where someone else publishes AP, but we
+   * want old names to work (or 'all' names to work, depending on your
+   * point of view).
+   */
+  dncp_for_each_enabled_ep(sd->dncp, ep)
     {
       bool found = false;
 
-      if (!dncp_ep_is_enabled(ep))
-        continue;
-
       dncp_for_each_tlv(sd->dncp, t)
-        {
-          a = dncp_tlv_get_attr(t);
-          if (tlv_id(a) == HNCP_T_ASSIGNED_PREFIX)
-            {
-              ah = tlv_data(a);
-              if (ah->ep_id == dncp_ep_get_id(ep))
-                {
-                  found = true;
-                  break;
-                }
-            }
-        }
+        if ((ah = hncp_tlv_ap(dncp_tlv_get_attr(t))))
+          {
+            if (ah->ep_id == dncp_ep_get_id(ep))
+              {
+                found = true;
+                break;
+              }
+          }
       if (found)
         continue;
       /* Not found -> produce forward DDZ only. */
