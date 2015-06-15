@@ -1,4 +1,7 @@
 /*
+ * Copyright (c) 2015 Cisco Systems, Inc.
+ */
+/*
  * Author: Pierre Pfister
  *
  * Just a bunch of defined prefixes, interface names and DHCP_DATA that can be used for tests.

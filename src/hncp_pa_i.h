@@ -1,7 +1,7 @@
 /*
  * Author: Pierre Pfister <pierre pfister@darou.fr>
  *
- * Copyright (c) 2014 Cisco Systems, Inc.
+ * Copyright (c) 2014-2015 Cisco Systems, Inc.
  *
  * hncp_pa.c is too big.
  * hncp_pa_i.h and .c contain structure manipulation functions (dummy things).

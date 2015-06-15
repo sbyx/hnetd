@@ -1,3 +1,6 @@
+/*
+ * Copyright (c) 2015 Cisco Systems, Inc.
+ */
 #include "sput.h"
 
 #include "pa_filters.c"

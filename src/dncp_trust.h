@@ -3,7 +3,7 @@
  *
  * Author: Markus Stenberg <markus stenberg@iki.fi>
  *
- * Copyright (c) 2014 cisco Systems, Inc.
+ * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Thu Nov 20 11:46:44 2014 mstenber
  * Last modified: Thu Jun 11 09:49:42 2015 mstenber
@@ -77,7 +77,7 @@ const char *dncp_trust_verdict_to_string(dncp_trust_verdict verdict);
 void dncp_trust_register_multicall(void);
 
 /*
- * Callback that can be used with dtls_set_unknown_cert_callback
+ * Callback that can be used with dtls_set_unknown_cert_cb
  * (context must be dncp_trust instance)
  */
-bool dncp_trust_dtls_unknown_callback(dtls d, dtls_cert cert, void *context);
+bool dncp_trust_dtls_unknown_cb(dtls d, dtls_cert cert, void *context);

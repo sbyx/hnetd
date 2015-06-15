@@ -30,17 +30,17 @@ void test_hncp_multicast_base(bool aa_enabled)
    * one with (fake) DP must publish it's address. */
   net_sim_s s;
   dncp n1, n2;
-  dncp_ep_i l1, l2;
+  dncp_ep l1, l2;
 
   net_sim_init(&s);
   s.disable_link_auto_address = !aa_enabled;
   n1 = net_sim_find_dncp(&s, "n1");
-  l1 = net_sim_dncp_find_link_by_name(n1, "eth0");
+  l1 = net_sim_dncp_find_ep_by_name(n1, "eth0");
   /* Fake external connection */
   dncp_add_tlv(n1, HNCP_T_EXTERNAL_CONNECTION, 0, 0, 0);
 
   n2 = net_sim_find_dncp(&s, "n2");
-  l2 = net_sim_dncp_find_link_by_name(n2, "eth0");
+  l2 = net_sim_dncp_find_ep_by_name(n2, "eth0");
 
   net_sim_set_connected(l1, l2, true);
   net_sim_set_connected(l2, l1, true);

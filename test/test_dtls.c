@@ -3,7 +3,7 @@
  *
  * Author: Markus Stenberg <markus stenberg@iki.fi>
  *
- * Copyright (c) 2014 cisco Systems, Inc.
+ * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:31 2014 mstenber
  * Last modified: Mon Jun  8 09:52:33 2015 mstenber
@@ -138,9 +138,9 @@ static void _test_basic_i(int i)
 {
   int pbase = 49000 + i * 2;
   d1 = dtls_create(pbase);
-  dtls_set_readable_callback(d1, _readable_cb, NULL);
+  dtls_set_readable_cb(d1, _readable_cb, NULL);
   d2 = dtls_create(pbase+1);
-  dtls_set_readable_callback(d2, _readable_cb, NULL);
+  dtls_set_readable_cb(d2, _readable_cb, NULL);
   int rv;
   char *msg = "foo";
   struct uloop_timeout t = { .cb = _timeout };
@@ -243,9 +243,9 @@ static void _test_unknown_i(int i)
 
   int pbase = 49100 + i * 2;
   d1 = dtls_create(pbase);
-  dtls_set_unknown_cert_callback(d1, _unknown_cb, NULL);
+  dtls_set_unknown_cert_cb(d1, _unknown_cb, NULL);
   d2 = dtls_create(pbase+1);
-  dtls_set_unknown_cert_callback(d2, _unknown_cb, NULL);
+  dtls_set_unknown_cert_cb(d2, _unknown_cb, NULL);
   int rv;
   char *msg = "foo";
   struct uloop_timeout t = { .cb = _timeout };

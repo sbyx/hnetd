@@ -3,7 +3,7 @@
  *
  * Author: Markus Stenberg <mstenber@cisco.com>
  *
- * Copyright (c) 2013 cisco Systems, Inc.
+ * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
  * Last modified: Thu Jun 11 09:49:13 2015 mstenber
@@ -544,7 +544,7 @@ void dncp_ext_readable(dncp o)
       /* This is raw */
       list_for_each_entry(s, &o->subscribers[DNCP_CALLBACK_SOCKET_MSG],
                           lhs[DNCP_CALLBACK_SOCKET_MSG])
-        s->msg_received_callback(s, ep, src, dst, flags, msg);
+        s->msg_received_cb(s, ep, src, dst, flags, msg);
 
       if (!l->enabled)
         {

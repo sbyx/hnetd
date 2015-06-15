@@ -3,11 +3,11 @@
  *
  * Author: Markus Stenberg <mstenber@cisco.com>
  *
- * Copyright (c) 2013 cisco Systems, Inc.
+ * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Thu Jun 11 09:54:45 2015 mstenber
- * Edit time:     100 min
+ * Last modified: Mon Jun 15 13:28:28 2015 mstenber
+ * Edit time:     103 min
  *
  */
 
@@ -140,7 +140,7 @@ void hncp_int(void)
   hncp_s s;
   dncp o;
   dncp_node n;
-  dncp_ep_i l;
+  dncp_ep ep;
 
   hncp_init(&s);
   o = hncp_get_dncp(&s);
@@ -176,11 +176,9 @@ void hncp_int(void)
 
   /* Similarly, links */
   const char *ifn = "foo";
-  l = dncp_find_link_by_name(o, ifn, false);
-  sput_fail_unless(!l, "dncp_find_link_by_name w/ create=false => none");
-  l = dncp_find_link_by_name(o, ifn, true);
-  sput_fail_unless(l, "dncp_find_link_by_name w/ create=false => !none");
-  sput_fail_unless(dncp_find_link_by_name(o, ifn, false) == l, "still same");
+  ep = dncp_find_ep_by_name(o, ifn);
+  sput_fail_unless(ep, "dncp_find_ep_by_name => !none");
+  sput_fail_unless(dncp_find_ep_by_name(o, ifn) == ep, "still same");
 
   /* but on second run, no */
   dncp_ext_timeout(o);

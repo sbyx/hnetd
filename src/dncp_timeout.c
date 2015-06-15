@@ -3,11 +3,11 @@
  *
  * Author: Markus Stenberg <mstenber@cisco.com>
  *
- * Copyright (c) 2013 cisco Systems, Inc.
+ * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu Jun 11 09:49:29 2015 mstenber
- * Edit time:     596 min
+ * Last modified: Mon Jun 15 12:53:25 2015 mstenber
+ * Edit time:     597 min
  *
  */
 
@@ -392,15 +392,18 @@ void dncp_ext_timeout(dncp o)
 
 void dncp_trickle_reset(dncp o)
 {
-  dncp_ep_i l;
+  dncp_ep ep;
 
   /* This function does not care if Trickle is actually in per-peer or
    * per-link mode here; resetting the variables does nothing harmful
    * anyway. */
 
   /* Per-link */
-  vlist_for_each_element(&o->links, l, in_links)
-    trickle_set_i(&l->trickle, l, l->conf.trickle_imin);
+  dncp_for_each_ep(o, ep)
+    {
+      dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
+      trickle_set_i(&l->trickle, l, ep->trickle_imin);
+    }
 
   /* Per-peer */
   dncp_t_neighbor ne;
@@ -445,5 +448,5 @@ void dncp_ext_ep_ready(dncp_ep ep, bool enabled)
       /* kill TLV, if any */
       ep_i_set_keepalive_interval(l, DNCP_KEEPALIVE_INTERVAL(o));
     }
-  dncp_notify_subscribers_link_changed(ep, enabled ? DNCP_EVENT_ADD : DNCP_EVENT_REMOVE);
+  dncp_notify_subscribers_ep_changed(ep, enabled ? DNCP_EVENT_ADD : DNCP_EVENT_REMOVE);
 }

@@ -1,3 +1,6 @@
+/*
+ * Copyright (c) 2015 Cisco Systems, Inc.
+ */
 #include "hnetd.h"
 #include "sput.h"
 #include <stdio.h>

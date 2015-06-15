@@ -1,7 +1,7 @@
 /*
  * Author: Pierre Pfister <pierre pfister@darou.fr>
  *
- * Copyright (c) 2014 Cisco Systems, Inc.
+ * Copyright (c) 2014-2015 Cisco Systems, Inc.
  *
  * hncp_pa.c implements prefix and address assignment.
  * It is a particularly intricate piece of code due to its multiple
@@ -2073,11 +2073,11 @@ hncp_pa hncp_pa_create(hncp hncp, struct hncp_link *hncp_link)
 	//Subscribe to DNCP callbacks
 	hp->hncp = hncp;
 	hp->dncp = hncp->dncp;
-	hp->dncp_user.link_change_callback = NULL;
-	hp->dncp_user.local_tlv_change_callback = NULL; //hpa_dncp_local_tlv_change_cb;
-	hp->dncp_user.node_change_callback = hpa_dncp_node_change_cb;
-	hp->dncp_user.republish_callback = hpa_dncp_republish_cb;
-	hp->dncp_user.tlv_change_callback = hpa_dncp_tlv_change_cb;
+	hp->dncp_user.ep_change_cb = NULL;
+	hp->dncp_user.local_tlv_change_cb = NULL; //hpa_dncp_local_tlv_change_cb;
+	hp->dncp_user.node_change_cb = hpa_dncp_node_change_cb;
+	hp->dncp_user.republish_cb = hpa_dncp_republish_cb;
+	hp->dncp_user.tlv_change_cb = hpa_dncp_tlv_change_cb;
 	dncp_subscribe(hp->dncp, &hp->dncp_user);
 
 	//Subscribe to HNCP Link

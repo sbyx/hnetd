@@ -3,10 +3,10 @@
  *
  * Author: Markus Stenberg <mstenber@cisco.com>
  *
- * Copyright (c) 2014 cisco Systems, Inc.
+ * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 19 17:34:25 2014 mstenber
- * Last modified: Thu Jun 11 09:49:36 2015 mstenber
+ * Last modified: Mon Jun 15 12:59:06 2015 mstenber
  * Edit time:     243 min
  *
  */
@@ -542,8 +542,8 @@ void dncp_trust_request_verdict(dncp_trust t,
     }
 }
 
-bool dncp_trust_dtls_unknown_callback(dtls d __unused,
-                                      dtls_cert cert, void *context)
+bool dncp_trust_dtls_unknown_cb(dtls d __unused,
+                                dtls_cert cert, void *context)
 {
   dncp_trust t = context;
   int verdict = _trust_get_cert_verdict(t, cert);
@@ -630,7 +630,7 @@ dncp_trust dncp_trust_create(dncp o, const char *filename)
   vlist_init(&t->tree, _compare_trust_node, _update_trust_node);
   t->tree.keep_old = true;
   t->timeout.cb = _trust_write_cb;
-  t->subscriber.tlv_change_callback = _tlv_cb;
+  t->subscriber.tlv_change_cb = _tlv_cb;
   if (filename)
     t->filename = strdup(filename);
   _trust_load(t);

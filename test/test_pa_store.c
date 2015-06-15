@@ -1,3 +1,6 @@
+/*
+ * Copyright (c) 2015 Cisco Systems, Inc.
+ */
 #include <sys/stat.h>
 
 #include <stdio.h>

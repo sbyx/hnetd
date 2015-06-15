@@ -3,10 +3,10 @@
  *
  * Author: Markus Stenberg <markus stenberg@iki.fi>
  *
- * Copyright (c) 2013 cisco Systems, Inc.
+ * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Wed Dec  4 10:04:30 2013 mstenber
- * Last modified: Thu Jun 11 09:48:56 2015 mstenber
+ * Last modified: Mon Jun 15 12:40:19 2015 mstenber
  * Edit time:     61 min
  *
  */
@@ -17,14 +17,14 @@
 
 #include "dncp_i.h"
 
-#define HANDLE_ENUM_CB(o, s, x)                                         \
-  do {                                                                  \
-    x(o, s, DNCP_CALLBACK_LOCAL_TLV, local_tlv_change_callback);        \
-    x(o, s, DNCP_CALLBACK_REPUBLISH, republish_callback);               \
-    x(o, s, DNCP_CALLBACK_TLV, tlv_change_callback);                    \
-    x(o, s, DNCP_CALLBACK_NODE, node_change_callback);                  \
-    x(o, s, DNCP_CALLBACK_LINK, link_change_callback);                  \
-    x(o, s, DNCP_CALLBACK_SOCKET_MSG, msg_received_callback);           \
+#define HANDLE_ENUM_CB(o, s, x)                                 \
+  do {                                                          \
+    x(o, s, DNCP_CALLBACK_LOCAL_TLV, local_tlv_change_cb);      \
+    x(o, s, DNCP_CALLBACK_REPUBLISH, republish_cb);             \
+    x(o, s, DNCP_CALLBACK_TLV, tlv_change_cb);                  \
+    x(o, s, DNCP_CALLBACK_NODE, node_change_cb);                \
+    x(o, s, DNCP_CALLBACK_EP, ep_change_cb);                    \
+    x(o, s, DNCP_CALLBACK_SOCKET_MSG, msg_received_cb);         \
   } while(0)
 
 #define HANDLE_ADD(o, s, e, cb)                         \
@@ -37,18 +37,18 @@ void dncp_subscribe(dncp o, dncp_subscriber s)
   struct tlv_attr *a;
 
   HANDLE_ENUM_CB(o, s, HANDLE_ADD);
-  if (s->local_tlv_change_callback)
+  if (s->local_tlv_change_cb)
     {
       vlist_for_each_element(&o->tlvs, t, in_tlvs)
-        s->local_tlv_change_callback(s, &t->tlv, true);
+        s->local_tlv_change_cb(s, &t->tlv, true);
     }
   dncp_for_each_node(o, n)
     {
-      if (s->node_change_callback)
-        s->node_change_callback(s, n, true);
-      if (s->tlv_change_callback)
+      if (s->node_change_cb)
+        s->node_change_cb(s, n, true);
+      if (s->tlv_change_cb)
         dncp_node_for_each_tlv(n, a)
-          s->tlv_change_callback(s, n, a, true);
+          s->tlv_change_cb(s, n, a, true);
     }
 }
 
@@ -61,18 +61,18 @@ void dncp_unsubscribe(dncp o, dncp_subscriber s)
   struct tlv_attr *a;
   dncp_tlv t;
 
-  if (s->local_tlv_change_callback)
+  if (s->local_tlv_change_cb)
     {
       vlist_for_each_element(&o->tlvs, t, in_tlvs)
-        s->local_tlv_change_callback(s, &t->tlv, false);
+        s->local_tlv_change_cb(s, &t->tlv, false);
     }
   dncp_for_each_node(o, n)
     {
-      if (s->tlv_change_callback)
+      if (s->tlv_change_cb)
         dncp_node_for_each_tlv(n, a)
-          s->tlv_change_callback(s, n, a, false);
-      if (s->node_change_callback)
-        s->node_change_callback(s, n, false);
+          s->tlv_change_cb(s, n, a, false);
+      if (s->node_change_cb)
+        s->node_change_cb(s, n, false);
     }
   HANDLE_ENUM_CB(o, s, HANDLE_DEL);
 }
@@ -130,7 +130,7 @@ void dncp_notify_subscribers_tlvs_changed(dncp_node n,
           else if (r < 0)
             {
               /* op < np => op deleted */
-              s->tlv_change_callback(s, n, op, false);
+              s->tlv_change_cb(s, n, op, false);
               op = tlv_next(op);
             }
           else
@@ -144,7 +144,7 @@ void dncp_notify_subscribers_tlvs_changed(dncp_node n,
       while (op)
         {
           ENSURE_VALID(op, old_end);
-          s->tlv_change_callback(s, n, op, false);
+          s->tlv_change_cb(s, n, op, false);
           op = tlv_next(op);
         }
     }
@@ -179,7 +179,7 @@ void dncp_notify_subscribers_tlvs_changed(dncp_node n,
           else
             {
               /* op > np => np added */
-              s->tlv_change_callback(s, n, np, true);
+              s->tlv_change_cb(s, n, np, true);
               np = tlv_next(np);
             }
         }
@@ -187,7 +187,7 @@ void dncp_notify_subscribers_tlvs_changed(dncp_node n,
       while (np)
         {
           ENSURE_VALID(np, new_end);
-          s->tlv_change_callback(s, n, np, true);
+          s->tlv_change_cb(s, n, np, true);
           np = tlv_next(np);
         }
     }
@@ -201,7 +201,7 @@ void dncp_notify_subscribers_local_tlv_changed(dncp o,
 
   list_for_each_entry(s, &o->subscribers[DNCP_CALLBACK_LOCAL_TLV],
                       lhs[DNCP_CALLBACK_LOCAL_TLV])
-    s->local_tlv_change_callback(s, a, add);
+    s->local_tlv_change_cb(s, a, add);
 }
 
 void dncp_notify_subscribers_node_changed(dncp_node n, bool add)
@@ -210,7 +210,7 @@ void dncp_notify_subscribers_node_changed(dncp_node n, bool add)
 
   list_for_each_entry(s, &n->dncp->subscribers[DNCP_CALLBACK_NODE],
                       lhs[DNCP_CALLBACK_NODE])
-    s->node_change_callback(s, n, add);
+    s->node_change_cb(s, n, add);
 }
 
 
@@ -220,17 +220,17 @@ void dncp_notify_subscribers_about_to_republish_tlvs(dncp_node n)
 
   list_for_each_entry(s, &n->dncp->subscribers[DNCP_CALLBACK_REPUBLISH],
                       lhs[DNCP_CALLBACK_REPUBLISH])
-    s->republish_callback(s);
+    s->republish_cb(s);
 }
 
 
-void dncp_notify_subscribers_link_changed(dncp_ep ep,
-                                          enum dncp_subscriber_event event)
+void dncp_notify_subscribers_ep_changed(dncp_ep ep,
+                                        enum dncp_subscriber_event event)
 {
   dncp_subscriber s;
   dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
 
-  list_for_each_entry(s, &l->dncp->subscribers[DNCP_CALLBACK_LINK],
-                      lhs[DNCP_CALLBACK_LINK])
-    s->link_change_callback(s, &l->conf, event);
+  list_for_each_entry(s, &l->dncp->subscribers[DNCP_CALLBACK_EP],
+                      lhs[DNCP_CALLBACK_EP])
+    s->ep_change_cb(s, &l->conf, event);
 }

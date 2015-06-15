@@ -3,11 +3,11 @@
  *
  * Author: Markus Stenberg <markus stenberg@iki.fi>
  *
- * Copyright (c) 2013 cisco Systems, Inc.
+ * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu Jun 11 09:54:14 2015 mstenber
- * Edit time:     400 min
+ * Last modified: Mon Jun 15 13:26:32 2015 mstenber
+ * Edit time:     413 min
  *
  */
 
@@ -82,7 +82,7 @@
 typedef struct {
   struct list_head lh;
 
-  dncp_ep_i l;
+  dncp_ep ep;
   struct sockaddr_in6 src, dst;
   void *buf;
   size_t len;
@@ -94,8 +94,8 @@ typedef struct {
 typedef struct {
   struct list_head lh;
 
-  dncp_ep_i src;
-  dncp_ep_i dst;
+  dncp_ep src;
+  dncp_ep dst;
 } net_neigh_s, *net_neigh;
 
 typedef struct {
@@ -302,7 +302,7 @@ bool net_sim_is_busy(net_sim s)
 
 
 
-void net_sim_local_tlv_callback(dncp_subscriber sub,
+void net_sim_local_tlv_cb(dncp_subscriber sub,
                                 struct tlv_attr *tlv, bool add)
 {
 #if MESSAGE_LOSS_CHANCE < 1
@@ -336,9 +336,9 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
   n->s = s;
   r = hncp_init(&n->h);
   if (s->fake_unicast)
-    n->h.ext.conf.per_link.unicast_only = true;
+    n->h.ext.conf.per_ep.unicast_only = true;
   if (s->fake_unicast_is_reliable_stream)
-    n->h.ext.conf.per_link.unicast_is_reliable_stream = true;
+    n->h.ext.conf.per_ep.unicast_is_reliable_stream = true;
   n->d = hncp_get_dncp(&n->h);
   sput_fail_unless(r, "hncp_init");
 
@@ -380,7 +380,7 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
     if (!(n->multicast = hncp_multicast_create(&n->h, &multicast_params)))
       return NULL;
 #endif /* !DISABLE_HNCP_MULTICAST */
-  n->debug_subscriber.local_tlv_change_callback = net_sim_local_tlv_callback;
+  n->debug_subscriber.local_tlv_change_cb = net_sim_local_tlv_cb;
   s->node_count++;
   dncp_subscribe(n->d, &n->debug_subscriber);
   L_DEBUG("[%s] %s net_sim_find_hncp added",
@@ -394,24 +394,17 @@ dncp net_sim_find_dncp(net_sim s, const char *name)
   return hncp_get_dncp(net_sim_find_hncp(s, name));
 }
 
-dncp_ep_i net_sim_dncp_find_link_by_name(dncp o, const char *name)
+dncp_ep net_sim_dncp_find_ep_by_name(dncp o, const char *name)
 {
   hncp h = container_of(o->ext, hncp_s, ext);
   net_node n = container_of(h, net_node_s, h);
-  dncp_ep_i l;
+  dncp_ep ep = dncp_find_ep_by_name(o, name);
 
-  l = dncp_find_link_by_name(o, name, false);
-
-  if (l && l->enabled)
-    return l;
-
-  dncp_ext_ep_ready(dncp_find_ep_by_name(o, name), true);
-
-  l = dncp_find_link_by_name(o, name, false);
-
-  sput_fail_unless(l, "dncp_find_link_by_name");
-  if (!l)
+  if (!ep)
     return NULL;
+
+  if (dncp_ep_is_enabled(ep))
+    return ep;
 
   /* Initialize the address - in rather ugly way. We just hash
    * ifname + xor that with our own hash. The result should be
@@ -419,7 +412,7 @@ dncp_ep_i net_sim_dncp_find_link_by_name(dncp o, const char *name)
   dncp_hash_s h1, h2;
   unsigned char buf[16];
   int i;
-  hncp_ep hep = dncp_ep_get_ext_data(&l->conf);
+  hncp_ep hep = dncp_ep_get_ext_data(ep);
 
   o->ext->cb.hash(name, strlen(name), &h1);
   o->ext->cb.hash(n->name, strlen(n->name), &h2);
@@ -439,39 +432,44 @@ dncp_ep_i net_sim_dncp_find_link_by_name(dncp o, const char *name)
    * officially set(!). Beautiful.. */
   /* Override the ep_id to be unique. */
   if (n->s->use_global_ep_ids)
-    l->ep_id = n->s->next_free_ep_id++;
+    {
+      dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
+      l->ep_id = n->s->next_free_ep_id++;
+    }
+
+  /* Note that the interface is ready. */
+  dncp_ext_ep_ready(ep, true);
 
   /* Give callback about it to iface users. */
-  net_sim_node_iface_callback(n, cb_intiface, name, true);
-  return l;
+  net_sim_node_iface_cb(n, cb_intiface, name, true);
+  return ep;
 }
 
-void net_sim_set_connected(dncp_ep_i l1, dncp_ep_i l2, bool enabled)
+void net_sim_set_connected(dncp_ep ep1, dncp_ep ep2, bool enabled)
 {
+  dncp_ep_i l1 = container_of(ep1, dncp_ep_i_s, conf);
   dncp o = l1->dncp;
   hncp h = container_of(o->ext, hncp_s, ext);
   net_node node = container_of(h, net_node_s, h);
   net_sim s = node->s;
   net_neigh n;
-  hncp_ep h1 = dncp_ep_get_ext_data(&l1->conf);
-  hncp_ep h2 = dncp_ep_get_ext_data(&l2->conf);
+  hncp_ep h1 = dncp_ep_get_ext_data(ep1);
+  hncp_ep h2 = dncp_ep_get_ext_data(ep2);
 
 
-  L_DEBUG("connection %p/%d -> %p/%d %s",
-          l1, l1->ep_id, l2, l2->ep_id, enabled ? "on" : "off");
   if (enabled)
     {
       /* Make sure it's not there already */
       list_for_each_entry(n, &s->neighs, lh)
-        if (n->src == l1 && n->dst == l2)
+        if (n->src == ep1 && n->dst == ep2)
           return;
 
       /* Add node */
       n = calloc(1, sizeof(*n));
 
       sput_fail_unless(n, "calloc net_neigh");
-      n->src = l1;
-      n->dst = l2;
+      n->src = ep1;
+      n->dst = ep2;
       list_add(&n->lh, &s->neighs);
     }
   else
@@ -479,7 +477,7 @@ void net_sim_set_connected(dncp_ep_i l1, dncp_ep_i l2, bool enabled)
       /* Remove node */
       list_for_each_entry(n, &s->neighs, lh)
         {
-          if (n->src == l1 && n->dst == l2)
+          if (n->src == ep1 && n->dst == ep2)
             {
               list_del(&n->lh);
               free(n);
@@ -507,7 +505,7 @@ void net_sim_remove_node(net_sim s, net_node node)
   /* Remove from neighbors */
   list_for_each_entry_safe(n, nn, &s->neighs, lh)
     {
-      if (n->src->dncp == o || n->dst->dncp == o)
+      if (dncp_ep_get_dncp(n->src) == o || dncp_ep_get_dncp(n->dst) == o)
         {
           list_del(&n->lh);
           free(n);
@@ -518,7 +516,7 @@ void net_sim_remove_node(net_sim s, net_node node)
   list_for_each_safe(p, pn, &s->messages)
     {
       net_msg m = container_of(p, net_msg_s, lh);
-      if (m->l->dncp == o)
+      if (dncp_ep_get_dncp(m->ep) == o)
         {
           uloop_timeout_cancel(&m->deliver_to);
           list_del(&m->lh);
@@ -609,14 +607,14 @@ void net_sim_populate_iface_next(net_node n)
 {
   static char dummybuf[12345];
   struct iface *i = (struct iface *)dummybuf;
-  dncp_ep_i l;
+  dncp_ep ep;
 
-  vlist_for_each_element(&n->d->links, l, in_links)
+  dncp_for_each_ep(n->d, ep)
     {
       *i = default_iface;
-      strcpy(i->ifname, l->conf.ifname);
+      strcpy(i->ifname, ep->ifname);
       smock_push("iface_next", i);
-      i = (void *)i + sizeof(struct iface) + strlen(l->conf.ifname) + 1;
+      i = (void *)i + sizeof(struct iface) + strlen(ep->ifname) + 1;
     }
   smock_push("iface_next", NULL);
 }
@@ -662,7 +660,7 @@ _recv(dncp_ext ext,
   list_for_each_entry(m, &node->messages, lh)
     {
       int s = m->len > len ? len : m->len;
-      *ep = dncp_find_ep_by_name(o, m->l->conf.ifname);
+      *ep = dncp_find_ep_by_name(o, m->ep->ifname);
       static struct sockaddr_in6 ret_src, ret_dst;
       ret_src = m->src;
       ret_dst = m->dst;
@@ -680,7 +678,7 @@ _recv(dncp_ext ext,
         f |= DNCP_RECV_FLAG_SRC_LINKLOCAL;
       *flags = f;
       memcpy(buf, m->buf, s);
-      L_DEBUG("%s/%s: _io_recv %d bytes", node->name, m->l->conf.ifname, s);
+      L_DEBUG("%s/%s: _io_recv %d bytes", node->name, m->ep->ifname, s);
       list_del(&m->lh);
       free(m->buf);
       free(m);
@@ -732,7 +730,7 @@ sanity_check_buf(dncp o, void *buf, size_t len, int depth)
 static void _message_deliver_cb(struct uloop_timeout *t)
 {
   net_msg m = container_of(t, net_msg_s, deliver_to);
-  dncp o = m->l->dncp;
+  dncp o = dncp_ep_get_dncp(m->ep);
   hncp h = container_of(o->ext, hncp_s, ext);
   net_node node = container_of(h, net_node_s, h);
 
@@ -742,16 +740,16 @@ static void _message_deliver_cb(struct uloop_timeout *t)
 }
 
 static void
-_send_one(net_sim s, void *buf, size_t len, dncp_ep_i sl, dncp_ep_i dl,
+_send_one(net_sim s, void *buf, size_t len, dncp_ep sl, dncp_ep dl,
           const struct sockaddr_in6 *dst)
 {
   if (MESSAGE_WAS_LOST)
     return;
   net_msg m = calloc(1, sizeof(*m));
-  hncp_ep shl = dncp_ep_get_ext_data(&sl->conf);
+  hncp_ep shl = dncp_ep_get_ext_data(sl);
 
   sput_fail_unless(m, "calloc neigh");
-  m->l = dl;
+  m->ep = dl;
   m->buf = malloc(len);
   sput_fail_unless(m->buf, "malloc buf");
   memcpy(m->buf, buf, len);
@@ -759,21 +757,21 @@ _send_one(net_sim s, void *buf, size_t len, dncp_ep_i sl, dncp_ep_i dl,
   memset(&m->src, 0, sizeof(m->src));
   m->src.sin6_family = AF_INET6;
   m->src.sin6_addr = shl->ipv6_address;
-  m->src.sin6_scope_id = dl->ep_id;
+  m->src.sin6_scope_id = dncp_ep_get_id(dl);
   m->dst = *dst;
   list_add(&m->lh, &s->messages);
   m->deliver_to.cb = _message_deliver_cb;
   uloop_timeout_set(&m->deliver_to, MESSAGE_PROPAGATION_DELAY);
 
 #if L_LEVEL >= 7
-  hncp h1 = container_of(sl->dncp->ext, hncp_s, ext);
+  hncp h1 = container_of(dncp_ep_get_dncp(sl)->ext, hncp_s, ext);
   net_node node1 = container_of(h1, net_node_s, h);
-  hncp h2 = container_of(dl->dncp->ext, hncp_s, ext);
+  hncp h2 = container_of(dncp_ep_get_dncp(dl)->ext, hncp_s, ext);
   net_node node2 = container_of(h2, net_node_s, h);
   bool is_multicast = memcmp(&dst->sin6_addr, &h1->multicast_address,
                              sizeof(h1->multicast_address)) == 0;
   L_DEBUG("_send_one: %s/%s -> %s/%s (%d bytes %s)",
-          node1->name, sl->conf.ifname, node2->name, dl->conf.ifname, (int)len,
+          node1->name, sl->ifname, node2->name, dl->ifname, (int)len,
           is_multicast ? "multicast" : "unicast");
 #endif /* L_LEVEL >= 7 */
 }
@@ -809,14 +807,12 @@ _send(dncp_ext ext, dncp_ep ep,
   sput_fail_unless(ep2, "sin6_scope_id lookup ok");
   sput_fail_unless(ep == ep2, "same returned ep");
 
-  dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
-
   bool is_multicast = memcmp(&dst->sin6_addr, &h->multicast_address,
                              sizeof(h->multicast_address)) == 0;
   net_neigh n;
 
-  L_DEBUG("_io_send: %s -> " SA6_F " (" DNCP_LINK_F ")",
-          is_multicast ? "multicast" : "unicast", SA6_D(dst), DNCP_LINK_D(l));
+  L_DEBUG("_io_send: %s -> " SA6_F,
+          is_multicast ? "multicast" : "unicast", SA6_D(dst));
   sanity_check_buf(o, buf, len, 0);
   if (is_multicast)
     {
@@ -832,8 +828,8 @@ _send(dncp_ext ext, dncp_ep ep,
   int sent = 0;
   list_for_each_entry(n, &s->neighs, lh)
     {
-      hncp_ep dhl = dncp_ep_get_ext_data(&n->dst->conf);
-      if (n->src == l
+      hncp_ep dhl = dncp_ep_get_ext_data(n->dst);
+      if (n->src == ep
           && (is_multicast
               || (memcmp(&dhl->ipv6_address, &dst->sin6_addr,
                          sizeof(dst->sin6_addr)) == 0)))
@@ -844,7 +840,7 @@ _send(dncp_ext ext, dncp_ep ep,
     }
   /* Loop at self too, just for fun. */
   if (is_multicast)
-    _send_one(s, buf, len, l, l, dst);
+    _send_one(s, buf, len, ep, ep, dst);
   else
     sput_fail_unless(sent <= 1, "unicast must hit only one target");
 }

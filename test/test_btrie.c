@@ -1,3 +1,6 @@
+/*
+ * Copyright (c) 2015 Cisco Systems, Inc.
+ */
 
 #ifndef typeof
 #define typeof __typeof
