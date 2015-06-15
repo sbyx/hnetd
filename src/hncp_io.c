@@ -257,7 +257,7 @@ static hnetd_time_t _get_time(dncp_ext ext __unused)
 
 #ifdef DTLS
 
-static void _dtls_readable_callback(dtls d __unused, void *context)
+static void _dtls_readable_cb(dtls d __unused, void *context)
 {
   hncp h = context;
 
@@ -268,12 +268,12 @@ static void _dtls_readable_callback(dtls d __unused, void *context)
 void hncp_set_dtls(hncp h, dtls d)
 {
   h->d = d;
-  dtls_set_readable_callback(d, _dtls_readable_callback, h);
+  dtls_set_readable_cb(d, _dtls_readable_cb, h);
 }
 
 #endif /* DTLS */
 
-void _udp46_readable_callback(udp46 s __unused, void *context)
+void _udp46_readable_cb(udp46 s __unused, void *context)
 {
   hncp h = context;
 
@@ -305,7 +305,7 @@ bool hncp_io_init(hncp h)
   h->ext.cb.get_hwaddrs = _get_hwaddrs;
   h->ext.cb.get_time = _get_time;
   h->ext.cb.schedule_timeout = _schedule_timeout;
-  udp46_set_readable_callback(h->u46_server, _udp46_readable_callback, h);
+  udp46_set_readable_cb(h->u46_server, _udp46_readable_cb, h);
   return true;
 }
 

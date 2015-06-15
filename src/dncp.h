@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Thu Jun 11 09:48:33 2015 mstenber
- * Edit time:     261 min
+ * Last modified: Mon Jun 15 12:41:32 2015 mstenber
+ * Edit time:     267 min
  *
  */
 
@@ -64,10 +64,10 @@ typedef struct dncp_tlv_struct dncp_tlv_s, *dncp_tlv;
 /*
  * Flow of DNCP state change notifications (outbound case):
  *
- * - (if local TLV change), local_tlv_change_callback is called
+ * - (if local TLV change), local_tlv_change_cb is called
  * .. at some point, when TLV changes are to be published to the network ..
- * - republish_callback is called
- * - tlv_change_callback is called
+ * - republish_cb is called
+ * - tlv_change_cb is called
  */
 
 enum {
@@ -75,7 +75,7 @@ enum {
   DNCP_CALLBACK_REPUBLISH,
   DNCP_CALLBACK_TLV,
   DNCP_CALLBACK_NODE,
-  DNCP_CALLBACK_LINK,
+  DNCP_CALLBACK_EP,
   DNCP_CALLBACK_SOCKET_MSG,
   NUM_DNCP_CALLBACKS
 };
@@ -99,8 +99,8 @@ struct dncp_subscriber_struct {
    * @param tlv The TLV that is being added or removed (there is no 'update').
    * @param add Flag which indicates whether the operation was add or remove.
    */
-  void (*local_tlv_change_callback)(dncp_subscriber s,
-                                    struct tlv_attr *tlv, bool add);
+  void (*local_tlv_change_cb)(dncp_subscriber s,
+                              struct tlv_attr *tlv, bool add);
 
   /**
    * About to republish local TLVs notification.
@@ -109,7 +109,7 @@ struct dncp_subscriber_struct {
    * It is called _before_ TLV change notifications for _local_ TLVs
    * are provided.
    */
-  void (*republish_callback)(dncp_subscriber r);
+  void (*republish_cb)(dncp_subscriber r);
 
   /**
    * TLV change notification.
@@ -121,8 +121,8 @@ struct dncp_subscriber_struct {
    * @param tlv The TLV that is being added or removed (there is no 'update').
    * @param add Flag which indicates whether the operation was add or remove.
    */
-  void (*tlv_change_callback)(dncp_subscriber s,
-                              dncp_node n, struct tlv_attr *tlv, bool add);
+  void (*tlv_change_cb)(dncp_subscriber s,
+                        dncp_node n, struct tlv_attr *tlv, bool add);
 
   /**
    * Node change notification.
@@ -133,19 +133,21 @@ struct dncp_subscriber_struct {
    * @param n The node which is being added or removed.
    * @param add Flag which indicates whether the operation was add or remove.
    */
-  void (*node_change_callback)(dncp_subscriber s, dncp_node n, bool add);
+  void (*node_change_cb)(dncp_subscriber s, dncp_node n, bool add);
 
   /**
-   * Some link-specific information changed.
+   * Some endpoint-specific information changed.
    *
-   * This is called whenever a link's preferred address changes, or
-   * set of links itself changes.
+   * This is called whenever an endpoint's parameters, or set of
+   * endpoints itself changes. Note that DNCP itself does not have any
+   * per-endpoint parameters that would cause update event; profiles
+   * may.
    *
-   * @param ifname The link which is being added, removed or modified.
-   * @param event indicates whether the link was added, removed or updated.
+   * @param ep The endpoint which is being added, removed or modified.
+   * @param event indicates whether the endpoint was added, removed or updated.
    */
-  void (*link_change_callback)(dncp_subscriber s, dncp_ep ep,
-                               enum dncp_subscriber_event event);
+  void (*ep_change_cb)(dncp_subscriber s, dncp_ep ep,
+                       enum dncp_subscriber_event event);
 
   /**
    * TLV(s) received on a socket-notification.
@@ -160,12 +162,12 @@ struct dncp_subscriber_struct {
    * authentication and authorization has happened before this
    * callback is called.
    */
-  void (*msg_received_callback)(dncp_subscriber s,
-                                dncp_ep ep,
-                                struct sockaddr_in6 *src,
-                                struct sockaddr_in6 *dst,
-                                int recv_flags,
-                                struct tlv_attr *msg);
+  void (*msg_received_cb)(dncp_subscriber s,
+                          dncp_ep ep,
+                          struct sockaddr_in6 *src,
+                          struct sockaddr_in6 *dst,
+                          int recv_flags,
+                          struct tlv_attr *msg);
 };
 
 /***************************************** API for handling single endpoints */
@@ -184,7 +186,7 @@ struct dncp_ep_struct {
   int trickle_k;
 
   /* How frequently (overriding Trickle) we MUST send something on the
-   * link. */
+   * endpoint. */
   hnetd_time_t keepalive_interval;
 
   /* How large can the multicasts be? */
@@ -417,8 +419,8 @@ dncp_tlv dncp_get_first_tlv(dncp o);
  * comes. */
 
 struct dncp_ext_configuration_struct {
-  /* Per-link configuration defaults to what is provided here. */
-  dncp_ep_s per_link;
+  /* Per-endpoint configuration defaults to what is provided here. */
+  dncp_ep_s per_ep;
 
   /* Size of the node identifier; MUST be <= DNCP_NI_MAX_LEN */
   uint8_t node_id_length;
@@ -464,7 +466,7 @@ struct dncp_ext_configuration_struct {
  * FLAG_SECURE is not, packet should be probably ignored. */
 #define DNCP_RECV_FLAG_SECURE_TRIED  0x8
 
-struct dncp_ext_callbacks_struct {
+struct dncp_ext_cbs_struct {
   /* I/O-related callbacks */
 
   /** Receive bytes from the network. ep, src, dst are set as appropriate. */
@@ -513,7 +515,7 @@ struct dncp_ext_callbacks_struct {
 
 struct dncp_ext_struct {
   struct dncp_ext_configuration_struct conf;
-  struct dncp_ext_callbacks_struct cb;
+  struct dncp_ext_cbs_struct cb;
 };
 
 /**
@@ -578,5 +580,5 @@ void dncp_notify_subscribers_about_to_republish_tlvs(dncp_node n);
 void dncp_notify_subscribers_local_tlv_changed(dncp o,
                                                struct tlv_attr *a,
                                                bool add);
-void dncp_notify_subscribers_link_changed(dncp_ep ep,
-                                          enum dncp_subscriber_event event);
+void dncp_notify_subscribers_ep_changed(dncp_ep ep,
+                                        enum dncp_subscriber_event event);

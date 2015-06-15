@@ -207,7 +207,7 @@ hncp_multicast hncp_multicast_create(hncp h, hncp_multicast_params p)
   m->bp_timeout.cb = _bp_timeout;
   m->rp_timeout.cb = _rp_timeout;
 
-  m->subscriber.tlv_change_callback = _tlv_cb;
+  m->subscriber.tlv_change_cb = _tlv_cb;
   dncp_subscribe(m->dncp, &m->subscriber);
 
   m->iface.cb_intiface = _cb_intiface;

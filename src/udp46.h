@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu May 15 12:16:06 2014 mstenber
- * Last modified: Tue May 26 08:28:04 2015 mstenber
+ * Last modified: Mon Jun 15 12:57:40 2015 mstenber
  * Edit time:     27 min
  *
  */
@@ -47,14 +47,13 @@ udp46 udp46_create(uint16_t port);
  */
 void udp46_get_fds(udp46 s, int *fd_v4, int *fd_v6);
 
-typedef void (*udp46_readable_callback)(udp46 s, void *context);
+typedef void (*udp46_readable_cb)(udp46 s, void *context);
 
 /**
  * Convenience method to set up callback to call when there is
  * something available. (It leverages uloop+ufd internally)
  */
-void udp46_set_readable_callback(udp46 s, udp46_readable_callback cb,
-                                 void *cb_context);
+void udp46_set_readable_cb(udp46 s, udp46_readable_cb cb, void *cb_context);
 
 /**
  * Receive a packet.

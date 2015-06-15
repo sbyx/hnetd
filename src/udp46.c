@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu May 15 12:33:19 2014 mstenber
- * Last modified: Wed May 27 16:56:26 2015 mstenber
+ * Last modified: Mon Jun 15 12:57:30 2015 mstenber
  * Edit time:     122 min
  *
  */
@@ -33,7 +33,7 @@ struct udp46_struct {
   int s6;
   uint16_t port;
   struct uloop_fd ufds[2];
-  udp46_readable_callback cb;
+  udp46_readable_cb cb;
   void *cb_context;
 };
 
@@ -324,7 +324,7 @@ int udp46_send_iovec(udp46 s,
 
 void udp46_destroy(udp46 s)
 {
-  udp46_set_readable_callback(s, NULL, NULL);
+  udp46_set_readable_cb(s, NULL, NULL);
   close(s->s4);
   close(s->s6);
   free(s);
@@ -354,8 +354,8 @@ static void ufd_cb_6(struct uloop_fd *u, unsigned int events __unused)
     s->cb(s, s->cb_context);
 }
 
-void udp46_set_readable_callback(udp46 s, udp46_readable_callback cb,
-                                 void *cb_context)
+void udp46_set_readable_cb(udp46 s, udp46_readable_cb cb,
+                           void *cb_context)
 {
   if (!s->cb != !cb)
     {

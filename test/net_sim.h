@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu Jun 11 09:54:14 2015 mstenber
+ * Last modified: Mon Jun 15 12:55:58 2015 mstenber
  * Edit time:     400 min
  *
  */
@@ -302,7 +302,7 @@ bool net_sim_is_busy(net_sim s)
 
 
 
-void net_sim_local_tlv_callback(dncp_subscriber sub,
+void net_sim_local_tlv_cb(dncp_subscriber sub,
                                 struct tlv_attr *tlv, bool add)
 {
 #if MESSAGE_LOSS_CHANCE < 1
@@ -336,9 +336,9 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
   n->s = s;
   r = hncp_init(&n->h);
   if (s->fake_unicast)
-    n->h.ext.conf.per_link.unicast_only = true;
+    n->h.ext.conf.per_ep.unicast_only = true;
   if (s->fake_unicast_is_reliable_stream)
-    n->h.ext.conf.per_link.unicast_is_reliable_stream = true;
+    n->h.ext.conf.per_ep.unicast_is_reliable_stream = true;
   n->d = hncp_get_dncp(&n->h);
   sput_fail_unless(r, "hncp_init");
 
@@ -380,7 +380,7 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
     if (!(n->multicast = hncp_multicast_create(&n->h, &multicast_params)))
       return NULL;
 #endif /* !DISABLE_HNCP_MULTICAST */
-  n->debug_subscriber.local_tlv_change_callback = net_sim_local_tlv_callback;
+  n->debug_subscriber.local_tlv_change_cb = net_sim_local_tlv_cb;
   s->node_count++;
   dncp_subscribe(n->d, &n->debug_subscriber);
   L_DEBUG("[%s] %s net_sim_find_hncp added",
@@ -442,7 +442,7 @@ dncp_ep_i net_sim_dncp_find_link_by_name(dncp o, const char *name)
     l->ep_id = n->s->next_free_ep_id++;
 
   /* Give callback about it to iface users. */
-  net_sim_node_iface_callback(n, cb_intiface, name, true);
+  net_sim_node_iface_cb(n, cb_intiface, name, true);
   return l;
 }
 
@@ -609,14 +609,14 @@ void net_sim_populate_iface_next(net_node n)
 {
   static char dummybuf[12345];
   struct iface *i = (struct iface *)dummybuf;
-  dncp_ep_i l;
+  dncp_ep ep;
 
-  vlist_for_each_element(&n->d->links, l, in_links)
+  dncp_for_each_ep(n->d, ep)
     {
       *i = default_iface;
-      strcpy(i->ifname, l->conf.ifname);
+      strcpy(i->ifname, ep->ifname);
       smock_push("iface_next", i);
-      i = (void *)i + sizeof(struct iface) + strlen(l->conf.ifname) + 1;
+      i = (void *)i + sizeof(struct iface) + strlen(ep->ifname) + 1;
     }
   smock_push("iface_next", NULL);
 }

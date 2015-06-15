@@ -77,7 +77,7 @@ const char *dncp_trust_verdict_to_string(dncp_trust_verdict verdict);
 void dncp_trust_register_multicall(void);
 
 /*
- * Callback that can be used with dtls_set_unknown_cert_callback
+ * Callback that can be used with dtls_set_unknown_cert_cb
  * (context must be dncp_trust instance)
  */
-bool dncp_trust_dtls_unknown_callback(dtls d, dtls_cert cert, void *context);
+bool dncp_trust_dtls_unknown_cb(dtls d, dtls_cert cert, void *context);

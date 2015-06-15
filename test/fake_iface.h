@@ -69,7 +69,7 @@ void iface_unregister_user(struct iface_user *user)
   list_del(&user->head);
 }
 
-#define net_sim_node_iface_callback(n, cb_name, ...)    \
+#define net_sim_node_iface_cb(n, cb_name, ...)    \
   do {                                                  \
     struct iface_user *u;                               \
     list_for_each_entry(u, &n->iface_users, head)       \

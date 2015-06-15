@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Jun 11 09:48:44 2015 mstenber
- * Edit time:     381 min
+ * Last modified: Mon Jun 15 12:49:40 2015 mstenber
+ * Edit time:     386 min
  *
  */
 
@@ -63,11 +63,8 @@ struct dncp_struct {
   /* local data (TLVs API's clients want published). */
   struct vlist_tree tlvs;
 
-  /* local links (those API's clients want active). */
-  struct vlist_tree links;
-
-  /* Link configuration options */
-  struct list_head link_confs;
+  /* local endpoints (endpoints clients have at least referred to once). */
+  struct vlist_tree eps;
 
   /* flag which indicates that we should perhaps re-publish our node
    * in nodes. */
@@ -138,7 +135,7 @@ struct dncp_trickle_struct {
 
 
 struct dncp_ep_i_struct {
-  struct vlist_node in_links;
+  struct vlist_node in_eps;
 
   /* Backpointer to dncp */
   dncp dncp;
@@ -157,17 +154,17 @@ struct dncp_ep_i_struct {
   uint32_t published_keepalive_interval;
 
   /* Most recent request for network state. (This could be global too,
-   * but one outgoing request per link sounds fine too). */
+   * but one outgoing request per endpoint sounds fine too). */
   hnetd_time_t last_req_network_state;
 
-  /* The per-link Trickle state. */
+  /* The per-ep Trickle state. */
   dncp_trickle_s trickle;
 };
 
 typedef struct dncp_neighbor_struct dncp_neighbor_s, *dncp_neighbor;
 
 struct dncp_neighbor_struct {
-  /* Link-level address */
+  /* Most recent address we heard from this particular neighbor */
   struct sockaddr_in6 last_sa6;
 
   /* When did we last time receive _consistent_ state from the peer
@@ -276,7 +273,7 @@ void dncp_trickle_reset(dncp o);
 /* Compatibility / convenience macros to access stuff that used to be fixed. */
 #define DNCP_NI_LEN(o) (o)->ext->conf.node_id_length
 #define DNCP_HASH_LEN(o) (o)->ext->conf.hash_length
-#define DNCP_KEEPALIVE_INTERVAL(o) (o)->ext->conf.per_link.keepalive_interval
+#define DNCP_KEEPALIVE_INTERVAL(o) (o)->ext->conf.per_ep.keepalive_interval
 
 /* Inlined utilities. */
 static inline hnetd_time_t dncp_time(dncp o)

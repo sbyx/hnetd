@@ -84,14 +84,14 @@ void hncp_two(void)
   //node2 = container_of(n2, net_node_s, n);
 
   /* First, give delegated prefixes */
-  net_sim_node_iface_callback(node1,
+  net_sim_node_iface_cb(node1,
                               cb_prefix,
                               "eth1",
                               &p1,
                               NULL,
                               hnetd_time() + 123, hnetd_time() + 1,
                               NULL, 0);
-  net_sim_node_iface_callback(node1,
+  net_sim_node_iface_cb(node1,
                               cb_prefix,
                               "eth1",
                               &p2,

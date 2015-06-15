@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Tue Jun  9 16:04:12 2015 mstenber
- * Edit time:     976 min
+ * Last modified: Mon Jun 15 12:50:57 2015 mstenber
+ * Edit time:     977 min
  *
  */
 
@@ -163,20 +163,20 @@ static void update_tlv(struct vlist_tree *t,
 }
 
 static int
-compare_links(const void *a, const void *b, void *ptr __unused)
+compare_eps(const void *a, const void *b, void *ptr __unused)
 {
   dncp_ep_i t1 = (dncp_ep_i) a, t2 = (dncp_ep_i) b;
 
   return strcmp(t1->conf.ifname, t2->conf.ifname);
 }
 
-static void update_link(struct vlist_tree *t,
+static void update_ep(struct vlist_tree *t,
                         struct vlist_node *node_new,
                         struct vlist_node *node_old)
 {
-  dncp o = container_of(t, dncp_s, links);
-  dncp_ep_i t_old = container_of(node_old, dncp_ep_i_s, in_links);
-  dncp_ep_i t_new = container_of(node_new, dncp_ep_i_s, in_links);
+  dncp o = container_of(t, dncp_s, eps);
+  dncp_ep_i t_old = container_of(node_old, dncp_ep_i_s, in_eps);
+  dncp_ep_i t_new = container_of(node_new, dncp_ep_i_s, in_eps);
 
   if (t_old)
     {
@@ -229,8 +229,7 @@ bool dncp_init(dncp o, dncp_ext ext, const void *node_id, int len)
   vlist_init(&o->nodes, compare_nodes, update_node);
   o->nodes.keep_old = true;
   vlist_init(&o->tlvs, compare_tlvs, update_tlv);
-  vlist_init(&o->links, compare_links, update_link);
-  INIT_LIST_HEAD(&o->link_confs);
+  vlist_init(&o->eps, compare_eps, update_ep);
   memset(&nih, 0, sizeof(nih));
   ext->cb.hash(node_id, len, &nih.h);
   o->first_free_ep_id = 1;
@@ -291,12 +290,12 @@ dncp dncp_create(dncp_ext ext)
 void dncp_uninit(dncp o)
 {
   /* TLVs should be freed first; they're local phenomenom, but may be
-   * reflected on links/nodes. */
+   * reflected on eps/nodes. */
   vlist_flush_all(&o->tlvs);
 
   /* Link destruction will refer to node -> have to be taken out
    * before nodes. */
-  vlist_flush_all(&o->links);
+  vlist_flush_all(&o->eps);
 
   /* All except own node should be taken out first. */
   vlist_update(&o->nodes);
@@ -342,9 +341,9 @@ dncp_tlv dncp_get_first_tlv(dncp o)
 
 dncp_ep dncp_get_first_ep(dncp o)
 {
-  if (avl_is_empty(&o->links.avl))
+  if (avl_is_empty(&o->eps.avl))
     return NULL;
-  dncp_ep_i l = avl_first_element(&o->links.avl, l, in_links.avl);
+  dncp_ep_i l = avl_first_element(&o->eps.avl, l, in_eps.avl);
   return &l->conf;
 }
 
@@ -403,7 +402,7 @@ dncp_ep_i dncp_find_link_by_name(dncp o, const char *ifname, bool create)
   if (!ifname || !*ifname)
     return NULL;
 
-  l = vlist_find(&o->links, cl, cl, in_links);
+  l = vlist_find(&o->eps, cl, cl, in_eps);
 
   if (create && !l)
     {
@@ -412,10 +411,10 @@ dncp_ep_i dncp_find_link_by_name(dncp o, const char *ifname, bool create)
         return NULL;
       l->dncp = o;
       l->ep_id = o->first_free_ep_id++;
-      l->conf = o->ext->conf.per_link;
+      l->conf = o->ext->conf.per_ep;
       strncpy(l->conf.dnsname, ifname, sizeof(l->conf.ifname));
       strncpy(l->conf.ifname, ifname, sizeof(l->conf.ifname));
-      vlist_add(&o->links, &l->in_links, l);
+      vlist_add(&o->eps, &l->in_eps, l);
     }
   return l;
 }
@@ -424,7 +423,7 @@ dncp_ep dncp_find_ep_by_id(dncp o, uint32_t ep_id)
 {
   dncp_ep_i l;
   /* XXX - this could be also made more efficient. Oh well. */
-  vlist_for_each_element(&o->links, l, in_links)
+  vlist_for_each_element(&o->eps, l, in_eps)
     if (l->ep_id == ep_id)
       return &l->conf;
   return NULL;
@@ -456,11 +455,11 @@ dncp_ep dncp_ep_get_next(dncp_ep ep)
 {
   dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
   dncp o = l->dncp;
-  dncp_ep_i last = avl_last_element(&o->links.avl, l, in_links.avl);
+  dncp_ep_i last = avl_last_element(&o->eps.avl, l, in_eps.avl);
 
   if (!ep || l == last)
     return NULL;
-  l = avl_next_element(l, in_links.avl);
+  l = avl_next_element(l, in_eps.avl);
   return &l->conf;
 }
 

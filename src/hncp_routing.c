@@ -90,7 +90,7 @@ static void hncp_routing_intaddr(struct iface_user *u, __unused const char *ifna
 		uloop_timeout_set(&bfs->t, 0);
 }
 
-static void hncp_routing_callback(dncp_subscriber s, __unused dncp_node n,
+static void hncp_routing_cb(dncp_subscriber s, __unused dncp_node n,
 		struct tlv_attr *tlv, __unused bool add)
 {
 	hncp_bfs bfs = container_of(s, hncp_bfs_s, subscr);
@@ -305,7 +305,7 @@ hncp_bfs hncp_routing_create(hncp hncp, const char *script, bool incremental)
 	if (incremental) {
 		bfs->t.cb = hncp_routing_schedule;
 		bfs->iface.cb_intaddr = hncp_routing_intaddr;
-		bfs->subscr.tlv_change_callback = hncp_routing_callback;
+		bfs->subscr.tlv_change_cb = hncp_routing_cb;
 		dncp_subscribe(bfs->dncp, &bfs->subscr);
 	}
 

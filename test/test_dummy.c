@@ -25,7 +25,7 @@
 
 #include <stdio.h>
 
-int dummy_callback(int i)
+int dummy_cb(int i)
 {
   int v1 = smock_pull_int("in");
   int v2 = smock_pull_int("out");
@@ -54,10 +54,10 @@ void sample(void)
   smock_push_int("out", 2);
   smock_push_int("in", 3);
   smock_push_int("out", 6);
-  r = dummy_callback(1);
-  sput_fail_unless(r == 2, "dummy_callback broken");
-  r = dummy_callback(3);
-  sput_fail_unless(r == 6, "dummy_callback broken");
+  r = dummy_cb(1);
+  sput_fail_unless(r == 2, "dummy_cb broken");
+  r = dummy_cb(3);
+  sput_fail_unless(r == 6, "dummy_cb broken");
   /* In the end, we should be again gone. */
   sput_fail_unless(smock_empty(), "smock empty");
 }

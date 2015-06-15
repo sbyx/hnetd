@@ -157,14 +157,14 @@ hncp_set_ipv6_address(hncp h, const char *ifname, const struct in6_addr *addr)
     {
       L_DEBUG("hncp_set_ipv6_address: no %s any more", ep->ifname);
     }
-  dncp_notify_subscribers_link_changed(ep, DNCP_EVENT_UPDATE);
+  dncp_notify_subscribers_ep_changed(ep, DNCP_EVENT_UPDATE);
 }
 
 bool hncp_init(hncp o)
 {
   dncp_ext_s ext_s = {
     .conf = {
-      .per_link = {
+      .per_ep = {
         .trickle_imin = HNCP_TRICKLE_IMIN,
         .trickle_imax = HNCP_TRICKLE_IMAX,
         .trickle_k = HNCP_TRICKLE_K,

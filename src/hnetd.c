@@ -45,7 +45,7 @@ typedef struct {
 	hncp hncp;
 } hncp_iface_user_s, *hncp_iface_user;
 
-void hncp_iface_intaddr_callback(struct iface_user *u, const char *ifname,
+void hncp_iface_intaddr_cb(struct iface_user *u, const char *ifname,
 								 const struct prefix *addr6,
 								 const struct prefix *addr4 __unused)
 {
@@ -54,7 +54,7 @@ void hncp_iface_intaddr_callback(struct iface_user *u, const char *ifname,
 }
 
 
-void hncp_iface_intiface_callback(struct iface_user *u,
+void hncp_iface_intiface_cb(struct iface_user *u,
 								  const char *ifname, bool enabled)
 {
 	hncp_iface_user hiu = container_of(u, hncp_iface_user_s, iu);
@@ -66,8 +66,8 @@ void hncp_iface_glue(hncp_iface_user hiu, hncp h)
 {
 	/* Initialize hiu appropriately */
 	memset(hiu, 0, sizeof(*hiu));
-	hiu->iu.cb_intiface = hncp_iface_intiface_callback;
-	hiu->iu.cb_intaddr = hncp_iface_intaddr_callback;
+	hiu->iu.cb_intiface = hncp_iface_intiface_cb;
+	hiu->iu.cb_intaddr = hncp_iface_intaddr_cb;
 	hiu->hncp = h;
 	iface_register_user(&hiu->iu);
 }
@@ -312,7 +312,7 @@ int main(__unused int argc, char *argv[])
 						L_ERR("Unable to create dncp trust module");
 						return 13;
 				}
-				dtls_set_unknown_cert_callback(d, dncp_trust_dtls_unknown_callback, dt);
+				dtls_set_unknown_cert_cb(d, dncp_trust_dtls_unknown_cb, dt);
 		}
 		dtls_start(d);
 #endif /* DTLS */

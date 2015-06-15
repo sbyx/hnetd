@@ -230,7 +230,7 @@ struct hncp_link* hncp_link_create(dncp dncp, const struct hncp_link_config *con
 		l->dncp = dncp;
 		INIT_LIST_HEAD(&l->users);
 
-		l->subscr.tlv_change_callback = cb_tlv;
+		l->subscr.tlv_change_cb = cb_tlv;
 		dncp_subscribe(dncp, &l->subscr);
 
 		l->iface.cb_intiface = cb_intiface;

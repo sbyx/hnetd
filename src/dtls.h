@@ -42,8 +42,8 @@ typedef struct x509_st *dtls_cert;
 #endif /* DTLS_OPENSSL */
 
 typedef struct dtls_struct *dtls;
-typedef void (*dtls_readable_callback)(dtls d, void *context);
-typedef bool (*dtls_unknown_callback)(dtls d, dtls_cert cert, void *context);
+typedef void (*dtls_readable_cb)(dtls d, void *context);
+typedef bool (*dtls_unknown_cb)(dtls d, dtls_cert cert, void *context);
 
 /* Create/destroy instance. */
 dtls dtls_create(uint16_t port);
@@ -88,7 +88,7 @@ void dtls_set_limits(dtls d, dtls_limits limits);
 
 
 /* Callback to call when dtls has new data. */
-void dtls_set_readable_callback(dtls d, dtls_readable_callback cb, void *cb_context);
+void dtls_set_readable_cb(dtls d, dtls_readable_cb cb, void *cb_context);
 
 /* Authentication scheme 1 - PSK */
 
@@ -107,7 +107,7 @@ bool dtls_set_verify_locations(dtls d, const char *path, const char *dir);
 /* Authentication scheme 3 - instead of using PKI, declare verdicts on
  * certificates on our own. The return value of 'true' from the
  * callback indicates we trust a certificate. */
-void dtls_set_unknown_cert_callback(dtls d, dtls_unknown_callback cb, void *cb_context);
+void dtls_set_unknown_cert_cb(dtls d, dtls_unknown_cb cb, void *cb_context);
 
 
 

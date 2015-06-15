@@ -6,7 +6,7 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:42 2014 mstenber
- * Last modified: Thu Jun 11 09:50:10 2015 mstenber
+ * Last modified: Mon Jun 15 12:57:15 2015 mstenber
  * Edit time:     339 min
  *
  */
@@ -121,10 +121,10 @@ typedef struct {
 typedef struct dtls_struct {
   /* Client provided - (optional) callback to call when something
    * readable available. */
-  dtls_readable_callback readable_cb;
+  dtls_readable_cb readable_cb;
   void *readable_cb_context;
 
-  dtls_unknown_callback unknown_cb;
+  dtls_unknown_cb unknown_cb;
   void *unknown_cb_context;
 
   /* We keep this around, just for re-binding of new received connections. */
@@ -661,16 +661,16 @@ _dtls_client_cb(udp46 s __unused, void *context)
   _dtls_poll(d, true);
 }
 
-void dtls_set_readable_callback(dtls d,
-                                dtls_readable_callback cb, void *cb_context)
+void dtls_set_readable_cb(dtls d,
+                          dtls_readable_cb cb, void *cb_context)
 {
   d->readable_cb = cb;
   d->readable_cb_context = cb_context;
 }
 
-void dtls_set_unknown_cert_callback(dtls d,
-                                    dtls_unknown_callback cb,
-                                    void *cb_context)
+void dtls_set_unknown_cert_cb(dtls d,
+                              dtls_unknown_cb cb,
+                              void *cb_context)
 {
   d->unknown_cb = cb;
   d->unknown_cb_context = cb_context;
@@ -748,8 +748,8 @@ void dtls_start(dtls d)
 {
   if (d->started) return;
   d->started = true;
-  udp46_set_readable_callback(d->u46_server, _dtls_server_cb, d);
-  udp46_set_readable_callback(d->u46_client, _dtls_client_cb, d);
+  udp46_set_readable_cb(d->u46_server, _dtls_server_cb, d);
+  udp46_set_readable_cb(d->u46_client, _dtls_client_cb, d);
 }
 
 void dtls_destroy(dtls d)

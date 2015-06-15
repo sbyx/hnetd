@@ -925,10 +925,10 @@ hncp_sd hncp_sd_create(hncp h, hncp_sd_params p, struct hncp_link *l)
   _set_router_name(sd);
 
   /* Set up the hncp subscriber */
-  sd->subscriber.local_tlv_change_callback = _local_tlv_cb;
-  sd->subscriber.tlv_change_callback = _tlv_cb;
-  sd->subscriber.republish_callback = _republish_cb;
-  sd->subscriber.link_change_callback = _force_republish_cb;
+  sd->subscriber.local_tlv_change_cb = _local_tlv_cb;
+  sd->subscriber.tlv_change_cb = _tlv_cb;
+  sd->subscriber.republish_cb = _republish_cb;
+  sd->subscriber.ep_change_cb = _force_republish_cb;
   dncp_subscribe(o, &sd->subscriber);
 
   return sd;

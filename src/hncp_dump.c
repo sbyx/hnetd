@@ -297,9 +297,9 @@ static int hd_nodes(dncp o, struct blob_buf *b)
 
 static int hd_links(dncp o, struct blob_buf *b)
 {
-	dncp_ep_i link;
-	vlist_for_each_element(&o->links, link, in_links)
-		hd_a(!blobmsg_add_u32(b, link->conf.ifname, link->ep_id), return -1);
+	dncp_ep ep;
+	dncp_for_each_ep(o, ep)
+		hd_a(!blobmsg_add_u32(b, ep->ifname, dncp_ep_get_id(ep)), return -1);
 	return 0;
 }
 
