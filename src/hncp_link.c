@@ -63,7 +63,7 @@ static void calculate_link(struct hncp_link *l, dncp_ep ep, bool enable)
 		if (ourvertlv->cap_legacy)
 			elected |= HNCP_LINK_LEGACY;
 
-		if (!link)
+		if (!dncp_ep_is_enabled(ep))
 			elected |= HNCP_LINK_STATELESS;
 	}
 
