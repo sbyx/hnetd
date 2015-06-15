@@ -1,3 +1,6 @@
+/*
+ * Copyright (c) 2015 Cisco Systems, Inc.
+ */
 #ifndef SRC_HNCP_LINK_H_
 #define SRC_HNCP_LINK_H_
 

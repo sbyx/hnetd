@@ -1,7 +1,7 @@
 /*
  * Author: Pierre Pfister <pierre pfister@darou.fr>
  *
- * Copyright (c) 2014 Cisco Systems, Inc.
+ * Copyright (c) 2014-2015 Cisco Systems, Inc.
  *
  * hncp_pa.c implements prefix and address assignment.
  * It is a particularly intricate piece of code due to its multiple

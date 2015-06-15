@@ -1,3 +1,6 @@
+/*
+ * Copyright (c) 2015 Cisco Systems, Inc.
+ */
 /* Basic tests. */
 
 #include <stdio.h>

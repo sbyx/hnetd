@@ -1,4 +1,7 @@
 /*
+ * Copyright (c) 2015 Cisco Systems, Inc.
+ */
+/*
  * Author: Pierre Pfister
  *
  * Fakes random and md5 functions used in various places in hnetd.

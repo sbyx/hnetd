@@ -3,7 +3,7 @@
  *
  * Author: Markus Stenberg <markus stenberg@iki.fi>
  *
- * Copyright (c) 2013 cisco Systems, Inc.
+ * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
  * Last modified: Mon Jun 15 13:06:56 2015 mstenber

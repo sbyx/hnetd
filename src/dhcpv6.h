@@ -1,3 +1,6 @@
+/*
+ * Copyright (c) 2015 Cisco Systems, Inc.
+ */
 #ifndef DHCPV6_H_
 #define DHCPV6_H_
 

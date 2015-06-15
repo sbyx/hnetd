@@ -1,3 +1,6 @@
+/*
+ * Copyright (c) 2015 Cisco Systems, Inc.
+ */
 #include "hncp_dump.h"
 
 #include "dncp_i.h"
