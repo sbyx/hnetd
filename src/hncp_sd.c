@@ -6,8 +6,8 @@
  * Copyright (c) 2014 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Jun 15 10:56:41 2015 mstenber
- * Edit time:     669 min
+ * Last modified: Mon Jun 15 12:09:05 2015 mstenber
+ * Edit time:     674 min
  *
  */
 
@@ -448,7 +448,7 @@ bool hncp_sd_reconfigure_ohp(hncp_sd sd)
 
       sprintf(tbuf, "%s=", iface->ifname);
       ep = dncp_find_ep_by_name(sd->dncp, iface->ifname);
-      hncp_sd_dump_link_fqdn(sd, dncp_ep_is_enabled(ep) ? ep : NULL, iface->ifname,
+      hncp_sd_dump_link_fqdn(sd, ep, iface->ifname,
                              tbuf+strlen(tbuf), sizeof(tbuf)-strlen(tbuf));
 
       md5_hash(tbuf, strlen(tbuf), &ctx);
