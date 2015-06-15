@@ -243,13 +243,15 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 						}
 					}
 			} else if ((ap = hncp_tlv_ap(a)) && c != dncp->own_node && hc->bfs.ifname) {
-				dncp_ep_i link = dncp_find_link_by_name(dncp, hc->bfs.ifname, false);
-				struct iface *ifo = link ? iface_get(hc->bfs.ifname) : NULL;
+				struct iface *ifo = iface_get(hc->bfs.ifname);
+				dncp_ep ep = dncp_find_ep_by_name(dncp, hc->bfs.ifname);
+				if (!dncp_ep_is_enabled(ep))
+					ep = NULL;
 				// Skip routes for prefixes on connected links
-				if (link && ifo && (ifo->flags & IFACE_FLAG_ADHOC) != IFACE_FLAG_ADHOC && hc->bfs.hopcount == 1) {
+				if (ep && ifo && (ifo->flags & IFACE_FLAG_ADHOC) != IFACE_FLAG_ADHOC && hc->bfs.hopcount == 1) {
 					dncp_t_neighbor_s np = {
 						.neighbor_ep_id = ap->ep_id,
-						.ep_id = link->ep_id
+						.ep_id = dncp_ep_get_id(ep)
 					};
 					size_t buflen = sizeof(np) + DNCP_NI_LEN(dncp);
 					void *buf = alloca(buflen);
@@ -264,7 +266,7 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 				struct prefix to = { .plen = ap->prefix_length_bits };
 				size_t plen = ROUND_BITS_TO_BYTES(to.plen);
 				memcpy(&to.prefix, &ap[1], plen);
-				unsigned linkid = (link) ? link->ep_id : 0;
+				unsigned linkid = (ep) ? dncp_ep_get_id(ep) : 0;
 				prefix_ntop(dst, sizeof(dst), &to.prefix, to.plen);
 				snprintf(metric, sizeof(metric), "%u", hc->bfs.hopcount << 8 | linkid);
 

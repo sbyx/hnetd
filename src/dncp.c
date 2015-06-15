@@ -6,8 +6,8 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Jun 15 12:50:57 2015 mstenber
- * Edit time:     977 min
+ * Last modified: Mon Jun 15 13:06:56 2015 mstenber
+ * Edit time:     978 min
  *
  */
 
@@ -389,13 +389,6 @@ int dncp_remove_tlvs_by_type(dncp o, int type)
 
 dncp_ep dncp_find_ep_by_name(dncp o, const char *ifname)
 {
-  dncp_ep_i l = dncp_find_link_by_name(o, ifname, true);
-
-  return l ? &l->conf : NULL;
-}
-
-dncp_ep_i dncp_find_link_by_name(dncp o, const char *ifname, bool create)
-{
   dncp_ep_i cl = container_of(ifname, dncp_ep_i_s, conf.ifname[0]);
   dncp_ep_i l;
 
@@ -404,19 +397,18 @@ dncp_ep_i dncp_find_link_by_name(dncp o, const char *ifname, bool create)
 
   l = vlist_find(&o->eps, cl, cl, in_eps);
 
-  if (create && !l)
-    {
-      l = (dncp_ep_i) calloc(1, sizeof(*l) + o->ext->conf.ext_ep_data_size);
-      if (!l)
-        return NULL;
-      l->dncp = o;
-      l->ep_id = o->first_free_ep_id++;
-      l->conf = o->ext->conf.per_ep;
-      strncpy(l->conf.dnsname, ifname, sizeof(l->conf.ifname));
-      strncpy(l->conf.ifname, ifname, sizeof(l->conf.ifname));
-      vlist_add(&o->eps, &l->in_eps, l);
-    }
-  return l;
+  if (l)
+    return &l->conf;
+  l = (dncp_ep_i) calloc(1, sizeof(*l) + o->ext->conf.ext_ep_data_size);
+  if (!l)
+    return NULL;
+  l->dncp = o;
+  l->ep_id = o->first_free_ep_id++;
+  l->conf = o->ext->conf.per_ep;
+  strncpy(l->conf.dnsname, ifname, sizeof(l->conf.ifname));
+  strncpy(l->conf.ifname, ifname, sizeof(l->conf.ifname));
+  vlist_add(&o->eps, &l->in_eps, l);
+  return &l->conf;
 }
 
 dncp_ep dncp_find_ep_by_id(dncp o, uint32_t ep_id)

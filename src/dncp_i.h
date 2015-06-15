@@ -6,7 +6,7 @@
  * Copyright (c) 2013 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Jun 15 12:49:40 2015 mstenber
+ * Last modified: Mon Jun 15 13:05:49 2015 mstenber
  * Edit time:     386 min
  *
  */
@@ -236,8 +236,6 @@ struct dncp_tlv_struct {
  * dynamic allocations (and some of the steps omitted too). */
 bool dncp_init(dncp o, dncp_ext ext, const void *node_id, int len);
 void dncp_uninit(dncp o);
-
-dncp_ep_i dncp_find_link_by_name(dncp o, const char *ifname, bool create);
 
 /* Private utility - shouldn't be used by clients. */
 void dncp_node_set(dncp_node n,
