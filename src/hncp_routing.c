@@ -59,7 +59,10 @@ static void hncp_configure_exec(struct uloop_process *p, __unused int ret)
 static void hncp_routing_intiface(struct iface_user *u, const char *ifname, bool enable)
 {
 	hncp_bfs bfs = container_of(u, hncp_bfs_s, iface);
+	struct iface *iface = iface_get(ifname);
 	size_t i;
+
+	enable = enable && iface && (iface->flags & IFACE_FLAG_LEAF) != IFACE_FLAG_LEAF;
 
 	for (i = 0; i < bfs->ifaces_cnt; ++i)
 		if (!strcmp(bfs->ifaces[i], ifname))
