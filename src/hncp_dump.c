@@ -175,7 +175,7 @@ static int hd_node_neighbor(struct tlv_attr *tlv, struct blob_buf *b)
 
 	if (!(nh = dncp_tlv_neighbor2(tlv, HNCP_NI_LEN)))
 		return -1;
-	hd_a(!blobmsg_add_string(b, "node-id", hd_ni_to_hex(dncp_tlv_get_node_id2(tlv, HNCP_NI_LEN))), return -1);
+	hd_a(!blobmsg_add_string(b, "node-id", hd_ni_to_hex(dncp_tlv_get_node_id2(nh, HNCP_NI_LEN))), return -1);
 	hd_a(!blobmsg_add_u32(b, "local-link", ntohl(nh->ep_id)), return -1);
 	hd_a(!blobmsg_add_u32(b, "neighbor-link", ntohl(nh->neighbor_ep_id)), return -1);
 	return 0;
