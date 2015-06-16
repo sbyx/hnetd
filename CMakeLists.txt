@@ -113,7 +113,7 @@ add_library(dncp STATIC src/hnetd_time.c src/prefix.c src/tlv.c src/dncp.c src/d
 # Unit test stuff
 
 # With this, 'make check' works even in a clean tree (sigh, cmake..)
-add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
+add_custom_target(check COMMAND FAKE_LOG_DISABLE=1 ${CMAKE_CTEST_COMMAND})
 enable_testing()
 include_directories(src)
 

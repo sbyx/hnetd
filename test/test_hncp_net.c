@@ -6,7 +6,7 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Mon Jun 15 13:42:49 2015 mstenber
+ * Last modified: Tue Jun 16 19:56:46 2015 mstenber
  * Edit time:     645 min
  *
  */
@@ -755,6 +755,7 @@ int main(__unused int argc, __unused char **argv)
 
   fprintf(stderr, "Starting with random seed %d\n", seed);
   sput_start_testing();
+  fake_log_init();
   sput_enter_suite("hncp_net"); /* optional */
   maybe_run_test(hncp_two);
   maybe_run_test(hncp_bird14);
