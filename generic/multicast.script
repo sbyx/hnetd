@@ -32,16 +32,16 @@ rpa () {
 		exit 1
 	fi
 	if [ "$3" != "::" ]; then
-		pimbc rpa "$3" flush
+		pimbc rpa flush "$3"
 	fi
 	if [ "$2" != "::" ]; then
-		pimbc rpa "$2" add "ff00::/8"
-		pimbc rpa "$2" add "224.0.0.0/4"
+		pimbc rpa add "$2" "ff00::/8"
+		pimbc rpa add "$2" "224.0.0.0/4"
 	fi
 }
 
 bp () {
-	if [ "$1" != "add" -a "$1" != "del" ]; then
+	if [ "$1" != "add" -a "$1" != "remove" ]; then
 		exit 1
 	fi
 	if [ "$2" != "local" -a "$2" != "remote" ]; then
@@ -49,7 +49,8 @@ bp () {
 	fi
 	if [ "$3" != "" ]; then 
 		if [ "$2" = "remote" ]; then
-			pimbc proxy "$1" "$3" $PIM_PROXY_PORT
+			[ "$1" = "add" ] && pimbc proxy add "$3" "$PIM_PROXY_PORT"
+			[ "$1" = "remove" ] && pimbc proxy del "$3" "$PIM_PROXY_PORT"
 		fi
 	fi
 }
@@ -59,8 +60,14 @@ ifstate () {
 		exit 1
 	fi
 	case "$2" in
-		int) pimbc iface "$1" pim 1 ssbidir 1 querier 1;;
-		ext) pimbc iface "$1" pim 0 ssbidir 0 querier 0;;
+		int) 
+			pimbc link set "$1" pim on ssbidir on mld on igmp on hello 500ms
+			pimbc link set "$1" proxy off
+			;;
+		ext) 
+			pimbc link set "$1" pim off ssbidir off mld off igmp off
+			pimbc link set "$1" proxy "::" "$PIM_PROXY_PORT"
+			;;
 		*) exit 1;;
 	esac
 }
