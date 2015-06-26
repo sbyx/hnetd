@@ -52,6 +52,11 @@ int iface_get_preferred_address(struct in6_addr *foo, bool v4, const char *ifnam
   return -1;
 }
 
+int iface_get_address(struct in6_addr *addr, bool v4, const struct in6_addr *preferred)
+{
+	return -1;
+}
+
 /* Quiet some warnings.. */
 struct platform_rpc_method;
 struct blob_attr;

@@ -4,19 +4,16 @@
 # Called by hnetd in order to control the multicast daemon
 # 
 # Call syntax:
+# rpa (ADDRESS|none) (OLD-ADDRESS|none)
 #
-# rpa (local|remote) IPV6ADDRESS OLD-IPV6ADDRESS
-#  (called only when RPA changes; initial-none OLD-IPV6ADDRESS is "::")
-# 
-# bp (add|remove) (local|remote) IPV6ADDRESS
-#  (called whenever TLV space changes (TBD: change to happen only on RP?))
+# bp ifname (add|remove) ADDRESS PORT
 #
-# ifstate IFNAME (int|ext)
+# proxy ifname (on|off) [ADDRESS PORT]
+#
+# pim ifname (on|off)
 #
 
 echo "[multicast.script] $*"
-
-PIM_PROXY_PORT=15656
 
 error () {
 	echo "This script must be run by hnetd."
@@ -28,55 +25,42 @@ if [ "$(id -u)" -ne "0" ] || [ "$1" = "" ]; then
 fi
 
 rpa () {
-	if [ -z "$2" ] || [ -z "$3" ]; then
-		exit 1
-	fi
-	if [ "$3" != "::" ]; then
-		pimbc rpa flush "$3"
-	fi
-	if [ "$2" != "::" ]; then
-		pimbc rpa add "$2" "ff00::/8"
-		pimbc rpa add "$2" "224.0.0.0/4"
+	[ "$2" != "none" ] && pimbc rpa flush "$2"
+	if [ "$1" != "none" ]; then
+		pimbc rpa add "$1" "ff00::/8"
+		pimbc rpa add "$1" "224.0.0.0/4"
 	fi
 }
 
 bp () {
-	if [ "$1" != "add" -a "$1" != "remove" ]; then
-		exit 1
-	fi
-	if [ "$2" != "local" -a "$2" != "remote" ]; then
-		exit 1
-	fi
-	if [ "$3" != "" ]; then 
-		if [ "$2" = "remote" ]; then
-			[ "$1" = "add" ] && pimbc proxy add "$3" "$PIM_PROXY_PORT"
-			[ "$1" = "remove" ] && pimbc proxy del "$3" "$PIM_PROXY_PORT"
-		fi
-	fi
-}
-
-ifstate () {
-	if [ -z "$1" ]; then
-		exit 1
-	fi
-	case "$2" in
-		int) 
-			pimbc link set "$1" pim on ssbidir on mld on igmp on hello 500ms
-			pimbc link set "$1" proxy off
-			;;
-		ext) 
-			pimbc link set "$1" pim off ssbidir off mld off igmp off
-			pimbc link set "$1" proxy "::" "$PIM_PROXY_PORT"
-			;;
-		*) exit 1;;
+	case "$1" in
+		add) pimbc proxy add "$2" "$3" ;;
+		remove) pimbc proxy del "$2" "$3" ;;
+		*) error ;;
 	esac
 }
 
+proxy () {
+	case "$2" in
+		on) pimbc link set "$1" proxy "$3" "$4" ;;
+		off) pimbc link set "$1" proxy off ;;
+		*) error ;;
+	esac
+}
+
+pim () {
+	case "$2" in
+		on) pimbc link set "$1" pim on ssbidir on mld on igmp on hello 500ms ;;
+		off) pimbc link set "$1" pim off ssbidir off mld off igmp off ;;
+		*) error ;;
+	esac
+}
 
 case "$1" in
 	rpa) shift 1; rpa $@;;
 	bp) shift 1; bp $@;;
-	ifstate) shift 1; ifstate $@;;
+	proxy) shift 1; proxy $@;;
+	pim) shift 1; pim $@;;
 	*) error;;
 esac
 

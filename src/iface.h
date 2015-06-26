@@ -68,6 +68,8 @@ bool iface_has_ipv4_address(const char *ifname);
 // Get preferred interface address
 int iface_get_preferred_address(struct in6_addr *addr, bool v4, const char *ifname);
 
+// Confirm existence of the preferred address, or get a new one
+int iface_get_address(struct in6_addr *addr, bool v4, const struct in6_addr *preferred);
 
 // Internal API to platform
 

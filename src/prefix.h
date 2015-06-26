@@ -77,4 +77,6 @@ const char *prefix_ntopc(char *dst, size_t bufflen,
  */
 int prefix_pton(const char *src, struct in6_addr *addr, uint8_t *plen);
 
+const char *addr_ntop(char *dst, size_t bufflen, const struct in6_addr *addr);
+
 #endif

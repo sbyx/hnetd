@@ -21,6 +21,12 @@
 #include "net_sim.h"
 #include "sput.h"
 
+//dependency of hncp_multicast
+int iface_get_address(struct in6_addr *addr, bool v4, const struct in6_addr *preferred)
+{
+	return -1;
+}
+
 /**************************************************************** Test cases */
 
 struct prefix p1 = {

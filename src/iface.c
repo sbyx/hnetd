@@ -597,6 +597,26 @@ int iface_get_preferred_address(struct in6_addr *addr, bool v4, const char *ifna
 	return -!pref;
 }
 
+// Confirm the preferred address exists or get a new one
+int iface_get_address(struct in6_addr *addr, bool v4, const struct in6_addr *preferred)
+{
+	struct iface *c;
+	hnetd_time_t now = hnetd_time();
+	if(preferred) {
+		list_for_each_entry(c, &interfaces, head) {
+			struct iface_addr *a;
+			vlist_for_each_element(&c->assigned, a, node) {
+				if (a->preferred_until >= now &&
+						!memcmp(&a->prefix.prefix, preferred, sizeof(a->prefix.prefix))) {
+					*addr = *preferred;
+					return 0;
+				}
+			}
+		}
+	}
+	return iface_get_preferred_address(addr, v4, NULL);
+}
+
 static bool iface_discover_border(struct iface *c)
 {
 	if (!c->platform) // No border discovery on unmanaged interfaces

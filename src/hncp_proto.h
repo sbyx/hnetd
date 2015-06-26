@@ -106,6 +106,17 @@ typedef struct __packed {
   uint8_t id[];
 } hncp_t_prefix_domain_s, *hncp_t_prefix_domain;
 
+/* HNCP_T_PIM_RPA_CANDIDATE */
+typedef struct __packed {
+	struct in6_addr addr;
+} hncp_t_pim_rpa_candidate_s, *hncp_t_pim_rpa_candidate;
+
+/* HNCP_T_PIM_BORDER_PROXY */
+typedef struct __packed {
+	struct in6_addr addr;
+	uint16_t port;
+} hncp_t_pim_border_proxy_s, *hncp_t_pim_border_proxy;
+
 /**************************************************************** Addressing */
 
 #define HNCP_PORT 8808

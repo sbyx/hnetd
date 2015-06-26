@@ -205,6 +205,18 @@ static int hd_node_prefix(struct tlv_attr *tlv, struct blob_buf *b)
 	return 0;
 }
 
+static int hd_node_pim_bp(struct tlv_attr *tlv, struct blob_buf *b)
+{
+	hncp_t_pim_border_proxy bp = (hncp_t_pim_border_proxy)tlv_data(tlv);
+	if(tlv_len(tlv) != 18)
+		return -1;
+
+	hd_a(!blobmsg_add_string(b, "address", ADDR_REPR(&bp->addr)), return -1);
+	hd_a(!blobmsg_add_u16(b, "port", bp->port), return -1);
+	return 0;
+}
+
+
 static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 {
 	struct tlv_attr *tlv;
@@ -214,7 +226,8 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 			neighbors = {NULL, NULL, 0, NULL},
 			externals = {NULL, NULL, 0, NULL},
 			addresses = {NULL, NULL, 0, NULL},
-			zones = {NULL, NULL, 0, NULL};
+			zones = {NULL, NULL, 0, NULL},
+			pim_bps = {NULL, NULL, 0, NULL};
 	int ret = -1;
 
 	hd_a(!blobmsg_add_u32(b, "update", n->update_number), return -1);
@@ -227,6 +240,7 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 	hd_a(!blob_buf_init(&externals, BLOBMSG_TYPE_ARRAY), goto el);
 	hd_a(!blob_buf_init(&addresses, BLOBMSG_TYPE_ARRAY), goto ad);
 	hd_a(!blob_buf_init(&zones, BLOBMSG_TYPE_ARRAY), goto zo);
+	hd_a(!blob_buf_init(&pim_bps, BLOBMSG_TYPE_ARRAY), goto bp);
 
 	dncp_node_for_each_tlv(n, tlv) {
 		switch (tlv_id(tlv)) {
@@ -265,6 +279,12 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 			case HNCP_T_DNS_DOMAIN_NAME:
 				hd_a(!hd_push_dn(b, "domain", tlv_data(tlv), tlv_len(tlv)), goto err);
 				break;
+			case HNCP_T_PIM_RPA_CANDIDATE:
+				hd_a(!blobmsg_add_string(b, "rpa_candidate", ADDR_REPR((struct in6_addr *)tlv_data(tlv))), goto err);
+				break;
+			case HNCP_T_PIM_BORDER_PROXY:
+				hd_do_in_table(&pim_bps, NULL, hd_node_pim_bp(tlv, &pim_bps), goto err);
+				break;
 			default:
 				break;
 		}
@@ -275,8 +295,11 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 	hd_a(!blobmsg_add_named_blob(b, "uplinks", externals.head), goto err);
 	hd_a(!blobmsg_add_named_blob(b, "addresses", addresses.head), goto err);
 	hd_a(!blobmsg_add_named_blob(b, "zones", zones.head), goto err);
+	hd_a(!blobmsg_add_named_blob(b, "pim_proxies", pim_bps.head), goto err);
 	ret = 0;
 err:
+	blob_buf_free(&pim_bps);
+bp:
 	blob_buf_free(&zones);
 zo:
 	blob_buf_free(&addresses);
