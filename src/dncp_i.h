@@ -6,7 +6,7 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Jun 15 13:05:49 2015 mstenber
+ * Last modified: Mon Jun 29 10:15:16 2015 mstenber
  * Edit time:     386 min
  *
  */
@@ -252,10 +252,6 @@ void dncp_self_flush(dncp_node n);
 
 /* Various hash calculation utilities. */
 void dncp_calculate_network_hash(dncp o);
-static inline unsigned long long dncp_hash64(dncp_hash h)
-{
-  return *((unsigned long long *)h);
-}
 
 /* Utility functions to send frames. */
 void dncp_ep_i_send_network_state(dncp_ep_i l,
@@ -272,6 +268,7 @@ void dncp_trickle_reset(dncp o);
 #define DNCP_NI_LEN(o) (o)->ext->conf.node_id_length
 #define DNCP_HASH_LEN(o) (o)->ext->conf.hash_length
 #define DNCP_KEEPALIVE_INTERVAL(o) (o)->ext->conf.per_ep.keepalive_interval
+#define DNCP_HASH_REPR(o, h) HEX_REPR(h, DNCP_HASH_LEN(o))
 
 /* Inlined utilities. */
 static inline hnetd_time_t dncp_time(dncp o)

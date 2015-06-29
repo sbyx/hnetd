@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Jun 15 13:06:56 2015 mstenber
- * Edit time:     978 min
+ * Last modified: Mon Jun 29 10:18:05 2015 mstenber
+ * Edit time:     986 min
  *
  */
 
@@ -544,9 +544,9 @@ void dncp_calculate_node_data_hash(dncp_node n)
   n->node_data_hash_dirty = false;
   l = n->tlv_container ? tlv_len(n->tlv_container) : 0;
   n->dncp->ext->cb.hash(tlv_data(n->tlv_container), l, &n->node_data_hash);
-  L_DEBUG("dncp_calculate_node_data_hash %s=%llx%s",
+  L_DEBUG("dncp_calculate_node_data_hash %s=%s%s",
           DNCP_NODE_REPR(n),
-          dncp_hash64(&n->node_data_hash),
+          DNCP_HASH_REPR(n->dncp, &n->node_data_hash),
           n == n->dncp->own_node ? " [self]" : "");
 }
 
@@ -573,15 +573,15 @@ void dncp_calculate_network_hash(dncp o)
       dncp_calculate_node_data_hash(n);
       *((uint32_t *)dst) = cpu_to_be32(n->update_number);
       memcpy(dst + 4, &n->node_data_hash, DNCP_HASH_LEN(o));
-      L_DEBUG(".. %s/%d=%llx",
+      L_DEBUG(".. %s/%d=%s",
               DNCP_NODE_REPR(n), n->update_number,
-              dncp_hash64(&n->node_data_hash));
+              DNCP_HASH_REPR(n->dncp, &n->node_data_hash));
       dst += onelen;
     }
   o->ext->cb.hash(buf, cnt * onelen, &o->network_hash);
   free(buf);
-  L_DEBUG("dncp_calculate_network_hash =%llx",
-          dncp_hash64(&o->network_hash));
+  L_DEBUG("dncp_calculate_network_hash =%s",
+          DNCP_HASH_REPR(o, &o->network_hash));
 
   if (memcmp(&old_hash, &o->network_hash, DNCP_HASH_LEN(o)))
     dncp_trickle_reset(o);

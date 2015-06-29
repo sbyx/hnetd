@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Mon Jun 15 13:26:32 2015 mstenber
- * Edit time:     413 min
+ * Last modified: Mon Jun 29 10:17:46 2015 mstenber
+ * Edit time:     416 min
  *
  */
 
@@ -218,10 +218,10 @@ bool net_sim_is_converged(net_sim s)
         }
       if (memcmp(&fn->d->network_hash, &n->d->network_hash, HNCP_HASH_LEN))
         {
-          L_DEBUG("network hash mismatch %s<>%s [%llx <> %llx]",
+          L_DEBUG("network hash mismatch %s<>%s [%s <> %s]",
                   fn->name, n->name,
-                  dncp_hash64(&fn->d->network_hash),
-                  dncp_hash64(&n->d->network_hash));
+                  DNCP_HASH_REPR(fn->d, &fn->d->network_hash),
+                  DNCP_HASH_REPR(n->d, &n->d->network_hash));
           s->not_converged_count++;
           return false;
         }
