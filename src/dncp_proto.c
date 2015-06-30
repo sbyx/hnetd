@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue Jun 30 10:16:32 2015 mstenber
- * Edit time:     1010 min
+ * Last modified: Tue Jun 30 10:31:29 2015 mstenber
+ * Edit time:     1015 min
  *
  */
 
@@ -458,15 +458,15 @@ handle_message(dncp_ep_i l,
               void *nd_data = tlv_data(a) + ns_len;
               dncp_hash_s nd_hash;
 
-              n = n ? n: dncp_find_node_by_node_id(o, ni, true);
-              if (!n)
-                return; /* OOM */
               o->ext->cb.hash(nd_data, nd_len, &nd_hash);
-              if (memcmp(&nd_hash, &n->node_data_hash, hlen))
+              if (memcmp(&nd_hash, h, hlen))
                 {
                   L_INFO("broken hash compared to data in node state");
                   break;
                 }
+              n = n ? n: dncp_find_node_by_node_id(o, ni, true);
+              if (!n)
+                return; /* OOM */
               if (dncp_node_is_self(n))
                 {
                   L_DEBUG("received %d update number from network, own %d",
@@ -495,6 +495,8 @@ handle_message(dncp_ep_i l,
                   dncp_node_set(n, new_update_number,
                                 dncp_time(o) - be32_to_cpu(ns->ms_since_origination),
                                 tb.head);
+                  memcpy(&n->node_data_hash, h, hlen);
+                  n->node_data_hash_dirty = false;
                 }
               else
                 {
