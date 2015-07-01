@@ -51,7 +51,7 @@ do {                                                            \
 #define HNCP_PA_DP_DELAYED_DELETE_MS 50
 
 #define PAL_CONF_DFLT_USE_ULA             1
-#define PAL_CONF_DFLT_NO_ULA_IF_V6        1
+#define PAL_CONF_DFLT_NO_ULA_IF_V6        0
 #define PAL_CONF_DFLT_USE_V4              1
 #define PAL_CONF_DFLT_NO_V4_IF_V6         0
 #define PAL_CONF_DFLT_USE_RDM_ULA         1
