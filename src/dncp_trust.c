@@ -6,7 +6,7 @@
  * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 19 17:34:25 2014 mstenber
- * Last modified: Mon Jun 15 12:59:06 2015 mstenber
+ * Last modified: Wed Jul  1 11:02:55 2015 mstenber
  * Edit time:     243 min
  *
  */
@@ -259,7 +259,7 @@ static int _trust_get_remote_verdict(dncp_trust t, dncp_sha256 h,
     *cname = 0;
   dncp_for_each_node(o, node)
     if (node != o->own_node)
-      dncp_node_for_each_tlv_with_type(node, a, DNCP_T_TRUST_VERDICT)
+      dncp_node_for_each_tlv_with_t_v(node, a, DNCP_T_TRUST_VERDICT, false)
         if ((tv = dncp_tlv_trust_verdict(a)))
           {
             if (memcmp(&tv->sha256_hash, h, sizeof(*h)) == 0)

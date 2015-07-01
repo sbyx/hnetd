@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue Jun 30 10:31:29 2015 mstenber
- * Edit time:     1015 min
+ * Last modified: Wed Jul  1 11:23:13 2015 mstenber
+ * Edit time:     1016 min
  *
  */
 
@@ -337,6 +337,7 @@ handle_message(dncp_ep_i l,
 
   tlv_for_each_attr(a, msg)
     {
+      L_DEBUG("handling tlv #%d", tlv_id(a));
       got_tlv = true;
       switch (tlv_id(a))
         {

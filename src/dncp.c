@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Mon Jun 29 10:18:05 2015 mstenber
- * Edit time:     986 min
+ * Last modified: Wed Jul  1 11:30:03 2015 mstenber
+ * Edit time:     999 min
  *
  */
 
@@ -642,7 +642,7 @@ bool dncp_ep_has_highest_id(dncp_ep ep)
   struct tlv_attr *a;
   dncp_t_neighbor nh;
 
-  dncp_node_for_each_tlv_with_type(o->own_node, a, DNCP_T_NEIGHBOR)
+  dncp_node_for_each_tlv_with_t_v(o->own_node, a, DNCP_T_NEIGHBOR, false)
     if ((nh = dncp_tlv_neighbor(o, a)))
       {
         if (nh->ep_id != ep_id)
@@ -658,7 +658,7 @@ bool dncp_ep_has_highest_id(dncp_ep ep)
 
 void dncp_node_recalculate_index(dncp_node n)
 {
-  int size = n->dncp->num_tlv_indexes * 2 * sizeof(n->tlv_index[0]);
+  int size = n->dncp->num_tlv_indexes * 4 * sizeof(n->tlv_index[0]);
 
   assert(n->tlv_index_dirty);
   if (!n->tlv_index)
@@ -680,7 +680,7 @@ void dncp_node_recalculate_index(dncp_node n)
   /* Note: This algorithm isn't particularly clever - while linear in
    * speed (O(# of indexes + # of entries in tlv_container), it has bit
    * too significant constant factor for comfort. */
-  dncp_node_for_each_tlv(n, a)
+  tlv_for_each_attr(a, n->tlv_container)
     {
       if ((int)tlv_id(a) != type)
         {
@@ -696,6 +696,13 @@ void dncp_node_recalculate_index(dncp_node n)
       if (idx)
         n->tlv_index[2 * idx - 1] = tlv_next(a);
     }
+
+  /* TBD: What if n->tlv_container_valid && n->tlv_container_valid !=
+   * n->tlv_container (currently we do not support rewriting, but at
+   * some point we might); iterate again? */
+  if (size
+      && n->tlv_container_valid && n->tlv_container_valid == n->tlv_container)
+    memcpy((void *)n->tlv_index + size / 2, n->tlv_index, size / 2);
   n->tlv_index_dirty = false;
 }
 
@@ -742,7 +749,7 @@ dncp_ep dncp_ep_from_ext_data(void *ext_data)
 }
 
 struct tlv_attr *
-dncp_node_get_tlv_with_type(dncp_node n, uint16_t type, bool first)
+dncp_node_get_tlv_with_type(dncp_node n, uint16_t type, bool first, bool valid)
 {
   if (type >= n->dncp->tlv_type_to_index_length
       || !n->dncp->tlv_type_to_index[type])
@@ -754,8 +761,8 @@ dncp_node_get_tlv_with_type(dncp_node n, uint16_t type, bool first)
       if (!n->tlv_index)
         return NULL;
     }
-  int index = n->dncp->tlv_type_to_index[type] - 1;
-  assert(index >= 0 && index < n->dncp->num_tlv_indexes);
+  int index = n->dncp->tlv_type_to_index[type] - 1 +
+    (valid ? n->dncp->num_tlv_indexes : 0);
   int i = index * 2 + (first ? 0 : 1);
   return n->tlv_index[i];
 }

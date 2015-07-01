@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Jun 29 10:15:16 2015 mstenber
- * Edit time:     386 min
+ * Last modified: Wed Jul  1 11:03:17 2015 mstenber
+ * Edit time:     387 min
  *
  */
 
@@ -332,7 +332,7 @@ dncp_node_find_neigh_bidir(dncp_node n, dncp_t_neighbor ne)
   struct tlv_attr *a;
   dncp_t_neighbor ne2;
 
-  dncp_node_for_each_tlv_with_type(n2, a, DNCP_T_NEIGHBOR)
+  dncp_node_for_each_tlv_with_t_v(n2, a, DNCP_T_NEIGHBOR, false)
     if ((ne2 = dncp_tlv_neighbor(n->dncp, a)))
       {
         if (ne->ep_id == ne2->neighbor_ep_id

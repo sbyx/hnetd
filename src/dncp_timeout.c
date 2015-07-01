@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Mon Jun 15 12:53:25 2015 mstenber
- * Edit time:     597 min
+ * Last modified: Wed Jul  1 11:27:09 2015 mstenber
+ * Edit time:     601 min
  *
  */
 
@@ -100,7 +100,7 @@ static void _node_set_reachable(dncp_node n, bool value)
 
 static void _prune_rec(dncp_node n)
 {
-  struct tlv_attr *tlvs, *a;
+  struct tlv_attr *a;
   dncp_t_neighbor ne;
   dncp_node n2;
 
@@ -112,15 +112,7 @@ static void _prune_rec(dncp_node n)
   if (n->in_nodes.version == n->dncp->nodes.version)
     return;
 
-  tlvs = dncp_node_get_tlvs(n);
-
-  L_DEBUG("_prune_rec %s / %p = %p",
-          DNCP_NODE_REPR(n), n, tlvs);
-
-  /* No TLVs? No point recursing, unless the node is us (we have to
-   * visit it always in any case). */
-  if (!tlvs && n != n->dncp->own_node)
-    return;
+  L_DEBUG("_prune_rec %s / %p", DNCP_NODE_REPR(n), n);
 
   /* Refresh the entry - we clearly did reach it. */
   vlist_add(&n->dncp->nodes, &n->in_nodes, n);
@@ -129,7 +121,7 @@ static void _prune_rec(dncp_node n)
   /* Look at it's neighbors. */
   /* Ignore if it's not _bidirectional_ neighbor. Unidirectional
    * ones lead to graph not settling down. */
-  tlv_for_each_attr(a, tlvs)
+  dncp_node_for_each_tlv_with_t_v(n, a, DNCP_T_NEIGHBOR, false)
     if ((ne = dncp_tlv_neighbor(n->dncp, a)))
       if ((n2 = dncp_node_find_neigh_bidir(n, ne)))
         _prune_rec(n2);
@@ -211,7 +203,7 @@ _neighbor_interval(dncp o, dncp_t_neighbor neigh)
 
   struct tlv_attr *a;
   uint32_t value = DNCP_KEEPALIVE_INTERVAL(o);
-  dncp_node_for_each_tlv_with_type(n, a, DNCP_T_KEEPALIVE_INTERVAL)
+  dncp_node_for_each_tlv_with_t_v(n, a, DNCP_T_KEEPALIVE_INTERVAL, false)
     {
       dncp_t_keepalive_interval ka = tlv_data(a);
       if (tlv_len(a) != sizeof(*ka))
