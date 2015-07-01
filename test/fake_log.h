@@ -6,8 +6,8 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Mon Jun  8 09:54:52 2015 mstenber
- * Last modified: Tue Jun 16 20:03:10 2015 mstenber
- * Edit time:     16 min
+ * Last modified: Wed Jul  1 11:18:05 2015 mstenber
+ * Edit time:     18 min
  *
  */
 
@@ -51,17 +51,18 @@ void fake_log_disable(int priority __unused,
 int log_level = 7;
 void (*hnetd_log)(int priority, const char *format, ...) = fake_log;
 
-#define fake_log_init()                                 \
-do {                                                    \
-  FILE *f = fopen("/dev/null", "w");                    \
-  sput_set_output_stream(f);                            \
-  if (getenv("FAKE_LOG_CHECK"))                         \
-    hnetd_log = fake_log_check;                         \
-  else if (getenv("FAKE_LOG_DISABLE"))                  \
-    hnetd_log = fake_log_disable;                       \
-  else                                                  \
-    {                                                   \
-      sput_set_output_stream(fopen("/dev/null", "w"));  \
-      fclose(f);                                        \
-    }                                                   \
+#define fake_log_init()                         \
+do {                                            \
+  bool quiet = true;                            \
+  if (getenv("FAKE_LOG_CHECK"))                 \
+    hnetd_log = fake_log_check;                 \
+  else if (getenv("FAKE_LOG_DISABLE"))          \
+    hnetd_log = fake_log_disable;               \
+  else                                          \
+    quiet = false;                              \
+  if (quiet)                                    \
+    {                                           \
+      FILE *f = fopen("/dev/null", "w");        \
+      sput_set_output_stream(f);                \
+    }                                           \
 } while(0)
