@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Jul  1 11:50:14 2015 mstenber
- * Edit time:     1034 min
+ * Last modified: Thu Jul  2 13:31:15 2015 mstenber
+ * Edit time:     1056 min
  *
  */
 
@@ -271,7 +271,6 @@ handle_message(dncp_ep_i l,
   dncp_node n;
   dncp_t_ep_id lid = NULL;
   bool seen_lid = false;
-  bool seen_valid_ns = false;
   dncp_neighbor ne = NULL;
   struct tlv_buf tb;
   uint32_t new_update_number;
@@ -329,6 +328,17 @@ handle_message(dncp_ep_i l,
           {
             dncp_tlv tne = _heard(l, lid, src, multicast);
             ne = tne ? dncp_tlv_get_extra(tne) : NULL;
+
+            if (ne)
+              {
+                if (!multicast)
+                  ne->last_contact = dncp_time(l->dncp);
+              }
+            /* We received first contact via multicast, and other party
+             * seems keen. Send a unicast request, to potentially set up
+             * the peer structure. */
+            else if (multicast)
+              should_request_network_state = true;
           }
         break;
 
@@ -392,11 +402,19 @@ handle_message(dncp_ep_i l,
 
         if (consistent)
           {
-            seen_valid_ns = true;
+            l->trickle.c++;
+            if (ne)
+              {
+                ne->trickle.c++;
+                ne->last_contact = dncp_time(l->dncp);
+              }
           }
         else
           {
-            should_request_network_state = true;
+            /* MUST: rate limit check */
+            if ((dncp_time(o) - l->last_req_network_state) >=
+                l->conf.trickle_imin)
+              should_request_network_state = true;
           }
         break;
 
@@ -446,19 +464,14 @@ handle_message(dncp_ep_i l,
               {
                 L_DEBUG("received %d update number from network, own %d",
                         new_update_number, n->update_number);
-                if (o->collided)
-                  {
-                    if (o->ext->cb.handle_collision(o->ext))
-                      return;
-                  }
-                else
+                if (!(o->collided && o->ext->cb.handle_collision(o->ext)))
                   {
                     o->collided = true;
                     n->update_number = new_update_number + 1000 - 1;
                     /* republish increments the count too */
+                    o->republish_tlvs = true;
+                    dncp_schedule(o);
                   }
-                o->republish_tlvs = true;
-                dncp_schedule(o);
                 return;
               }
             /* Ok. nd contains more recent TLV data than what we have
@@ -497,36 +510,13 @@ handle_message(dncp_ep_i l,
 
   }
 
-  /* Shared got unicast from the other party handling. */
-  if (!multicast && ne)
-    ne->last_contact = dncp_time(l->dncp);
+  /* Now, we can handle whether or not to send a network state request
+   * based on the flags we know. */
+  if (!should_request_network_state || updated_or_requested_state || is_local)
+    return;
 
-  if (seen_valid_ns)
-    {
-      if (ne)
-        {
-          l->trickle.c++;
-          ne->trickle.c++;
-          ne->last_contact = dncp_time(l->dncp);
-        }
-      else if (lid)
-        {
-          /* Send an unicast request, to potentially set up the
-           * peer structure. */
-          should_request_network_state = true;
-        }
-    }
-
-  if ((should_request_network_state  || (lid && !ne))
-      && !updated_or_requested_state && !is_local)
-    {
-      /* MUST: rate limit check */
-      if ((dncp_time(o) - l->last_req_network_state) < l->conf.trickle_imin)
-        return;
-      l->last_req_network_state = dncp_time(o);
-
-      dncp_ep_i_send_req_network_state(l, dst, src);
-    }
+  l->last_req_network_state = dncp_time(o);
+  dncp_ep_i_send_req_network_state(l, dst, src);
 }
 
 
