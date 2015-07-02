@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Jul  1 11:03:17 2015 mstenber
- * Edit time:     387 min
+ * Last modified: Thu Jul  2 11:44:00 2015 mstenber
+ * Edit time:     388 min
  *
  */
 
@@ -194,6 +194,7 @@ struct dncp_node_struct {
   dncp_hash_s node_data_hash;
   bool node_data_hash_dirty; /* Something related to hash changed */
   hnetd_time_t origination_time; /* in monotonic time */
+  hnetd_time_t expiration_time; /* in monotonic time */
 
   /* TLV data for the node. All TLV data in one binary blob, as
    * received/created. We could probably also maintain this at end of

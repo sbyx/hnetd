@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Jul  1 11:27:09 2015 mstenber
- * Edit time:     601 min
+ * Last modified: Thu Jul  2 11:43:45 2015 mstenber
+ * Edit time:     605 min
  *
  */
 
@@ -112,6 +112,10 @@ static void _prune_rec(dncp_node n)
   if (n->in_nodes.version == n->dncp->nodes.version)
     return;
 
+  /* If it was expired, we can ignore it and pretend it did not happen. */
+  if (dncp_time(n->dncp) >= n->expiration_time)
+    return;
+
   L_DEBUG("_prune_rec %s / %p", DNCP_NODE_REPR(n), n);
 
   /* Refresh the entry - we clearly did reach it. */
@@ -149,7 +153,11 @@ static void dncp_prune(dncp o)
   vlist_for_each_element(&o->nodes, n, in_nodes)
     {
       if (n->in_nodes.version == o->nodes.version)
-        continue;
+        {
+          /* Determine when the origination time overflows */
+          next_time = TMIN(next_time, n->expiration_time);
+          continue;
+        }
       if (n->last_reachable_prune < grace_after)
         continue;
       next_time = TMIN(next_time,

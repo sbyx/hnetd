@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 16:00:31 2013 mstenber
- * Last modified: Wed Jul  1 11:30:03 2015 mstenber
- * Edit time:     999 min
+ * Last modified: Thu Jul  2 11:43:05 2015 mstenber
+ * Edit time:     1000 min
  *
  */
 
@@ -79,7 +79,10 @@ void dncp_node_set(dncp_node n, uint32_t update_number,
 
   /* Replace origination time if any */
   if (t)
-    n->origination_time = t;
+    {
+      n->origination_time = t;
+      n->expiration_time = t + (1L << 32);
+    }
 
   /* If the pointer changed, handle it */
   if (n->tlv_container != a)
