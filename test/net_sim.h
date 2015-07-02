@@ -6,7 +6,7 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Mon Jun 29 10:17:46 2015 mstenber
+ * Last modified: Thu Jul  2 11:58:07 2015 mstenber
  * Edit time:     416 min
  *
  */
@@ -357,6 +357,10 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
   /* Glue it to pa */
   if (!s->disable_pa && !(n->pa = hncp_pa_create(&n->h, n->link)))
     goto fail;
+  struct hncp_pa_ula_conf ulaconf;
+  hncp_pa_ula_conf_default(&ulaconf);
+  ulaconf.no_ula_if_glb_ipv6 = 1;
+  hncp_pa_ula_conf_set(n->pa, &ulaconf);
 #endif /* !DISABLE_HNCP_PA */
 #ifndef DISABLE_HNCP_SD
   static hncp_sd_params_s sd_params = {
