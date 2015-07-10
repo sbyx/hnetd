@@ -81,7 +81,7 @@ void dncp_node_set(dncp_node n, uint32_t update_number,
   if (t)
     {
       n->origination_time = t;
-      n->expiration_time = t + (1L << 32);
+      n->expiration_time = t + ((1LL << 32) - (1LL << 15));
     }
 
   /* If the pointer changed, handle it */
