@@ -122,3 +122,6 @@ typedef struct __packed {
 #define HNCP_PORT 8808
 #define HNCP_DTLS_SERVER_PORT 8809
 #define HNCP_MCAST_GROUP "ff02::8808"
+
+#define HNCP_UCAST_DISCOVER6 "2001:1::8808"
+#define HNCP_UCAST_DISCOVER4 "192.0.0.9"

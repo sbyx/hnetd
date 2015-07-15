@@ -99,7 +99,7 @@ set(HNCP_WITH_GLUE ${DNCP_WITH_PROTO} $<TARGET_OBJECTS:L_HNCP_GLUE>)
 add_library(L_HNCP_IO OBJECT src/hncp_io.c ${DTLS_SOURCE} src/udp46.c)
 set(HNCP_IO $<TARGET_OBJECTS:L_HNCP_IO>)
 set(HNCP ${HNCP_WITH_GLUE} ${HNCP_IO}  ${TRUST_SOURCE})
-add_executable(hnetd ${HNCP} ${HT} src/hncp_routing.c src/hncp_dump.c src/hnetd.c src/iface.c src/pd.c src/ ${BACKEND_SOURCE})
+add_executable(hnetd ${HNCP} ${HT} src/hncp_routing.c src/hncp_dump.c src/hncp_tunnel.c src/hnetd.c src/iface.c src/pd.c src/ ${BACKEND_SOURCE})
 target_link_libraries(hnetd ubox resolv blobmsg_json ${BACKEND_LINK} ${DTLS_LINK})
 install(TARGETS hnetd DESTINATION sbin/)
 

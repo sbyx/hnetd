@@ -1,0 +1,25 @@
+#!/bin/sh
+
+# Funny NAT workaround for linux kernel
+NATCAST4=192.0.2.9
+
+if [ "$1" = init ]; then
+	which modprobe && modprobe l2tp_eth
+	set -e
+	ip addr replace "$2"/128 dev lo preferred_lft 0
+	ip addr replace "$NATCAST4"/32 dev lo preferred_lft 0
+	iptables -t nat -I PREROUTING -d "$3" -j DNAT --to-destination "$NATCAST4"
+	
+else
+	ifname=hnet-$1
+	ip link set $ifname down
+	ip l2tp del session tunnel_id $1 session_id $2
+	ip l2tp del tunnel tunnel_id $1
+	
+	if [ "$4" != 0 ]; then
+		set -e
+		ip l2tp add tunnel local $3 remote $6 tunnel_id $1 peer_tunnel_id $4 encap udp udp_sport $1 udp_dport $4
+		ip l2tp add session name $ifname tunnel_id $1 session_id $2 peer_session_id $5
+		ip link set $ifname up mtu 1280
+	fi
+fi

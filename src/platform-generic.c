@@ -206,17 +206,16 @@ static void platform_call(char *argv[])
 // Constructor for openwrt-specific interface part
 void platform_iface_new(struct iface *c, __unused const char *handle)
 {
-	char *argv_dhcpv4[] = {backend, "dhcpv4client", c->ifname, NULL};
 	char *argv_dhcpv6[] = {backend, "dhcpv6client", c->ifname, NULL};
 	assert(c->platform == NULL);
 
 	struct platform_iface *iface = calloc(1, sizeof(*iface));
 	if (!(c->flags & IFACE_FLAG_NODHCP) && (
 			!(c->flags & IFACE_FLAG_INTERNAL) ||
-			(c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID)) {
-		iface->dhcpv4 = platform_run(argv_dhcpv4);
+			(c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID))
 		iface->dhcpv6 = platform_run(argv_dhcpv6);
-	}
+
+	platform_restart_dhcpv4(c);
 
 	c->platform = iface;
 }
@@ -329,6 +328,7 @@ void platform_set_dhcp(struct iface *c, enum hncp_link_elected elected)
 void platform_restart_dhcpv4(struct iface *c)
 {
 	struct platform_iface *iface = c->platform;
+
 	if (iface) {
 		char metricbuf[16];
 		snprintf(metricbuf, sizeof(metricbuf), "%i", 1000 + if_nametoindex(c->ifname));
@@ -337,9 +337,12 @@ void platform_restart_dhcpv4(struct iface *c)
 			kill(iface->dhcpv4, SIGTERM);
 
 		char *argv_dhcpv4[] = {backend, "dhcpv4client", c->ifname,
-				(c->designatedv4) ? "0" : "1", metricbuf, NULL};
+				(c->designatedv4 && !(c->flags & IFACE_FLAG_NODESIGNATED)) ? "0" : "1",
+				metricbuf, HNCP_UCAST_DISCOVER4 "/32", NULL};
 
-		iface->dhcpv4 = platform_run(argv_dhcpv4);
+		if (!(c->flags & IFACE_FLAG_NODHCP) && (!(c->flags & IFACE_FLAG_INTERNAL) ||
+				(c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID))
+			iface->dhcpv4 = platform_run(argv_dhcpv4);
 	}
 }
 

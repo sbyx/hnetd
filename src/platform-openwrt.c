@@ -492,7 +492,8 @@ static void handle_restart_dhcp(struct ubus_request *req, int ret __unused)
 
 	if (iface->dhcp_is_v4) {
 		blobmsg_add_string(&b, "sendopts", "0x4d:07484f4d454e4554");
-		blobmsg_add_u8(&b, "defaultroute", c->designatedv4);
+		blobmsg_add_string(&b, "customroutes", HNCP_UCAST_DISCOVER4 "/32");
+		blobmsg_add_u8(&b, "defaultroute", c->designatedv4 && !(c->flags & IFACE_FLAG_NODESIGNATED));
 		blobmsg_add_u32(&b, "metric", 1000 + if_nametoindex(c->ifname));
 	} else {
 		memset(dtb, 0, sizeof(dtb));

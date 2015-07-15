@@ -24,6 +24,7 @@
 #include "hncp_sd.h"
 #include "hncp_multicast.h"
 #include "hncp_routing.h"
+#include "hncp_tunnel.h"
 #include "hncp_proto.h"
 #include "hncp_link.h"
 #include "hncp_dump.h"
@@ -140,6 +141,7 @@ int main(__unused int argc, char *argv[])
 	}
 
 	const char *routing_script = NULL;
+	const char *tunnel_script = NULL;
 	const char *pa_store_file = NULL;
 	const char *pd_socket_path = "/var/run/hnetd_pd";
 	const char *pa_ip4prefix = NULL;
@@ -185,7 +187,7 @@ int main(__unused int argc, char *argv[])
 			{ NULL,          0,                      NULL,           0 }
 	};
 
-	while ((c = getopt_long(argc, argv, "?b::d:f:o:n:r:s:p:m:c:M:S", longopts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "?b::d:f:o:n:r:t:s:p:m:c:M:S", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'b':
 			pidfile = (optarg && optarg[0]) ? optarg : "/var/run/hnetd.pid";
@@ -216,6 +218,9 @@ int main(__unused int argc, char *argv[])
 			break;
 		case 'r':
 			routing_script = optarg;
+			break;
+		case 't':
+			tunnel_script = optarg;
 			break;
 		case 's':
 			pa_store_file = optarg;
@@ -335,6 +340,9 @@ int main(__unused int argc, char *argv[])
 	}
 	if (routing_script)
 		hncp_routing_create(h, routing_script, !strict);
+
+	if (tunnel_script)
+		hncp_tunnel_create(hncp_get_dncp(h), tunnel_script);
 
 	//Note that pa subscribes to iface. Which is possible before iface init.
 	if(!(hncp_pa = hncp_pa_create(h, link))) {
