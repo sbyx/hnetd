@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Tue Jun 16 19:56:46 2015 mstenber
- * Edit time:     645 min
+ * Last modified: Thu Jul  2 11:47:19 2015 mstenber
+ * Edit time:     653 min
  *
  */
 
@@ -733,6 +733,83 @@ void hncp_random_monkey(void)
 
 }
 
+struct tlv_attr *
+always_failing_validate_node_data(dncp_node n, struct tlv_attr *a)
+{
+  return NULL;
+}
+
+
+void hncp_version(void)
+{
+  /* Basic idea: Like hncp_two, except with
+   * always_failing_validate_node_data in the profile. */
+  net_sim_s s;
+  dncp n1, n2;
+  dncp_ep l1, l2;
+
+  net_sim_init(&s);
+  n1 = net_sim_find_dncp(&s, "n1");
+  n1->ext->cb.validate_node_data = always_failing_validate_node_data;
+  n2 = net_sim_find_dncp(&s, "n2");
+  n2->ext->cb.validate_node_data = always_failing_validate_node_data;
+  l1 = net_sim_dncp_find_ep_by_name(n1, "eth0");
+  l2 = net_sim_dncp_find_ep_by_name(n2, "eth1");
+
+  /* connect l1+l2 -> should converge at some point */
+  net_sim_set_connected(l1, l2, true);
+  net_sim_set_connected(l2, l1, true);
+  SIM_WHILE(&s, 1000, !net_sim_is_converged(&s));
+
+  /* Make sure we can get neighbors for the other node from n1, using
+   * the valid=false, but NOT with valid=true. */
+  dncp_node n = dncp_find_node_by_node_id(n1, &n2->own_node->node_id, false);
+  sput_fail_unless(n, "dncp_node_find_by_id");
+
+  struct tlv_attr *a = NULL;
+  dncp_node_for_each_tlv_with_type(n, a, DNCP_T_NEIGHBOR)
+    break;
+  sput_fail_unless(!a, "should have no neighbors in valid data");
+  dncp_node_for_each_tlv_with_t_v(n, a, DNCP_T_NEIGHBOR, false)
+    break;
+  sput_fail_unless(a, "should have neighbors in un-validated data");
+  net_sim_uninit(&s);
+}
+
+void hncp_expiration(void)
+{
+  net_sim_s s;
+  dncp n1, n2;
+  dncp_ep l1, l2;
+
+  net_sim_init(&s);
+  n1 = net_sim_find_dncp(&s, "n1");
+  n2 = net_sim_find_dncp(&s, "n2");
+  l1 = net_sim_dncp_find_ep_by_name(n1, "eth0");
+  l2 = net_sim_dncp_find_ep_by_name(n2, "eth1");
+
+  /* connect l1+l2 -> should converge at some point */
+  net_sim_set_connected(l1, l2, true);
+  net_sim_set_connected(l2, l1, true);
+  SIM_WHILE(&s, 1000, !net_sim_is_converged(&s));
+
+  /* Make sure we can get neighbors for the other node from n1, using
+   * the valid=false, but NOT with valid=true. */
+  dncp_node n = dncp_find_node_by_node_id(n1, &n2->own_node->node_id, false);
+  sput_fail_unless(n, "dncp_node_find_by_id succeeded");
+
+  /* Advance time _a lot_, run sim once */
+  fu_set_hnetd_time(hnetd_time() + (1LL << 32) + 42);
+  fu_poll();
+
+  n = dncp_find_node_by_node_id(n1, &n2->own_node->node_id, false);
+  sput_fail_unless(!n, "dncp_node_find_by_id failed");
+
+  net_sim_uninit(&s);
+}
+
+
+
 #define test_setup() srandom(seed)
 #define maybe_run_test(fun) sput_maybe_run_test(fun, test_setup())
 
@@ -763,6 +840,8 @@ int main(__unused int argc, __unused char **argv)
   sput_start_testing();
   fake_log_init();
   sput_enter_suite("hncp_net"); /* optional */
+  maybe_run_test(hncp_version);
+  maybe_run_test(hncp_expiration);
   maybe_run_test(hncp_two);
   maybe_run_test(hncp_bird14);
   maybe_run_test(hncp_bird14_u);

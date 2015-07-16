@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Mon Jun 15 13:05:49 2015 mstenber
- * Edit time:     386 min
+ * Last modified: Thu Jul  2 11:44:00 2015 mstenber
+ * Edit time:     388 min
  *
  */
 
@@ -194,6 +194,7 @@ struct dncp_node_struct {
   dncp_hash_s node_data_hash;
   bool node_data_hash_dirty; /* Something related to hash changed */
   hnetd_time_t origination_time; /* in monotonic time */
+  hnetd_time_t expiration_time; /* in monotonic time */
 
   /* TLV data for the node. All TLV data in one binary blob, as
    * received/created. We could probably also maintain this at end of
@@ -252,10 +253,6 @@ void dncp_self_flush(dncp_node n);
 
 /* Various hash calculation utilities. */
 void dncp_calculate_network_hash(dncp o);
-static inline unsigned long long dncp_hash64(dncp_hash h)
-{
-  return *((unsigned long long *)h);
-}
 
 /* Utility functions to send frames. */
 void dncp_ep_i_send_network_state(dncp_ep_i l,
@@ -272,6 +269,7 @@ void dncp_trickle_reset(dncp o);
 #define DNCP_NI_LEN(o) (o)->ext->conf.node_id_length
 #define DNCP_HASH_LEN(o) (o)->ext->conf.hash_length
 #define DNCP_KEEPALIVE_INTERVAL(o) (o)->ext->conf.per_ep.keepalive_interval
+#define DNCP_HASH_REPR(o, h) HEX_REPR(h, DNCP_HASH_LEN(o))
 
 /* Inlined utilities. */
 static inline hnetd_time_t dncp_time(dncp o)
@@ -335,7 +333,7 @@ dncp_node_find_neigh_bidir(dncp_node n, dncp_t_neighbor ne)
   struct tlv_attr *a;
   dncp_t_neighbor ne2;
 
-  dncp_node_for_each_tlv_with_type(n2, a, DNCP_T_NEIGHBOR)
+  dncp_node_for_each_tlv_with_t_v(n2, a, DNCP_T_NEIGHBOR, false)
     if ((ne2 = dncp_tlv_neighbor(n->dncp, a)))
       {
         if (ne->ep_id == ne2->neighbor_ep_id

@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Mon Jun 15 12:41:32 2015 mstenber
- * Edit time:     267 min
+ * Last modified: Wed Jul  1 10:54:34 2015 mstenber
+ * Edit time:     274 min
  *
  */
 
@@ -290,6 +290,9 @@ dncp_tlv dncp_find_tlv(dncp o, uint16_t type, void *data, uint16_t len);
 
 /**
  * Find node with matching node identifier (if any).
+ *
+ * The returned node may not be currently reachable.
+ * TBD: API to check for reachability?
  */
 dncp_node dncp_find_node_by_node_id(dncp o, void *nibuf, bool create);
 
@@ -368,13 +371,18 @@ hnetd_time_t dncp_node_get_origination_time(dncp_node n);
 const char *dncp_node_repr(dncp_node n, char *to_buf);
 int dncp_node_cmp(dncp_node n1, dncp_node n2);
 
-struct tlv_attr *dncp_node_get_tlv_with_type(dncp_node n, uint16_t type, bool first);
+struct tlv_attr *dncp_node_get_tlv_with_type(dncp_node n, uint16_t type,
+                                             bool first, bool valid);
 
-#define dncp_node_for_each_tlv_with_type(n, a, type)            \
-  for (a = dncp_node_get_tlv_with_type(n, type, true) ;         \
-       a && a != dncp_node_get_tlv_with_type(n, type, false) ;  \
+/* Iterate through TLVs of particular type (that have been validated
+ * to conform to the current profile, if valid is set). */
+#define dncp_node_for_each_tlv_with_t_v(n, a, t, v)             \
+  for (a = dncp_node_get_tlv_with_type(n, t, true, v) ;         \
+       a && a != dncp_node_get_tlv_with_type(n, t, false, v) ;  \
        a = tlv_next(a))
 
+#define dncp_node_for_each_tlv_with_type(n, a, t) \
+  dncp_node_for_each_tlv_with_t_v(n, a, t, true)
 
 /******************************************************* Per-(local) tlv API */
 

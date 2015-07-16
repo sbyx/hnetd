@@ -6,7 +6,7 @@
  * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:30:01 2014 mstenber
- * Last modified: Wed Jun 10 10:15:14 2015 mstenber
+ * Last modified: Wed Jul  1 10:35:43 2015 mstenber
  * Edit time:     20 min
  *
  */
@@ -39,7 +39,7 @@
 #define HNCP_NI_LEN 4
 
 /* Default keep-alive interval to be used; overridable by user config */
-#define HNCP_KEEPALIVE_INTERVAL 24 * HNETD_TIME_PER_SECOND
+#define HNCP_KEEPALIVE_INTERVAL 20 * HNETD_TIME_PER_SECOND
 
 /* How many keep-alive periods can be missed until peer is declared M.I.A. */
 /* (Note: This CANNOT be configured) */

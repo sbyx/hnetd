@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Thu Nov 21 13:26:21 2013 mstenber
- * Last modified: Mon Jun 15 13:28:28 2015 mstenber
- * Edit time:     103 min
+ * Last modified: Mon Jun 29 17:07:02 2015 mstenber
+ * Edit time:     110 min
  *
  */
 
@@ -206,12 +206,37 @@ void hncp_int(void)
   hncp_uninit(&s);
 }
 
+void hncp_hash(void)
+{
+  /*
+   * Make sure the hash function is sane,
+   * c.f. https://github.com/sbyx/hnetd/issues/40
+   */
+  unsigned char buf[16];
+  unsigned char input[] = {
+    0, 0, 1, 0x54, 0xd3, 0xf7, 0xf5, 0xf6, 0xd5, 0x26, 0xd3, 0x0d  };
+  unsigned char exp_buf[16] = {
+    0xb1, 0xb2, 0xaf, 0xad, 0xd1, 0xaf, 0x5f, 0xf9, 0x2b, 0x24,
+    0x25, 0xc4, 0xc2, 0x44, 0xe6, 0xfc };
+  hncp_s s;
+
+  hncp_init(&s);
+  dncp o = hncp_get_dncp(&s);
+  dncp_ext ext = dncp_get_ext(o);
+
+  ext->cb.hash(input, sizeof(input), buf);
+  sput_fail_unless(memcmp(buf, exp_buf, DNCP_HASH_LEN(s.dncp))==0, "hash ok");
+
+  hncp_uninit(&s);
+}
+
 int main(int argc, char **argv)
 {
   setbuf(stdout, NULL); /* so that it's in sync with stderr when redirected */
   openlog("test_hncp", LOG_CONS | LOG_PERROR, LOG_DAEMON);
   sput_start_testing();
   sput_enter_suite("hncp"); /* optional */
+  sput_run_test(hncp_hash);
   sput_run_test(hncp_ext);
   sput_run_test(hncp_int);
   sput_leave_suite(); /* optional */
