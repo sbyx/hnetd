@@ -285,10 +285,17 @@ static void hm_rpa_update(hm m)
 					found_node = n;
 				}
 
-	if(m->rpa_tlv && !m->has_address) {
-		L_DEBUG("hncp_multicast: Stop candidating (no address)");
-		dncp_remove_tlv(m->dncp, m->rpa_tlv);
-		m->rpa_tlv = NULL;
+	if(m->rpa_tlv) {
+		if(!m->has_address) {
+			L_DEBUG("hncp_multicast: Stop candidating (no address)");
+			dncp_remove_tlv(m->dncp, m->rpa_tlv);
+			m->rpa_tlv = NULL;
+		} else if (memcmp(&m->current_address,
+				dncp_tlv_get_attr(m->rpa_tlv)->data, sizeof(struct in6_addr)))  {
+			L_DEBUG("hncp_multicast: Candidate address changed (removing TLV)");
+			dncp_remove_tlv(m->dncp, m->rpa_tlv);
+			m->rpa_tlv = NULL;
+		}
 	}
 
 	if(found) {
@@ -455,6 +462,12 @@ hncp_multicast hncp_multicast_create(hncp h, hncp_multicast_params p)
 
 	/* Even if we're alone, we may want to be RP. */
 	uloop_timeout_set(&m->rp_timeout, RP_TIMEOUT);
+
+	//Start or restart
+	char *argv[] = {(char *)m->p.multicast_script,
+			"init", "start", NULL};
+	task_add(m, argv);
+
 	return m;
 }
 
@@ -474,6 +487,9 @@ void hncp_multicast_destroy(hncp_multicast m)
 	uloop_timeout_cancel(&m->rp_timeout);
 	uloop_timeout_cancel(&m->addr_timeout);
 	uloop_process_delete(&m->process);
+	char *argv[] = {(char *)m->p.multicast_script,
+			"init", "stop", NULL};
+	hncp_run(argv);
 	free(m);
 }
 

@@ -19,6 +19,7 @@ create_babel_conf() {
     echo "redistribute" > $FILE
     echo "redistribute local deny" >> $FILE
     echo "ipv6-subtrees yes" >> $FILE
+    echo "reflect-kernel-metric true" >> $FILE
     for IF in $*; do
         echo "interface $IF" >> $FILE
     done

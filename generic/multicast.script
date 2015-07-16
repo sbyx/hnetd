@@ -4,6 +4,9 @@
 # Called by hnetd in order to control the multicast daemon
 # 
 # Call syntax:
+#
+# init (start|stop)
+#
 # rpa (ADDRESS|none) (OLD-ADDRESS|none)
 #
 # bp ifname (add|remove) ADDRESS PORT
@@ -23,6 +26,24 @@ error () {
 if [ "$(id -u)" -ne "0" ] || [ "$1" = "" ]; then
 	error
 fi
+
+init () {
+	if [ -f "/etc/init.d/pimbd" ]; then
+		if [ "$1" = "start" ]; then
+			/etc/init.d/pimbd restart
+		else
+			/etc/init.d/pimbd stop
+		fi
+	else
+		if [ -f "/tmp/pimbd-hnet.pid" ]; then
+			kill `cat /tmp/pimbd-hnet.pid`
+			rm /tmp/pimbd-hnet.pid
+		fi
+		if [ "$1" = "start" ]; then
+			pimbd -S -p /tmp/pimbd-hnet.pid &
+		fi
+	fi
+}
 
 rpa () {
 	if [ "$2" != "none" ]; then
@@ -61,6 +82,7 @@ pim () {
 }
 
 case "$1" in
+	init) shift 1; init $@;;
 	rpa) shift 1; rpa $@;;
 	bp) shift 1; bp $@;;
 	proxy) shift 1; proxy $@;;
