@@ -19,7 +19,7 @@ hnetd is designed to run on generic Linux-based routers.
 	c) collision and conflict detection and resolving
 
 2. Prefix distribution and allocation
-	a) IPv6 prefix delegatuin
+	a) IPv6 prefix delegation
 	b) IPv4 prefix allocation
 
 3. Routing setup
@@ -51,7 +51,7 @@ hnetd uses the following auxiliary tools (replacable):
 * udhcpc (DHCP client): http://busybox.net
 
 hnetd uses cmake:
-* To prepare a Makefile use:  "cmake . -DCMAKE_INSTALL_PREFIX=/usr" 
+* To prepare a Makefile use:  "cmake . -DCMAKE_INSTALL_PREFIX=/usr"
 * To build / install use: "make" / "make install" afterwards.
 * To build DEB or RPM packages use: "make package" afterwards.
 
@@ -67,7 +67,7 @@ Use:
 	./scripts/feeds install hnetd ohybridproxy
 
 and select both packets in "make menuconfig" under "Network" and the submenu
-"IP Addresses and Names". Snapshot packages might be avialable in the OpenWrt
+"IP Addresses and Names". Snapshot packages might be available in the OpenWrt
 daily snapshots folder: http://downloads.openwrt.org/snapshots/trunk/
 
 To use hnetd on an interface add a config section in /etc/config/network, e.g.
@@ -98,7 +98,7 @@ them if needed. The symlinks hnet-client, hnet-ifup and hnet-ifdown should be
 preserved as well.
 
 Copy the scripts dhcp.script and dhcpv6.script to /usr/share/hnetd and
-adapt them if needed. 
+adapt them if needed.
 
 If you are using odhcpd as DHCP/DHCPv6/RA server start it as a daemon.
 Afterwards run hnetd with appropriate parameters.
@@ -106,7 +106,7 @@ Afterwards run hnetd with appropriate parameters.
 Once both services are running, you can use the hnet CLI tools:
 
 hnet-ifup [-c category] [-a] [-d] [-u] [-p prefix] [-l id[/idmask]]
-	[-i id/idmask [filter-prefix]] [-m ip6_plen] [-k trickle_k] 
+	[-i id/idmask [filter-prefix]] [-m ip6_plen] [-k trickle_k]
 	[-P ping_interval] [-4 global-IPv4-address] [-6 delegated prefix]
 	[-D dns-server] <interfacename>
 adds the network interface <interfacename> (e.g. eth0) to the homenet.
@@ -117,7 +117,7 @@ adds the network interface <interfacename> (e.g. eth0) to the homenet.
 	static: like external, but does not run a DHCP or DHCPv6 client
 	internal: interface is always internal / towards interior nodes
 	leaf: like internal but connects to clients-only (no routers)
-	guest: like leaf, but clients should only reach the internet
+	guest: like leaf, but clients should only reach the Internet
 	hybrid: like internal, but connected to trusted, legacy CPE (experimental)
 	adhoc: like internal, but link is non-transitive (e.g. mesh) (experimental)
 static:
