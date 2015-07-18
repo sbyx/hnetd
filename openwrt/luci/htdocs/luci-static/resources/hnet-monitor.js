@@ -27,6 +27,7 @@ var hnet = (function() {
 				UPLINK_ROUTER: "#FF99A0",
 				IFACE : "#2B7CE9",
 				DESIGNATED_IFACE : "red",
+				RPA_IFACE: "#CC3300",
 				UNKNOWN_IFACE: "grey",
 				UPLINK : "violet",
 				CONNEXION_UNIDIR : "#009966",
@@ -40,6 +41,7 @@ var hnet = (function() {
 			UPLINK_ROUTER: "#7BCBC0",
 			IFACE : "#C0FB64",
 			DESIGNATED_IFACE : "#7BCB00",
+			RPA_IFACE: "#CC3300",
 			UNKNOWN_IFACE: "#B6BCB6",
 			UPLINK : "#B3C2EE",
 			CONNEXION_UNIDIR : "#89D414",
@@ -398,6 +400,20 @@ var hnet = (function() {
 		
 		var prefix_present = false;
 		var me = this;
+		if(("rpa_candidate" in hncp.nodes[this.router.id])) {
+			var rpa_present = false;
+			var hncp_a = hncp.nodes[me.router.id]["addresses"];
+			hncp_a.forEach(function(a) {
+				if((a.address == hncp.nodes[me.router.id]["rpa_candidate"]) && (a["link-id"] == me.id) ) 
+					rpa_present = true;});
+
+			if(rpa_present) {
+				this.node.radius = this.monitor.conf.sizes.DESIGNATED_IFACE_RADIUS;
+				this.node.color = this.monitor.conf.colors.RPA_IFACE;
+				return;
+			}
+		}
+
 		var hncp_p = hncp.nodes[this.router.id]["prefixes"];
 		hncp_p.forEach(function(p) {if(p.link == me.id) prefix_present = true;});
 		
