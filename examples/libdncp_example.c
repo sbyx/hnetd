@@ -2,7 +2,6 @@
  * Copyright (c) 2015 Cisco Systems, Inc.
  */
 #include "dncp.h"
-#include "dncp_profile.h"
 
 /*
  * You can compile a static library implementing basic dncp API.
@@ -27,12 +26,15 @@ static void example_log(__unused int priority, const char *format, ...) {
 void (*hnetd_log)(int priority, const char *format, ...) = example_log;
 
 /* In this example, we just use hncp's functions */
+#include "udp46.c"
 #include "hncp_io.c"
 #include "hncp.c"
 
 int main (int argc, char **argv)
 {
-	dncp hncp;
+	hncp hncp;
+
+	uloop_init();
 	if(!(hncp = hncp_create())) {
 		L_ERR("hncp_create error");
 		return -1;
@@ -41,7 +43,7 @@ int main (int argc, char **argv)
 	argc--;
 	argv++;
 	while(argc) {
-		if(!dncp_ep_set_enabled(hncp, argv[0], 1)) {
+		if(!hncp_io_set_ifname_enabled(hncp, argv[0], 1)) {
 			L_ERR("Could not enable iface %s", argv[0]);
 			return -1;
 		}
@@ -50,7 +52,7 @@ int main (int argc, char **argv)
 	}
 
 	char *data = "The answer";
-	dncp_tlv tlv = dncp_add_tlv(hncp, 42, data, strlen(data), 0);
+	dncp_tlv tlv = dncp_add_tlv(hncp->dncp, 42, data, strlen(data), 0);
 	if(!(tlv)) {
 		L_ERR("Could not publish TLV");
 	}
