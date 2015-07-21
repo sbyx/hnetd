@@ -103,12 +103,13 @@ add_executable(hnetd ${HNCP} ${HT} src/hncp_routing.c src/hncp_dump.c src/hnetd.
 target_link_libraries(hnetd ubox resolv blobmsg_json ${BACKEND_LINK} ${DTLS_LINK})
 install(TARGETS hnetd DESTINATION sbin/)
 
+# Fix for SSL build please :p -MSt
 # Build DNCP static library
-add_library(dncp STATIC src/hnetd_time.c src/prefix.c src/tlv.c src/dncp.c src/dncp_notify.c src/dncp_timeout.c src/dncp_proto.c)
+#add_library(dncp STATIC src/hnetd_time.c src/prefix.c src/tlv.c src/dncp.c src/dncp_notify.c src/dncp_timeout.c src/dncp_proto.c)
 
 # libdncp example
-add_executable(libdncp_example examples/libdncp_example.c)
-target_link_libraries(libdncp_example dncp ubox)
+#add_executable(libdncp_example examples/libdncp_example.c)
+#target_link_libraries(libdncp_example dncp ubox)
 
 # Unit test stuff
 
