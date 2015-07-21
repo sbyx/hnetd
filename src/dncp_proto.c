@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Thu Jul  2 13:31:15 2015 mstenber
- * Edit time:     1056 min
+ * Last modified: Tue Jul 21 10:56:34 2015 mstenber
+ * Edit time:     1057 min
  *
  */
 
@@ -384,6 +384,8 @@ handle_message(dncp_ep_i l,
                 break;
               }
           }
+        else
+          dncp_self_flush(o->own_node);
         dncp_ep_i_send_node_state(l, dst, src, n);
         break;
 
