@@ -6,7 +6,7 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 10:41:56 2013 mstenber
- * Last modified: Thu Jul  2 11:47:19 2015 mstenber
+ * Last modified: Tue Jul 21 12:05:26 2015 mstenber
  * Edit time:     653 min
  *
  */
@@ -20,12 +20,6 @@
 /* Test utilities */
 #include "net_sim.h"
 #include "sput.h"
-
-//dependency of hncp_multicast
-int iface_get_address(struct in6_addr *addr, bool v4, const struct in6_addr *preferred)
-{
-	return -1;
-}
 
 /**************************************************************** Test cases */
 

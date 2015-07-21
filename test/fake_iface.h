@@ -6,7 +6,7 @@
  * Copyright (c) 2015 cisco Systems, Inc.
  *
  * Created:       Thu Feb 26 13:40:08 2015 mstenber
- * Last modified: Thu Jun 11 09:53:46 2015 mstenber
+ * Last modified: Tue Jul 21 12:04:42 2015 mstenber
  * Edit time:     3 min
  *
  */
@@ -22,6 +22,11 @@ bool mock_iface = false;
 
 struct iface default_iface = {.elected = -1,
                               .internal = true};
+
+int iface_get_address(struct in6_addr *addr, bool v4, const struct in6_addr *preferred)
+{
+  return -1;
+}
 
 struct iface* iface_get(const char *ifname)
 {
