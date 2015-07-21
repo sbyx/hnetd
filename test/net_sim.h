@@ -6,7 +6,7 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Thu Jul  2 12:01:42 2015 mstenber
+ * Last modified: Tue Jul 21 12:15:25 2015 mstenber
  * Edit time:     416 min
  *
  */
@@ -544,8 +544,10 @@ void net_sim_remove_node(net_sim s, net_node node)
     hncp_pa_destroy(node->pa);
 #endif /* !DISABLE_HNCP_PA */
 #ifndef DISABLE_HNCP_MULTICAST
+#if 0
   if (!s->disable_multicast)
     hncp_multicast_destroy(node->multicast);
+#endif /* Enable again once it does not crash.. sigh. */
 #endif /* !DISABLE_HNCP_MULTICAST */
 
   hncp_link_destroy(node->link);
