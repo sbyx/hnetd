@@ -19,7 +19,9 @@
 #include "hncp_pa.h"
 #include "hncp_sd.h"
 #include "hncp_link.h"
+#ifdef HNCP_MULTICAST
 #include "hncp_multicast.h"
+#endif
 #include "sput.h"
 
 /* Lots of stubs here, rather not put __unused all over the place. */
@@ -108,7 +110,7 @@ typedef struct {
 #ifndef DISABLE_HNCP_PA
   hncp_pa pa;
 #endif /* !DISABLE_HNCP_PA */
-#ifndef DISABLE_HNCP_MULTICAST
+#if defined(HNCP_MULTICAST) && !defined(DISABLE_HNCP_MULTICAST)
   hncp_multicast multicast;
 #endif /* !DISABLE_HNCP_MULTICAST */
   hncp_sd sd;
@@ -289,7 +291,7 @@ bool net_sim_is_busy(net_sim s)
           return true;
         }
 #endif /* !DISABLE_HNCP_SD */
-#ifndef DISABLE_HNCP_MULTICAST
+#if defined(HNCP_MULTICAST) && !defined(DISABLE_HNCP_MULTICAST)
       if (!s->disable_multicast && hncp_multicast_busy(n->multicast))
         {
           L_DEBUG("net_sim_is_busy: pending multicast");
@@ -379,7 +381,7 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
       goto fail;
 
 #endif /* !DISABLE_HNCP_SD */
-#ifndef DISABLE_HNCP_MULTICAST
+#if defined(HNCP_MULTICAST) && !defined(DISABLE_HNCP_MULTICAST)
   static hncp_multicast_params_s multicast_params = {
     .multicast_script = "s-mc"
   };
@@ -543,7 +545,7 @@ void net_sim_remove_node(net_sim s, net_node node)
   if (!s->disable_pa)
     hncp_pa_destroy(node->pa);
 #endif /* !DISABLE_HNCP_PA */
-#ifndef DISABLE_HNCP_MULTICAST
+#if defined(HNCP_MULTICAST) && !defined(DISABLE_HNCP_MULTICAST)
 #if 0
   if (!s->disable_multicast)
     hncp_multicast_destroy(node->multicast);

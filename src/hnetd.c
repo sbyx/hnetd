@@ -22,7 +22,6 @@
 #include "hnetd_time.h"
 #include "hncp_pa.h"
 #include "hncp_sd.h"
-#include "hncp_multicast.h"
 #include "hncp_routing.h"
 #include "hncp_tunnel.h"
 #include "hncp_proto.h"
@@ -31,6 +30,10 @@
 #include "platform.h"
 #include "pd.h"
 #include "dncp_trust.h"
+
+#ifdef HNCP_MULTICAST
+#include "hncp_multicast.h"
+#endif
 
 #ifdef DTLS
 #include "dtls.h"
@@ -105,14 +108,18 @@ int main(__unused int argc, char *argv[])
 	hncp_iface_user_s hiu;
 	hncp_pa hncp_pa;
 	hncp_sd_params_s sd_params;
+#ifdef HNCP_MULTICAST
 	hncp_multicast_params_s multicast_params;
+#endif
 #ifdef DTLS
 	dncp_trust dt = NULL;
 #endif /* DTLS */
 	struct hncp_link_config link_config = {HNCP_VERSION, 0, 0, 0, 0, ""};
 
 	memset(&sd_params, 0, sizeof(sd_params));
+#ifdef HNCP_MULTICAST
 	memset(&multicast_params, 0, sizeof(multicast_params));
+#endif
 
 	openlog("hnetd", LOG_PERROR | LOG_PID, LOG_DAEMON);
 	uloop_init();
@@ -210,9 +217,11 @@ int main(__unused int argc, char *argv[])
 		case 'm':
 			sd_params.domain_name = optarg;
 			break;
+#ifdef HNCP_MUTLCIAST
 		case 'M':
 			multicast_params.multicast_script = optarg;
 			break;
+#endif
 		case 'S':
 			strict = true;
 			break;
@@ -331,6 +340,7 @@ int main(__unused int argc, char *argv[])
 		return 71;
 	}
 
+#ifdef HNCP_MULTICAST
 	if (multicast_params.multicast_script) {
 			hncp_multicast m = hncp_multicast_create(h, &multicast_params);
 			if (!m) {
@@ -338,6 +348,8 @@ int main(__unused int argc, char *argv[])
 					return 123;
 			}
 	}
+#endif
+
 	if (routing_script)
 		hncp_routing_create(h, routing_script, !strict);
 

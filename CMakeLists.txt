@@ -36,6 +36,11 @@ else()
   set(DTLS_LINK "")
 endif()
 
+if(${HNCP_MULTICAST})
+  set(EXTRA_SOURCE ${EXTRA_SOURCE} src/hncp_multicast.c)
+  add_definitions(-DHNCP_MULTICAST=1)
+endif(${HNCP_MULTICAST})
+
 OPTION(COVERAGE "build with coverage" OFF)
 
 if(${APPLE})
@@ -94,12 +99,12 @@ add_library(L_PA OBJECT src/pa_core.c src/pa_filters.c src/pa_rules.c src/pa_sto
 set(PA ${DNCP_BASE} ${BT} $<TARGET_OBJECTS:L_PA>)
 add_library(L_DNCP_PROTO OBJECT src/dncp_proto.c)
 set(DNCP_WITH_PROTO ${PA} $<TARGET_OBJECTS:L_DNCP_PROTO>)
-add_library(L_HNCP_GLUE OBJECT src/hncp.c src/hncp_pa.c src/hncp_sd.c src/hncp_link.c src/hncp_multicast.c)
+add_library(L_HNCP_GLUE OBJECT src/hncp.c src/hncp_pa.c src/hncp_sd.c src/hncp_link.c ${EXTRA_SOURCE})
 set(HNCP_WITH_GLUE ${DNCP_WITH_PROTO} $<TARGET_OBJECTS:L_HNCP_GLUE>)
 add_library(L_HNCP_IO OBJECT src/hncp_io.c ${DTLS_SOURCE} src/udp46.c)
 set(HNCP_IO $<TARGET_OBJECTS:L_HNCP_IO>)
 set(HNCP ${HNCP_WITH_GLUE} ${HNCP_IO}  ${TRUST_SOURCE})
-add_executable(hnetd ${HNCP} ${HT} src/hncp_routing.c src/hncp_dump.c src/hncp_tunnel.c src/hnetd.c src/iface.c src/pd.c src/ ${BACKEND_SOURCE})
+add_executable(hnetd ${HNCP} ${HT} src/hncp_routing.c src/hncp_dump.c src/hncp_tunnel.c src/hnetd.c src/iface.c src/pd.c ${BACKEND_SOURCE})
 target_link_libraries(hnetd ubox resolv blobmsg_json ${BACKEND_LINK} ${DTLS_LINK})
 install(TARGETS hnetd DESTINATION sbin/)
 
