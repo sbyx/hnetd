@@ -17,7 +17,6 @@ else
 	ip l2tp del tunnel tunnel_id $1
 	
 	if [ "$4" != 0 ]; then
-		set -e
 		ip l2tp add tunnel local $3 remote $6 tunnel_id $1 peer_tunnel_id $4 encap udp udp_sport $1 udp_dport $4
 		ip l2tp add session name $ifname tunnel_id $1 session_id $2 peer_session_id $5
 		ip link set $ifname up mtu 1280
