@@ -657,24 +657,6 @@ struct iface* iface_create(const char *ifname, const char *handle, iface_flags f
 			c->ip6_plen = 128;
 		}
 
-		// Get EUI-64 address
-		struct ifaddrs *ifaddr, *ifa;
-		if (!getifaddrs(&ifaddr)) {
-			for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
-				struct sockaddr_in6 *sa = (struct sockaddr_in6*)ifa->ifa_addr;
-				if (ifa->ifa_name && !strcmp(ifa->ifa_name, ifname) &&
-						sa && sa->sin6_family == AF_INET6 &&
-						IN6_IS_ADDR_LINKLOCAL(&sa->sin6_addr))
-					c->eui64_addr = sa->sin6_addr;
-			}
-			freeifaddrs(ifaddr);
-		}
-
-		// Fallback to random EUI-64 address
-		if (IN6_IS_ADDR_UNSPECIFIED(&c->eui64_addr))
-			for (size_t i = 8; i < 16; ++i)
-				c->eui64_addr.s6_addr[i] = random();
-
 		vlist_init(&c->assigned, compare_addrs, update_addr);
 		vlist_init(&c->delegated, compare_addrs, update_prefix);
 		INIT_LIST_HEAD(&c->chosen);

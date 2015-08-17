@@ -118,7 +118,6 @@ struct iface {
 	iface_flags flags;
 
 	// LL-address
-	struct in6_addr eui64_addr;
 	struct in_addr v4_saddr;
 	int v4_prefix;
 
