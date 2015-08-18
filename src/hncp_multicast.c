@@ -201,7 +201,6 @@ static void hm_external_set(hm m, hm_iface i, bool external)
 	L_DEBUG("hncp_multicast: %s external = %d", i->ifname, external);
 	hm_proxy_update(m, i);
 	hm_pim_update(m, i);
-	hm_iface_clean_maybe(m, i);
 }
 
 static void hm_internal_set(hm m, hm_iface i, bool internal)
@@ -212,7 +211,6 @@ static void hm_internal_set(hm m, hm_iface i, bool internal)
 	L_DEBUG("hncp_multicast: %s internal = %d", i->ifname, internal);
 	hm_proxy_update(m, i);
 	hm_pim_update(m, i);
-	hm_iface_clean_maybe(m, i);
 }
 
 static void hm_bp_notify(hm m, struct tlv_attr *tlv, bool enable)
@@ -396,16 +394,20 @@ static void _cb_extiface(struct iface_user *u, const char *ifname, bool enabled)
 {
 	hncp_multicast m = container_of(u, hncp_multicast_s, iface);
 	hm_iface i = hm_iface_goc(m, ifname, enabled);
-	if(i)
+	if(i) {
 		hm_external_set(m, i, enabled);
+		hm_iface_clean_maybe(m, i);
+	}
 }
 
 static void _cb_intiface(struct iface_user *u, const char *ifname, bool enabled)
 {
 	hncp_multicast m = container_of(u, hncp_multicast_s, iface);
 	hm_iface i = hm_iface_goc(m, ifname, enabled);
-	if(i)
+	if(i) {
 		hm_internal_set(m, i, enabled);
+		hm_iface_clean_maybe(m, i);
+	}
 	if(!enabled) {
 		//When an internal interface is not internal,
 		//we don't get end-of-address notifications
