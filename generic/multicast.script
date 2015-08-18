@@ -5,6 +5,8 @@
 # 
 # Call syntax:
 #
+# status
+#
 # init (start|stop)
 #
 # rpa (ADDRESS|none) (OLD-ADDRESS|none)
@@ -26,6 +28,11 @@ error () {
 if [ "$(id -u)" -ne "0" ] || [ "$1" = "" ]; then
 	error
 fi
+
+status () {
+	EXE=`which pimbd`
+	[ -n "$EXE" ] && exit 0 || exit 1
+}
 
 init () {
 	if [ -f "/etc/init.d/pimbd" ]; then
@@ -82,6 +89,7 @@ pim () {
 }
 
 case "$1" in
+	status) shift 1; status $@;;
 	init) shift 1; init $@;;
 	rpa) shift 1; rpa $@;;
 	bp) shift 1; bp $@;;
