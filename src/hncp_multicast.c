@@ -26,6 +26,7 @@
 #include "iface.h"
 #include "prefix.h"
 #include "hnetd.h"
+#include "exeq.h"
 
 #include <libubox/list.h>
 #include <unistd.h>
@@ -54,11 +55,11 @@ typedef struct hncp_multicast_struct
 
   /* Interface list */
   struct list_head ifaces;
-  struct list_head tasks;
 
   struct uloop_timeout rp_timeout;
   struct uloop_timeout addr_timeout;
-  struct uloop_process process;
+
+  struct exeq exeq;
 
   char has_rpa : 1;
   char has_address : 1;
@@ -81,62 +82,6 @@ struct task {
 
 static void hm_iface_destroy(hm hm, hm_iface i);
 static void hm_iface_clean_maybe(hm hm, hm_iface i);
-
-static void task_start_maybe(hm hm)
-{
-	if(hm->process.pending || list_empty(&hm->tasks))
-		return;
-
-	struct task *t = list_first_entry(&hm->tasks, struct task, le);
-	pid_t pid = hncp_run(t->args);
-	hm->process.pid = pid;
-	uloop_process_add(&hm->process);
-	list_del(&t->le);
-	free(t);
-}
-
-static  void _process_handler(struct uloop_process *c, int ret)
-{
-	hm hm = container_of(c, struct hncp_multicast_struct, process);
-	if(ret)
-		L_ERR("Child process %d exited with status %d", c->pid, ret);
-	else
-		L_DEBUG("Child process %d terminated normally.", c->pid, ret);
-	task_start_maybe(hm);
-}
-
-static void task_add(hm hm, char *args[])
-{
-	size_t datalen = 0;
-	size_t len;
-	struct task *task;
-	size_t arg_cnt;
-	for(arg_cnt = 0; args[arg_cnt] ; arg_cnt++) {
-		datalen += strlen(args[arg_cnt]) + 1;
-	}
-
-	if(arg_cnt >= TASK_MAX_ARGS) {
-		L_ERR("Too many arguments in task");
-		return;
-	}
-
-	if(!(task = malloc(sizeof(*task) + datalen))) {
-		L_ERR("Could not create task");
-		return;
-	}
-
-	datalen = 0;
-	for(arg_cnt = 0; args[arg_cnt]; arg_cnt++) {
-		len = strlen(args[arg_cnt]) + 1;
-		memcpy(task->data + datalen, args[arg_cnt], len);
-		task->args[arg_cnt] = task->data + datalen;
-		datalen += len;
-	}
-	task->args[arg_cnt] = NULL;
-
-	list_add_tail(&task->le, &hm->tasks);
-	task_start_maybe(hm);
-}
 
 static void hm_proxy_set(hm m, hm_iface i, bool enable)
 {
@@ -162,7 +107,7 @@ find:
 		addr_ntop(addr, INET6_ADDRSTRLEN, &m->current_address);
 		char *argv[] = { (char *)m->p.multicast_script,
 				"proxy", i->ifname, "on", addr, port, NULL };
-		task_add(m, argv);
+		exeq_add(&m->exeq, argv);
 		hncp_t_pim_border_proxy_s tlv = {
 				.addr = m->current_address,
 				.port = htons(i->proxy_port)
@@ -171,7 +116,7 @@ find:
 	} else {
 		char *argv[] = { (char *)m->p.multicast_script,
 				"proxy", i->ifname, "off", NULL };
-		task_add(m, argv);
+		exeq_add(&m->exeq, argv);
 		dncp_remove_tlv(m->dncp, i->proxy_tlv);
 		i->proxy_tlv = NULL;
 	}
@@ -188,7 +133,7 @@ static void hm_pim_set(hm m, hm_iface i, bool enable)
 	L_DEBUG("hncp_multicast: %s pim = %d", i->ifname, enable);
 	char *argv[] = { (char *)m->p.multicast_script,
 					"pim", i->ifname, enable?"on":"off", NULL};
-	task_add(m, argv);
+	exeq_add(&m->exeq, argv);
 }
 
 #define hm_pim_update(m, i) hm_pim_set(m, i, i->internal && !i->external)
@@ -226,7 +171,7 @@ static void hm_bp_notify(hm m, struct tlv_attr *tlv, bool enable)
 	 char *argv[] = {(char *)m->p.multicast_script,
 			 "bp", enable ? "add" : "remove",
 					 addr, port, NULL};
-	 task_add(m, argv);
+	 exeq_add(&m->exeq, argv);
 }
 
 static void hm_is_controller_set(hm m, bool enable)
@@ -261,7 +206,7 @@ static void hm_rpa_set(hm m, struct in6_addr *addr)
 			addr?ADDR_REPR(addr):"none");
 	char *argv[] = { (char *)m->p.multicast_script,
 			"rpa", addr?new:"none", m->has_rpa?old:"none", NULL };
-	task_add(m, argv);
+	exeq_add(&m->exeq, argv);
 
 	m->has_rpa = !!addr;
 	if(addr)
@@ -449,10 +394,9 @@ hncp_multicast hncp_multicast_create(hncp h, hncp_multicast_params p)
 	m->dncp = hncp_get_dncp(h);
 	m->p = *p;
 	m->rp_timeout.cb = _rp_timeout;
-	m->process.cb = _process_handler;
 	m->addr_timeout.cb = _addr_timeout;
 	INIT_LIST_HEAD(&m->ifaces);
-	INIT_LIST_HEAD(&m->tasks);
+	exeq_init(&m->exeq);
 
 	m->subscriber.tlv_change_cb = _tlv_cb;
 	dncp_subscribe(m->dncp, &m->subscriber);
@@ -468,7 +412,7 @@ hncp_multicast hncp_multicast_create(hncp h, hncp_multicast_params p)
 	//Start or restart
 	char *argv[] = {(char *)m->p.multicast_script,
 			"init", "start", NULL};
-	task_add(m, argv);
+	exeq_add(&m->exeq, argv);
 
 	return m;
 }
@@ -480,15 +424,11 @@ void hncp_multicast_destroy(hncp_multicast m)
 	list_for_each_entry_safe(i, is, &m->ifaces, le)
 		hm_iface_destroy(m, i);
 
-	struct task *t, *ts;
-	list_for_each_entry_safe(t, ts, &m->tasks, le)
-		free(t);
-
 	iface_unregister_user(&m->iface);
 	dncp_unsubscribe(m->dncp, &m->subscriber);
 	uloop_timeout_cancel(&m->rp_timeout);
 	uloop_timeout_cancel(&m->addr_timeout);
-	uloop_process_delete(&m->process);
+	exeq_term(&m->exeq);
 	char *argv[] = {(char *)m->p.multicast_script,
 			"init", "stop", NULL};
 	hncp_run(argv);
@@ -497,5 +437,5 @@ void hncp_multicast_destroy(hncp_multicast m)
 
 bool hncp_multicast_busy(hncp_multicast m)
 {
-	return m->rp_timeout.pending || m->addr_timeout.pending || m->process.pending;
+	return m->rp_timeout.pending || m->addr_timeout.pending || m->exeq.process.pending;
 }

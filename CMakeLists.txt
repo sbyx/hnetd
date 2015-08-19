@@ -94,7 +94,7 @@ add_library(L_PA OBJECT src/pa_core.c src/pa_filters.c src/pa_rules.c src/pa_sto
 set(PA ${DNCP_BASE} ${BT} $<TARGET_OBJECTS:L_PA>)
 add_library(L_DNCP_PROTO OBJECT src/dncp_proto.c)
 set(DNCP_WITH_PROTO ${PA} $<TARGET_OBJECTS:L_DNCP_PROTO>)
-add_library(L_HNCP_GLUE OBJECT src/hncp.c src/hncp_pa.c src/hncp_sd.c src/hncp_link.c src/hncp_multicast.c)
+add_library(L_HNCP_GLUE OBJECT src/hncp.c src/hncp_pa.c src/hncp_sd.c src/hncp_link.c src/exeq.c src/hncp_multicast.c)
 set(HNCP_WITH_GLUE ${DNCP_WITH_PROTO} $<TARGET_OBJECTS:L_HNCP_GLUE>)
 add_library(L_HNCP_IO OBJECT src/hncp_io.c ${DTLS_SOURCE} src/udp46.c)
 set(HNCP_IO $<TARGET_OBJECTS:L_HNCP_IO>)
@@ -149,6 +149,11 @@ add_executable(test_hncp_io test/test_hncp_io.c ${DTLS_SOURCE} src/udp46.c ${HT}
 target_link_libraries(test_hncp_io ubox ${BACKEND_LINK} blobmsg_json ${DTLS_LINK})
 add_test(hncp_io test_hncp_io)
 add_dependencies(check test_hncp_io)
+
+add_executable(test_exeq test/test_exeq.c)
+target_link_libraries(test_exeq ubox)
+add_test(exeq test_exeq)
+add_dependencies(check test_exeq)
 
 add_executable(test_hncp_net test/test_hncp_net.c ${HNCP_WITH_GLUE})
 target_link_libraries(test_hncp_net ubox ${BACKEND_LINK} blobmsg_json)
