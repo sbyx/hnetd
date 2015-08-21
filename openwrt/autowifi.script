@@ -1,0 +1,35 @@
+#!/bin/sh
+
+echo "Auto-Wifi Script: $@" >> /tmp/autowifi.log
+
+wlan="wlan$2"
+ssid="$3"
+password="$4"
+
+if [ "$1" = "addssid" ]; then
+	uci -q batch <<-EOT
+		set wireless.@wifi-device[$2].disabled=0
+		set wireless.@wifi-iface[$2].mode='ap'
+		set wireless.@wifi-iface[$2].ssid=$ssid
+		set wireless.@wifi-iface[$2].network='hw$2'
+		set network.hw$2='interface'
+		set network.hw$2.proto='hnet'
+		set network.hw$2.slice='$slice'
+	EOT
+	if [ -n "$password" -o "$password" = "none" ]; then
+		uci set wireless.@wifi-iface[$2].encryption='psk2'
+		uci set wireless.@wifi-iface[$2].key="$password"
+	else
+		uci delete wireless.@wifi-iface[$2].encryption
+		uci delete wireless.@wifi-iface[$2].key
+	fi
+	uci commit wireless
+	uci commit network
+	reload_config
+elif [ "$1" = "delssid" ]; then
+	uci set wireless.@wifi-device[$2].disabled=1
+	uci delete network.hw$2
+	uci commit wireless
+	uci commit network
+	reload_config
+fi

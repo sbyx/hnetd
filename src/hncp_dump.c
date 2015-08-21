@@ -216,6 +216,24 @@ static int hd_node_pim_bp(struct tlv_attr *tlv, struct blob_buf *b)
 	return 0;
 }
 
+static int hd_node_ssid(struct tlv_attr *tlv, struct blob_buf *b)
+{
+	if(tlv_len(tlv) != sizeof(hncp_t_wifi_ssid_s))
+		goto inv;
+
+	hncp_t_wifi_ssid ssid = (hncp_t_wifi_ssid) tlv->data;
+	if(ssid->password[HNCP_WIFI_PASSWORD_LEN] != 0 ||
+			ssid->ssid[HNCP_WIFI_SSID_LEN] != 0)
+		goto inv;
+
+	hd_a(!blobmsg_add_string(b, "ssid", (char *)ssid->ssid), return -1);
+	hd_a(!blobmsg_add_string(b, "password", (char *)ssid->password), return -1);
+	return 0;
+inv:
+	hd_a(!blobmsg_add_u32(b, "invalid", 1), return -1);
+	return 0;
+}
+
 
 static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 {
@@ -227,7 +245,8 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 			externals = {NULL, NULL, 0, NULL},
 			addresses = {NULL, NULL, 0, NULL},
 			zones = {NULL, NULL, 0, NULL},
-			pim_bps = {NULL, NULL, 0, NULL};
+			pim_bps = {NULL, NULL, 0, NULL},
+			hncp_wifi = {NULL, NULL, 0, NULL};
 	int ret = -1;
 
 	hd_a(!blobmsg_add_u32(b, "update", n->update_number), return -1);
@@ -241,6 +260,7 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 	hd_a(!blob_buf_init(&addresses, BLOBMSG_TYPE_ARRAY), goto ad);
 	hd_a(!blob_buf_init(&zones, BLOBMSG_TYPE_ARRAY), goto zo);
 	hd_a(!blob_buf_init(&pim_bps, BLOBMSG_TYPE_ARRAY), goto bp);
+	hd_a(!blob_buf_init(&hncp_wifi, BLOBMSG_TYPE_ARRAY), goto aw);
 
 	dncp_node_for_each_tlv(n, tlv) {
 		switch (tlv_id(tlv)) {
@@ -285,6 +305,9 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 			case HNCP_T_PIM_BORDER_PROXY:
 				hd_do_in_table(&pim_bps, NULL, hd_node_pim_bp(tlv, &pim_bps), goto err);
 				break;
+			case HNCP_T_SSID:
+				hd_do_in_table(&hncp_wifi, NULL, hd_node_ssid(tlv, &hncp_wifi), goto err);
+				break;
 			default:
 				break;
 		}
@@ -296,8 +319,11 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 	hd_a(!blobmsg_add_named_blob(b, "addresses", addresses.head), goto err);
 	hd_a(!blobmsg_add_named_blob(b, "zones", zones.head), goto err);
 	hd_a(!blobmsg_add_named_blob(b, "pim_proxies", pim_bps.head), goto err);
+	hd_a(!blobmsg_add_named_blob(b, "ssids", hncp_wifi.head), goto err);
 	ret = 0;
 err:
+	blob_buf_free(&hncp_wifi);
+aw:
 	blob_buf_free(&pim_bps);
 bp:
 	blob_buf_free(&zones);

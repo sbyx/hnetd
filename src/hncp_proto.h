@@ -35,6 +35,9 @@ enum {
   /* draft-pfister-homenet-multicast */
   HNCP_T_PIM_RPA_CANDIDATE = 191,
   HNCP_T_PIM_BORDER_PROXY = 192,
+
+  /* Experimental feature - hncp_wifi.h */
+  HNCP_T_SSID = 195,
 };
 
 /* HNCP_T_VERSION */
@@ -116,6 +119,15 @@ typedef struct __packed {
 	struct in6_addr addr;
 	uint16_t port;
 } hncp_t_pim_border_proxy_s, *hncp_t_pim_border_proxy;
+
+/* HNCP_T_SSID */
+#define HNCP_WIFI_SSID_LEN     31
+#define HNCP_WIFI_PASSWORD_LEN 31
+
+typedef struct __packed {
+	uint8_t ssid[HNCP_WIFI_SSID_LEN + 1];
+	uint8_t password[HNCP_WIFI_PASSWORD_LEN + 1];
+} hncp_t_wifi_ssid_s, *hncp_t_wifi_ssid;
 
 /**************************************************************** Addressing */
 

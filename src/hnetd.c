@@ -25,6 +25,7 @@
 #include "hncp_multicast.h"
 #include "hncp_routing.h"
 #include "hncp_tunnel.h"
+#include "hncp_wifi.h"
 #include "hncp_proto.h"
 #include "hncp_link.h"
 #include "hncp_dump.h"
@@ -94,6 +95,7 @@ int usage() {
 	 "\t--verify-path <(DTLS) path to trusted cert file>\n"
 	 "\t--verify-dir <(DTLS) path to trusted cert directory>\n"
 	 "\t-M multicast_script (enables draft-pfister-homenet-multicast support)\n"
+	 "\t-w wifi_script,[ssid1:pass2,[ssid2:pass2,...]]\n"
 	 );
     return(3);
 }
@@ -156,6 +158,7 @@ int main(__unused int argc, char *argv[])
 	const char *dtls_path = NULL;
 	const char *dtls_dir = NULL;
 	const char *pidfile = NULL;
+	const char *wifi = NULL;
 	bool strict = false;
 
 	enum {
@@ -187,7 +190,7 @@ int main(__unused int argc, char *argv[])
 			{ NULL,          0,                      NULL,           0 }
 	};
 
-	while ((c = getopt_long(argc, argv, "?b::d:f:o:n:r:t:s:p:m:c:M:S", longopts, NULL)) != -1) {
+	while ((c = getopt_long(argc, argv, "?b::d:f:o:n:r:t:s:p:m:c:M:Sw:", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'b':
 			pidfile = (optarg && optarg[0]) ? optarg : "/var/run/hnetd.pid";
@@ -227,6 +230,9 @@ int main(__unused int argc, char *argv[])
 			break;
 		case 'p':
 			pd_socket_path = optarg;
+			break;
+		case 'w':
+			wifi = optarg;
 			break;
 		case GOL_IPPREFIX:
 			pa_ip4prefix = optarg;
@@ -343,6 +349,32 @@ int main(__unused int argc, char *argv[])
 
 	if (tunnel_script)
 		hncp_tunnel_create(hncp_get_dncp(h), tunnel_script);
+
+	if(wifi) {
+		hncp_wifi w = NULL;
+		char *entry, *buf;
+		if(!(buf = strdup(wifi))) {
+			L_ERR("strdup error");
+			return 123;
+		}
+		for (entry = strtok(buf, ","); entry; entry = strtok(NULL, ",")) {
+			if(!w) {
+				if(!(w = hncp_wifi_init(h, strdup(entry)))) {
+					L_ERR("unable to initialize auto-wifi, exiting");
+					return 124;
+				}
+			} else {
+				char *delim;
+				if(!(delim = strchr(entry, ':'))) {
+					L_ERR("Invalid argument %s in %s", entry, wifi);
+					return 125;
+				}
+				*delim = 0;
+				hncp_wifi_modssid(w, entry, delim + 1, 0);
+			}
+		}
+		free(buf);
+	}
 
 	//Note that pa subscribes to iface. Which is possible before iface init.
 	if(!(hncp_pa = hncp_pa_create(h, link))) {
