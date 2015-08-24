@@ -479,13 +479,40 @@ static void hpa_refresh_ec(hncp_pa hpa, bool publish)
 		dph++;
 		memcpy(dph, &dp->dp.prefix.prefix, plen);
 		if (dp->dhcp_len) {
-			int type = prefix_is_ipv4(&dp->dp.prefix)?HNCP_T_DHCP_OPTIONS:HNCP_T_DHCPV6_OPTIONS;
-			st = tlv_new(&tb, type, dp->dhcp_len);
+			st = tlv_new(&tb, HNCP_T_DHCPV6_OPTIONS, dp->dhcp_len);
 			memcpy(tlv_data(st), dp->dhcp_data, dp->dhcp_len);
 		}
 		tlv_nest_end(&tb, cookie);
 
-		//todo: Add DHCP Data
+		dncp_add_tlv_attr(dncp, tb.head, 0);
+		tlv_buf_free(&tb);
+	}
+
+	//IPv4 Local prefix
+	if(publish && hpa->v4_enabled && hpa->v4_dp.dp.enabled
+			&& hpa->v4_dp.pa.type == HPA_DP_T_LOCAL) {
+		void *cookie;
+		memset(&tb, 0, sizeof(tb));
+		tlv_buf_init(&tb, HNCP_T_EXTERNAL_CONNECTION);
+
+		dp = &hpa->v4_dp;
+		// Determine how much space we need for TLV.
+		plen = ROUND_BITS_TO_BYTES(dp->dp.prefix.plen);
+		flen = sizeof(hncp_t_delegated_prefix_header_s) + plen;
+
+		cookie = tlv_nest_start(&tb, HNCP_T_DELEGATED_PREFIX, flen);
+		dph = tlv_data(tb.head);
+		dph->ms_valid_at_origination = _local_abs_to_remote_rel(now, dp->valid_until);
+		dph->ms_preferred_at_origination = _local_abs_to_remote_rel(now, dp->preferred_until);
+		dph->prefix_length_bits = dp->dp.prefix.plen;
+		dph++;
+		memcpy(dph, &dp->dp.prefix.prefix, plen);
+		if (dp->dhcp_len) {
+			st = tlv_new(&tb, HNCP_T_DHCP_OPTIONS, dp->dhcp_len);
+			memcpy(tlv_data(st), dp->dhcp_data, dp->dhcp_len);
+		}
+		tlv_nest_end(&tb, cookie);
+
 		dncp_add_tlv_attr(dncp, tb.head, 0);
 		tlv_buf_free(&tb);
 	}
@@ -679,11 +706,13 @@ static void hpa_dp_update_enabled(hncp_pa hpa)
 
 #define hpa_v4_update(hpa) hpa_v4_to(&(hpa)->v4_to)
 
-static int hpa_has_other_v4(hncp_pa hpa)
+static int hpa_has_better_v4(hncp_pa hpa, bool uplink)
 {
 	hpa_dp dp;
 	hpa_for_each_dp(hpa, dp)
-			if(dp->pa.type == HPA_DP_T_HNCP && prefix_is_ipv4(&dp->dp.prefix) && memcmp(&dp->hncp.node_id, dncp_node_get_id(dncp_get_own_node(hpa->dncp)), HNCP_NI_LEN) >= 0)
+			if(dp->pa.type == HPA_DP_T_HNCP &&
+					prefix_is_ipv4(&dp->dp.prefix) && (!uplink || (dp->hncp.dst_present && dp->hncp.dst.plen == 0 &&
+					memcmp(&dp->hncp.node_id, dncp_node_get_id(dncp_get_own_node(hpa->dncp)), HNCP_NI_LEN) >= 0)))
 			return 1;
 	return 0;
 }
@@ -707,8 +736,8 @@ static void hpa_v4_to(struct uloop_timeout *to)
 	hpa_iface elected_iface;
 
 	if(!hpa->ula_conf.use_ipv4 ||
-			!(elected_iface = hpa_elect_v4(hpa)) || //We have no v4 candidate
-			hpa_has_other_v4(hpa)) {
+			(!(elected_iface = hpa_elect_v4(hpa)) && hpa_has_better_v4(hpa, false)) || //We have no v4 candidate
+			hpa_has_better_v4(hpa, true)) {
 		//Cannot have an IPv4 uplink
 		if(hpa->v4_enabled) {
 			L_DEBUG("IPv4 Prefix: Remove");
@@ -717,16 +746,33 @@ static void hpa_v4_to(struct uloop_timeout *to)
 			list_del(&hpa->v4_dp.dp.le);
 			hpa_dp_update_enabled(hpa);
 		}
+		hpa->v4_backoff = 0;
 	} else if(hpa->v4_enabled) {
 		if(hpa->v4_dp.iface.iface != elected_iface) {
 			//Update elected interface
 			L_DEBUG("IPv4 Prefix: Change interface from %s to %s",
-					hpa->v4_dp.iface.iface->ifname, elected_iface->ifname);
+					hpa->v4_dp.iface.iface->ifname?hpa->v4_dp.iface.iface->ifname:"null",
+							elected_iface->ifname?elected_iface->ifname:"null");
 			//todo: This approach will destroy all APs. Maybe we can do it more
 			//seemlessly
 			hpa_dp_set_enabled(hpa, &hpa->v4_dp, 0);
-			hpa->v4_dp.iface.iface = elected_iface;
+
+			//Either with or without uplink
+			bool update_ec = false;
+			if(elected_iface) {
+				if(!hpa->v4_dp.iface.iface)
+					update_ec = true;
+				hpa->v4_dp.pa.type = HPA_DP_T_IFACE;
+				hpa->v4_dp.iface.excluded = 0;
+				hpa->v4_dp.iface.iface = elected_iface;
+			} else {
+				if(hpa->v4_dp.iface.iface)
+					update_ec = true;
+				hpa->v4_dp.pa.type = HPA_DP_T_LOCAL;
+			}
 			hpa_dp_update_enabled(hpa);
+			if(update_ec)
+				hpa_refresh_ec(hpa, 1);
 		}
 
 		if((hpa->v4_dp.valid_until - hpa->ula_conf.local_update_delay) <= now) {
@@ -736,15 +782,24 @@ static void hpa_v4_to(struct uloop_timeout *to)
 					now + hpa->ula_conf.local_valid_lifetime,
 					NULL, 0);
 		}
-	} else {
-		//
-		L_DEBUG("IPv4 Prefix: Uplink is now %s", elected_iface->ifname);
+	} else if(!elected_iface && !hpa->v4_backoff) { //No backoff yet
+		int delay = 10 + (random() % HPA_ULA_MAX_BACKOFF);
+		hpa->v4_backoff = now + delay;
+		L_DEBUG("IPv4 Spontaneous Generation: Backoff %d ms", delay);
+	} else if(elected_iface || hpa->v4_backoff <= now) {
 		memset(&hpa->v4_dp, 0, sizeof(hpa->v4_dp));
 		hpa->v4_dp.dp.local = 1;
 		hpa->v4_dp.dp.prefix = hpa->ula_conf.v4_prefix;
-		hpa->v4_dp.pa.type = HPA_DP_T_IFACE;
-		hpa->v4_dp.iface.excluded = 0;
-		hpa->v4_dp.iface.iface = elected_iface;
+		if(elected_iface) {
+			L_DEBUG("IPv4 Prefix: Uplink is now %s", elected_iface->ifname);
+			hpa->v4_dp.pa.type = HPA_DP_T_IFACE;
+			hpa->v4_dp.iface.excluded = 0;
+			hpa->v4_dp.iface.iface = elected_iface;
+		} else {
+			L_DEBUG("IPv4 Prefix: Spontaneous generation");
+			hpa->v4_dp.pa.type = HPA_DP_T_LOCAL;
+		}
+
 		hpa->v4_dp.pa.prefix = hpa->ula_conf.v4_prefix.prefix;
 		hpa->v4_dp.pa.plen = hpa->ula_conf.v4_prefix.plen;
 		list_add(&hpa->v4_dp.dp.le, &hpa->dps);
@@ -754,12 +809,14 @@ static void hpa_v4_to(struct uloop_timeout *to)
 				NULL, 0);
 		hpa->v4_enabled = 1;
 		hpa_dp_update_enabled(hpa);
-		hpa->ula_backoff = 0;
+		hpa->v4_backoff = 0;
 	}
 
 	if(hpa->v4_enabled) { //Next update time
 		uloop_timeout_set(to,
 				(int)(hpa->v4_dp.valid_until - hpa->ula_conf.local_update_delay - now));
+	} else if(hpa->v4_backoff) { //Wake up for backoff
+		uloop_timeout_set(to, (int)(hpa->v4_backoff - now + 10));
 	}
 }
 
@@ -767,7 +824,7 @@ static int hpa_has_other_ula(hncp_pa hpa)
 {
 	hpa_dp dp;
 	hpa_for_each_dp(hpa, dp)
-		if(dp->pa.type != HPA_DP_T_ULA &&
+		if(dp->pa.type != HPA_DP_T_LOCAL &&
 				prefix_is_ipv6_ula(&dp->dp.prefix))
 			return 1;
 	return 0;
@@ -849,7 +906,7 @@ found:
 		memset(&hpa->ula_dp, 0, sizeof(hpa->ula_dp));
 		hpa->ula_dp.dp.local = 1;
 		hpa->ula_dp.dp.prefix = ula;
-		hpa->ula_dp.pa.type = HPA_DP_T_ULA;
+		hpa->ula_dp.pa.type = HPA_DP_T_LOCAL;
 		hpa->ula_dp.pa.prefix = ula.prefix;
 		hpa->ula_dp.pa.plen = ula.plen;
 		list_add(&hpa->ula_dp.dp.le, &hpa->dps);
@@ -1351,6 +1408,9 @@ static void hpa_update_dp_tlv(hncp_pa hpa, dncp_node n,
 	struct tlv_attr *stlv;
 	int left;
 	void *start;
+	bool dst_present = false;
+	struct prefix dst;
+	memset(&dst, 0, sizeof(dst));
 
 	/* Account for prefix padding */
 	flen = ROUND_BYTES_TO_4BYTES(flen);
@@ -1364,6 +1424,15 @@ static void hpa_update_dp_tlv(hncp_pa hpa, dncp_node n,
 		if (tlv_id(stlv) == HNCP_T_DHCPV6_OPTIONS) {
 			dhcpv6_data = tlv_data(stlv);
 			dhcpv6_len = tlv_len(stlv);
+		} if (tlv_id(stlv) == HNCP_T_PREFIX_DOMAIN) {
+			if(tlv_len(stlv) > 0) {
+				uint8_t type = *((uint8_t *)tlv_data(stlv));
+				if(type <= 128 && (tlv_len(stlv) == (unsigned int) ROUND_BITS_TO_BYTES(type) + 1)) {
+					dst_present = true;
+					dst.plen = type;
+					memcpy(&dst.prefix, tlv_data(stlv) + 1, ROUND_BITS_TO_BYTES(type));
+				}
+			}
 		} else {
 			L_NOTICE("unknown delegated prefix option seen:%d", tlv_id(stlv));
 		}
@@ -1390,6 +1459,20 @@ static void hpa_update_dp_tlv(hncp_pa hpa, dncp_node n,
 				HEX_REPR(tlv_data(tlv), tlv_len(tlv)));
 		uloop_timeout_cancel(&dp->hncp.delete_to);
 		hpa_dp_update(hpa, dp, preferred, valid, dhcpv6_data, dhcpv6_len);
+
+		//Update destination prefix
+		if(dp->hncp.dst_present != dst_present ||
+				(dp->hncp.dst_present && !memcmp(&dp->hncp.dst, &dst, sizeof(dst)))) {
+			dp->hncp.dst_present = dst_present;
+			if(dst_present)
+				memcpy(&dp->hncp.dst, &dst, sizeof(dst));
+
+			//ula and ipv4 spontaneous generation depends on destination prefix policies
+			if(prefix_is_ipv4(&dp->dp.prefix))
+				hpa_v4_update(hpa);
+			else if (prefix_is_ula(&dp->dp.prefix))
+				hpa_ula_update(hpa);
+		}
 	} else if(!(dp = calloc(1, sizeof(*dp)))) {
 		L_ERR("hpa_update_dp_tlv could not malloc for new dp");
 	} else {
@@ -1404,6 +1487,12 @@ static void hpa_update_dp_tlv(hncp_pa hpa, dncp_node n,
 		dp->pa.type = HPA_DP_T_HNCP;
 		dp->hncp.delete_to.cb = hpa_dp_delete_to;
 		DNCP_NODE_TO_PA(n, &dp->hncp.node_id);
+
+		//Set destination prefix policy
+		dp->hncp.dst_present = dst_present;
+		if(dst_present)
+			memcpy(&dp->hncp.dst, &dst, sizeof(dst));
+
 		list_add(&dp->dp.le, &hpa->dps);
 		hpa_dp_update(hpa, dp, preferred, valid, dhcpv6_data, dhcpv6_len);
 		hpa_dp_update_enabled(hpa); //recompute enabled

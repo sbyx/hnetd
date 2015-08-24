@@ -35,6 +35,9 @@ extern struct prefix ipv6_global_prefix;
 #define prefix_is_ipv4(prefix) \
 	prefix_contains(&ipv4_in_ipv6_prefix, prefix)
 
+#define prefix_is_ula(prefix) \
+	prefix_contains(&ipv6_ula_prefix, prefix)
+
 #define prefix_is_ipv6_ula(prefix) \
 	prefix_contains(&ipv6_ula_prefix, prefix)
 

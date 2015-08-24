@@ -161,8 +161,8 @@ struct hpa_lease_struct {
 typedef struct hpa_dp_struct {
 	struct hncp_pa_dp dp;
 
-#define HPA_DP_T_IFACE 0x1 //DP or local IPv4
-#define HPA_DP_T_ULA   0x2 //Local ULA
+#define HPA_DP_T_IFACE 0x1 //DP or uplink IPv4
+#define HPA_DP_T_LOCAL 0x2 //Local ULA or IPv4
 #define HPA_DP_T_HNCP  0x3 //From another node
 	struct pa_dp pa;
 
@@ -191,6 +191,10 @@ typedef struct hpa_dp_struct {
 		struct {
 			hncp_node_id_s node_id;
 			struct uloop_timeout delete_to;
+
+			//When there is an explicit destination option
+			bool dst_present;
+			struct prefix dst;
 		} hncp;
 	};
 } *hpa_dp, hpa_dp_s;
@@ -255,6 +259,7 @@ struct hncp_pa_struct {
 	struct uloop_timeout v4_to;
 	bool v4_enabled;
 	hpa_dp_s v4_dp;
+	hnetd_time_t v4_backoff;
 
 	struct uloop_timeout ula_to;
 	bool ula_enabled;
