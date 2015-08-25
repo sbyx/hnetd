@@ -54,6 +54,7 @@ do {                                                            \
 #define PAL_CONF_DFLT_NO_ULA_IF_V6        0
 #define PAL_CONF_DFLT_USE_V4              1
 #define PAL_CONF_DFLT_NO_V4_IF_V6         0
+#define PAL_CONF_DFLT_NO_V4_UNLESS_UPLINK 1
 #define PAL_CONF_DFLT_USE_RDM_ULA         1
 #define PAL_CONF_DFLT_ULA_RDM_PLEN        48
 
@@ -667,6 +668,14 @@ static void hpa_dp_set_enabled(hncp_pa hpa, hpa_dp dp, bool enabled)
 }
 
 static int hpa_dp_compute_enabled(hncp_pa hpa, hpa_dp dp) {
+
+	//We have special rules for ULA and v4
+	if(dp == &hpa->v4_dp)
+		return hpa->v4_enabled;
+
+	if(dp == &hpa->ula_dp)
+		return hpa->ula_enabled;
+
 	//A little bit brute-force. Using a btrie would help avoiding that.
 	hpa_dp dp2;
 	bool passed = 0;
@@ -741,7 +750,8 @@ static void hpa_v4_to(struct uloop_timeout *to)
 	hpa_iface elected_iface;
 
 	if(!hpa->ula_conf.use_ipv4 ||
-			(!(elected_iface = hpa_elect_v4(hpa)) && hpa_has_better_v4(hpa, false)) || //We have no v4 candidate
+			(!(elected_iface = hpa_elect_v4(hpa))
+					&& (hpa->ula_conf.no_ipv4_if_no_uplink || hpa_has_better_v4(hpa, false))) || //We have no v4 candidate
 			hpa_has_better_v4(hpa, true)) {
 		//Cannot have an IPv4 uplink
 		if(hpa->v4_enabled) {
@@ -1429,13 +1439,16 @@ static void hpa_update_dp_tlv(hncp_pa hpa, dncp_node n,
 		if (tlv_id(stlv) == HNCP_T_DHCPV6_OPTIONS) {
 			dhcpv6_data = tlv_data(stlv);
 			dhcpv6_len = tlv_len(stlv);
-		} if (tlv_id(stlv) == HNCP_T_PREFIX_DOMAIN) {
+		} else if (tlv_id(stlv) == HNCP_T_PREFIX_DOMAIN) {
 			if(tlv_len(stlv) > 0) {
 				uint8_t type = *((uint8_t *)tlv_data(stlv));
 				if(type <= 128 && (tlv_len(stlv) == (unsigned int) ROUND_BITS_TO_BYTES(type) + 1)) {
+					L_DEBUG("Found a Prefix Policy with prefix length %d", (int)type);
 					dst_present = true;
 					dst.plen = type;
 					memcpy(&dst.prefix, tlv_data(stlv) + 1, ROUND_BITS_TO_BYTES(type));
+				} else {
+					L_DEBUG("Found an unknown or invalid prefix policy (%d)", (int)type);
 				}
 			}
 		} else {
@@ -1833,6 +1846,7 @@ void hncp_pa_ula_conf_default(struct hncp_pa_ula_conf *conf)
 	conf->no_ula_if_glb_ipv6 = PAL_CONF_DFLT_NO_ULA_IF_V6;
 	conf->use_ipv4 = PAL_CONF_DFLT_USE_V4;
 	conf->no_ipv4_if_glb_ipv6 = PAL_CONF_DFLT_NO_V4_IF_V6;
+	conf->no_ipv4_if_no_uplink = PAL_CONF_DFLT_NO_V4_UNLESS_UPLINK;
 	conf->use_random_ula = PAL_CONF_DFLT_USE_RDM_ULA;
 	conf->random_ula_plen = PAL_CONF_DFLT_ULA_RDM_PLEN;
 	conf->v4_prefix = PAL_CONF_DFLT_V4_PREFIX;

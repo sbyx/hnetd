@@ -85,6 +85,7 @@ int usage() {
 	 "\t-s pa_store file\n"
 	 "\t-p socket path\n"
 	 "\t--ip4prefix v.x.y.z/prefix\n"
+	 "\t--ip4mode [ifuplink,on,off]"
 	 "\t--ulaprefix v:x:y:z::/prefix\n"
 	 "\t--ulamode [on,off,ifnov6]\n"
 	 "\t--loglevel [0-9]\n"
@@ -147,6 +148,7 @@ int main(__unused int argc, char *argv[])
 	const char *pa_store_file = NULL;
 	const char *pd_socket_path = "/var/run/hnetd_pd";
 	const char *pa_ip4prefix = NULL;
+	const char *pa_ip4mode = NULL;
 	const char *pa_ulaprefix = NULL;
 	const char *pa_ulamode = NULL;
 	const char *dtls_password = NULL;
@@ -163,6 +165,7 @@ int main(__unused int argc, char *argv[])
 
 	enum {
 		GOL_IPPREFIX = 1000,
+		GOL_IPMODE,
 		GOL_ULAPREFIX,
 		GOL_ULAMODE,
 		GOL_LOGLEVEL,
@@ -177,6 +180,7 @@ int main(__unused int argc, char *argv[])
 	struct option longopts[] = {
 			//Can use no_argument, required_argument or optional_argument
 			{ "ip4prefix",   required_argument,      NULL,           GOL_IPPREFIX },
+			{ "ip4mode",     required_argument,      NULL,           GOL_IPMODE },
 			{ "ulaprefix",   required_argument,      NULL,           GOL_ULAPREFIX },
 			{ "ulamode",     required_argument,      NULL,           GOL_ULAMODE },
 			{ "loglevel",    required_argument,      NULL,           GOL_LOGLEVEL },
@@ -236,6 +240,9 @@ int main(__unused int argc, char *argv[])
 			break;
 		case GOL_IPPREFIX:
 			pa_ip4prefix = optarg;
+			break;
+		case GOL_IPMODE:
+			pa_ip4mode = optarg;
 			break;
 		case GOL_ULAPREFIX:
 			pa_ulaprefix = optarg;
@@ -402,6 +409,19 @@ int main(__unused int argc, char *argv[])
 		} else {
 			L_INFO("Setting %s as IPv4 prefix", PREFIX_REPR(&ula_conf.v4_prefix));
 		}
+	}
+
+	if(!pa_ip4mode || !strcmp(pa_ip4mode, "ifuplink")) {
+		ula_conf.use_ipv4 = 1;
+		ula_conf.no_ipv4_if_no_uplink = 1;
+	} else if (!strcmp(pa_ip4mode, "on")) {
+		ula_conf.use_ipv4 = 1;
+		ula_conf.no_ipv4_if_no_uplink = 0;
+	} else if (!strcmp(pa_ip4mode, "off")) {
+		ula_conf.use_ipv4 = 0;
+	} else {
+		L_ERR("Invalid ip4mode option %s", pa_ip4mode);
+		return 40;
 	}
 
 	if(pa_ulaprefix) {

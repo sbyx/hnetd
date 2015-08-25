@@ -131,6 +131,12 @@ struct hncp_pa_ula_conf
 	 * default = 0 */
 	char no_ipv4_if_glb_ipv6;
 
+	/* Do not generate IPv4 prefix unless we have an uplink
+	 * connectivity.
+	 * default = 1
+	 */
+	char no_ipv4_if_no_uplink;
+
 	/* When needed, use that v4 prefix
 	 * default = ::ffff:10.0.0.0/104 */
 	struct prefix v4_prefix;
