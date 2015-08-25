@@ -343,6 +343,8 @@ static void hpa_refresh_ec(hncp_pa hpa, bool publish)
 	int dhcpv6_options_len = 0, dhcp_options_len = 0;
 	hpa_iface i;
 
+	L_DEBUG("Refresh external connexions (publish %d)", (int) publish);
+
 	if (publish)
 		dncp_remove_tlvs_by_type(dncp, HNCP_T_EXTERNAL_CONNECTION);
 
@@ -425,6 +427,7 @@ static void hpa_refresh_ec(hncp_pa hpa, bool publish)
 			} domain = {{0}, IN6ADDR_ANY_INIT};
 
 			/* TODO: for each prefix domain of DP */
+			L_DEBUG("Adding Prefix Policy type %d to %s", 0, PREFIX_REPR(&dp->dp.prefix));
 			size_t dlen = sizeof(domain.d) + ROUND_BITS_TO_BYTES(domain.d.type);
 			st = tlv_new(&tb, HNCP_T_PREFIX_DOMAIN, dlen);
 			memcpy(tlv_data(st), &domain, dlen);
@@ -719,7 +722,9 @@ static int hpa_has_better_v4(hncp_pa hpa, bool uplink)
 
 static hpa_iface hpa_elect_v4(hncp_pa hpa)
 {
-	if(hpa->v4_enabled && hpa->v4_dp.iface.iface->ipv4_uplink)
+	if(hpa->v4_enabled &&
+			hpa->v4_dp.pa.type == HPA_DP_T_IFACE &&
+			hpa->v4_dp.iface.iface->ipv4_uplink)
 		return hpa->v4_dp.iface.iface;
 
 	hpa_iface i;
@@ -751,8 +756,8 @@ static void hpa_v4_to(struct uloop_timeout *to)
 		if(hpa->v4_dp.iface.iface != elected_iface) {
 			//Update elected interface
 			L_DEBUG("IPv4 Prefix: Change interface from %s to %s",
-					hpa->v4_dp.iface.iface->ifname?hpa->v4_dp.iface.iface->ifname:"null",
-							elected_iface->ifname?elected_iface->ifname:"null");
+					(hpa->v4_dp.pa.type == HPA_DP_T_IFACE)?hpa->v4_dp.iface.iface->ifname:"null",
+							elected_iface?elected_iface->ifname:"null");
 			//todo: This approach will destroy all APs. Maybe we can do it more
 			//seemlessly
 			hpa_dp_set_enabled(hpa, &hpa->v4_dp, 0);
@@ -760,13 +765,13 @@ static void hpa_v4_to(struct uloop_timeout *to)
 			//Either with or without uplink
 			bool update_ec = false;
 			if(elected_iface) {
-				if(!hpa->v4_dp.iface.iface)
+				if(hpa->v4_dp.pa.type != HPA_DP_T_IFACE)
 					update_ec = true;
 				hpa->v4_dp.pa.type = HPA_DP_T_IFACE;
 				hpa->v4_dp.iface.excluded = 0;
 				hpa->v4_dp.iface.iface = elected_iface;
 			} else {
-				if(hpa->v4_dp.iface.iface)
+				if(hpa->v4_dp.pa.type == HPA_DP_T_IFACE)
 					update_ec = true;
 				hpa->v4_dp.pa.type = HPA_DP_T_LOCAL;
 			}
