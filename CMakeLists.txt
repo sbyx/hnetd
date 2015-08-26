@@ -103,9 +103,12 @@ add_executable(hnetd ${HNCP} ${HT} src/hncp_routing.c src/hncp_dump.c src/hncp_t
 target_link_libraries(hnetd ubox resolv blobmsg_json ${BACKEND_LINK} ${DTLS_LINK})
 install(TARGETS hnetd DESTINATION sbin/)
 
-# Fix for SSL build please :p -MSt
 # Build DNCP static library
-#add_library(dncp STATIC src/hnetd_time.c src/prefix.c src/tlv.c src/dncp.c src/dncp_notify.c src/dncp_timeout.c src/dncp_proto.c)
+# ToDo: Fix DTLS Build
+if(${DTLS_OPENSSL})
+	add_library(dncp STATIC src/hnetd_time.c src/prefix.c src/tlv.c src/dncp.c src/dncp_notify.c src/dncp_timeout.c src/dncp_proto.c)
+	set_property(TARGET dncp PROPERTY COMPILE_FLAGS "${CMAKE_C_FLAGS} -g -std=c99 -fPIC")
+endif(${DTLS_OPENSSL})
 
 # libdncp example
 #add_executable(libdncp_example examples/libdncp_example.c)

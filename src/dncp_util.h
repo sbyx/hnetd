@@ -42,7 +42,7 @@ dncp_tlv_trust_verdict(const struct tlv_attr *a)
     return NULL;
   if (tlv_len(a) > sizeof(dncp_t_trust_verdict_s) + DNCP_T_TRUST_VERDICT_CNAME_LEN)
     return NULL;
-  const char *data = tlv_data(a);
+  const char *data = (const char *)tlv_data(a);
   /* Make sure it is also null terminated */
   if (data[tlv_len(a)-1])
     return NULL;

@@ -299,7 +299,7 @@ dncp_tlv_neighbor2(const struct tlv_attr *a, int nidlen)
   if (tlv_id(a) != DNCP_T_NEIGHBOR
       || tlv_len(a) != (nidlen + sizeof(dncp_t_neighbor_s)))
     return NULL;
-  return (dncp_t_neighbor)(tlv_data(a) + nidlen);
+  return (dncp_t_neighbor)((char *)tlv_data(a) + nidlen);
 }
 
 static inline dncp_t_neighbor
@@ -311,7 +311,7 @@ dncp_tlv_neighbor(dncp o, const struct tlv_attr *a)
 static inline dncp_node_id
 dncp_tlv_get_node_id2(void *tlv, int nidlen)
 {
-  return (dncp_node_id)(tlv - nidlen);
+  return (dncp_node_id)((char *)tlv - nidlen);
 }
 
 static inline dncp_node_id
