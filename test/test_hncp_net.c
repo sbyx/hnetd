@@ -39,9 +39,9 @@ bool link_has_neighbors(dncp_ep l)
 
   dncp_for_each_tlv(dncp_ep_get_dncp(l), t)
     {
-      if (tlv_id(&t->tlv) == DNCP_T_NEIGHBOR)
+      if (tlv_id(&t->tlv) == DNCP_T_PEER)
         {
-          dncp_t_neighbor ne = tlv_data(&t->tlv);
+          dncp_t_peer ne = tlv_data(&t->tlv);
           if (ne->ep_id == dncp_ep_get_id(l))
             return true;
         }
@@ -497,19 +497,19 @@ dncp_ep net_sim_dncp_find_ep_n(dncp o, int i)
   ma[r1] &= ~MONKEY_MASK(p1, r2, p2)
 
 
-dncp_t_neighbor monkey_neighbor(dncp n1, dncp_ep l1,
+dncp_t_peer monkey_neighbor(dncp n1, dncp_ep l1,
                                 dncp n2, dncp_ep l2)
 {
-  dncp_t_neighbor nh;
+  dncp_t_peer nh;
   struct tlv_attr *a;
 
   dncp_node_for_each_tlv_with_type(n1->own_node, a,
-                                   DNCP_T_NEIGHBOR)
-    if ((nh = dncp_tlv_neighbor(n1, a)))
+                                   DNCP_T_PEER)
+    if ((nh = dncp_tlv_peer(n1, a)))
       {
         if (nh->ep_id != dncp_ep_get_id(l1))
           continue;
-        if (nh->neighbor_ep_id != dncp_ep_get_id(l2))
+        if (nh->peer_ep_id != dncp_ep_get_id(l2))
           continue;
         if (memcmp(dncp_tlv_get_node_id(n1, nh),
                    &n2->own_node->node_id,
@@ -529,9 +529,9 @@ bool monkey_ok(int *ma,
     MONKEY_CONNECTED(ma, j, p2, i, p1) && i != j;
 
   /* Look at the _published_ state only. */
-  dncp_t_neighbor nh1 = monkey_neighbor(n1, l1, n2, l2);
+  dncp_t_peer nh1 = monkey_neighbor(n1, l1, n2, l2);
   bool found1 = nh1 && dncp_node_find_neigh_bidir(n1->own_node, nh1);
-  dncp_t_neighbor nh2 = monkey_neighbor(n2, l2, n1, l1);
+  dncp_t_peer nh2 = monkey_neighbor(n2, l2, n1, l1);
   bool found2 = nh2 && dncp_node_find_neigh_bidir(n2->own_node, nh2);
 
   if (found1 != found2)
@@ -761,10 +761,10 @@ void hncp_version(void)
   sput_fail_unless(n, "dncp_node_find_by_id");
 
   struct tlv_attr *a = NULL;
-  dncp_node_for_each_tlv_with_type(n, a, DNCP_T_NEIGHBOR)
+  dncp_node_for_each_tlv_with_type(n, a, DNCP_T_PEER)
     break;
   sput_fail_unless(!a, "should have no neighbors in valid data");
-  dncp_node_for_each_tlv_with_t_v(n, a, DNCP_T_NEIGHBOR, false)
+  dncp_node_for_each_tlv_with_t_v(n, a, DNCP_T_PEER, false)
     break;
   sput_fail_unless(a, "should have neighbors in un-validated data");
   net_sim_uninit(&s);

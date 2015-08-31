@@ -52,7 +52,7 @@ static void trickle_upgrade(dncp_trickle t, dncp_ep_i l)
   trickle_set_i(t, l, t->i * 2);
 }
 
-static void trickle_send_nocheck(dncp_trickle t, dncp_ep_i l, dncp_neighbor ne)
+static void trickle_send_nocheck(dncp_trickle t, dncp_ep_i l, dncp_peer ne)
 {
   t->num_sent++;
   t->last_sent = dncp_time(l->dncp);
@@ -66,7 +66,7 @@ static void trickle_send_nocheck(dncp_trickle t, dncp_ep_i l, dncp_neighbor ne)
                                maximum_size, false);
 }
 
-static void trickle_send(dncp_trickle t, dncp_ep_i l, dncp_neighbor ne)
+static void trickle_send(dncp_trickle t, dncp_ep_i l, dncp_peer ne)
 {
   if (t->c < l->conf.trickle_k
       && (!l->conf.unicast_is_reliable_stream ||
@@ -101,7 +101,7 @@ static void _node_set_reachable(dncp_node n, bool value)
 static void _prune_rec(dncp_node n)
 {
   struct tlv_attr *a;
-  dncp_t_neighbor ne;
+  dncp_t_peer ne;
   dncp_node n2;
 
   if (!n)
@@ -125,8 +125,8 @@ static void _prune_rec(dncp_node n)
   /* Look at it's neighbors. */
   /* Ignore if it's not _bidirectional_ neighbor. Unidirectional
    * ones lead to graph not settling down. */
-  dncp_node_for_each_tlv_with_t_v(n, a, DNCP_T_NEIGHBOR, false)
-    if ((ne = dncp_tlv_neighbor(n->dncp, a)))
+  dncp_node_for_each_tlv_with_t_v(n, a, DNCP_T_PEER, false)
+    if ((ne = dncp_tlv_peer(n->dncp, a)))
       if ((n2 = dncp_node_find_neigh_bidir(n, ne)))
         _prune_rec(n2);
 }
@@ -198,7 +198,7 @@ static void dncp_prune(dncp o)
 #endif /* L_LEVEL >= 8 */
 
 static hnetd_time_t
-_neighbor_interval(dncp o, dncp_t_neighbor neigh)
+_neighbor_interval(dncp o, dncp_t_peer neigh)
 {
   dncp_node_id ni = dncp_tlv_get_node_id(o, neigh);
   dncp_node n = dncp_find_node_by_node_id(o, ni, false);
@@ -219,7 +219,7 @@ _neighbor_interval(dncp o, dncp_t_neighbor neigh)
           L_DEBUG("invalid keepalive tlv length");
           continue;
         }
-      if (ka->ep_id && ka->ep_id != neigh->neighbor_ep_id)
+      if (ka->ep_id && ka->ep_id != neigh->peer_ep_id)
         continue;
       value = be32_to_cpu(ka->interval_in_ms) * HNETD_TIME_PER_SECOND / 1000;
       if (ka->ep_id)
@@ -233,7 +233,7 @@ _neighbor_interval(dncp o, dncp_t_neighbor neigh)
 
 static hnetd_time_t handle_trickle_and_ka(dncp_trickle t,
                                           dncp_ep_i l,
-                                          dncp_neighbor ne)
+                                          dncp_peer ne)
 {
   hnetd_time_t next = 0;
   hnetd_time_t now = dncp_time(l->dncp);
@@ -334,13 +334,13 @@ void dncp_ext_timeout(dncp o)
 
   /* Look at neighbors we should be worried about.. */
   /* vlist_for_each_element(&l->neighbors, n, in_neighbors) */
-  dncp_t_neighbor ne;
+  dncp_t_peer ne;
   dncp_for_each_tlv_safe(o, t, t2)
-    if ((ne = dncp_tlv_neighbor(o, &t->tlv)))
+    if ((ne = dncp_tlv_peer(o, &t->tlv)))
       {
         dncp_ep ep = dncp_find_ep_by_id(o, ne->ep_id);
         dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
-        dncp_neighbor n = dncp_tlv_get_extra(t);
+        dncp_peer n = dncp_tlv_get_extra(t);
         hnetd_time_t interval = _neighbor_interval(o, ne);
 
         if (ep->unicast_only)
@@ -406,12 +406,12 @@ void dncp_trickle_reset(dncp o)
     }
 
   /* Per-peer */
-  dncp_t_neighbor ne;
+  dncp_t_peer ne;
   dncp_tlv t;
   dncp_for_each_tlv(o, t)
-    if ((ne = dncp_tlv_neighbor(o, &t->tlv)))
+    if ((ne = dncp_tlv_peer(o, &t->tlv)))
       {
-        dncp_neighbor n = dncp_tlv_get_extra(t);
+        dncp_peer n = dncp_tlv_get_extra(t);
         dncp_ep ep = dncp_find_ep_by_id(o, ne->ep_id);
         dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
 
@@ -438,10 +438,10 @@ void dncp_ext_ep_ready(dncp_ep ep, bool enabled)
     {
       dncp o = l->dncp;
       dncp_tlv t, t2;
-      dncp_t_neighbor ne;
+      dncp_t_peer ne;
 
       dncp_for_each_tlv_safe(o, t, t2)
-        if ((ne = dncp_tlv_neighbor(o, &t->tlv)))
+        if ((ne = dncp_tlv_peer(o, &t->tlv)))
           if (ne->ep_id == l->ep_id)
             dncp_remove_tlv(o, t);
 

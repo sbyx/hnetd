@@ -179,13 +179,13 @@ err:
 
 static int hd_node_neighbor(struct tlv_attr *tlv, struct blob_buf *b)
 {
-	dncp_t_neighbor nh;
+	dncp_t_peer nh;
 
-	if (!(nh = dncp_tlv_neighbor2(tlv, HNCP_NI_LEN)))
+	if (!(nh = dncp_tlv_peer2(tlv, HNCP_NI_LEN)))
 		return -1;
 	hd_a(!blobmsg_add_string(b, "node-id", hd_ni_to_hex(dncp_tlv_get_node_id2(nh, HNCP_NI_LEN))), return -1);
 	hd_a(!blobmsg_add_u32(b, "local-link", ntohl(nh->ep_id)), return -1);
-	hd_a(!blobmsg_add_u32(b, "neighbor-link", ntohl(nh->neighbor_ep_id)), return -1);
+	hd_a(!blobmsg_add_u32(b, "neighbor-link", ntohl(nh->peer_ep_id)), return -1);
 	return 0;
 }
 
@@ -272,7 +272,7 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 			case HNCP_T_ASSIGNED_PREFIX:
 				hd_do_in_table(&prefixes, NULL, hd_node_prefix(tlv, &prefixes), goto err);
 				break;
-			case DNCP_T_NEIGHBOR:
+			case DNCP_T_PEER:
 				hd_do_in_table(&neighbors, NULL, hd_node_neighbor(tlv, &neighbors), goto err);
 				break;
 			case HNCP_T_EXTERNAL_CONNECTION:

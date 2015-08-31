@@ -309,7 +309,7 @@ void net_sim_local_tlv_cb(dncp_subscriber sub,
   net_node n = container_of(sub, net_node_s, debug_subscriber);
   net_sim s = n->s;
 
-  if (tlv_id(tlv) == DNCP_T_NEIGHBOR)
+  if (tlv_id(tlv) == DNCP_T_PEER)
     {
       sput_fail_unless(!add || !s->add_neighbor_is_error, "undesired add");
       sput_fail_unless(add || !s->del_neighbor_is_error, "undesired del");

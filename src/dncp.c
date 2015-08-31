@@ -643,10 +643,10 @@ bool dncp_ep_has_highest_id(dncp_ep ep)
   dncp o = l->dncp;
   uint32_t ep_id = l->ep_id;
   struct tlv_attr *a;
-  dncp_t_neighbor nh;
+  dncp_t_peer nh;
 
-  dncp_node_for_each_tlv_with_t_v(o->own_node, a, DNCP_T_NEIGHBOR, false)
-    if ((nh = dncp_tlv_neighbor(o, a)))
+  dncp_node_for_each_tlv_with_t_v(o->own_node, a, DNCP_T_PEER, false)
+    if ((nh = dncp_tlv_peer(o, a)))
       {
         if (nh->ep_id != ep_id)
           continue;

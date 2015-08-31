@@ -195,7 +195,7 @@ static void hncp_tunnel_discover(struct uloop_timeout *timer)
 	} negotiate = {
 		cpu_to_be16(HNCP_T_TUNNEL_MESSAGE),
 		cpu_to_be16(sizeof(negotiate) - sizeof(struct tlv_attr)),
-		cpu_to_be16(DNCP_T_ENDPOINT_ID),
+		cpu_to_be16(DNCP_T_NODE_ENDPOINT),
 		cpu_to_be16(sizeof(negotiate.endpoint)),
 		{*node_id, 0},
 		cpu_to_be16(HNCP_T_NODE_ADDRESS),
@@ -212,8 +212,8 @@ static void hncp_tunnel_discover(struct uloop_timeout *timer)
 	list_for_each_entry_safe(s, n, &t->l2tpv3, head) {
 		if (s->epid) {
 			struct tlv_attr *a;
-			dncp_node_for_each_tlv_with_type(t->dncp->own_node, a, DNCP_T_NEIGHBOR) {
-				dncp_t_neighbor ne = dncp_tlv_neighbor(t->dncp, a);
+			dncp_node_for_each_tlv_with_type(t->dncp->own_node, a, DNCP_T_PEER) {
+				dncp_t_peer ne = dncp_tlv_peer(t->dncp, a);
 				if (ne->ep_id == s->epid &&
 						dncp_node_find_neigh_bidir(t->dncp->own_node, ne)) {
 					s->active = now;
@@ -390,7 +390,7 @@ static void hncp_tunnel_handle_negotiate(dncp_subscriber subscr,
 
 	tlv_for_each_attr(a, msg) {
 		switch (tlv_id(a)) {
-		case DNCP_T_ENDPOINT_ID:
+		case DNCP_T_NODE_ENDPOINT:
 			if (tlv_len(a) == sizeof(*endpoint))
 				endpoint = tlv_data(a);
 			break;

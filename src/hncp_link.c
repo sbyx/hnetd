@@ -73,7 +73,7 @@ static void calculate_link(struct hncp_link *l, dncp_ep ep, bool enable)
 	if (enable) {
 		struct tlv_attr *c;
 		dncp_node_for_each_tlv(dncp_get_own_node(l->dncp), c) {
-			dncp_t_neighbor ne = dncp_tlv_neighbor(l->dncp, c);
+			dncp_t_peer ne = dncp_tlv_peer(l->dncp, c);
 			hncp_t_assigned_prefix_header ah = hncp_tlv_ap(c);
 
 			if (ne && ne->ep_id == dncp_ep_get_id(ep))
@@ -89,7 +89,7 @@ static void calculate_link(struct hncp_link *l, dncp_ep ep, bool enable)
 			"neighbors on iface %d", (int)peercnt, (int)dncp_ep_get_id(ep));
 
 		dncp_node_for_each_tlv(dncp_get_own_node(l->dncp), c) {
-			dncp_t_neighbor cn = dncp_tlv_neighbor(l->dncp, c);
+			dncp_t_peer cn = dncp_tlv_peer(l->dncp, c);
 
 			if (!cn || cn->ep_id != dncp_ep_get_id(ep))
 				continue;
@@ -108,12 +108,12 @@ static void calculate_link(struct hncp_link *l, dncp_ep ep, bool enable)
 						tlv_len(pc) > sizeof(*peervertlv))
 					peervertlv = tlv_data(pc);
 
-				dncp_t_neighbor pn = dncp_tlv_neighbor(l->dncp, pc);
-				if (!pn || pn->ep_id != cn->neighbor_ep_id ||
+				dncp_t_peer pn = dncp_tlv_peer(l->dncp, pc);
+				if (!pn || pn->ep_id != cn->peer_ep_id ||
 				    memcmp(dncp_tlv_get_node_id(l->dncp, pn), &dncp_get_own_node(l->dncp)->node_id, DNCP_NI_LEN(l->dncp)))
 					continue;
 
-				if (pn->neighbor_ep_id == dncp_ep_get_id(ep)) {
+				if (pn->peer_ep_id == dncp_ep_get_id(ep)) {
 					// Matching reverse neighbor entry
 					L_DEBUG("hncp_link_calculate: if %"PRIu32" -> neigh %s:%"PRIu32,
 							dncp_ep_get_id(ep), DNCP_STRUCT_REPR(peer->node_id), pn->ep_id);
@@ -121,9 +121,9 @@ static void calculate_link(struct hncp_link *l, dncp_ep ep, bool enable)
 					memcpy(&peers[peerpos].node_id, &peer->node_id, HNCP_NI_LEN);
 					peers[peerpos].ep_id = pn->ep_id;
 					++peerpos;
-				} else if (pn->neighbor_ep_id < dncp_ep_get_id(ep)) {
+				} else if (pn->peer_ep_id < dncp_ep_get_id(ep)) {
 					L_WARN("hncp_link_calculate: %s links %d and %d appear to be connected",
-							ep->ifname, dncp_ep_get_id(ep), pn->neighbor_ep_id);
+							ep->ifname, dncp_ep_get_id(ep), pn->peer_ep_id);
 
 					// Two of our links seem to be connected
 					enable = false;
@@ -204,7 +204,7 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 		struct tlv_attr *tlv, bool add __unused)
 {
 	struct hncp_link *l = container_of(s, struct hncp_link, subscr);
-	dncp_t_neighbor ne = dncp_tlv_neighbor(l->dncp, tlv);
+	dncp_t_peer ne = dncp_tlv_peer(l->dncp, tlv);
 	dncp_ep ep = NULL;
 
 	if (ne) {
@@ -213,7 +213,7 @@ static void cb_tlv(dncp_subscriber s, dncp_node n,
 			ep = dncp_find_ep_by_id(l->dncp, ne->ep_id);
 		} else if (!memcmp(dncp_tlv_get_node_id(l->dncp, ne),  &dncp_get_own_node(l->dncp)->node_id, DNCP_NI_LEN(l->dncp))) {
 			L_DEBUG("hncp_link: other node neighbor tlv changed");
-			ep = dncp_find_ep_by_id(l->dncp, ne->neighbor_ep_id);
+			ep = dncp_find_ep_by_id(l->dncp, ne->peer_ep_id);
 		}
 	}
 

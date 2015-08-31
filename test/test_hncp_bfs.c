@@ -94,7 +94,7 @@ void hncp_bfs_one(void)
 
 	// TLV foo
 	struct tlv_buf b = {NULL, NULL, 0, NULL};
-	dncp_t_neighbor_s n;
+	dncp_t_peer_s n;
 	struct __attribute__((__packed__)) {
 		hncp_t_delegated_prefix_header_s hdr;
 		struct in6_addr prefix;
@@ -113,9 +113,9 @@ void hncp_bfs_one(void)
 
 	// N0 link 0
 	n.ep_id = l1->ep_id;
-	n.neighbor_ep_id = 0;
-	n.neighbor_node_id = n1->node_id;
-	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
+	n.peer_ep_id = 0;
+	n.peer_node_id = n1->node_id;
+	tlv_put(&b, DNCP_T_PEER, &n, sizeof(n));
 
 	ap.hdr.ep_id = l1->ep_id;
 	ap.hdr.prefix_length_bits = 64;
@@ -125,9 +125,9 @@ void hncp_bfs_one(void)
 
 	// N0 link 1
 	n.ep_id = l3->ep_id;
-	n.neighbor_ep_id = 0;
-	n.neighbor_node_id = n3->node_id;
-	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
+	n.peer_ep_id = 0;
+	n.peer_node_id = n3->node_id;
+	tlv_put(&b, DNCP_T_PEER, &n, sizeof(n));
 
 	ap.hdr.ep_id = 0;
 	ap.hdr.prefix_length_bits = 64;
@@ -142,15 +142,15 @@ void hncp_bfs_one(void)
 
 	// N1 link 0
 	n.ep_id = 0;
-	n.neighbor_ep_id = l1->ep_id;
-	n.neighbor_node_id = n0->node_id;
-	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
+	n.peer_ep_id = l1->ep_id;
+	n.peer_node_id = n0->node_id;
+	tlv_put(&b, DNCP_T_PEER, &n, sizeof(n));
 
 	// N1 link 1
 	n.ep_id = 1;
-	n.neighbor_ep_id =0;
-	n.neighbor_node_id = n2->node_id;
-	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
+	n.peer_ep_id =0;
+	n.peer_node_id = n2->node_id;
+	tlv_put(&b, DNCP_T_PEER, &n, sizeof(n));
 
 	ap.hdr.ep_id = 0;
 	ap.hdr.prefix_length_bits = 64;
@@ -165,21 +165,21 @@ void hncp_bfs_one(void)
 
 	// N2 link 0
 	n.ep_id = 0;
-	n.neighbor_ep_id = 1;
-	n.neighbor_node_id = n1->node_id;
-	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
+	n.peer_ep_id = 1;
+	n.peer_node_id = n1->node_id;
+	tlv_put(&b, DNCP_T_PEER, &n, sizeof(n));
 
 	// N2 link 1
 	n.ep_id = 1;
-	n.neighbor_ep_id = 1;
-	n.neighbor_node_id = n3->node_id;
-	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
+	n.peer_ep_id = 1;
+	n.peer_node_id = n3->node_id;
+	tlv_put(&b, DNCP_T_PEER, &n, sizeof(n));
 
 	// N2 link 2
 	n.ep_id = 2;
-	n.neighbor_ep_id = 0;
-	n.neighbor_node_id = n4->node_id;
-	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
+	n.peer_ep_id = 0;
+	n.peer_node_id = n4->node_id;
+	tlv_put(&b, DNCP_T_PEER, &n, sizeof(n));
 
 	ap.hdr.ep_id = 2;
 	ap.hdr.prefix_length_bits = 64;
@@ -199,15 +199,15 @@ void hncp_bfs_one(void)
 
 	// N3 link 0
 	n.ep_id = 0;
-	n.neighbor_ep_id = l3->ep_id;
-	n.neighbor_node_id = n0->node_id;
-	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
+	n.peer_ep_id = l3->ep_id;
+	n.peer_node_id = n0->node_id;
+	tlv_put(&b, DNCP_T_PEER, &n, sizeof(n));
 
 	// N3 link 1
 	n.ep_id = 1;
-	n.neighbor_ep_id = 1;
-	n.neighbor_node_id = n2->node_id;
-	tlv_put(&b, DNCP_T_NEIGHBOR, &n, sizeof(n));
+	n.peer_ep_id = 1;
+	n.peer_node_id = n2->node_id;
+	tlv_put(&b, DNCP_T_PEER, &n, sizeof(n));
 
 	ap.hdr.ep_id = 1;
 	ap.hdr.prefix_length_bits = 64;

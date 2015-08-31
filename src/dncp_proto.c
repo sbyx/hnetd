@@ -73,7 +73,7 @@ static bool _push_ep_id_tlv(struct tlv_buf *tb, dncp_ep_i l,
   if (l->conf.unicast_is_reliable_stream && dst && !always_ep_id)
     return true;
 
-  struct tlv_attr *a = tlv_new(tb, DNCP_T_ENDPOINT_ID, tl);
+  struct tlv_attr *a = tlv_new(tb, DNCP_T_NODE_ENDPOINT, tl);
 
   if (!a)
     return false;
@@ -210,12 +210,12 @@ static dncp_tlv
 _find_local_tlv_by_remote(dncp o, struct sockaddr_in6 *remote)
 {
   dncp_tlv t;
-  dncp_t_neighbor ne;
+  dncp_t_peer ne;
 
   dncp_for_each_tlv(o, t)
-    if ((ne = dncp_tlv_neighbor(o, &t->tlv)))
+    if ((ne = dncp_tlv_peer(o, &t->tlv)))
       {
-        dncp_neighbor n = dncp_tlv_get_extra(t);
+        dncp_peer n = dncp_tlv_get_extra(t);
         if (memcmp(&n->last_sa6, remote, sizeof(*remote)) == 0)
           return t;
       }
@@ -226,21 +226,21 @@ static dncp_tlv
 _heard(dncp_ep_i l, dncp_t_ep_id lid, struct sockaddr_in6 *src,
        bool multicast)
 {
-  int nplen = sizeof(dncp_t_neighbor_s) + DNCP_NI_LEN(l->dncp);
+  int nplen = sizeof(dncp_t_peer_s) + DNCP_NI_LEN(l->dncp);
   void *np = alloca(nplen);
-  dncp_t_neighbor n_sample = np + DNCP_NI_LEN(l->dncp);
+  dncp_t_peer n_sample = np + DNCP_NI_LEN(l->dncp);
   memcpy(np, dncp_tlv_get_node_id(l->dncp, lid), DNCP_NI_LEN(l->dncp));
-  n_sample->neighbor_ep_id = lid->ep_id;
+  n_sample->peer_ep_id = lid->ep_id;
   n_sample->ep_id = l->ep_id;
 
-  dncp_neighbor n;
-  dncp_tlv t = dncp_find_tlv(l->dncp, DNCP_T_NEIGHBOR, np, nplen);
+  dncp_peer n;
+  dncp_tlv t = dncp_find_tlv(l->dncp, DNCP_T_PEER, np, nplen);
   if (!t)
     {
       /* Doing add based on multicast is relatively insecure. */
       if (multicast)
         return NULL;
-      t = dncp_add_tlv(l->dncp, DNCP_T_NEIGHBOR, np, nplen, sizeof(*n));
+      t = dncp_add_tlv(l->dncp, DNCP_T_PEER, np, nplen, sizeof(*n));
       if (!t)
         return NULL;
       n = dncp_tlv_get_extra(t);
@@ -271,7 +271,7 @@ handle_message(dncp_ep_i l,
   dncp_node n;
   dncp_t_ep_id lid = NULL;
   bool seen_lid = false;
-  dncp_neighbor ne = NULL;
+  dncp_peer ne = NULL;
   struct tlv_buf tb;
   uint32_t new_update_number;
   bool should_request_network_state = false;
@@ -291,12 +291,12 @@ handle_message(dncp_ep_i l,
        * may reuse old info. */
       void *buf = fake_lid;
       dncp_tlv t = _find_local_tlv_by_remote(o, src);
-      dncp_t_neighbor t_ne;
-      if (t && (t_ne = dncp_tlv_neighbor(o, &t->tlv)))
+      dncp_t_peer t_ne;
+      if (t && (t_ne = dncp_tlv_peer(o, &t->tlv)))
         {
           memcpy(buf, dncp_tlv_get_node_id(o, t_ne), nilen);
           lid = buf + nilen;
-          lid->ep_id = t_ne->neighbor_ep_id;
+          lid->ep_id = t_ne->peer_ep_id;
 
           dncp_tlv tne = _heard(l, lid, src, multicast);
           ne = tne ? dncp_tlv_get_extra(tne) : NULL;
@@ -308,7 +308,7 @@ handle_message(dncp_ep_i l,
     L_DEBUG("handling tlv #%d", tlv_id(a));
     switch (tlv_id(a))
       {
-      case DNCP_T_ENDPOINT_ID:
+      case DNCP_T_NODE_ENDPOINT:
         if (seen_lid)
           {
             L_INFO("got second endpoint id - ignoring");
@@ -609,10 +609,10 @@ void dncp_ext_ep_peer_state(dncp_ep ep,
       return;
     }
   dncp_tlv t = _find_local_tlv_by_remote(o, remote);
-  dncp_t_neighbor ne;
-  if (t && (ne = dncp_tlv_neighbor(o, &t->tlv)))
+  dncp_t_peer ne;
+  if (t && (ne = dncp_tlv_peer(o, &t->tlv)))
     {
-      dncp_neighbor n = dncp_tlv_get_extra(t);
+      dncp_peer n = dncp_tlv_get_extra(t);
       n->last_contact = 0;
     }
   dncp_schedule(o);

@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 27 18:17:46 2013 mstenber
- * Last modified: Thu Jun 11 09:49:19 2015 mstenber
- * Edit time:     125 min
+ * Last modified: Mon Aug 31 13:04:23 2015 mstenber
+ * Edit time:     127 min
  *
  */
 
@@ -23,15 +23,13 @@ enum {
   DNCP_T_REQ_NET_STATE = 1, /* empty */
   DNCP_T_REQ_NODE_STATE = 2, /* = just normal hash */
 
-  /* This should be included in every message to facilitate neighbor
-   * discovery of peers. */
-  DNCP_T_ENDPOINT_ID = 3,
+  DNCP_T_NODE_ENDPOINT = 3,
 
   DNCP_T_NET_STATE = 4, /* = just normal hash, accumulated from node states so sensible to send later */
   DNCP_T_NODE_STATE = 5,
-  DNCP_T_CUSTOM = 6, /* not implemented */
-  DNCP_T_FRAGMENT_COUNT = 7, /* not implemented */
-  DNCP_T_NEIGHBOR = 8,
+  /* was: DNCP_T_CUSTOM = 6, */
+  /* was: DNCP_T_FRAGMENT_COUNT = 7 */
+  DNCP_T_PEER = 8,
   DNCP_T_KEEPALIVE_INTERVAL = 9,
   DNCP_T_TRUST_VERDICT = 10
 };
@@ -50,7 +48,7 @@ typedef struct __packed {
 
 typedef uint32_t ep_id_t;
 
-/* DNCP_T_ENDPOINT_ID */
+/* DNCP_T_NODE_ENDPOINT */
 typedef struct __packed {
   /* dncp_node_id_s node_id; variable length, encoded here */
   ep_id_t ep_id;
@@ -68,12 +66,12 @@ typedef struct __packed {
 
 /* DNCP_T_CUSTOM custom data, with H-64 of URI at start to identify type TBD */
 
-/* DNCP_T_NEIGHBOR */
+/* DNCP_T_PEER */
 typedef struct __packed {
   /* dncp_node_id_s node_id; variable length, encoded here */
-  uint32_t neighbor_ep_id;
+  uint32_t peer_ep_id;
   uint32_t ep_id;
-} dncp_t_neighbor_s, *dncp_t_neighbor;
+} dncp_t_peer_s, *dncp_t_peer;
 
 /* DNCP_T_KEEPALIVE_INTERVAL */
 typedef struct __packed {

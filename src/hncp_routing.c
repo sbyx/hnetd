@@ -98,7 +98,7 @@ static void hncp_routing_cb(dncp_subscriber s, __unused dncp_node n,
 {
 	hncp_bfs bfs = container_of(s, hncp_bfs_s, subscr);
 	if (tlv_id(tlv) == HNCP_T_ASSIGNED_PREFIX || tlv_id(tlv) == HNCP_T_DELEGATED_PREFIX ||
-			tlv_id(tlv) == DNCP_T_NEIGHBOR || tlv_id(tlv) == HNCP_T_EXTERNAL_CONNECTION ||
+			tlv_id(tlv) == DNCP_T_PEER || tlv_id(tlv) == HNCP_T_EXTERNAL_CONNECTION ||
 			tlv_id(tlv) == HNCP_T_NODE_ADDRESS)
 		uloop_timeout_set(&bfs->t, 0);
 }
@@ -144,8 +144,8 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 		struct tlv_attr *a, *a2;
 		dncp_node_for_each_tlv(c, a) {
 			hncp_t_assigned_prefix_header ap;
-			dncp_t_neighbor ne;
-			if ((ne = dncp_tlv_neighbor(dncp, a))) {
+			dncp_t_peer ne;
+			if ((ne = dncp_tlv_peer(dncp, a))) {
 				if (!(n = dncp_node_find_neigh_bidir(c, ne)))
 					continue; // Connection not mutual
 
@@ -158,8 +158,8 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 					dncp_ep ep = dncp_find_ep_by_id(dncp, ne->ep_id);
 					if (!ep)
 						continue;
-					dncp_tlv tlv = dncp_find_tlv(dncp, DNCP_T_NEIGHBOR, tlv_data(a), tlv_len(a));
-					dncp_neighbor neigh = tlv ? dncp_tlv_get_extra(tlv) : NULL;
+					dncp_tlv tlv = dncp_find_tlv(dncp, DNCP_T_PEER, tlv_data(a), tlv_len(a));
+					dncp_peer neigh = tlv ? dncp_tlv_get_extra(tlv) : NULL;
 					if (neigh) {
 						hn->bfs.next_hop = &neigh->last_sa6.sin6_addr;
 						hn->bfs.ifname = ep->ifname;
@@ -169,7 +169,7 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 					hncp_t_node_address ra;
 					dncp_node_for_each_tlv_with_type(n, na, HNCP_T_NODE_ADDRESS) {
 						if ((ra = hncp_tlv_ra(na))) {
-							if (ra->ep_id == ne->neighbor_ep_id &&
+							if (ra->ep_id == ne->peer_ep_id &&
 							    IN6_IS_ADDR_V4MAPPED(&ra->address)) {
 								hn->bfs.next_hop4 = &ra->address;
 								break;
@@ -252,8 +252,8 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 					ep = NULL;
 				// Skip routes for prefixes on connected links
 				if (ep && ifo && (ifo->flags & IFACE_FLAG_ADHOC) != IFACE_FLAG_ADHOC && hc->bfs.hopcount == 1) {
-					dncp_t_neighbor_s np = {
-						.neighbor_ep_id = ap->ep_id,
+					dncp_t_peer_s np = {
+						.peer_ep_id = ap->ep_id,
 						.ep_id = dncp_ep_get_id(ep)
 					};
 					size_t buflen = sizeof(np) + DNCP_NI_LEN(dncp);
@@ -262,7 +262,7 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 					memcpy(buf + DNCP_NI_LEN(dncp), &np, sizeof(np));
 
 
-					if (dncp_find_tlv(dncp, DNCP_T_NEIGHBOR, buf, buflen))
+					if (dncp_find_tlv(dncp, DNCP_T_PEER, buf, buflen))
 						continue;
 				}
 

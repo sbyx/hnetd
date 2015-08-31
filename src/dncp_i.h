@@ -161,9 +161,9 @@ struct dncp_ep_i_struct {
   dncp_trickle_s trickle;
 };
 
-typedef struct dncp_neighbor_struct dncp_neighbor_s, *dncp_neighbor;
+typedef struct dncp_peer_struct dncp_peer_s, *dncp_peer;
 
-struct dncp_neighbor_struct {
+struct dncp_peer_struct {
   /* Most recent address we heard from this particular neighbor */
   struct sockaddr_in6 last_sa6;
 
@@ -293,19 +293,19 @@ static inline hnetd_time_t dncp_time(dncp o)
        n = (n == avl_last_element(&o->nodes.avl, n, in_nodes.avl) ?     \
             NULL : avl_next_element(n, in_nodes.avl)))
 
-static inline dncp_t_neighbor
-dncp_tlv_neighbor2(const struct tlv_attr *a, int nidlen)
+static inline dncp_t_peer
+dncp_tlv_peer2(const struct tlv_attr *a, int nidlen)
 {
-  if (tlv_id(a) != DNCP_T_NEIGHBOR
-      || tlv_len(a) != (nidlen + sizeof(dncp_t_neighbor_s)))
+  if (tlv_id(a) != DNCP_T_PEER
+      || tlv_len(a) != (nidlen + sizeof(dncp_t_peer_s)))
     return NULL;
-  return (dncp_t_neighbor)((char *)tlv_data(a) + nidlen);
+  return (dncp_t_peer)((char *)tlv_data(a) + nidlen);
 }
 
-static inline dncp_t_neighbor
-dncp_tlv_neighbor(dncp o, const struct tlv_attr *a)
+static inline dncp_t_peer
+dncp_tlv_peer(dncp o, const struct tlv_attr *a)
 {
-  return dncp_tlv_neighbor2(a, DNCP_NI_LEN(o));
+  return dncp_tlv_peer2(a, DNCP_NI_LEN(o));
 }
 
 static inline dncp_node_id
@@ -322,7 +322,7 @@ dncp_tlv_get_node_id(dncp o, void *tlv)
 }
 
 static inline dncp_node
-dncp_node_find_neigh_bidir(dncp_node n, dncp_t_neighbor ne)
+dncp_node_find_neigh_bidir(dncp_node n, dncp_t_peer ne)
 {
   if (!n)
     return NULL;
@@ -331,13 +331,13 @@ dncp_node_find_neigh_bidir(dncp_node n, dncp_t_neighbor ne)
   if (!n2)
     return NULL;
   struct tlv_attr *a;
-  dncp_t_neighbor ne2;
+  dncp_t_peer ne2;
 
-  dncp_node_for_each_tlv_with_t_v(n2, a, DNCP_T_NEIGHBOR, false)
-    if ((ne2 = dncp_tlv_neighbor(n->dncp, a)))
+  dncp_node_for_each_tlv_with_t_v(n2, a, DNCP_T_PEER, false)
+    if ((ne2 = dncp_tlv_peer(n->dncp, a)))
       {
-        if (ne->ep_id == ne2->neighbor_ep_id
-            && ne->neighbor_ep_id == ne2->ep_id &&
+        if (ne->ep_id == ne2->peer_ep_id
+            && ne->peer_ep_id == ne2->ep_id &&
             !memcmp(dncp_tlv_get_node_id(n->dncp, ne2),
                     &n->node_id, DNCP_NI_LEN(n->dncp)))
           return n2;
