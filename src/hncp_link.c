@@ -238,12 +238,12 @@ struct hncp_link* hncp_link_create(dncp dncp, const struct hncp_link_config *con
 		l->iface.cb_intaddr = cb_intaddr;
 		iface_register_user(&l->iface);
 
-		if (conf) {
+		if (conf && conf->version == HNCP_T_VERSION_INDICATED_VERSION) {
 			struct __packed {
 				hncp_t_version_s version;
 				char agent[sizeof(conf->agent)];
 			} data = {
-				{conf->version, 0, conf->cap_mdnsproxy, conf->cap_prefixdel,
+				{0, 0, conf->cap_mdnsproxy, conf->cap_prefixdel,
 						conf->cap_hostnames, conf->cap_legacy}, {0}
 			};
 			memcpy(data.agent, conf->agent, sizeof(data.agent));

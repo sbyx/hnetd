@@ -6,7 +6,7 @@
  * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:30:01 2014 mstenber
- * Last modified: Wed Jul  1 10:35:43 2015 mstenber
+ * Last modified: Mon Aug 31 12:47:16 2015 mstenber
  * Edit time:     20 min
  *
  */
@@ -59,13 +59,6 @@
 
 
 /****************************************** Other implementation definitions */
-
-/* Current (binary) data schema version
- *
- * Note that adding new TLVs does not require change of version; only
- * change of contents of existing TLVs (used by others) does.
- */
-#define HNCP_VERSION 1
 
 /* 0 = reserved link id. note it somewhere. */
 
