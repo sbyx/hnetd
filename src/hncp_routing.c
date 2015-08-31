@@ -99,7 +99,7 @@ static void hncp_routing_cb(dncp_subscriber s, __unused dncp_node n,
 	hncp_bfs bfs = container_of(s, hncp_bfs_s, subscr);
 	if (tlv_id(tlv) == HNCP_T_ASSIGNED_PREFIX || tlv_id(tlv) == HNCP_T_DELEGATED_PREFIX ||
 			tlv_id(tlv) == DNCP_T_NEIGHBOR || tlv_id(tlv) == HNCP_T_EXTERNAL_CONNECTION ||
-			tlv_id(tlv) == HNCP_T_ROUTER_ADDRESS)
+			tlv_id(tlv) == HNCP_T_NODE_ADDRESS)
 		uloop_timeout_set(&bfs->t, 0);
 }
 
@@ -166,8 +166,8 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 					}
 
 					struct tlv_attr *na;
-					hncp_t_router_address ra;
-					dncp_node_for_each_tlv_with_type(n, na, HNCP_T_ROUTER_ADDRESS) {
+					hncp_t_node_address ra;
+					dncp_node_for_each_tlv_with_type(n, na, HNCP_T_NODE_ADDRESS) {
 						if ((ra = hncp_tlv_ra(na))) {
 							if (ra->ep_id == ne->neighbor_ep_id &&
 							    IN6_IS_ADDR_V4MAPPED(&ra->address)) {
@@ -217,8 +217,8 @@ static void hncp_routing_exec(struct uloop_process *p, __unused int ret)
 							continue;
 
 						tlv_for_each_in_buf(b, tlv_data(a2) + flen, tlv_len(a2) - flen) {
-							hncp_t_prefix_domain d = tlv_data(b);
-							if (tlv_id(b) != HNCP_T_PREFIX_DOMAIN || tlv_len(b) < 1 || d->type > 128)
+							hncp_t_prefix_policy d = tlv_data(b);
+							if (tlv_id(b) != HNCP_T_PREFIX_POLICY || tlv_len(b) < 1 || d->type > 128)
 								continue;
 
 							plen = ROUND_BITS_TO_BYTES(d->type);

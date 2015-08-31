@@ -82,8 +82,8 @@ do {                                                            \
 
 #define tlv_ra_update(n, id, a, is_add)                         \
 do {                                                            \
-  hncp_t_router_address_s h = {.address = a, .ep_id = id};      \
-  dncp_add_tlv(n, HNCP_T_ROUTER_ADDRESS, &h, sizeof(h), 0);     \
+  hncp_t_node_address_s h = {.address = a, .ep_id = id};      \
+  dncp_add_tlv(n, HNCP_T_NODE_ADDRESS, &h, sizeof(h), 0);     \
  } while(0)
 
 void test_hncp_sd(void)

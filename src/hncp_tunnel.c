@@ -188,7 +188,7 @@ static void hncp_tunnel_discover(struct uloop_timeout *timer)
 		hncp_ep_id_s endpoint;
 		uint16_t address_type;
 		uint16_t address_len;
-		hncp_t_router_address_s address;
+		hncp_t_node_address_s address;
 		uint16_t l2tpv3_type;
 		uint16_t l2tpv3_len;
 		hncp_t_tunnel_l2tpv3_s l2tpv3;
@@ -198,7 +198,7 @@ static void hncp_tunnel_discover(struct uloop_timeout *timer)
 		cpu_to_be16(DNCP_T_ENDPOINT_ID),
 		cpu_to_be16(sizeof(negotiate.endpoint)),
 		{*node_id, 0},
-		cpu_to_be16(HNCP_T_ROUTER_ADDRESS),
+		cpu_to_be16(HNCP_T_NODE_ADDRESS),
 		cpu_to_be16(sizeof(negotiate.address)),
 		{0, IN6ADDR_ANY_INIT},
 		cpu_to_be16(HNCP_T_TUNNEL_NEGOTIATE),
@@ -230,11 +230,11 @@ static void hncp_tunnel_discover(struct uloop_timeout *timer)
 
 	// find a local IPv6 router address tlv to uniquely identify this node
 	struct tlv_attr *a;
-	dncp_node_for_each_tlv_with_type(t->dncp->own_node, a, HNCP_T_ROUTER_ADDRESS) {
-		if (tlv_len(a) < sizeof(hncp_t_router_address))
+	dncp_node_for_each_tlv_with_type(t->dncp->own_node, a, HNCP_T_NODE_ADDRESS) {
+		if (tlv_len(a) < sizeof(hncp_t_node_address))
 			continue;
 
-		hncp_t_router_address la = tlv_data(a);
+		hncp_t_node_address la = tlv_data(a);
 		if (!IN6_IS_ADDR_V4MAPPED(&la->address) && !IN6_IS_ADDR_LINKLOCAL(&la->address) &&
 				(IN6_IS_ADDR_UNSPECIFIED(&negotiate.address.address) ||
 						hncp_tunnel_is_private_v6(&negotiate.address.address)))
@@ -379,7 +379,7 @@ static void hncp_tunnel_handle_negotiate(dncp_subscriber subscr,
 
 	hncp_t_tunnel_l2tpv3 l2tpv3 = NULL;
 	hncp_ep_id endpoint = NULL;
-	hncp_t_router_address address = NULL;
+	hncp_t_node_address address = NULL;
 
 	tlv_for_each_attr(a, buf)
 		if (tlv_id(a) == HNCP_T_TUNNEL_MESSAGE)
@@ -395,7 +395,7 @@ static void hncp_tunnel_handle_negotiate(dncp_subscriber subscr,
 				endpoint = tlv_data(a);
 			break;
 
-		case HNCP_T_ROUTER_ADDRESS:
+		case HNCP_T_NODE_ADDRESS:
 			if (tlv_len(a) == sizeof(*address))
 				address = tlv_data(a);
 			break;
@@ -421,7 +421,7 @@ static void hncp_tunnel_handle_negotiate(dncp_subscriber subscr,
 				t->dncp, &endpoint->node_id, false);
 
 		if (node) {
-			dncp_node_for_each_tlv_with_type(node, a, HNCP_T_ROUTER_ADDRESS)
+			dncp_node_for_each_tlv_with_type(node, a, HNCP_T_NODE_ADDRESS)
 				if (address && tlv_len(a) == sizeof(*address) &&
 						!memcmp(tlv_data(a), address, sizeof(*address)))
 					address = NULL;

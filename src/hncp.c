@@ -6,8 +6,8 @@
  * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 14:50:58 2014 mstenber
- * Last modified: Tue Jun  9 12:21:42 2015 mstenber
- * Edit time:     72 min
+ * Last modified: Mon Aug 31 12:33:02 2015 mstenber
+ * Edit time:     74 min
  *
  */
 
@@ -62,9 +62,9 @@ hncp_validate_node_data(dncp_node n, struct tlv_attr *a)
       if (tlv_id(va) == HNCP_T_VERSION &&
           tlv_len(va) >= sizeof(hncp_t_version_s))
         {
-          hncp_t_version v = tlv_data(va);
-          version = v->version;
+          version = HNCP_T_VERSION_INDICATED_VERSION;
 #if L_LEVEL >= LOG_ERR
+          hncp_t_version v = tlv_data(va);
           agent = v->user_agent;
           agent_len = tlv_len(va) - sizeof(hncp_t_version_s);
 #endif /* L_LEVEL >= LOG_ERR */

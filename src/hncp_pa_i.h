@@ -302,24 +302,25 @@ do                              \
   } while(0)
 
 
-hnetd_time_t _remote_rel_to_local_abs(hnetd_time_t base, uint32_t netvalue)
+static hnetd_time_t
+_remote_rel_to_local_abs(hnetd_time_t base, uint32_t netvalue)
 {
-	if (netvalue == UINT32_MAX)
-		return HNETD_TIME_MAX;
-	return base + be32_to_cpu(netvalue);
+  if (netvalue == UINT32_MAX)
+    return HNETD_TIME_MAX;
+  return base + be32_to_cpu(netvalue) * HNETD_TIME_PER_SECOND;
 }
 
 static uint32_t _local_abs_to_remote_rel(hnetd_time_t now, hnetd_time_t v)
 {
-	if (v == HNETD_TIME_MAX)
-		return cpu_to_be32(UINT32_MAX);
-	if (now > v)
-		return 0;
-	hnetd_time_t delta = v - now;
-	/* Convert to infinite if it would overflow too. */
-	if (delta >= UINT32_MAX)
-		return cpu_to_be32(UINT32_MAX);
-	return cpu_to_be32(delta);
+  if (v == HNETD_TIME_MAX)
+    return cpu_to_be32(UINT32_MAX);
+  if (now > v)
+    return 0;
+  hnetd_time_t delta = (v - now) / HNETD_TIME_PER_SECOND;
+  /* Convert to infinite if it would overflow too. */
+  if (delta >= UINT32_MAX)
+    return cpu_to_be32(UINT32_MAX);
+  return cpu_to_be32(delta);
 }
 
 static int hpa_ifconf_comp(const void *k1, const void *k2, __unused void *ptr)

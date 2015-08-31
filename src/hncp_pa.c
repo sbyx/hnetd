@@ -423,14 +423,14 @@ static void hpa_refresh_ec(hncp_pa hpa, bool publish)
 			}
 
 			struct __packed {
-				hncp_t_prefix_domain_s d;
+				hncp_t_prefix_policy_s d;
 				struct in6_addr dest;
 			} domain = {{0}, IN6ADDR_ANY_INIT};
 
 			/* TODO: for each prefix domain of DP */
 			L_DEBUG("Adding Prefix Policy type %d to %s", 0, PREFIX_REPR(&dp->dp.prefix));
 			size_t dlen = sizeof(domain.d) + ROUND_BITS_TO_BYTES(domain.d.type);
-			st = tlv_new(&tb, HNCP_T_PREFIX_DOMAIN, dlen);
+			st = tlv_new(&tb, HNCP_T_PREFIX_POLICY, dlen);
 			memcpy(tlv_data(st), &domain, dlen);
 
 			tlv_nest_end(&tb, cookie);
@@ -1338,7 +1338,7 @@ static void hpa_update_ap_tlv(hncp_pa hpa, dncp_node n,
 static void hpa_update_ra_tlv(hncp_pa hpa, dncp_node n,
 		struct tlv_attr *tlv, bool add)
 {
-	hncp_t_router_address ra;
+	hncp_t_node_address ra;
 	if (!(ra = hncp_tlv_ra(tlv)))
 		return;
 
@@ -1439,7 +1439,7 @@ static void hpa_update_dp_tlv(hncp_pa hpa, dncp_node n,
 		if (tlv_id(stlv) == HNCP_T_DHCPV6_OPTIONS) {
 			dhcpv6_data = tlv_data(stlv);
 			dhcpv6_len = tlv_len(stlv);
-		} else if (tlv_id(stlv) == HNCP_T_PREFIX_DOMAIN) {
+		} else if (tlv_id(stlv) == HNCP_T_PREFIX_POLICY) {
 			if(tlv_len(stlv) > 0) {
 				uint8_t type = *((uint8_t *)tlv_data(stlv));
 				if(type <= 128 && (tlv_len(stlv) == (unsigned int) ROUND_BITS_TO_BYTES(type) + 1)) {
@@ -1561,7 +1561,7 @@ static void hpa_dncp_tlv_change_cb(dncp_subscriber s,
 	case HNCP_T_ASSIGNED_PREFIX:
 		hpa_update_ap_tlv(hpa, n, tlv, add);
 		break;
-	case HNCP_T_ROUTER_ADDRESS:
+	case HNCP_T_NODE_ADDRESS:
 		hpa_update_ra_tlv(hpa, n, tlv, add);
 		break;
 	default:
@@ -1604,9 +1604,9 @@ static void hpa_aa_publish(hncp_pa hpa, struct pa_ldp *ldp)
 	if((ep = container_of(ldp->link, hpa_iface_s, aal)->ep))
 		ep_id = dncp_ep_get_id(ep);
 
-	hncp_t_router_address_s h = {.address = ldp->prefix, .ep_id = ep_id};
+	hncp_t_node_address_s h = {.address = ldp->prefix, .ep_id = ep_id};
 	ldp->userdata[PA_LDP_U_HNCP_TLV] =
-			dncp_add_tlv(hpa->dncp, HNCP_T_ROUTER_ADDRESS, &h, sizeof(h), 0);
+			dncp_add_tlv(hpa->dncp, HNCP_T_NODE_ADDRESS, &h, sizeof(h), 0);
 }
 
 static void hpa_ap_unpublish(hncp_pa hpa, struct pa_ldp *ldp)

@@ -6,8 +6,8 @@
  * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:52:55 2014 mstenber
- * Last modified: Mon Jun  8 12:56:00 2015 mstenber
- * Edit time:     9 min
+ * Last modified: Mon Aug 31 12:32:37 2015 mstenber
+ * Edit time:     14 min
  *
  */
 
@@ -22,15 +22,15 @@ enum {
   HNCP_T_EXTERNAL_CONNECTION = 33,
   HNCP_T_DELEGATED_PREFIX = 34, /* may contain TLVs */
   HNCP_T_ASSIGNED_PREFIX = 35, /* may contain TLVs */
-  HNCP_T_ROUTER_ADDRESS = 36, /* router address */
+  HNCP_T_NODE_ADDRESS = 36, /* router address */
   HNCP_T_DHCPV6_OPTIONS = 37, /* contains just raw DHCPv6 options */
   HNCP_T_DHCP_OPTIONS = 38,
 
   HNCP_T_DNS_DELEGATED_ZONE = 39, /* the 'beef' */
-  HNCP_T_DNS_DOMAIN_NAME = 40, /* non-default domain (very optional) */
-  HNCP_T_DNS_ROUTER_NAME = 41, /* router name (moderately optional) */
+  HNCP_T_DOMAIN_NAME = 40, /* non-default domain (very optional) */
+  HNCP_T_NODE_NAME = 41, /* node name (moderately optional) */
   HNCP_T_MANAGED_PSK = 42,
-  HNCP_T_PREFIX_DOMAIN = 43,
+  HNCP_T_PREFIX_POLICY = 43,
 
   /* draft-pfister-homenet-multicast */
   HNCP_T_PIM_RPA_CANDIDATE = 191,
@@ -42,8 +42,8 @@ enum {
 
 /* HNCP_T_VERSION */
 typedef struct __packed {
-  uint8_t version;
-  uint8_t reserved;
+  uint8_t reserved1;
+  uint8_t reserved2;
   unsigned int cap_mdnsproxy:4;
   unsigned int cap_prefixdel:4;
   unsigned int cap_hostnames:4;
@@ -77,11 +77,11 @@ typedef struct __packed {
 /* HNCP_T_DHCP_OPTIONS - just container, no own content */
 /* HNCP_T_DHCPV6_OPTIONS - just container, no own content */
 
-/* HNCP_T_ROUTER_ADDRESS */
+/* HNCP_T_NODE_ADDRESS */
 typedef struct __packed {
   ep_id_t ep_id;
   struct in6_addr address;
-} hncp_t_router_address_s, *hncp_t_router_address;
+} hncp_t_node_address_s, *hncp_t_node_address;
 
 /* HNCP_T_DNS_DELEGATED_ZONE */
 typedef struct __packed {
@@ -95,19 +95,20 @@ typedef struct __packed {
 #define HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE 2
 #define HNCP_T_DNS_DELEGATED_ZONE_FLAG_LEGACY_BROWSE 4
 
-/* HNCP_T_DNS_DOMAIN_NAME has just DNS label sequence */
+/* HNCP_T_DOMAIN_NAME has just DNS label sequence */
 
-/* HNCP_T_DNS_ROUTER_NAME */
+/* HNCP_T_NODE_NAME */
 typedef struct __packed {
   struct in6_addr address;
+  uint8_t name_length;
   char name[];
-} hncp_t_dns_router_name_s, *hncp_t_dns_router_name;
+} hncp_t_node_name_s, *hncp_t_node_name;
 
-/* HNCP_T_PREFIX_DOMAIN */
+/* HNCP_T_PREFIX_POLICY */
 typedef struct __packed {
   uint8_t type;
   uint8_t id[];
-} hncp_t_prefix_domain_s, *hncp_t_prefix_domain;
+} hncp_t_prefix_policy_s, *hncp_t_prefix_policy;
 
 /* HNCP_T_PIM_RPA_CANDIDATE */
 typedef struct __packed {
@@ -137,3 +138,6 @@ typedef struct __packed {
 
 #define HNCP_UCAST_DISCOVER6 "2001:1::8808"
 #define HNCP_UCAST_DISCOVER4 "192.0.0.9"
+
+/* Presence of HNCP_T_VERSION TLV indicates this version */
+#define HNCP_T_VERSION_INDICATED_VERSION 1

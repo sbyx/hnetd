@@ -6,8 +6,8 @@
  * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Jun 15 12:09:05 2015 mstenber
- * Edit time:     674 min
+ * Last modified: Mon Aug 31 12:19:51 2015 mstenber
+ * Edit time:     679 min
  *
  */
 
@@ -334,14 +334,15 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
   md5_hash(sd->hncp->domain, strlen(sd->hncp->domain), &ctx);
   dncp_for_each_node(sd->dncp, n)
     {
-      dncp_node_for_each_tlv_with_type(n, a, HNCP_T_DNS_ROUTER_NAME) {
-        int namelen = tlv_len(a) - sizeof(hncp_t_dns_router_name_s);
-        if (namelen > 0 && namelen <= DNS_MAX_L_LEN)
+      dncp_node_for_each_tlv_with_type(n, a, HNCP_T_NODE_NAME) {
+        hncp_t_node_name rname = tlv_data(a);
+        int namelen = tlv_len(a) - sizeof(hncp_t_node_name_s);
+        if (namelen > 0 && namelen >= rname->name_length
+            && rname->name_length && rname->name_length <= DNS_MAX_L_LEN)
           {
-            hncp_t_dns_router_name rname = tlv_data(a);
             md5_hash(rname, tlv_len(a), &ctx);
             fprintf(f, "host-record=%.*s.%s,%s\n",
-                    namelen, rname->name, sd->hncp->domain,
+                    rname->name_length, rname->name, sd->hncp->domain,
                     ADDR_REPR(&rname->address));
           }
       }
@@ -490,7 +491,7 @@ bool hncp_sd_reconfigure_pcp(hncp_sd sd)
   md5_ctx_t ctx;
   dncp_node n;
   struct tlv_attr *tlv, *a;
-  hncp_t_router_address ra;
+  hncp_t_node_address ra;
   hncp_t_delegated_prefix_header dp;
   char tbuf[123];
 
@@ -583,28 +584,30 @@ static void
 _set_router_name(hncp_sd sd)
 {
   size_t namelen = strlen(sd->router_name);
-  hncp_t_dns_router_name rname = alloca(sizeof(*rname) + namelen);
+  hncp_t_node_name rname = alloca(sizeof(*rname) + namelen);
   memcpy(rname->name, sd->router_name, namelen);
+  rname->name_length = namelen;
 
-  dncp_remove_tlvs_by_type(sd->dncp, HNCP_T_DNS_ROUTER_NAME);
+  dncp_remove_tlvs_by_type(sd->dncp, HNCP_T_NODE_NAME);
 
   if (!iface_get_preferred_address(&rname->address, false, NULL))
-    dncp_add_tlv(sd->dncp, HNCP_T_DNS_ROUTER_NAME,
+    dncp_add_tlv(sd->dncp, HNCP_T_NODE_NAME,
                  rname, sizeof(*rname) + namelen, 0);
 
   if (!iface_get_preferred_address(&rname->address, true, NULL))
-    dncp_add_tlv(sd->dncp, HNCP_T_DNS_ROUTER_NAME,
+    dncp_add_tlv(sd->dncp, HNCP_T_NODE_NAME,
                  rname, sizeof(*rname) + namelen, 0);
 }
 
 static bool
 _tlv_router_name_matches(hncp_sd sd, struct tlv_attr *a)
 {
-  if (tlv_id(a) == HNCP_T_DNS_ROUTER_NAME)
+  if (tlv_id(a) == HNCP_T_NODE_NAME)
     {
-      hncp_t_dns_router_name rname = tlv_data(a);
+      hncp_t_node_name rname = tlv_data(a);
       int namelen = tlv_len(a) - sizeof(*rname);
-      if (namelen == (int)strlen(sd->router_name)
+      if (namelen >= (int)strlen(sd->router_name)
+          && rname->name_length == (int)strlen(sd->router_name)
           && memcmp(rname->name, sd->router_name, namelen) == 0)
         return true;
     }
@@ -649,7 +652,7 @@ _find_router_name(hncp_sd sd)
 
   dncp_for_each_node(sd->dncp, n)
     {
-      dncp_node_for_each_tlv_with_type(n, a, HNCP_T_DNS_ROUTER_NAME)
+      dncp_node_for_each_tlv_with_type(n, a, HNCP_T_NODE_NAME)
         {
           if (_tlv_router_name_matches(sd, a))
             return n;
@@ -697,7 +700,7 @@ static struct tlv_attr *_get_dns_domain_tlv(hncp_sd sd)
 
   dncp_for_each_node(sd->dncp, n)
     {
-      dncp_node_for_each_tlv_with_type(n, a, HNCP_T_DNS_DOMAIN_NAME)
+      dncp_node_for_each_tlv_with_type(n, a, HNCP_T_DOMAIN_NAME)
         best = a;
     }
   return best;
@@ -751,7 +754,7 @@ static void _tlv_cb(dncp_subscriber s,
            TLV_REPR(tlv));
   switch (tlv_id(tlv))
     {
-    case HNCP_T_DNS_ROUTER_NAME:
+    case HNCP_T_NODE_NAME:
       /* Handle router name collision detection; we're interested only in
        * nodes with higher router id overriding our choice. */
       if (add
@@ -787,14 +790,14 @@ static void _tlv_cb(dncp_subscriber s,
         }
       break;
 
-    case HNCP_T_DNS_DOMAIN_NAME:
+    case HNCP_T_DOMAIN_NAME:
       /* As the TLVs aren't _yet_ valid on the node, there's a race
        * condition potential here. So we just do things after a
        * timeout. */
       _should_update(sd, UPDATE_FLAG_DOMAIN);
       break;
 
-    case HNCP_T_ROUTER_ADDRESS:
+    case HNCP_T_NODE_ADDRESS:
       /* Router name/address changes trigger dnsmasq update due to
        * synthesized <routername>.<domain> host records. */
       /* Addresses of where to find PCP server may also have changed */
@@ -909,7 +912,7 @@ hncp_sd hncp_sd_create(hncp h, hncp_sd_params p, struct hncp_link *l)
           L_ERR("invalid domain:%s", p->domain_name);
           abort();
         }
-      dncp_add_tlv(o, HNCP_T_DNS_DOMAIN_NAME, ll, len, 0);
+      dncp_add_tlv(o, HNCP_T_DOMAIN_NAME, ll, len, 0);
 
       strncpy(sd->hncp->domain, p->domain_name, DNS_MAX_ESCAPED_LEN);
     }

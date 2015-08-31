@@ -49,11 +49,11 @@ hncp_tlv_dp(const struct tlv_attr *a)
   return dh;
 }
 
-static inline hncp_t_router_address
+static inline hncp_t_node_address
 hncp_tlv_ra(const struct tlv_attr *a)
 {
-  if (tlv_id(a) != HNCP_T_ROUTER_ADDRESS
-      || tlv_len(a) != sizeof(hncp_t_router_address_s))
+  if (tlv_id(a) != HNCP_T_NODE_ADDRESS
+      || tlv_len(a) != sizeof(hncp_t_node_address_s))
     return NULL;
   return tlv_data(a);
 }

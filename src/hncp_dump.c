@@ -1,6 +1,11 @@
 /*
  * Copyright (c) 2015 Cisco Systems, Inc.
  */
+
+/* TBD: This whole module is full of potential for nastiness, given it
+ * does not do any input validation (length of TLVs) => it is a DoS
+ * vector. Should fix (and probably unify TLV validation code in
+ * general). -MSt */
 #include "hncp_dump.h"
 
 #include "dncp_i.h"
@@ -83,7 +88,7 @@ static int hd_node_zone(struct tlv_attr *tlv, struct blob_buf *b)
 
 static int hd_node_address(struct tlv_attr *tlv, struct blob_buf *b)
 {
-	hncp_t_router_address ra = (hncp_t_router_address) tlv_data(tlv);
+	hncp_t_node_address ra = (hncp_t_node_address) tlv_data(tlv);
 	if(tlv_len(tlv) != 20)
 		return -1;
 	hd_a(!blobmsg_add_string(b, "address", ADDR_REPR(&ra->address)), return -1);
@@ -117,8 +122,8 @@ static int hd_node_externals_dp(struct tlv_attr *tlv, struct blob_buf *b)
 	hd_a(!blob_buf_init(&dps, BLOBMSG_TYPE_ARRAY), return -1);
 	if (tlv_len(tlv) > flen) {
 		tlv_for_each_in_buf(a, tlv_data(tlv) + flen, tlv_len(tlv) - flen) {
-			hncp_t_prefix_domain d = tlv_data(a);
-			if (tlv_id(a) != HNCP_T_PREFIX_DOMAIN || tlv_len(a) < 1)
+			hncp_t_prefix_policy d = tlv_data(a);
+			if (tlv_id(a) != HNCP_T_PREFIX_POLICY || tlv_len(a) < 1)
 				continue;
 
 			plen = ROUND_BITS_TO_BYTES(d->type);
@@ -239,7 +244,7 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 {
 	struct tlv_attr *tlv;
 	hncp_t_version v;
-	hncp_t_dns_router_name na;
+	hncp_t_node_name na;
 	struct blob_buf prefixes = {NULL, NULL, 0, NULL},
 			neighbors = {NULL, NULL, 0, NULL},
 			externals = {NULL, NULL, 0, NULL},
@@ -273,13 +278,12 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 			case HNCP_T_EXTERNAL_CONNECTION:
 				hd_do_in_table(&externals, NULL, hd_node_external(tlv, &externals), goto err);
 				break;
-			case HNCP_T_ROUTER_ADDRESS:
+			case HNCP_T_NODE_ADDRESS:
 				hd_do_in_table(&addresses, NULL, hd_node_address(tlv, &addresses), goto err);
 				break;
 			case HNCP_T_VERSION:
 				v = (hncp_t_version)tlv_data(tlv);
 				if(tlv_len(tlv) > sizeof(hncp_t_version_s)) {
-					hd_a(!blobmsg_add_u32(b, "version", v->version), goto err);
 					hd_a(!blobmsg_add_u32(b, "cap_m", v->cap_mdnsproxy), goto err);
 					hd_a(!blobmsg_add_u32(b, "cap_p", v->cap_prefixdel), goto err);
 					hd_a(!blobmsg_add_u32(b, "cap_h", v->cap_hostnames), goto err);
@@ -292,11 +296,11 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 			case HNCP_T_DNS_DELEGATED_ZONE:
 				hd_do_in_table(&zones, NULL, hd_node_zone(tlv, &zones), goto err);
 				break;
-			case HNCP_T_DNS_ROUTER_NAME:
+			case HNCP_T_NODE_NAME:
 				na = tlv_data(tlv);
-				hd_a(!hd_push_string(b, "router-name", na->name, tlv_len(tlv)) - sizeof(*na), goto err);
+				hd_a(!hd_push_string(b, "router-name", na->name, na->name_length), goto err);
 				break;
-			case HNCP_T_DNS_DOMAIN_NAME:
+			case HNCP_T_DOMAIN_NAME:
 				hd_a(!hd_push_dn(b, "domain", tlv_data(tlv), tlv_len(tlv)), goto err);
 				break;
 			case HNCP_T_PIM_RPA_CANDIDATE:
