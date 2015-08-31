@@ -104,15 +104,12 @@ target_link_libraries(hnetd ubox resolv blobmsg_json ${BACKEND_LINK} ${DTLS_LINK
 install(TARGETS hnetd DESTINATION sbin/)
 
 # Build DNCP static library
-# ToDo: Fix DTLS Build
-if(${DTLS_OPENSSL})
-	add_library(dncp STATIC src/hnetd_time.c src/prefix.c src/tlv.c src/dncp.c src/dncp_notify.c src/dncp_timeout.c src/dncp_proto.c)
-	set_property(TARGET dncp PROPERTY COMPILE_FLAGS "${CMAKE_C_FLAGS} -g -std=c99 -fPIC")
-endif(${DTLS_OPENSSL})
+add_library(dncp STATIC src/hnetd_time.c src/prefix.c src/tlv.c src/dncp.c src/dncp_notify.c src/dncp_timeout.c src/dncp_proto.c ${DTLS_SOURCE})
+set_property(TARGET dncp PROPERTY COMPILE_FLAGS "${CMAKE_C_FLAGS} -g -std=c99 -fPIC")
 
 # libdncp example
-#add_executable(libdncp_example examples/libdncp_example.c)
-#target_link_libraries(libdncp_example dncp ubox)
+add_executable(libdncp_example examples/libdncp_example.c)
+target_link_libraries(libdncp_example dncp ubox ${DTLS_LINK})
 
 # Unit test stuff
 
