@@ -6,7 +6,7 @@
  * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Mon Aug 31 12:19:51 2015 mstenber
+ * Last modified: Wed Sep  2 15:05:34 2015 mstenber
  * Edit time:     679 min
  *
  */
@@ -331,7 +331,6 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
    * <subdomain>'s ~NS (remote, real IP)
    * <subdomain>'s ~NS (local, LOCAL_OHP_ADDRESS)
    */
-  md5_hash(sd->hncp->domain, strlen(sd->hncp->domain), &ctx);
   dncp_for_each_node(sd->dncp, n)
     {
       dncp_node_for_each_tlv_with_type(n, a, HNCP_T_NODE_NAME) {
@@ -394,6 +393,9 @@ bool hncp_sd_write_dnsmasq_conf(hncp_sd sd, const char *filename)
   /* Default is 150. Given 0.5 second lifetime on service queries,
    * that's not much. */
   fprintf(f, "dns-forward-max=12345\n");
+
+  /* RFC1918 rebinds are ok for the home domain */
+  fprintf(f, "rebind-domain-ok=%s\n", sd->hncp->domain);
   fclose(f);
   return _sh_changed(&ctx, &sd->dnsmasq_state);
 }
