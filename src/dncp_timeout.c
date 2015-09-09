@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Wed Sep  9 10:03:02 2015 mstenber
- * Edit time:     608 min
+ * Last modified: Wed Sep  9 15:12:29 2015 mstenber
+ * Edit time:     609 min
  *
  */
 
@@ -327,8 +327,7 @@ void dncp_ext_timeout(dncp o)
         {
           if (l->send_reply_at <= now)
             {
-              struct sockaddr_in6 *src = l->reply_has_src? &l->reply_src : NULL;
-              dncp_ep_i_send_buf(l, src, &l->reply_dst, &l->reply_buf);
+              dncp_reply_send(&l->reply);
               l->send_reply_at = 0;
             }
           else

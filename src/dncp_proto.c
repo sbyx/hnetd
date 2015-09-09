@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Wed Sep  9 11:36:57 2015 mstenber
- * Edit time:     1155 min
+ * Last modified: Wed Sep  9 15:42:06 2015 mstenber
+ * Edit time:     1181 min
  *
  */
 
@@ -21,13 +21,53 @@
 
 /***************************************************** Low-level TLV pushing */
 
+static int
+_bytes_to_exp(size_t bytes)
+{
+  int i = -1;
+  size_t v = 1;
+
+  while ( bytes > v)
+    {
+      v <<= 1;
+      i += 1;
+    }
+  return i;
+}
+
+static bool _push_ep_id_tlv(struct tlv_buf *tb, dncp_ep_i l,
+                            struct sockaddr_in6 *dst, bool always_ep_id);
+
+
+/* NOTE: The design here is definitely scary.
+ *
+ * The assumption is that if the container tlv-buf _has_ id, it
+ * represents 1<<id byte maximum length on the wire. If that is the
+ * case _or_ the tlv_buf is uninitialized, the struct tlv_buf _is_
+ * within dncp_reply. Otherwise, nothing is assumed.
+ */
+
 static struct tlv_attr *_push_tlv(struct tlv_buf *tb, int t, size_t len)
 {
-  /* Consider if we would overflow */
-  int ot = tlv_id(tb->head);
-  if (ot)
+  if (tb->head)
     {
-      if ((tlv_len(tb->head) + len + sizeof(struct tlv_attr)) > (1<<ot))
+      /* Consider if we would overflow */
+      int ot = tlv_id(tb->head);
+      if (ot)
+        {
+          dncp_reply reply = container_of(tb, dncp_reply_s, buf);
+          if ((tlv_len(tb->head) + len + sizeof(struct tlv_attr)) > (1<<ot))
+            {
+              dncp_reply_send(reply);
+              memset(tb, 0, sizeof(*tb));
+            }
+        }
+    }
+  if (!tb->head)
+    {
+      dncp_reply reply = container_of(tb, dncp_reply_s, buf);
+      tlv_buf_init(tb, _bytes_to_exp(reply->l->conf.maximum_unicast_size));
+      if (!_push_ep_id_tlv(tb, reply->l, &reply->dst, false))
         return NULL;
     }
   return tlv_new(tb, t, len);
@@ -174,6 +214,12 @@ void dncp_ep_i_send_buf(dncp_ep_i l,
   tlv_buf_free(buf);
 }
 
+void dncp_reply_send(dncp_reply reply)
+{
+  struct sockaddr_in6 *src = reply->has_src? &reply->src : NULL;
+  dncp_ep_i_send_buf(reply->l, src, &reply->dst, &reply->buf);
+}
+
 
 void dncp_ep_i_send_network_state(dncp_ep_i l,
                                   struct sockaddr_in6 *src,
@@ -253,20 +299,6 @@ _heard(dncp_ep_i l, dncp_t_ep_id lid, struct sockaddr_in6 *src,
   return t;
 }
 
-static int
-_bytes_to_exp(size_t bytes)
-{
-  int i = -1;
-  size_t v = 1;
-
-  while ( bytes > v)
-    {
-      v <<= 1;
-      i += 1;
-    }
-  return i;
-}
-
 /* Handle a single received message. */
 static void
 handle_message(dncp_ep_i l,
@@ -290,10 +322,10 @@ handle_message(dncp_ep_i l,
   dncp_node_id ni;
   char fake_lid[DNCP_NI_MAX_LEN + sizeof(*lid)];
   bool is_local = false;
-  struct tlv_buf reply;
+  dncp_reply_s reply = { .has_src = !!dst, .dst = *src, .l = l };
 
-  memset(&reply, 0, sizeof(reply));
-  tlv_buf_init(&reply, _bytes_to_exp(l->conf.maximum_unicast_size));
+  if (reply.has_src)
+    reply.src = *dst;
 
   /* Validate that link id exists (if this were TCP, we would keep
    * track of the remote link id on per-stream basis). */
@@ -314,11 +346,6 @@ handle_message(dncp_ep_i l,
           ne = tne ? dncp_tlv_get_extra(tne) : NULL;
         }
     }
-
-  if (!_push_ep_id_tlv(&reply, l, dst, false))
-    goto oom;
-
-  size_t initial_reply_len = tlv_len(reply.head);
 
   tlv_for_each_attr(a, msg)
   {
@@ -364,7 +391,7 @@ handle_message(dncp_ep_i l,
         if (multicast)
           L_INFO("ignoring req-net-hash in multicast");
         else
-          (void)_push_network_state(&reply, o, 0);
+          (void)_push_network_state(&reply.buf, o, 0);
         break;
 
       case DNCP_T_REQ_NODE_STATE:
@@ -403,7 +430,7 @@ handle_message(dncp_ep_i l,
           }
         else
           dncp_self_flush(o->own_node);
-        (void)_push_node_state_tlv(&reply, n, true);
+        (void)_push_node_state_tlv(&reply.buf, n, true);
         break;
 
       case DNCP_T_NET_STATE:
@@ -517,7 +544,7 @@ handle_message(dncp_ep_i l,
             L_DEBUG("node data %s for %s",
                     multicast ? "not acceptable/supplied" : "missing",
                     DNCP_NI_REPR(l->dncp, ni));
-            (void)_push_req_node_data_tlv(&reply, l->dncp, ns);
+            (void)_push_req_node_data_tlv(&reply.buf, l->dncp, ns);
           }
         updated_or_requested_state = true;
         break;
@@ -533,17 +560,14 @@ handle_message(dncp_ep_i l,
    * based on the flags we know. */
   if (should_request_network_state && !updated_or_requested_state && !is_local)
     {
-      (void)_push_network_state_tlv(&reply, l->dncp);
-      (void)_push_tlv(&reply, DNCP_T_REQ_NET_STATE, 0);
+      (void)_push_network_state_tlv(&reply.buf, l->dncp);
+      (void)_push_tlv(&reply.buf, DNCP_T_REQ_NET_STATE, 0);
       l->last_req_network_state = dncp_time(o);
     }
 
-  /* If the reply just contains our ep id, ignore it */
-  if (tlv_len(reply.head) == initial_reply_len)
-    {
-      tlv_buf_free(&reply);
-      return;
-    }
+  /* If we haven't pushed anything, ignore the reply. */
+  if (!reply.buf.head)
+    return;
 
   hnetd_time_t t = dncp_time(o);
   if (multicast)
@@ -552,21 +576,14 @@ handle_message(dncp_ep_i l,
       if (!l->send_reply_at || l->send_reply_at > t)
         {
           if (l->send_reply_at)
-            tlv_buf_free(&l->reply_buf);
+            tlv_buf_free(&l->reply.buf);
           l->send_reply_at = t;
-          l->reply_has_src = dst != NULL;
-          if (l->reply_has_src)
-            l->reply_src = *dst;
-          l->reply_dst = *src;
-          l->reply_buf = reply;
+          l->reply = reply;
           dncp_schedule(o);
         }
     }
   else
-    dncp_ep_i_send_buf(l, dst, src, &reply);
-  return;
- oom:
-  tlv_buf_free(&reply);
+    dncp_reply_send(&reply);
 }
 
 

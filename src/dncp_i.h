@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Wed Sep  9 11:21:54 2015 mstenber
- * Edit time:     394 min
+ * Last modified: Wed Sep  9 15:14:19 2015 mstenber
+ * Edit time:     395 min
  *
  */
 
@@ -134,6 +134,14 @@ struct dncp_trickle_struct {
 };
 
 
+typedef struct dncp_reply_struct {
+  struct tlv_buf buf;
+  dncp_ep_i l;
+  bool has_src;
+  struct sockaddr_in6 src;
+  struct sockaddr_in6 dst;
+} dncp_reply_s, *dncp_reply;
+
 struct dncp_ep_i_struct {
   struct vlist_node in_eps;
 
@@ -159,11 +167,7 @@ struct dncp_ep_i_struct {
 
   /* When do we want to send a delayed reply (0 if not currently) */
   hnetd_time_t send_reply_at;
-  /* And using what src+dst */
-  bool reply_has_src;
-  struct sockaddr_in6 reply_src;
-  struct sockaddr_in6 reply_dst;
-  struct tlv_buf reply_buf;
+  dncp_reply_s reply;
 
   /* The per-ep Trickle state. */
   dncp_trickle_s trickle;
@@ -272,7 +276,7 @@ void dncp_ep_i_send_network_state(dncp_ep_i l,
 void dncp_ep_i_send_buf(dncp_ep_i l,
                         struct sockaddr_in6 *src, struct sockaddr_in6 *dst,
                         struct tlv_buf *buf);
-
+void dncp_reply_send(dncp_reply reply);
 
 /* Miscellaneous utilities that live in dncp_timeout */
 void dncp_trickle_reset(dncp o);
