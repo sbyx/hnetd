@@ -355,8 +355,10 @@ int main(__unused int argc, char *argv[])
 	if (routing_script)
 		hncp_routing_create(h, routing_script, !strict);
 
+#ifdef __linux__
 	if (tunnel_script)
 		hncp_tunnel_create(hncp_get_dncp(h), tunnel_script);
+#endif /* __linux__ */
 
 	if(wifi) {
 		hncp_wifi w = NULL;

@@ -42,6 +42,10 @@ if(${APPLE})
   # Xcode 4.* target breaks because it doesn't add 'system-ish' include paths
   include_directories(/usr/local/include /opt/local/include)
   link_directories(/usr/local/lib /opt/local/lib)
+  set(TUNNEL_SOURCE "")
+else()
+  set(TUNNEL_SOURCE "src/hncp_tunnel.c")
+
 endif(${APPLE})
 
 if (${COVERAGE})
@@ -99,7 +103,7 @@ set(HNCP_WITH_GLUE ${DNCP_WITH_PROTO} $<TARGET_OBJECTS:L_HNCP_GLUE>)
 add_library(L_HNCP_IO OBJECT src/hncp_io.c ${DTLS_SOURCE} src/udp46.c)
 set(HNCP_IO $<TARGET_OBJECTS:L_HNCP_IO>)
 set(HNCP ${HNCP_WITH_GLUE} ${HNCP_IO}  ${TRUST_SOURCE})
-add_executable(hnetd ${HNCP} ${HT} src/hncp_routing.c src/hncp_dump.c src/hncp_tunnel.c src/hnetd.c src/iface.c src/pd.c src/ src/hncp_wifi.c ${BACKEND_SOURCE})
+add_executable(hnetd ${HNCP} ${HT} src/hncp_routing.c src/hncp_dump.c src/hnetd.c src/iface.c src/pd.c src/ src/hncp_wifi.c ${BACKEND_SOURCE} ${TUNNEL_SOURCE})
 target_link_libraries(hnetd ubox resolv blobmsg_json ${BACKEND_LINK} ${DTLS_LINK})
 install(TARGETS hnetd DESTINATION sbin/)
 
