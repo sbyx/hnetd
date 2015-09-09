@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Mon Nov 25 14:00:10 2013 mstenber
- * Last modified: Tue Jun  2 13:55:00 2015 mstenber
- * Edit time:     416 min
+ * Last modified: Wed Sep  9 09:02:54 2015 mstenber
+ * Edit time:     420 min
  *
  */
 
@@ -269,6 +269,8 @@ void hncp_set_dtls(hncp h, dtls d)
 {
   h->d = d;
   dtls_set_readable_cb(d, _dtls_readable_cb, h);
+  h->ext.conf.per_ep.accept_node_data_updates_via_multicast = false;
+  /* TBD: Should we also configure existing links not to do this? */
 }
 
 #endif /* DTLS */

@@ -6,8 +6,8 @@
  * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 14:50:58 2014 mstenber
- * Last modified: Mon Aug 31 12:33:02 2015 mstenber
- * Edit time:     74 min
+ * Last modified: Wed Sep  9 08:51:37 2015 mstenber
+ * Edit time:     75 min
  *
  */
 
@@ -170,10 +170,7 @@ bool hncp_init(hncp o)
         .trickle_k = HNCP_TRICKLE_K,
         .keepalive_interval = HNCP_KEEPALIVE_INTERVAL,
         .maximum_multicast_size = HNCP_MAXIMUM_MULTICAST_SIZE,
-
-        /* TBD - should this be true or not? hmm. if so, we would have
-         * to turn it off _for every link_ when dtls is enabled. */
-        .accept_node_data_updates_via_multicast = false
+        .accept_node_data_updates_via_multicast = true
       },
       .node_id_length = HNCP_NI_LEN,
       .hash_length = HNCP_HASH_LEN,
