@@ -6,8 +6,8 @@
  * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:52:55 2014 mstenber
- * Last modified: Mon Aug 31 12:32:37 2015 mstenber
- * Edit time:     14 min
+ * Last modified: Wed Sep  9 11:24:47 2015 mstenber
+ * Edit time:     17 min
  *
  */
 
@@ -141,3 +141,15 @@ typedef struct __packed {
 
 /* Presence of HNCP_T_VERSION TLV indicates this version */
 #define HNCP_T_VERSION_INDICATED_VERSION 1
+
+
+/* Pretty arbitrary. I wonder if all links can really guarantee MTU
+ * size packets going through. However, IPv6 minimum MTU - size of
+ * IPv6 header - size of UDP header (we consider only the payload
+ * here) should work.  */
+#define HNCP_MAXIMUM_MULTICAST_SIZE (1280-40-8)
+
+/* Very arbitrary. On some implementations, I have seen some issues
+ * with 10+kb frames so we use this for now. It MUST be significantly
+ * more than 4k, due to how code is written at the moment. */
+#define HNCP_MAXIMUM_UNICAST_SIZE 9000

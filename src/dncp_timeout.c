@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:28:59 2013 mstenber
- * Last modified: Thu Jul  2 11:43:45 2015 mstenber
- * Edit time:     605 min
+ * Last modified: Wed Sep  9 10:03:02 2015 mstenber
+ * Edit time:     608 min
  *
  */
 
@@ -322,6 +322,18 @@ void dncp_ext_timeout(dncp o)
     {
       /* Update the 'active' link's published keepalive interval, if need be */
       dncp_ep_i l = container_of(ep, dncp_ep_i_s, conf);
+
+      if (l->send_reply_at)
+        {
+          if (l->send_reply_at <= now)
+            {
+              struct sockaddr_in6 *src = l->reply_has_src? &l->reply_src : NULL;
+              dncp_ep_i_send_buf(l, src, &l->reply_dst, &l->reply_buf);
+              l->send_reply_at = 0;
+            }
+          else
+            SET_NEXT(l->send_reply_at, "mc-reply");
+        }
 
       ep_i_set_keepalive_interval(l, ep->keepalive_interval);
 

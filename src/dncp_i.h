@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:56:12 2013 mstenber
- * Last modified: Thu Jul  2 11:44:00 2015 mstenber
- * Edit time:     388 min
+ * Last modified: Wed Sep  9 11:21:54 2015 mstenber
+ * Edit time:     394 min
  *
  */
 
@@ -157,6 +157,14 @@ struct dncp_ep_i_struct {
    * but one outgoing request per endpoint sounds fine too). */
   hnetd_time_t last_req_network_state;
 
+  /* When do we want to send a delayed reply (0 if not currently) */
+  hnetd_time_t send_reply_at;
+  /* And using what src+dst */
+  bool reply_has_src;
+  struct sockaddr_in6 reply_src;
+  struct sockaddr_in6 reply_dst;
+  struct tlv_buf reply_buf;
+
   /* The per-ep Trickle state. */
   dncp_trickle_s trickle;
 };
@@ -260,6 +268,10 @@ void dncp_ep_i_send_network_state(dncp_ep_i l,
                                   struct sockaddr_in6 *dst,
                                   size_t maximum_size,
                                   bool always_ep_id);
+
+void dncp_ep_i_send_buf(dncp_ep_i l,
+                        struct sockaddr_in6 *src, struct sockaddr_in6 *dst,
+                        struct tlv_buf *buf);
 
 
 /* Miscellaneous utilities that live in dncp_timeout */

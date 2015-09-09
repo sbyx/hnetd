@@ -6,8 +6,8 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Tue Nov 26 08:34:59 2013 mstenber
- * Last modified: Tue Jul 21 10:56:34 2015 mstenber
- * Edit time:     1057 min
+ * Last modified: Wed Sep  9 11:36:57 2015 mstenber
+ * Edit time:     1155 min
  *
  */
 
@@ -21,6 +21,36 @@
 
 /***************************************************** Low-level TLV pushing */
 
+static struct tlv_attr *_push_tlv(struct tlv_buf *tb, int t, size_t len)
+{
+  /* Consider if we would overflow */
+  int ot = tlv_id(tb->head);
+  if (ot)
+    {
+      if ((tlv_len(tb->head) + len + sizeof(struct tlv_attr)) > (1<<ot))
+        return NULL;
+    }
+  return tlv_new(tb, t, len);
+}
+
+
+/* .. and popping; we ensure we never send duplicates. */
+static void _maybe_pop_tlv(struct tlv_buf *tb, struct tlv_attr *last)
+{
+  struct tlv_attr *a;
+
+  tlv_for_each_attr(a, tb->head)
+    {
+      if (a == last)
+        break;
+      if (tlv_attr_cmp(a, last) == 0)
+        {
+          tlv_set_raw_len(tb->head, tlv_raw_len(tb->head) - tlv_raw_len(last));
+          return;
+        }
+    }
+}
+
 static bool _push_node_state_tlv(struct tlv_buf *tb, dncp_node n,
                                  bool incl_data)
 {
@@ -30,7 +60,7 @@ static bool _push_node_state_tlv(struct tlv_buf *tb, dncp_node n,
   int hlen = DNCP_HASH_LEN(n->dncp);
   dncp_t_node_state s;
   int tlen = nilen + sizeof(*s) + hlen + l;
-  struct tlv_attr *a = tlv_new(tb, DNCP_T_NODE_STATE, tlen);
+  struct tlv_attr *a = _push_tlv(tb, DNCP_T_NODE_STATE, tlen);
 
   if (!a)
     return false;
@@ -50,17 +80,20 @@ static bool _push_node_state_tlv(struct tlv_buf *tb, dncp_node n,
   if (l)
     memcpy(p, tlv_data(n->tlv_container), l);
 
+  _maybe_pop_tlv(tb, a);
+
   return true;
 }
 
 static bool _push_network_state_tlv(struct tlv_buf *tb, dncp o)
 {
-  struct tlv_attr *a = tlv_new(tb, DNCP_T_NET_STATE, DNCP_HASH_LEN(o));
+  struct tlv_attr *a = _push_tlv(tb, DNCP_T_NET_STATE, DNCP_HASH_LEN(o));
 
   if (!a)
     return false;
   dncp_calculate_network_hash(o);
   memcpy(tlv_data(a), &o->network_hash, DNCP_HASH_LEN(o));
+  _maybe_pop_tlv(tb, a);
   return true;
 }
 
@@ -73,7 +106,7 @@ static bool _push_ep_id_tlv(struct tlv_buf *tb, dncp_ep_i l,
   if (l->conf.unicast_is_reliable_stream && dst && !always_ep_id)
     return true;
 
-  struct tlv_attr *a = tlv_new(tb, DNCP_T_NODE_ENDPOINT, tl);
+  struct tlv_attr *a = _push_tlv(tb, DNCP_T_NODE_ENDPOINT, tl);
 
   if (!a)
     return false;
@@ -83,7 +116,64 @@ static bool _push_ep_id_tlv(struct tlv_buf *tb, dncp_ep_i l,
   return true;
 }
 
+static bool _push_network_state(struct tlv_buf *tb, dncp o,
+                                size_t maximum_size)
+{
+  if (!_push_network_state_tlv(tb, o))
+    return false;
+  /* We multicast only 'stable' state. Unicast, we give everything we have. */
+  if (!o->graph_dirty || !maximum_size)
+    {
+      int nn = 0;
+      int nilen = DNCP_NI_LEN(o);
+      int hlen = DNCP_HASH_LEN(o);
+      int ns_len = sizeof(dncp_t_node_state_s) + nilen + hlen;
+      dncp_node n;
+
+      if (maximum_size)
+        dncp_for_each_node(o, n)
+          nn++;
+      if (!maximum_size
+          || maximum_size >= (tlv_len(tb->head)
+                              + nn * (4 + ns_len)))
+        {
+          dncp_for_each_node(o, n)
+            {
+              if (!_push_node_state_tlv(tb, n, false))
+                return false;
+            }
+        }
+    }
+  return true;
+}
+
+static bool _push_req_node_data_tlv(struct tlv_buf *tb,
+                                    dncp o,
+                                    dncp_t_node_state ns)
+{
+  struct tlv_attr *a;
+
+  if (!(a = _push_tlv(tb, DNCP_T_REQ_NODE_STATE, DNCP_NI_LEN(o))))
+    return false;
+  dncp_node_id ni = dncp_tlv_get_node_id(o, ns);
+  memcpy(tlv_data(a), ni, DNCP_NI_LEN(o));
+  _maybe_pop_tlv(tb, a);
+  return true;
+}
+
 /****************************************** Actual payload sending utilities */
+
+void dncp_ep_i_send_buf(dncp_ep_i l,
+                        struct sockaddr_in6 *src, struct sockaddr_in6 *dst,
+                        struct tlv_buf *buf)
+{
+  dncp o = l->dncp;
+
+  o->ext->cb.send(o->ext, &l->conf, src, dst,
+                  tlv_data(buf->head), tlv_len(buf->head));
+  tlv_buf_free(buf);
+}
+
 
 void dncp_ep_i_send_network_state(dncp_ep_i l,
                                   struct sockaddr_in6 *src,
@@ -93,114 +183,18 @@ void dncp_ep_i_send_network_state(dncp_ep_i l,
 {
   struct tlv_buf tb;
   dncp o = l->dncp;
-  dncp_node n;
 
   memset(&tb, 0, sizeof(tb));
   tlv_buf_init(&tb, 0); /* not passed anywhere */
   if (!_push_ep_id_tlv(&tb, l, dst, always_ep_id))
     goto done;
-  if (!_push_network_state_tlv(&tb, o))
+  if (!_push_network_state(&tb, o, maximum_size))
     goto done;
-
-  /* We multicast only 'stable' state. Unicast, we give everything we have. */
-  if (!o->graph_dirty || !maximum_size)
-    {
-      int nn = 0;
-      int nilen = DNCP_NI_LEN(o);
-      int hlen = DNCP_HASH_LEN(o);
-      int ns_len = sizeof(dncp_t_node_state_s) + nilen + hlen;
-
-      if (maximum_size)
-        dncp_for_each_node(o, n)
-          nn++;
-      if (!maximum_size
-          || maximum_size >= (tlv_len(tb.head)
-                              + nn * (4 + ns_len)))
-        {
-          dncp_for_each_node(o, n)
-            {
-              if (!_push_node_state_tlv(&tb, n, false))
-                goto done;
-            }
-        }
-    }
-  if (maximum_size && tlv_len(tb.head) > maximum_size)
-    {
-      L_ERR("dncp_ep_i_send_network_state failed: %d > %d",
-            (int)tlv_len(tb.head), (int)maximum_size);
-      goto done;
-    }
   L_DEBUG("dncp_ep_i_send_network_state -> " SA6_F "%%" DNCP_LINK_F,
           SA6_D(dst), DNCP_LINK_D(l));
-  o->ext->cb.send(o->ext, &l->conf, src, dst,
-                  tlv_data(tb.head), tlv_len(tb.head));
+  dncp_ep_i_send_buf(l, src, dst, &tb);
+  return;
  done:
-  tlv_buf_free(&tb);
-}
-
-void dncp_ep_i_send_node_state(dncp_ep_i l,
-                               struct sockaddr_in6 *src,
-                               struct sockaddr_in6 *dst,
-                               dncp_node n)
-{
-  struct tlv_buf tb;
-  dncp o = l->dncp;
-
-  memset(&tb, 0, sizeof(tb));
-  tlv_buf_init(&tb, 0); /* not passed anywhere */
-  if (_push_ep_id_tlv(&tb, l, dst, false)
-      && _push_node_state_tlv(&tb, n, true))
-    {
-      L_DEBUG("dncp_ep_i_send_node_data %s -> " SA6_F " %%" DNCP_LINK_F,
-              DNCP_NODE_REPR(n), SA6_D(dst), DNCP_LINK_D(l));
-      o->ext->cb.send(o->ext, &l->conf, src, dst,
-                      tlv_data(tb.head), tlv_len(tb.head));
-    }
-  tlv_buf_free(&tb);
-}
-
-void dncp_ep_i_send_req_network_state(dncp_ep_i l,
-                                      struct sockaddr_in6 *src,
-                                      struct sockaddr_in6 *dst)
-{
-  struct tlv_buf tb;
-  dncp o = l->dncp;
-
-  memset(&tb, 0, sizeof(tb));
-  tlv_buf_init(&tb, 0); /* not passed anywhere */
-  if (_push_ep_id_tlv(&tb, l, dst, false)
-      && _push_network_state_tlv(&tb, l->dncp) /* SHOULD include local */
-      && tlv_new(&tb, DNCP_T_REQ_NET_STATE, 0))
-    {
-      L_DEBUG("dncp_ep_i_send_req_network_state -> " SA6_F "%%" DNCP_LINK_F,
-              SA6_D(dst), DNCP_LINK_D(l));
-      o->ext->cb.send(o->ext, &l->conf, src, dst,
-                      tlv_data(tb.head), tlv_len(tb.head));
-    }
-  tlv_buf_free(&tb);
-}
-
-void dncp_ep_i_send_req_node_data(dncp_ep_i l,
-                                  struct sockaddr_in6 *src,
-                                  struct sockaddr_in6 *dst,
-                                  dncp_t_node_state ns)
-{
-  struct tlv_buf tb;
-  struct tlv_attr *a;
-  dncp o = l->dncp;
-
-  memset(&tb, 0, sizeof(tb));
-  tlv_buf_init(&tb, 0); /* not passed anywhere */
-  if (_push_ep_id_tlv(&tb, l, dst, false)
-      && (a = tlv_new(&tb, DNCP_T_REQ_NODE_STATE, DNCP_NI_LEN(o))))
-    {
-      L_DEBUG("dncp_ep_i_send_req_node_data -> " SA6_F "%%" DNCP_LINK_F,
-              SA6_D(dst), DNCP_LINK_D(l));
-      dncp_node_id ni = dncp_tlv_get_node_id(l->dncp, ns);
-      memcpy(tlv_data(a), ni, DNCP_NI_LEN(o));
-      o->ext->cb.send(o->ext, &l->conf, src, dst,
-                      tlv_data(tb.head), tlv_len(tb.head));
-    }
   tlv_buf_free(&tb);
 }
 
@@ -259,6 +253,20 @@ _heard(dncp_ep_i l, dncp_t_ep_id lid, struct sockaddr_in6 *src,
   return t;
 }
 
+static int
+_bytes_to_exp(size_t bytes)
+{
+  int i = -1;
+  size_t v = 1;
+
+  while ( bytes > v)
+    {
+      v <<= 1;
+      i += 1;
+    }
+  return i;
+}
+
 /* Handle a single received message. */
 static void
 handle_message(dncp_ep_i l,
@@ -282,6 +290,10 @@ handle_message(dncp_ep_i l,
   dncp_node_id ni;
   char fake_lid[DNCP_NI_MAX_LEN + sizeof(*lid)];
   bool is_local = false;
+  struct tlv_buf reply;
+
+  memset(&reply, 0, sizeof(reply));
+  tlv_buf_init(&reply, _bytes_to_exp(l->conf.maximum_unicast_size));
 
   /* Validate that link id exists (if this were TCP, we would keep
    * track of the remote link id on per-stream basis). */
@@ -302,6 +314,11 @@ handle_message(dncp_ep_i l,
           ne = tne ? dncp_tlv_get_extra(tne) : NULL;
         }
     }
+
+  if (!_push_ep_id_tlv(&reply, l, dst, false))
+    goto oom;
+
+  size_t initial_reply_len = tlv_len(reply.head);
 
   tlv_for_each_attr(a, msg)
   {
@@ -347,7 +364,7 @@ handle_message(dncp_ep_i l,
         if (multicast)
           L_INFO("ignoring req-net-hash in multicast");
         else
-          dncp_ep_i_send_network_state(l, dst, src, 0, false);
+          (void)_push_network_state(&reply, o, 0);
         break;
 
       case DNCP_T_REQ_NODE_STATE:
@@ -386,7 +403,7 @@ handle_message(dncp_ep_i l,
           }
         else
           dncp_self_flush(o->own_node);
-        dncp_ep_i_send_node_state(l, dst, src, n);
+        (void)_push_node_state_tlv(&reply, n, true);
         break;
 
       case DNCP_T_NET_STATE:
@@ -500,7 +517,7 @@ handle_message(dncp_ep_i l,
             L_DEBUG("node data %s for %s",
                     multicast ? "not acceptable/supplied" : "missing",
                     DNCP_NI_REPR(l->dncp, ni));
-            dncp_ep_i_send_req_node_data(l, dst, src, ns);
+            (void)_push_req_node_data_tlv(&reply, l->dncp, ns);
           }
         updated_or_requested_state = true;
         break;
@@ -514,11 +531,42 @@ handle_message(dncp_ep_i l,
 
   /* Now, we can handle whether or not to send a network state request
    * based on the flags we know. */
-  if (!should_request_network_state || updated_or_requested_state || is_local)
-    return;
+  if (should_request_network_state && !updated_or_requested_state && !is_local)
+    {
+      (void)_push_network_state_tlv(&reply, l->dncp);
+      (void)_push_tlv(&reply, DNCP_T_REQ_NET_STATE, 0);
+      l->last_req_network_state = dncp_time(o);
+    }
 
-  l->last_req_network_state = dncp_time(o);
-  dncp_ep_i_send_req_network_state(l, dst, src);
+  /* If the reply just contains our ep id, ignore it */
+  if (tlv_len(reply.head) == initial_reply_len)
+    {
+      tlv_buf_free(&reply);
+      return;
+    }
+
+  hnetd_time_t t = dncp_time(o);
+  if (multicast)
+    {
+      t = t + random() % (l->conf.trickle_imin / 2);
+      if (!l->send_reply_at || l->send_reply_at > t)
+        {
+          if (l->send_reply_at)
+            tlv_buf_free(&l->reply_buf);
+          l->send_reply_at = t;
+          l->reply_has_src = dst != NULL;
+          if (l->reply_has_src)
+            l->reply_src = *dst;
+          l->reply_dst = *src;
+          l->reply_buf = reply;
+          dncp_schedule(o);
+        }
+    }
+  else
+    dncp_ep_i_send_buf(l, dst, src, &reply);
+  return;
+ oom:
+  tlv_buf_free(&reply);
 }
 
 

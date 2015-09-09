@@ -6,7 +6,7 @@
  * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 14:50:58 2014 mstenber
- * Last modified: Wed Sep  9 08:51:37 2015 mstenber
+ * Last modified: Wed Sep  9 10:19:22 2015 mstenber
  * Edit time:     75 min
  *
  */
@@ -169,6 +169,7 @@ bool hncp_init(hncp o)
         .trickle_imax = HNCP_TRICKLE_IMAX,
         .trickle_k = HNCP_TRICKLE_K,
         .keepalive_interval = HNCP_KEEPALIVE_INTERVAL,
+        .maximum_unicast_size = HNCP_MAXIMUM_UNICAST_SIZE,
         .maximum_multicast_size = HNCP_MAXIMUM_MULTICAST_SIZE,
         .accept_node_data_updates_via_multicast = true
       },

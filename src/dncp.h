@@ -6,7 +6,7 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 20 13:15:53 2013 mstenber
- * Last modified: Wed Jul  1 10:54:34 2015 mstenber
+ * Last modified: Wed Sep  9 10:19:42 2015 mstenber
  * Edit time:     274 min
  *
  */
@@ -191,6 +191,9 @@ struct dncp_ep_struct {
 
   /* How large can the multicasts be? */
   ssize_t maximum_multicast_size;
+
+  /* Or unicasts? (0 = no limit) */
+  ssize_t maximum_unicast_size;
 
   /* Do we accept node data updates via multicast? */
   bool accept_node_data_updates_via_multicast;

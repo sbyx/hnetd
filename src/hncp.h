@@ -6,7 +6,7 @@
  * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:30:01 2014 mstenber
- * Last modified: Mon Aug 31 12:47:16 2015 mstenber
+ * Last modified: Wed Sep  9 10:36:31 2015 mstenber
  * Edit time:     20 min
  *
  */
@@ -67,12 +67,6 @@
 /* How often we retry multicast joins? Once per second seems sane
  * enough. */
 #define HNCP_REJOIN_INTERVAL (1 * HNETD_TIME_PER_SECOND)
-
-/* Pretty arbitrary. I wonder if all links can really guarantee MTU
- * size packets going through. However, IPv6 minimum MTU - size of
- * IPv6 header - size of UDP header (we consider only the payload
- * here) should work.  */
-#define HNCP_MAXIMUM_MULTICAST_SIZE (1280-40-8)
 
 /*********************************************************************** API */
 
