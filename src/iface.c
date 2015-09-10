@@ -65,8 +65,6 @@ void iface_link_cb(struct hncp_link_user *user __unused, const char *ifname,
 		enum hncp_link_elected elected)
 {
 	struct iface *c = iface_get(ifname);
-	elected &= HNCP_LINK_HOSTNAMES | HNCP_LINK_LEGACY |
-			HNCP_LINK_PREFIXDEL | HNCP_LINK_STATELESS;
 
 	if (c && c->elected != elected && strcmp(c->ifname, "lo") &&
 			(c->flags & IFACE_FLAG_HYBRID) != IFACE_FLAG_HYBRID) {

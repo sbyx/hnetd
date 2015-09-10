@@ -18,7 +18,6 @@ enum hncp_link_elected {
 	HNCP_LINK_PREFIXDEL	= 1 << 2,
 	HNCP_LINK_MDNSPROXY	= 1 << 3,
 	HNCP_LINK_STATELESS	= 1 << 4,
-	HNCP_LINK_OTHERMNGD = 1 << 5,
 };
 
 struct hncp_link_config {
