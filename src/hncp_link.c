@@ -51,18 +51,18 @@ static void calculate_link(struct hncp_link *l, dncp_ep ep, bool enable)
 	if (l->versiontlv) {
 		ourvertlv = tlv_data(dncp_tlv_get_attr(l->versiontlv));
 
-		if (ourvertlv->cap_mdnsproxy)
+		if (ourvertlv->caps_mp >> 4)
 			elected |= HNCP_LINK_MDNSPROXY;
 
-		if (ourvertlv->cap_prefixdel)
+		if (ourvertlv->caps_mp & 0x0f)
 			elected |= HNCP_LINK_PREFIXDEL;
 
-		if (ourvertlv->cap_hostnames)
+		if (ourvertlv->caps_hl >> 4)
 			elected |= HNCP_LINK_HOSTNAMES;
 		else
 			elected |= HNCP_LINK_STATELESS;
 
-		if (ourvertlv->cap_legacy)
+		if (ourvertlv->caps_hl & 0x0f)
 			elected |= HNCP_LINK_LEGACY;
 	}
 
@@ -73,8 +73,6 @@ static void calculate_link(struct hncp_link *l, dncp_ep ep, bool enable)
 		struct tlv_attr *c;
 		dncp_node_for_each_tlv(dncp_get_own_node(l->dncp), c) {
 			dncp_t_peer ne = dncp_tlv_peer(l->dncp, c);
-			hncp_t_assigned_prefix_header ah = hncp_tlv_ap(c);
-
 			if (ne && ne->ep_id == dncp_ep_get_id(ep))
 				++peercnt;
 		}
@@ -133,43 +131,37 @@ static void calculate_link(struct hncp_link *l, dncp_ep ep, bool enable)
 
 			// Capability election
 			if (mutual && ourvertlv && peervertlv) {
-				int ourcaps = ourvertlv->cap_mdnsproxy << 12 |
-						ourvertlv->cap_prefixdel << 8 |
-						ourvertlv->cap_hostnames << 4 |
-						ourvertlv->cap_legacy;
-				int peercaps = peervertlv->cap_mdnsproxy << 12 |
-						peervertlv->cap_prefixdel << 8 |
-						peervertlv->cap_hostnames << 4 |
-						peervertlv->cap_legacy;
+				int ourcaps = (ourvertlv->caps_mp << 8) | ourvertlv->caps_hl;
+				int peercaps = (peervertlv->caps_mp << 8) | peervertlv->caps_hl;
 
-				if (ourvertlv->cap_mdnsproxy < peervertlv->cap_mdnsproxy)
+				if (ourvertlv->caps_mp >> 4 < peervertlv->caps_mp >> 4)
 					elected &= ~HNCP_LINK_MDNSPROXY;
 
-				if (ourvertlv->cap_prefixdel < peervertlv->cap_prefixdel)
+				if ((ourvertlv->caps_mp & 0x0f) < (peervertlv->caps_mp & 0x0f))
 					elected &= ~HNCP_LINK_PREFIXDEL;
 
-				if (ourvertlv->cap_hostnames < peervertlv->cap_hostnames)
+				if (ourvertlv->caps_hl >> 4 < peervertlv->caps_hl >> 4)
 					elected &= ~(HNCP_LINK_HOSTNAMES|HNCP_LINK_STATELESS);
 
-				if (ourvertlv->cap_legacy < peervertlv->cap_legacy)
+				if ((ourvertlv->caps_hl & 0x0f) < (peervertlv->caps_hl & 0x0f))
 					elected &= ~HNCP_LINK_LEGACY;
 
 				if (ourcaps < peercaps || (ourcaps == peercaps &&
 						memcmp(&dncp_get_own_node(l->dncp)->node_id, &peer->node_id, DNCP_NI_LEN(l->dncp)) < 0)) {
-					if (peervertlv->cap_mdnsproxy &&
-							ourvertlv->cap_mdnsproxy == peervertlv->cap_mdnsproxy)
+					if (peervertlv->caps_mp >> 4 &&
+							ourvertlv->caps_mp >> 4 == peervertlv->caps_mp >> 4)
 						elected &= ~HNCP_LINK_MDNSPROXY;
 
-					if (peervertlv->cap_prefixdel &&
-							ourvertlv->cap_prefixdel == peervertlv->cap_prefixdel)
+					if ((peervertlv->caps_mp & 0x0f) &&
+							(ourvertlv->caps_mp & 0x0f) == (peervertlv->caps_mp & 0x0f))
 						elected &= ~HNCP_LINK_PREFIXDEL;
 
-					if (peervertlv->cap_hostnames &&
-							ourvertlv->cap_hostnames == peervertlv->cap_hostnames)
+					if (peervertlv->caps_hl >> 4  &&
+							ourvertlv->caps_hl >> 4  == peervertlv->caps_hl >> 4)
 						elected &= ~(HNCP_LINK_HOSTNAMES|HNCP_LINK_STATELESS);
 
-					if (peervertlv->cap_legacy &&
-							ourvertlv->cap_legacy == peervertlv->cap_legacy)
+					if ((peervertlv->caps_hl & 0x0f) &&
+							(ourvertlv->caps_hl & 0x0f) == (peervertlv->caps_hl & 0x0f))
 						elected &= ~HNCP_LINK_LEGACY;
 				}
 
@@ -240,8 +232,8 @@ struct hncp_link* hncp_link_create(dncp dncp, const struct hncp_link_config *con
 				hncp_t_version_s version;
 				char agent[sizeof(conf->agent)];
 			} data = {
-				{0, 0, conf->cap_mdnsproxy, conf->cap_prefixdel,
-						conf->cap_hostnames, conf->cap_legacy}, {0}
+				{0, 0, conf->cap_mdnsproxy << 4 | conf->cap_prefixdel,
+						conf->cap_hostnames << 4 | conf->cap_legacy}, {0}
 			};
 			memcpy(data.agent, conf->agent, sizeof(data.agent));
 

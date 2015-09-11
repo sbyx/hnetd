@@ -284,10 +284,10 @@ static int hd_node(dncp o, dncp_node n, struct blob_buf *b)
 			case HNCP_T_VERSION:
 				v = (hncp_t_version)tlv_data(tlv);
 				if(tlv_len(tlv) > sizeof(hncp_t_version_s)) {
-					hd_a(!blobmsg_add_u32(b, "cap_m", v->cap_mdnsproxy), goto err);
-					hd_a(!blobmsg_add_u32(b, "cap_p", v->cap_prefixdel), goto err);
-					hd_a(!blobmsg_add_u32(b, "cap_h", v->cap_hostnames), goto err);
-					hd_a(!blobmsg_add_u32(b, "cap_l", v->cap_legacy), goto err);
+					hd_a(!blobmsg_add_u32(b, "cap_m", v->caps_mp >> 4), goto err);
+					hd_a(!blobmsg_add_u32(b, "cap_p", v->caps_mp & 0x0f), goto err);
+					hd_a(!blobmsg_add_u32(b, "cap_h", v->caps_hl >> 4), goto err);
+					hd_a(!blobmsg_add_u32(b, "cap_l", v->caps_hl & 0x0f), goto err);
 				}
 
 				if(tlv_len(tlv) > sizeof(hncp_t_version_s))
