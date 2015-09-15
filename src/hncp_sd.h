@@ -6,8 +6,8 @@
  * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 20:09:23 2014 mstenber
- * Last modified: Mon Jun  8 13:09:13 2015 mstenber
- * Edit time:     8 min
+ * Last modified: Tue Sep 15 11:01:26 2015 mstenber
+ * Edit time:     10 min
  *
  */
 
@@ -32,6 +32,11 @@ typedef struct hncp_sd_params_struct
 
   /* Which script is used to prod at ohybridproxy (required for SD) */
   const char *ohp_script;
+
+  /* DDZ changed script - helpful with e.g. zonestitcher; it is called
+  * with the locally configured domain as the first argument, and then
+  * each browse zone FQDN as separate arguments. */
+  const char *ddz_script;
 
   /* Which script is used to prod at minimalist-pcproxy (optional) */
   const char *pcp_script;

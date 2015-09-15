@@ -6,7 +6,7 @@
  * Copyright (c) 2013-2015 cisco Systems, Inc.
  *
  * Created:       Fri Dec  6 18:48:08 2013 mstenber
- * Last modified: Tue Jul 21 12:15:25 2015 mstenber
+ * Last modified: Tue Sep 15 10:42:14 2015 mstenber
  * Edit time:     416 min
  *
  */
@@ -370,6 +370,7 @@ hncp net_sim_find_hncp(net_sim s, const char *name)
     .dnsmasq_script = "s-dnsmasq",
     .dnsmasq_bonus_file = "/tmp/dnsmasq.conf",
     .ohp_script = "s-ohp",
+    .ddz_script = "s-ddz",
     .pcp_script = "s-pcp",
   };
 

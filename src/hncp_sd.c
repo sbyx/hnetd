@@ -6,8 +6,8 @@
  * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Tue Jan 14 14:04:22 2014 mstenber
- * Last modified: Wed Sep  2 15:05:34 2015 mstenber
- * Edit time:     679 min
+ * Last modified: Tue Sep 15 10:57:39 2015 mstenber
+ * Edit time:     696 min
  *
  */
 
@@ -41,20 +41,21 @@
 #define LOCAL_OHP_ADDRESS "127.0.0.2"
 #define LOCAL_OHP_PORT 54
 
-#define ARGS_MAX_LEN 512
-#define ARGS_MAX_COUNT 64
+#define ARGS_MAX_LEN 4096
+#define ARGS_MAX_COUNT 256
 
 /* Different 'daemons' to be restarted/reconfigured */
 #define UPDATE_FLAG_DNSMASQ 1
 #define UPDATE_FLAG_OHP     2
 #define UPDATE_FLAG_PCP     4
+#define UPDATE_FLAG_DDZ     8
 
 /* TLVs to be updated (and possibly other internal state) */
-#define UPDATE_FLAG_DDZ     0x10
-#define UPDATE_FLAG_DOMAIN  0x20
-#define UPDATE_FLAG_RNAME   0x40
+#define UPDATE_FLAG_LOCAL_DDZ 0x10
+#define UPDATE_FLAG_DOMAIN    0x20
+#define UPDATE_FLAG_RNAME     0x40
 
-#define UPDATE_FLAG_ALL     0x77
+#define UPDATE_FLAG_ALL     0x7F
 
 /* How long a timeout we schedule for the actual update (that occurs
  * in a timeout). This effectively sets an upper bound on how
@@ -93,6 +94,7 @@ struct hncp_sd_struct
   /* State (md5) hashes used to keep track of what has been committed. */
   char dnsmasq_state[16];
   char ohp_state[16];
+  char ddz_state[16];
   char pcp_state[16];
 
   /* Callbacks from other modules */
@@ -254,9 +256,9 @@ static void _publish_ddzs(hncp_sd sd)
   hncp_t_assigned_prefix_header ah;
   dncp_ep ep;
 
-  if (!(sd->should_update & UPDATE_FLAG_DDZ))
+  if (!(sd->should_update & UPDATE_FLAG_LOCAL_DDZ))
     return;
-  sd->should_update &= ~UPDATE_FLAG_DDZ;
+  sd->should_update &= ~UPDATE_FLAG_LOCAL_DDZ;
   L_DEBUG("_publish_ddzs");
   (void)dncp_remove_tlvs_by_type(sd->dncp, HNCP_T_DNS_DELEGATED_ZONE);
   dncp_for_each_tlv(sd->dncp, t)
@@ -425,6 +427,50 @@ bool hncp_sd_restart_dnsmasq(hncp_sd sd)
       c += strlen(s) + 1;                               \
     } while(0)
 
+
+bool hncp_sd_reconfigure_ddz(hncp_sd sd)
+{
+  dncp_node n;
+  struct tlv_attr *a;
+  char buf[ARGS_MAX_LEN];
+  char *c = buf;
+  char *args[ARGS_MAX_COUNT];
+  int narg = 0;
+  md5_ctx_t ctx;
+
+  PUSH_ARG(sd->p.ddz_script);
+  PUSH_ARG(sd->hncp->domain);
+  md5_begin(&ctx);
+  dncp_for_each_node(sd->dncp, n)
+    {
+      dncp_node_for_each_tlv_with_type(n, a, HNCP_T_DNS_DELEGATED_ZONE)
+        {
+          /* Decode the labels */
+          char buf[DNS_MAX_ESCAPED_LEN];
+          hncp_t_dns_delegated_zone dh = tlv_data(a);
+
+          if (tlv_len(a) < (sizeof(*dh)+1))
+            continue;
+          if (!(dh->flags & HNCP_T_DNS_DELEGATED_ZONE_FLAG_BROWSE))
+            continue;
+          dh = tlv_data(a);
+          if (ll2escaped(dh->ll, tlv_len(a) - sizeof(*dh),
+                         buf, sizeof(buf)) < 0)
+            continue;
+
+          md5_hash(buf, strlen(buf), &ctx);
+          PUSH_ARG(buf);
+        }
+    }
+  if (_sh_changed(&ctx, &sd->ddz_state))
+    {
+      args[narg] = NULL;
+      hncp_run(args);
+      return true;
+    }
+  return false;
+}
+
 bool hncp_sd_reconfigure_ohp(hncp_sd sd)
 {
   dncp_ep ep;
@@ -579,7 +625,7 @@ _election_cb(struct hncp_link_user *u,
              enum hncp_link_elected elected __unused)
 {
   hncp_sd sd = container_of(u, hncp_sd_s, link);
-  _should_update(sd, UPDATE_FLAG_OHP | UPDATE_FLAG_DDZ);
+  _should_update(sd, UPDATE_FLAG_OHP | UPDATE_FLAG_LOCAL_DDZ);
 }
 
 static void
@@ -675,7 +721,7 @@ _change_router_name(hncp_sd sd)
         {
           L_DEBUG("renamed to %s", sd->router_name);
           _set_router_name(sd);
-          _should_update(sd, UPDATE_FLAG_DDZ);
+          _should_update(sd, UPDATE_FLAG_LOCAL_DDZ);
           return;
         }
     }
@@ -691,7 +737,7 @@ static void _local_tlv_cb(dncp_subscriber s,
    * some point. OHP configuration may also change at this point. */
   if (tlv_id(tlv) == HNCP_T_ASSIGNED_PREFIX)
     {
-      _should_update(sd, UPDATE_FLAG_DDZ);
+      _should_update(sd, UPDATE_FLAG_LOCAL_DDZ);
     }
 }
 
@@ -781,7 +827,7 @@ static void _tlv_cb(dncp_subscriber s,
     case HNCP_T_DNS_DELEGATED_ZONE:
       /* Dnsmasq forwarder file reflects what's in published DDZ's. If
        * they change, it (could) change too. */
-      _should_update(sd, UPDATE_FLAG_DNSMASQ);
+      _should_update(sd, UPDATE_FLAG_DNSMASQ | UPDATE_FLAG_DDZ);
 
       /* Check also if it's name matches our router name directly ->
        * rename us if it does. */
@@ -834,6 +880,12 @@ void hncp_sd_update(hncp_sd sd)
             hncp_sd_restart_dnsmasq(sd);
         }
     }
+  if (sd->should_update & UPDATE_FLAG_DDZ)
+    {
+      sd->should_update &= ~UPDATE_FLAG_DDZ;
+      if (sd->p.ddz_script)
+        hncp_sd_reconfigure_ddz(sd);
+    }
   if (sd->should_update & UPDATE_FLAG_OHP)
     {
       sd->should_update &= ~UPDATE_FLAG_OHP;
@@ -880,7 +932,7 @@ static void _intaddr_cb(struct iface_user *u, __unused const char *ifname,
 {
   hncp_sd sd = container_of(u, hncp_sd_s, iface);
 
-  _should_update(sd, UPDATE_FLAG_RNAME | UPDATE_FLAG_DDZ);
+  _should_update(sd, UPDATE_FLAG_RNAME | UPDATE_FLAG_LOCAL_DDZ);
 }
 
 

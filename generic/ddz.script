@@ -1,0 +1,40 @@
+#!/bin/sh 
+#-*-sh-*-
+#
+# $Id: ddz-script $
+#
+# Author: Markus Stenberg <mstenber@cisco.com>
+#
+# Copyright (c) 2014 cisco Systems, Inc.
+#
+# Created:       Fri Jan 17 11:46:30 2014 mstenber
+# Last modified: Tue Sep 15 11:09:27 2015 mstenber
+# Edit time:     3 min
+#
+
+# This is minimalist init.d-like start/stop script for
+# zonestitcher. 
+
+ZS=zonestitcher
+DNSMASQDIR=/tmp/dnsmasq.d
+
+start() {
+    mkdir -p $DNSMASQDIR
+    DOMAIN=$1
+    shift
+    echo "server=/${DOMAIN}/127.0.0.2#55" > $DNSMASQDIR/zonestitcher.conf
+    $ZS -a 127.0.0.2 -p 55 $* &
+    # TBD: Should we actually restart dnsmasq too?
+}
+
+stop() {
+    killall -9 $ZS
+}
+
+
+CMD=$1
+# For debugging purposes
+LOGNAME=`basename $0`
+echo "$*" | logger -t "$LOGNAME"
+stop
+start $*

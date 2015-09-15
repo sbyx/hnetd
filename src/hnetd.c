@@ -78,6 +78,7 @@ int usage() {
   L_ERR( "Valid options are:\n"
 	 "\t-d dnsmasq_script\n"
 	 "\t-f dnsmasq_bonus_file\n"
+	 "\t-z ddz_script\n"
 	 "\t-o odhcp_script\n"
 	 "\t-c pcp_script\n"
 	 "\t-n router_name\n"
@@ -205,6 +206,9 @@ int main(__unused int argc, char *argv[])
 			break;
 		case 'f':
 			sd_params.dnsmasq_bonus_file = optarg;
+			break;
+		case 'z':
+			sd_params.ddz_script = optarg;
 			break;
 		case 'o':
 			sd_params.ohp_script = optarg;

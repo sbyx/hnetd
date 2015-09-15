@@ -6,8 +6,8 @@
  * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Wed Jan 15 17:17:36 2014 mstenber
- * Last modified: Mon Jun 15 13:43:43 2015 mstenber
- * Edit time:     162 min
+ * Last modified: Tue Sep 15 11:00:25 2015 mstenber
+ * Edit time:     171 min
  *
  */
 
@@ -205,6 +205,22 @@ void test_hncp_sd(void)
   sput_fail_unless(!rv, "reconfigure ohp works (2)");
   smock_is_empty();
   mock_iface = false;
+
+  /* Play with DDZ script */
+  memset(&node1->sd->ddz_state, 0, HNCP_HASH_LEN);
+  smock_push("execv_cmd", "s-ddz");
+  smock_push("execv_arg", "home.");
+  smock_push("execv_arg", "fqdn.");
+  smock_push("execv_arg", "label.r.home.");
+  rv = hncp_sd_reconfigure_ddz(node1->sd);
+  sput_fail_unless(rv, "reconfigure ddz works");
+  smock_is_empty();
+
+  /* Make sure second run is NOP */
+  rv = hncp_sd_reconfigure_ddz(node1->sd);
+  sput_fail_unless(!rv, "reconfigure ddz works (2)");
+  smock_is_empty();
+
 
   check_exec = false;
   debug_exec = true;
