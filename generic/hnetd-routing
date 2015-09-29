@@ -1,5 +1,6 @@
 #!/bin/sh
 
+PATH=/usr/bin:/usr/sbin:/bin:/sbin
 BABEL_EXE=`which babeld`
 BABEL_PID=/var/run/babeld-hnetd.pid
 BABEL_CONF=/var/run/babeld-hnetd.conf
