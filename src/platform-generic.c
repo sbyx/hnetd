@@ -210,14 +210,15 @@ void platform_iface_new(struct iface *c, __unused const char *handle)
 	assert(c->platform == NULL);
 
 	struct platform_iface *iface = calloc(1, sizeof(*iface));
+
+	c->platform = iface;
+
 	if (!(c->flags & IFACE_FLAG_NODHCP) && (
 			!(c->flags & IFACE_FLAG_INTERNAL) ||
 			(c->flags & IFACE_FLAG_HYBRID) == IFACE_FLAG_HYBRID))
 		iface->dhcpv6 = platform_run(argv_dhcpv6);
 
 	platform_restart_dhcpv4(c);
-
-	c->platform = iface;
 }
 
 // Destructor for openwrt-specific interface part
@@ -921,4 +922,3 @@ static void ipc_handle(struct uloop_fd *fd, __unused unsigned int events)
 		sendto(fd->fd, NULL, 0, MSG_DONTWAIT, (struct sockaddr *)&sender, sender_len);
 	}
 }
-
