@@ -66,7 +66,9 @@ setup_interface () {
 		fi
 
 		# TODO: delete this somehow when the prefix disappears
-		ip -6 route add unreachable "$addr" proto $PROTO
+		#ip -6 route add unreachable "$addr" proto $PROTO
+                # ^ this is taken care of by hnetd, actually, so we get
+                # two and this is too low metric -> removed for now -MSt 12/2015
 	done
 	
 	[ -n "$CER" ] && cerid=", \"cerid\": \"$CER\""
