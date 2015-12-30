@@ -6,8 +6,8 @@
  * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:50:18 2014 mstenber
- * Last modified: Tue May 26 07:59:27 2015 mstenber
- * Edit time:     36 min
+ * Last modified: Wed Dec 30 14:17:42 2015 mstenber
+ * Edit time:     42 min
  *
  */
 
@@ -35,11 +35,13 @@
  * 5. destroy
  */
 
-#ifdef DTLS_OPENSSL
+#if defined(DTLS_OPENSSL)
 typedef struct x509_st *dtls_cert;
+#elif defined(DTLS_MBEDTLS)
+typedef struct mbedtls_x509_crt *dtls_cert;
 #else
-#error
-#endif /* DTLS_OPENSSL */
+#error "Unknown DTLS variant - add support please, patches welcome! :->"
+#endif
 
 typedef struct dtls_struct *dtls;
 typedef void (*dtls_readable_cb)(dtls d, void *context);

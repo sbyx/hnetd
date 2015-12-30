@@ -6,8 +6,8 @@
  * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Wed Nov 19 17:34:25 2014 mstenber
- * Last modified: Wed Jul  1 11:02:55 2015 mstenber
- * Edit time:     243 min
+ * Last modified: Wed Dec 30 14:41:06 2015 mstenber
+ * Edit time:     254 min
  *
  */
 
@@ -58,8 +58,30 @@
 #include "dncp_i.h"
 
 #include <libubox/md5.h>
+
+#ifdef DTLS_OPENSSL
 #include <openssl/sha.h>
 #include <openssl/ssl.h>
+#endif /* DTLS_OPENSSL */
+
+#ifdef DTLS_MBEDTLS
+#include <mbedtls/sha256.h>
+
+#define SHA256_CTX mbedtls_sha256_context
+
+#define SHA256_Init(ctx) mbedtls_sha256_init(ctx)
+
+#define SHA256_Update(ctx, buf, len) do {       \
+  mbedtls_sha256_starts(ctx, 0);                \
+  mbedtls_sha256_update(ctx, buf, len);         \
+} while(0)
+
+#define SHA256_Final(output, ctx) mbedtls_sha256_finish(ctx, output)
+
+#include <mbedtls/x509.h>
+#include <mbedtls/x509_crt.h>
+
+#endif /* DTLS_MBEDTLS */
 
 /* in milliseconds, how long we have to be quiet before save */
 #define SAVE_INTERVAL 1000
@@ -479,9 +501,20 @@ static int _trust_get_cert_verdict(dncp_trust t, dtls_cert cert)
   int verdict = dncp_trust_get_verdict(t, &h, NULL);
 
   char cbuf[DNCP_T_TRUST_VERDICT_CNAME_LEN];
+#ifdef DTLS_OPENSSL
   X509_NAME_oneline(X509_get_subject_name(cert),
                     cbuf,
                     sizeof(cbuf));
+#endif /* DTLS_OPENSSL */
+
+#ifdef DTLS_MBEDTLS
+  int l = mbedtls_x509_dn_gets(cbuf, sizeof(cbuf), &cert->subject);
+  if (l < 0)
+    {
+      L_DEBUG("error when getting DN of certificate:%d", l);
+      return DNCP_VERDICT_NONE;
+    }
+#endif /* DTLS_MBEDTLS */
 
   if (verdict < DNCP_VERDICT_CONFIGURED_POSITIVE
       && hnetd_time() <= t->trust_until)

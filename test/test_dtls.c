@@ -6,8 +6,8 @@
  * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Thu Oct 16 10:57:31 2014 mstenber
- * Last modified: Mon Jun  8 09:52:33 2015 mstenber
- * Edit time:     144 min
+ * Last modified: Wed Dec 30 18:50:01 2015 mstenber
+ * Edit time:     151 min
  *
  */
 
@@ -72,6 +72,8 @@ void _readable_cb(dtls d, void *context)
 
   r = dtls_recv(d, &src, &dst, buf, len);
   L_DEBUG("_readable_cb - %d", r);
+  if (r < 0)
+    return;
   smock_pull_int_is("dtls_recv", r);
   if (r >= 0)
     {
@@ -303,22 +305,22 @@ static void _test_unknown_i(int i)
   sput_fail_unless(!pending_unknown, "no unknown left");
 }
 
-static void dtls_basic_sc_cert()
+static void dtls_basic_sc_psk()
 {
   _test_basic_i(0);
 }
 
-static void dtls_basic_sc_psk()
+static void dtls_basic_sc_cert()
 {
   _test_basic_i(1);
 }
 
-static void dtls_basic_cc_cert()
+static void dtls_basic_cc_psk()
 {
   _test_basic_i(2);
 }
 
-static void dtls_basic_cc_psk()
+static void dtls_basic_cc_cert()
 {
   _test_basic_i(3);
 }
