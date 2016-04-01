@@ -5,7 +5,6 @@ BABEL_EXE=`which babeld`
 BABEL_PID=/var/run/babeld-hnetd.pid
 BABEL_CONF=/var/run/babeld-hnetd.conf
 BABEL_CONF_OWRT=/tmp/babeld.d/hnetd.conf
-ISIS_INIT=`which autoisis`
 
 # Routing table for BFS (also rule priority)
 BFSTABLE=33333
@@ -57,12 +56,6 @@ configure)
             else 
                 handle_babel_generic $*
             fi
-	elif [ -x "$ISIS_INIT" ]; then
-		if [ -z "$1" ]; then
-			$ISIS_INIT stop
-		else
-			$ISIS_INIT start "$@"
-		fi
 	else
 		exit 1
 	fi
