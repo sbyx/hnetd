@@ -11,6 +11,12 @@ http://tools.ietf.org/html/draft-ietf-homenet-hncp
 hnetd is designed to run on generic Linux-based routers.
 
 
+** License **
+
+This project was originally licensed under the GNU General Public License 2,
+under agreement of all copyright holders responsible for contributions in this
+branchs, the license was changed to Apache 2.0 effective March 3rd 2016.
+
 ** Features **
 
 1. State synchronization between routers
