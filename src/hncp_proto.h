@@ -6,8 +6,8 @@
  * Copyright (c) 2014-2015 cisco Systems, Inc.
  *
  * Created:       Tue Dec 23 13:52:55 2014 mstenber
- * Last modified: Wed Sep  9 11:24:47 2015 mstenber
- * Edit time:     17 min
+ * Last modified: Fri Apr 15 11:16:25 2016 mstenber
+ * Edit time:     21 min
  *
  */
 
@@ -23,8 +23,8 @@ enum {
   HNCP_T_DELEGATED_PREFIX = 34, /* may contain TLVs */
   HNCP_T_ASSIGNED_PREFIX = 35, /* may contain TLVs */
   HNCP_T_NODE_ADDRESS = 36, /* router address */
-  HNCP_T_DHCPV6_OPTIONS = 37, /* contains just raw DHCPv6 options */
-  HNCP_T_DHCP_OPTIONS = 38,
+  HNCP_T_DHCP_OPTIONS = 37, /* contains just raw DHCP options */
+  HNCP_T_DHCPV6_OPTIONS = 38, /* contains just raw DHCPv6 options */
 
   HNCP_T_DNS_DELEGATED_ZONE = 39, /* the 'beef' */
   HNCP_T_DOMAIN_NAME = 40, /* non-default domain (very optional) */
@@ -32,12 +32,14 @@ enum {
   HNCP_T_MANAGED_PSK = 42,
   HNCP_T_PREFIX_POLICY = 43,
 
+  /* The new values are picked from the 'private use' range (768 - 1023) */
+
   /* draft-pfister-homenet-multicast */
-  HNCP_T_PIM_RPA_CANDIDATE = 191,
-  HNCP_T_PIM_BORDER_PROXY = 192,
+  HNCP_T_PIM_RPA_CANDIDATE = 881,
+  HNCP_T_PIM_BORDER_PROXY = 882,
 
   /* Experimental feature - hncp_wifi.h */
-  HNCP_T_SSID = 195,
+  HNCP_T_SSID = 793,
 };
 
 /* HNCP_T_VERSION */
@@ -130,9 +132,9 @@ typedef struct __packed {
 
 /**************************************************************** Addressing */
 
-#define HNCP_PORT 8808
-#define HNCP_DTLS_SERVER_PORT 8809
-#define HNCP_MCAST_GROUP "ff02::8808"
+#define HNCP_PORT 8231
+#define HNCP_DTLS_SERVER_PORT 8232
+#define HNCP_MCAST_GROUP "ff02::11"
 
 #define HNCP_UCAST_DISCOVER6 "2001:1::8808"
 #define HNCP_UCAST_DISCOVER4 "192.0.0.9"

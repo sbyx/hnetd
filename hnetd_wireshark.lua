@@ -7,8 +7,8 @@
 -- Copyright (c) 2013 cisco Systems, Inc.
 --
 -- Created:       Tue Dec  3 11:13:05 2013 mstenber
--- Last modified: Thu Apr 23 14:32:28 2015 mstenber
--- Edit time:     121 min
+-- Last modified: Fri Apr 15 11:18:29 2016 mstenber
+-- Edit time:     122 min
 --
 
 -- This is Lua module which provides VERY basic dissector for TLVs we
@@ -61,8 +61,8 @@ local tlvs = {
         },
         recurse=true
    },
-   [6]={name='custom'},
-   [7]={name='fragment-count'},
+   -- historic never deployed [6]={name='custom'},
+   -- historic never deployed [7]={name='fragment-count'},
    [8]={name='neighbor', contents={{4, f_nid_hash},
                                    {4, f_rlid},
                                    {4, f_lid},
@@ -79,15 +79,17 @@ local tlvs = {
    [34]={name='delegated-prefix'},
    [35]={name='assigned-prefix'},
    [36]={name='router-address'},
-   [37]={name='dhcpv6-options'},
-   [38]={name='dhcpv4-options'},
+   [37]={name='dhcpv4-options'},
+   [38]={name='dhcpv6-options'},
 
    [39]={name='dns-delegated-zone'},
    [40]={name='dns-domain-name'},
-   [41]={name='dns-router-name'},
+   [41]={name='dns-node-name'},
    [42]={name='managed-psk'},
+   [43]={name='prefix-policy'},
 
-   [199]={name='routing-protocol'},
+   -- does not seem to exist anymore in the wild:
+   -- [199]={name='routing-protocol'},
 }
 
 
@@ -170,5 +172,4 @@ end
 
 -- register as udp dissector
 udp_table = DissectorTable.get("udp.port")
-udp_table:add(8808, p_hncp)
-udp_table:add(38808, p_hncp)
+udp_table:add(8231, p_hncp)
