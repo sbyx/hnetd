@@ -12,10 +12,10 @@
 # Edit time:     15 min
 #
 
-# This is minimalist init.d-like start/stop script for
-# ohybridproxy. However, as ohybridproxy receives it's configuration
+# This is a minimalistic init.d-like start/stop script for
+# ohybridproxy. However, as ohybridproxy receives its configuration
 # via command line, the 'start' command is also equivalent to
-# 'restart', and has bunch of extra arguments..
+# 'restart', and has a bunch of extra arguments..
 
 OHP=ohybridproxy
 
