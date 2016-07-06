@@ -110,7 +110,10 @@ void iface_test_new_managed(void)
 	iface_update_ipv4_uplink(iface00);
 	iface_set_ipv4_uplink(iface00, &v4source, 24);
 	iface_commit_ipv4_uplink(iface00);
-	smock_pull_bool_is("test00", false);
+	/* smock_pull_bool_is("test00", false); */
+        /* this was removed in the commit
+           a5293745c235a057b6a477ffbd817937eaa9bc12 at 5/2015(!);
+        */
 
 	struct iface *iface = iface_create("test0", "test0", 0);
 	iface->carrier = true;
@@ -124,7 +127,10 @@ void iface_test_new_managed(void)
 	struct iface *iface3 = iface_create("test0", "test0", 0);
 	sput_fail_unless(iface == iface3, "create after create");
 
-	smock_pull_bool_is("test0", false);
+	/* smock_pull_bool_is("test0", false); */
+        /* this was removed in the commit
+           a5293745c235a057b6a477ffbd817937eaa9bc12 at 5/2015(!);
+        */
 
 	uloop_cancelled = false;
 	uloop_run();
