@@ -7,8 +7,8 @@
 -- Copyright (c) 2013 cisco Systems, Inc.
 --
 -- Created:       Tue Dec  3 11:13:05 2013 mstenber
--- Last modified: Fri Apr 15 11:18:29 2016 mstenber
--- Edit time:     122 min
+-- Last modified: Sat Jul 14 08:36:53 2018 mstenber
+-- Edit time:     123 min
 --
 
 -- This is Lua module which provides VERY basic dissector for TLVs we
@@ -20,14 +20,14 @@ p_hncp = Proto("hncp", "Homenet Control Protocol")
 
 local f_id = ProtoField.uint16('hncp.id', 'TLV id')
 local f_len = ProtoField.uint16('hncp.len', 'TLV len')
-local f_data = ProtoField.bytes('hncp.data', 'TLV data', base.HEX)
+local f_data = ProtoField.bytes('hncp.data', 'TLV data')
 
 local f_nid_hash = ProtoField.bytes('hncp.node_identifier_hash',
-                                    'Node identifier', base.HEX)
+                                    'Node identifier')
 local f_data_hash = ProtoField.bytes('hncp.data_hash',
-                                     'Node data hash', base.HEX)
+                                     'Node data hash')
 local f_network_hash = ProtoField.bytes('hncp.network_hash',
-                                        'Network state hash', base.HEX)
+                                        'Network state hash')
 
 local f_lid = ProtoField.uint32('hncp.llid', 'Local link identifier')
 local f_rlid = ProtoField.uint32('hncp.rlid', 'Remote link identifier')
