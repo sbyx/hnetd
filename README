@@ -47,8 +47,8 @@ effective April 3rd 2016.
 
 hnetd depends on the following libraries:
 * json-c: https://github.com/json-c/json-c
-* libubox: http://nbd.name/gitweb.cgi?p=luci2/libubox.git
-* libubus (OpenWrt only): http://nbd.name/gitweb.cgi?p=luci2/ubus.git
+* libubox: https://git.openwrt.org/project/libubox.git
+* libubus (OpenWrt only): https://git.openwrt.org/project/ubus.git
 
 hnetd uses the following auxiliary tools (replacable):
 * odhcp6c (DHCPv6 client): https://github.com/sbyx/odhcp6c
